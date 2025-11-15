@@ -6,8 +6,124 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="main-screen">
-        <button>Jugar</button>
+    <div class="launcher">
+        <!-- Barra lateral -->
+        <div class="sidebar">
+            <button class="sidebar-button active" onclick="showSection('play')">
+                🎮 Jugar
+            </button>
+            <button class="sidebar-button" onclick="showSection('profiles')">
+                👤 Perfiles
+            </button>
+            <button class="sidebar-button" onclick="showSection('settings')">
+                ⚙️ Configuración
+            </button>
+        </div>
+
+        <!-- Contenido principal -->
+        <div class="main-content">
+            <!-- Sección Jugar -->
+            <div id="play" class="section active">
+                <h1>Jugar</h1>
+                <div class="play-section">
+                    <div class="user-info">
+                        <div class="user-avatar">🧊</div>
+                        <div style="flex: 1;">
+                            <div class="input-group">
+                                <label>Nombre de usuario</label>
+                                <input id="nickname" type="text" placeholder="Nickname">
+                            </div>
+                        </div>
+                        <button class="btn-secondary">Iniciar Sesión</button>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Versión de Minecraft</label>
+                        <select id="versionSelect">
+                        </select>
+                    </div>
+
+                    <div class="button-group">
+                        <button class="btn-secondary" style="flex: 1;">
+                            📥 Instalar Versión
+                        </button>
+                        <button class="btn-secondary" style="flex: 1;">
+                            🔧 Mods & Forge
+                        </button>
+                    </div>
+
+                    <button class="play-button" onclick="launchGame()">
+                        JUGAR
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sección Perfiles -->
+            <div id="profiles" class="section">
+                <h1>Perfiles</h1>
+                <div class="profiles-section">
+                    <button class="btn-primary create-profile-btn">
+                        ➕ Crear Nuevo Perfil
+                    </button>
+
+                    <div class="profile-card">
+                        <div class="profile-info">
+                            <h3>Perfil Principal</h3>
+                            <p>Versión: 1.20.4 | Última jugada: Hace 2 horas</p>
+                        </div>
+                        <div class="profile-actions">
+                            <button class="btn-secondary btn-small">✏️ Editar</button>
+                            <button class="btn-danger btn-small">🗑️ Eliminar</button>
+                        </div>
+                    </div>
+
+                    <div class="profile-card">
+                        <div class="profile-info">
+                            <h3>Modpack Survival</h3>
+                            <p>Versión: 1.19.4 con Forge | Última jugada: Hace 1 día</p>
+                        </div>
+                        <div class="profile-actions">
+                            <button class="btn-secondary btn-small">✏️ Editar</button>
+                            <button class="btn-danger btn-small">🗑️ Eliminar</button>
+                        </div>
+                    </div>
+
+                    <div class="profile-card">
+                        <div class="profile-info">
+                            <h3>PvP 1.8.9</h3>
+                            <p>Versión: 1.8.9 | Última jugada: Hace 3 días</p>
+                        </div>
+                        <div class="profile-actions">
+                            <button class="btn-secondary btn-small">✏️ Editar</button>
+                            <button class="btn-danger btn-small">🗑️ Eliminar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sección Configuración -->
+            <div id="settings" class="section">
+                <h1>Configuración</h1>
+                <div class="play-section">
+                    <div class="input-group">
+                        <label>Directorio de instalación</label>
+                        <input type="text" value="C:\Users\Usuario\AppData\Roaming\.minecraft">
+                    </div>
+                    <div class="input-group">
+                        <label>Memoria RAM asignada</label>
+                        <select>
+                            <option>2 GB</option>
+                            <option selected>4 GB</option>
+                            <option>6 GB</option>
+                            <option>8 GB</option>
+                        </select>
+                    </div>
+                    <button class="btn-primary">Guardar Configuración</button>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <script src="scripts.js"></script>
 </body>
 </html>
