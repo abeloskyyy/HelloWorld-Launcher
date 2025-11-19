@@ -16,17 +16,23 @@ function showSection(sectionId) {
     event.target.classList.add('active');
 }
 
+
 function guardarDatos() {
     const username = document.getElementById("nickname").value;
 
-    window.pywebview.api.save_user_json(username, "", "")
+    window.pywebview.api.save_user_json(username, "")
         .then(() => alert("Guardado!"));
 }
 
 
+document.getElementById("nickname").addEventListener("input", () => {
+    const nick = document.getElementById("nickname").value;
+    window.pywebview.api.save_user_json(nick, "");
+});
+
 
 window.addEventListener('pywebviewready', async () => {
-    const versions = await pywebview.api.get_versions();
+    const versions = await window.pywebview.api.get_versions();
     const select = document.getElementById("versionSelect");
     select.innerHTML = "";
     versions.forEach(v => {
@@ -34,6 +40,10 @@ window.addEventListener('pywebviewready', async () => {
         option.value = v;
         option.textContent = v;
         select.appendChild(option);
+    });
+
+    window.pywebview.api.get_user_json().then(data => {
+        document.getElementById("nickname").value = data.username || "";
     });
 });
 

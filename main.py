@@ -7,23 +7,32 @@ import json
 import os
 
 
-
+# ------------- DIRECTORIOS -------------
 USER_FILE = "user.json"
 mc_dir = mll.utils.get_minecraft_directory()
+# ---------------------------------------
 
 
+
+
+# ------- GUARDAR Y CARGAR ARCHIVOS -------
 def save_user_data(data: dict):
     with open(USER_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
-    print("Datos guardados correctamente.")
 
 def load_user_data():
     if not os.path.exists(USER_FILE):
+        with open(USER_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f, indent=4)
         return {}
     with open(USER_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
+# ----------------------------------------
 
 
+
+
+# ------------ API WEBVIEW ------------
 class Api:
     def get_versions(self):
         versions = mll.utils.get_installed_versions(mc_dir)
@@ -52,18 +61,19 @@ class Api:
         
         subprocess.run(minecraft_command)
     
-    def save_user_json(self, username, ram, java_path):
-        data = {
-            "username": username,
-            "ram": ram,
-            "java_path": java_path
-        }
-        load_user_data(data)
-        return "ok"
+    def save_user_json(self, username, ram):
+        data = load_user_data()
+        data["username"] = username
+        data["ram"] = ram
+
+        save_user_data(data)
+        return data
     
     def get_user_json(self):
-        with open("user.json", "r", encoding="utf-8") as f:
-            return json.load(f)
+        return load_user_data()
+# ---------------------------------------
+
+
 
 
 
