@@ -3,9 +3,26 @@ import minecraft_launcher_lib as mll
 import messagebox
 import uuid
 import subprocess
+import json
+import os
 
 
+
+USER_FILE = "user.json"
 mc_dir = mll.utils.get_minecraft_directory()
+
+
+def save_user_data(data: dict):
+    with open(USER_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
+    print("Datos guardados correctamente.")
+
+def load_user_data():
+    if not os.path.exists(USER_FILE):
+        return {}
+    with open(USER_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
 
 class Api:
     def get_versions(self):
@@ -34,6 +51,19 @@ class Api:
         minecraft_command = mll.command.get_minecraft_command(version, mc_dir, options)
         
         subprocess.run(minecraft_command)
+    
+    def save_user_json(self, username, ram, java_path):
+        data = {
+            "username": username,
+            "ram": ram,
+            "java_path": java_path
+        }
+        load_user_data(data)
+        return "ok"
+    
+    def get_user_json(self):
+        with open("user.json", "r", encoding="utf-8") as f:
+            return json.load(f)
 
 
 

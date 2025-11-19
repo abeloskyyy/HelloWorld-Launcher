@@ -16,6 +16,14 @@ function showSection(sectionId) {
     event.target.classList.add('active');
 }
 
+function guardarDatos() {
+    const username = document.getElementById("nickname").value;
+
+    window.pywebview.api.save_user_json(username, "", "")
+        .then(() => alert("Guardado!"));
+}
+
+
 
 window.addEventListener('pywebviewready', async () => {
     const versions = await pywebview.api.get_versions();
