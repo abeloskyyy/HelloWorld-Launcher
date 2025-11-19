@@ -2,6 +2,10 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+
+    user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
 }
 
 body {
@@ -212,11 +216,17 @@ button {
     align-items: center;
     transition: all 0.3s ease;
     border: 2px solid transparent;
+    gap: 18px;
 }
 
 .profile-card:hover {
     background: rgba(0, 0, 0, 0.4);
     border-color: rgba(92, 184, 92, 0.3);
+}
+
+.profile-card img {
+    border-radius: 8px;
+    height: 70px;
 }
 
 .profile-info h3 {

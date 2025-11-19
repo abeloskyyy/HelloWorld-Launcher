@@ -19,19 +19,29 @@ function showSection(sectionId) {
 
 function guardarDatos() {
     const username = document.getElementById("nickname").value;
+    const mcdir = document.getElementById("mcdir").value;
 
-    window.pywebview.api.save_user_json(username, "")
+    window.pywebview.api.save_user_json(username, mcdir)
         .then(() => alert("Guardado!"));
 }
 
 
 document.getElementById("nickname").addEventListener("input", () => {
     const nick = document.getElementById("nickname").value;
-    window.pywebview.api.save_user_json(nick, "");
+    const mcdir = document.getElementById("mcdir").value;
+
+    window.pywebview.api.save_user_json(nick, mcdir);
+});
+document.getElementById("mcdir").addEventListener("input", () => {
+    const nick = document.getElementById("nickname").value;
+    const mcdir = document.getElementById("mcdir").value;
+
+    window.pywebview.api.save_user_json(nick, mcdir);
 });
 
 
 window.addEventListener('pywebviewready', async () => {
+    // ------------------- Cargar versiones ------------------- //
     const versions = await window.pywebview.api.get_versions();
     const select = document.getElementById("versionSelect");
     select.innerHTML = "";
@@ -42,9 +52,47 @@ window.addEventListener('pywebviewready', async () => {
         select.appendChild(option);
     });
 
+    
+    // ------------------- Cargar user.json -------------------- //
     window.pywebview.api.get_user_json().then(data => {
         document.getElementById("nickname").value = data.username || "";
+        document.getElementById("mcdir").value = data.mcdir || "";
     });
+
+
+
+    // ------------------- Cargar perfiles -------------------- //
+    const profilesData = await window.pywebview.api.get_profiles();
+    const profiles = profilesData.profiles;
+
+    const list = document.getElementById("profilesList");
+    list.innerHTML = ""; // limpiar
+
+    for (const id in profiles) {
+        const p = profiles[id];
+
+        const item = document.createElement("div");
+        item.className = "profile-item";
+        item.innerHTML = `
+            <div class="profile-card">
+                <div class="profile-info">
+                    <h3>${p.name}</h3>
+                    <p>Versión: ${p.version} | Última vez: Hace 2 horas</p>
+                </div>
+                <div class="profile-actions">
+                    <button class="btn-secondary btn-small">✏️ Editar</button>
+                    <button class="btn-danger btn-small">🗑️ Eliminar</button>
+                </div>
+            </div>
+        `;
+
+        // Opcional: clic para seleccionar el perfil
+        item.onclick = () => {
+            console.log("Perfil seleccionado:", id);
+        };
+
+        list.appendChild(item);
+    }
 });
 
 

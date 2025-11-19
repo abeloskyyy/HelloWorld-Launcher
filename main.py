@@ -9,7 +9,12 @@ import os
 
 # ------------- DIRECTORIOS -------------
 USER_FILE = "user.json"
-mc_dir = mll.utils.get_minecraft_directory()
+PROFILES_FILE = "profiles.json"
+
+APPDATA = os.getenv("APPDATA")
+default_mc_dir = os.path.join(APPDATA, ".minecraft")
+mc_dir = None
+launcher_dir = os.path.join(mc_dir, ".HWLauncher")
 # ---------------------------------------
 
 
@@ -27,8 +32,64 @@ def load_user_data():
         return {}
     with open(USER_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
+    
+
+
+
+def load_profiles():
+    if not os.path.exists(PROFILES_FILE):
+        with open(PROFILES_FILE, "w", encoding="utf-8") as f:
+            json.dump({"profiles": {}}, f, indent=4)
+        return {"profiles": {}}
+
+    with open(PROFILES_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+    
+def save_profiles(data):
+    with open(PROFILES_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
 # ----------------------------------------
 
+
+
+# --------------- PERFILES ---------------
+def add_profile(profile_id, name, version, icon, directory, jvm_args):
+    profiles = load_profiles()
+
+    profiles["profiles"][profile_id] = {
+        "name": name,
+        "version": version,
+        "icon": icon,
+        "directory": directory,
+        "jvm_args": jvm_args
+    }
+
+    save_profiles(profiles)
+
+
+
+def edit_profile(profile_id, updated_data):
+    profiles = load_profiles()
+
+    if profile_id not in profiles["profiles"]:
+        return False  # no existe
+
+    profiles["profiles"][profile_id].update(updated_data)
+    save_profiles(profiles)
+    return True
+
+
+
+def delete_profile(profile_id):
+    profiles = load_profiles()
+
+    if profile_id in profiles["profiles"]:
+        del profiles["profiles"][profile_id]
+        save_profiles(profiles)
+        return True
+    
+    return False
+# ----------------------------------------
 
 
 
@@ -61,16 +122,26 @@ class Api:
         
         subprocess.run(minecraft_command)
     
-    def save_user_json(self, username, ram):
+    def save_user_json(self, username, mcdir):
         data = load_user_data()
         data["username"] = username
-        data["ram"] = ram
+        data["mcdir"] = mcdir
 
         save_user_data(data)
         return data
     
     def get_user_json(self):
-        return load_user_data()
+        data = load_user_data()
+
+        # Si no existe, le pongo el default
+        if "mcdir" not in data or data["mcdir"] == "":
+            data["mcdir"] = mc_dir
+            save_user_data(data)
+
+        return data
+    
+    def get_profiles(self):
+        return load_profiles()
 # ---------------------------------------
 
 
