@@ -5,6 +5,7 @@ import uuid
 import subprocess
 import json
 import os
+import shutil
 
 
 # ------------- DIRECTORIOS -------------
@@ -14,7 +15,7 @@ PROFILES_FILE = "profiles.json"
 APPDATA = os.getenv("APPDATA")
 default_mc_dir = os.path.join(APPDATA, ".minecraft")
 mc_dir = None
-launcher_dir = os.path.join(mc_dir, ".HWLauncher")
+launcher_dir = None
 # ---------------------------------------
 
 
@@ -95,6 +96,12 @@ def delete_profile(profile_id):
 
 # ------------ API WEBVIEW ------------
 class Api:
+    def get_profile_icon(self, filename):
+        # path absoluto dentro del directorio real
+        icon_path = os.path.join(launcher_dir, "profiles-img", filename)
+        return f"file:///{icon_path.replace('\\', '/')}"
+
+
     def get_versions(self):
         versions = mll.utils.get_installed_versions(mc_dir)
         version_ids = [v["id"] for v in versions]
@@ -131,14 +138,7 @@ class Api:
         return data
     
     def get_user_json(self):
-        data = load_user_data()
-
-        # Si no existe, le pongo el default
-        if "mcdir" not in data or data["mcdir"] == "":
-            data["mcdir"] = mc_dir
-            save_user_data(data)
-
-        return data
+        return load_user_data()
     
     def get_profiles(self):
         return load_profiles()
@@ -150,6 +150,44 @@ class Api:
 
 
 if __name__ == '__main__':
+    # 1. Cargar los datos ANTES de usar la API
+    user_data = load_user_data()
+
+    if "mcdir" in user_data and user_data["mcdir"] != "":
+        mc_dir = user_data["mcdir"]
+    else:
+        mc_dir = default_mc_dir
+        user_data["mcdir"] = mc_dir
+        save_user_data(user_data)
+
+    launcher_dir = os.path.join(mc_dir, ".HWLauncher")
+    os.makedirs(launcher_dir, exist_ok=True)
+
+    # 4. Crear carpeta profiles-img y copiar iconos iniciales
+    profiles_img_dir = os.path.join(launcher_dir, "profiles-img")
+    if not os.path.exists(profiles_img_dir):
+        os.makedirs(profiles_img_dir, exist_ok=True)
+
+        import shutil
+        source_dir = os.path.join(os.path.dirname(__file__), "img", "profiles")
+
+        if os.path.exists(source_dir):
+            for filename in os.listdir(source_dir):
+                src = os.path.join(source_dir, filename)
+                dst = os.path.join(profiles_img_dir, filename)
+
+                if os.path.isfile(src):
+                    shutil.copy2(src, dst)
+
+            print("Iconos de perfiles copiados a profiles-img")
+        else:
+            print("WARNING: No existe ./img/profiles, no se copiaron iconos.")
+
+
+
+
+
+
     api = Api()
     window = webview.create_window(
         'HelloWorld Launcher',

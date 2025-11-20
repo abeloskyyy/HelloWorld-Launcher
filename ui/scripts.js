@@ -75,6 +75,7 @@ window.addEventListener('pywebviewready', async () => {
         item.className = "profile-item";
         item.innerHTML = `
             <div class="profile-card">
+                <img src="` + window.pywebview.api.get_profile_icon(p.icon) + `" id="profile-img">
                 <div class="profile-info">
                     <h3>${p.name}</h3>
                     <p>Versión: ${p.version} | Última vez: Hace 2 horas</p>
@@ -94,6 +95,9 @@ window.addEventListener('pywebviewready', async () => {
         list.appendChild(item);
     }
 });
+
+
+
 
 
 
