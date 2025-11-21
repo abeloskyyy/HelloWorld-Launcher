@@ -97,6 +97,7 @@ def delete_profile(profile_id):
 # ------------ API WEBVIEW ------------
 class Api:
     def get_profile_icon(self, filename):
+        print("Obteniendo icono de perfil:", filename)
         # path absoluto dentro del directorio real
         icon_path = os.path.join(launcher_dir, "profiles-img", filename)
         return f"file:///{icon_path.replace('\\', '/')}"

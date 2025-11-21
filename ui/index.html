@@ -62,43 +62,10 @@
             <div id="profiles" class="section">
                 <h1>Perfiles</h1>
                 <div class="profiles-section">
-                    <button class="btn-primary create-profile-btn">
+                    <button id="CreateProfileBtn" class="btn-primary create-profile-btn">
                         ➕ Crear Nuevo Perfil
                     </button>
-
-                    <div class="profile-card">
-                        <img id="profile-img">
-                        <div class="profile-info">
-                            <h3>Perfil Principal</h3>
-                            <p>Versión: 1.20.4 | Última jugada: Hace 2 horas</p>
-                        </div>
-                        <div class="profile-actions">
-                            <button class="btn-secondary btn-small">✏️ Editar</button>
-                            <button class="btn-danger btn-small">🗑️ Eliminar</button>
-                        </div>
-                    </div>
-
-                    <div class="profile-card">
-                        <div class="profile-info">
-                            <h3>Modpack Survival</h3>
-                            <p>Versión: 1.19.4 con Forge | Última jugada: Hace 1 día</p>
-                        </div>
-                        <div class="profile-actions">
-                            <button class="btn-secondary btn-small">✏️ Editar</button>
-                            <button class="btn-danger btn-small">🗑️ Eliminar</button>
-                        </div>
-                    </div>
-
-                    <div class="profile-card">
-                        <div class="profile-info">
-                            <h3>PvP 1.8.9</h3>
-                            <p>Versión: 1.8.9 | Última jugada: Hace 3 días</p>
-                        </div>
-                        <div class="profile-actions">
-                            <button class="btn-secondary btn-small">✏️ Editar</button>
-                            <button class="btn-danger btn-small">🗑️ Eliminar</button>
-                        </div>
-                    </div>
+                    <!-- Los perfiles se cargarán aquí dinámicamente -->
                 </div>
             </div>
 
@@ -122,6 +89,47 @@
                     <button class="btn-primary">Guardar Configuración</button>
                 </div>
             </div>
+        </div>
+
+        <div class="modal" id="modal">
+            <div class="modal-content">
+                <span>Crear Nuevo Perfil</span>
+                <div class="profile-icon-selector" id="iconSelector">
+                    <label for="iconInput" class="icon-button" id="iconButton">
+                        <img src="" alt="Preview" class="icon-preview" id="iconPreview" style="display: none;">
+                        <span class="placeholder-icon" id="placeholderIcon">👤</span>
+                    </label>
+                    <input 
+                        type="file" 
+                        id="iconInput" 
+                        class="icon-input" 
+                        accept="image/png,image/jpeg,image/jpg,image/gif"
+                    >
+                </div>
+                <p class="icon-label">Haz clic para seleccionar una imagen</p>
+                <div class="input-group">
+                    <label>Nombre del Perfil</label>
+                    <input id="profileName" type="text">
+                </div>
+                <div class="input-group">
+                    <label>Versión</label>
+                    <select name="create-profile-version" id="">
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Directorio</label>
+                    <input id="profileDir" type="text">
+                </div>
+                <div class="input-group">
+                    <label>Argumentos JVM</label>
+                    <input id="profileJVMArgs" type="text">
+                </div>
+                <div class="modal-options">
+                    <button id="acceptProfileBtn" class="btn-blue">Crear</button>
+                    <button id="cancelModalBtn" class="btn-red">Cancelar</button>
+                </div>
+            </div>
+
         </div>
     </div>
 
