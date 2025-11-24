@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
     <div class="launcher">
         <!-- Barra lateral -->
@@ -38,14 +40,33 @@
                     </div>
 
                     <div class="input-group">
-                        <label>Versión de Minecraft</label>
-                        <select id="versionSelect">
-                        </select>
+                        <label>Seleccionar perfil</label>
+                        <select id="profileSelect"></select>
+
+                        <!-- Select personalizado -->
+                        <div class="custom-select" id="customSelect">
+                            <div class="select-trigger" id="selectTrigger">
+                                <div class="select-trigger-content">
+                                    <img src="https://via.placeholder.com/40" alt="" class="select-trigger-icon"
+                                        id="selectedIcon">
+                                    <div class="select-trigger-text">
+                                        <div class="select-trigger-title" id="selectedTitle">Selecciona un perfil</div>
+                                        <div class="select-trigger-subtitle" id="selectedSubtitle">Elige tu
+                                            configuración</div>
+                                    </div>
+                                </div>
+                                <div class="select-arrow"></div>
+                            </div>
+
+                            <div class="select-options" id="selectOptions">
+                                <!-- Las opciones se cargarán dinámicamente aquí -->
+                            </div>
+                        </div>
                     </div>
 
                     <div class="button-group">
                         <button class="btn-secondary" style="flex: 1;">
-                            📥 Instalar Versión
+                            📥 Instalar versión
                         </button>
                         <button class="btn-secondary" style="flex: 1;">
                             🔧 Mods & Forge
@@ -53,7 +74,7 @@
                     </div>
 
                     <button class="play-button" onclick="launchGame()">
-                        JUGAR
+                        Jugar
                     </button>
                 </div>
             </div>
@@ -62,10 +83,12 @@
             <div id="profiles" class="section">
                 <h1>Perfiles</h1>
                 <div class="profiles-section">
-                    <button id="CreateProfileBtn" class="btn-primary create-profile-btn">
-                        ➕ Crear Nuevo Perfil
+                    <button id="createProfileBtn" class="btn-primary create-profile-btn">
+                        ➕ Crear nuevo perfil
                     </button>
-                    <!-- Los perfiles se cargarán aquí dinámicamente -->
+                    <div id="profilesList">
+                        <!-- Los perfiles se cargarán aquí dinámicamente -->
+                    </div>
                 </div>
             </div>
 
@@ -99,31 +122,37 @@
                         <img src="" alt="Preview" class="icon-preview" id="iconPreview" style="display: none;">
                         <span class="placeholder-icon" id="placeholderIcon">👤</span>
                     </label>
-                    <input 
-                        type="file" 
-                        id="iconInput" 
-                        class="icon-input" 
-                        accept="image/png,image/jpeg,image/jpg,image/gif"
-                    >
+                    <input type="file" id="iconInput" class="icon-input"
+                        accept="image/png,image/jpeg,image/jpg,image/gif">
                 </div>
                 <p class="icon-label">Haz clic para seleccionar una imagen</p>
-                <div class="input-group">
+                <div class="modal-input-group">
                     <label>Nombre del Perfil</label>
                     <input id="profileName" type="text">
                 </div>
-                <div class="input-group">
+                <div class="modal-input-group">
                     <label>Versión</label>
-                    <select name="create-profile-version" id="">
+                    <select name="create-profile-version" id="profileVersionSelect">
                     </select>
                 </div>
-                <div class="input-group">
+                <div class="modal-input-group">
                     <label>Directorio</label>
                     <input id="profileDir" type="text">
                 </div>
-                <div class="input-group">
+                <div class="modal-input-group">
                     <label>Argumentos JVM</label>
                     <input id="profileJVMArgs" type="text">
                 </div>
+
+                <!-- Indicador de progreso de instalación -->
+                <div id="installProgress" class="install-progress" style="display: none;">
+                    <div class="install-progress-text">Instalando versión...</div>
+                    <div class="progress-bar">
+                        <div id="progressBarFill" class="progress-bar-fill" style="width: 0%;"></div>
+                    </div>
+                    <div id="progressPercentage" class="progress-percentage">0%</div>
+                </div>
+
                 <div class="modal-options">
                     <button id="acceptProfileBtn" class="btn-blue">Crear</button>
                     <button id="cancelModalBtn" class="btn-red">Cancelar</button>
@@ -135,4 +164,5 @@
 
     <script src="scripts.js"></script>
 </body>
+
 </html>

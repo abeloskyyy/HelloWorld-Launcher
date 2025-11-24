@@ -74,8 +74,15 @@ body {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 h1 {
@@ -124,7 +131,8 @@ label {
     font-weight: 500;
 }
 
-input[type="text"], select {
+input[type="text"],
+select {
     padding: 12px 15px;
     background: rgba(0, 0, 0, 0.4);
     border: 2px solid rgba(92, 184, 92, 0.3);
@@ -134,7 +142,8 @@ input[type="text"], select {
     transition: all 0.3s ease;
 }
 
-input[type="text"]:focus, select:focus {
+input[type="text"]:focus,
+select:focus {
     outline: none;
     border-color: #5cb85c;
     background: rgba(0, 0, 0, 0.5);
@@ -257,6 +266,12 @@ button {
     height: 70px;
 }
 
+.profile-info {
+    flex: 0 1 auto;
+    text-align: left;
+    margin-right: auto;
+}
+
 .profile-info h3 {
     color: #5cb85c;
     margin-bottom: 5px;
@@ -304,6 +319,7 @@ button {
     z-index: 1000;
     display: none;
 }
+
 .modal.show {
     display: flex;
 }
@@ -315,18 +331,25 @@ button {
     width: 400px;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
 }
-.input-group label{
+
+.modal-input-group label {
     color: #333;
 }
-.input-group {
+
+.modal-input-group {
     margin: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 
-.modal-content input[type="text"], .modal-content select {
+.modal-content input[type="text"],
+.modal-content select {
     background: #f0f0f0;
     border: 2px solid #ccc;
     color: #333;
 }
+
 .profile-icon-selector {
     position: relative;
     width: 100%;
@@ -349,6 +372,7 @@ button {
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 10px;
 }
 
 .icon-button:hover {
@@ -385,10 +409,261 @@ button {
     font-size: 20px;
     font-weight: 600;
 }
+
 .modal-options {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
     margin: 20px;
     margin-top: 40px;
+}
+
+
+#profileSelect {
+    display: none;
+}
+
+/* Contenedor del select personalizado */
+.custom-select {
+    position: relative;
+    width: 100%;
+}
+
+/* Botón principal del select */
+.select-trigger {
+    padding: 15px 18px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 2px solid rgba(92, 184, 92, 0.3);
+    border-radius: 5px;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.3s ease;
+    min-height: 60px;
+}
+
+.select-trigger:hover {
+    border-color: #5cb85c;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.select-trigger.active {
+    border-color: #5cb85c;
+    border-radius: 5px 5px 0 0;
+}
+
+/* Contenido del trigger (texto + icono) */
+.select-trigger-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+}
+
+.select-trigger-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 5px;
+    object-fit: cover;
+    background: rgba(92, 184, 92, 0.2);
+}
+
+.select-trigger-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+}
+
+.select-trigger-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.select-trigger-subtitle {
+    font-size: 12px;
+    color: #aaa;
+}
+
+/* Flecha del select */
+.select-arrow {
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 6px solid #5cb85c;
+    transition: transform 0.3s ease;
+}
+
+.select-trigger.active .select-arrow {
+    transform: rotate(180deg);
+}
+
+/* Dropdown con opciones */
+.select-options {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.95);
+    border: 2px solid rgba(92, 184, 92, 0.3);
+    border-top: none;
+    border-radius: 0 0 5px 5px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+}
+
+.select-options.active {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+/* Scrollbar personalizado */
+.select-options::-webkit-scrollbar {
+    width: 8px;
+}
+
+.select-options::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.select-options::-webkit-scrollbar-thumb {
+    background: rgba(92, 184, 92, 0.5);
+    border-radius: 4px;
+}
+
+.select-options::-webkit-scrollbar-thumb:hover {
+    background: rgba(92, 184, 92, 0.7);
+}
+
+/* Opción individual */
+.select-option {
+    padding: 15px 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.select-option:last-child {
+    border-bottom: none;
+}
+
+.select-option:hover {
+    background: rgba(92, 184, 92, 0.15);
+}
+
+.select-option.selected {
+    background: rgba(92, 184, 92, 0.25);
+}
+
+/* Icono de la opción */
+.option-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 5px;
+    object-fit: cover;
+    background: rgba(92, 184, 92, 0.2);
+    flex-shrink: 0;
+}
+
+/* Contenido de la opción */
+.option-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+}
+
+.option-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.option-subtitle {
+    font-size: 12px;
+    color: #aaa;
+}
+
+.option-tags {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+    flex-wrap: wrap;
+}
+
+.option-tag {
+    padding: 2px 8px;
+    background: rgba(92, 184, 92, 0.2);
+    border: 1px solid rgba(92, 184, 92, 0.3);
+    border-radius: 3px;
+    font-size: 10px;
+    color: #5cb85c;
+    font-weight: 500;
+}
+
+.option-tag.forge {
+    background: rgba(184, 92, 92, 0.2);
+    border-color: rgba(184, 92, 92, 0.3);
+    color: #d9534f;
+}
+
+.option-tag.fabric {
+    background: rgba(92, 147, 184, 0.2);
+    border-color: rgba(92, 147, 184, 0.3);
+    color: #5c93b8;
+}
+
+/* Indicador de progreso de instalación */
+.install-progress {
+    margin: 20px 0;
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.install-progress-text {
+    font-size: 14px;
+    color: #333;
+    margin-bottom: 10px;
+    text-align: center;
+    font-weight: 500;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 10px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4CAF50, #8BC34A);
+    border-radius: 5px;
+    transition: width 0.3s ease;
+    box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
+}
+
+.progress-percentage {
+    font-size: 13px;
+    color: #4CAF50;
+    text-align: center;
+    font-weight: 700;
 }
