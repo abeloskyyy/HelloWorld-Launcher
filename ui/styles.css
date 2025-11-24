@@ -1,3 +1,13 @@
+@font-face {
+    font-family: "Pixel";
+    src: url("fonts/pixel.ttf") format("truetype");
+}
+
+
+
+
+
+
 * {
     margin: 0;
     padding: 0;
@@ -228,7 +238,8 @@ button {
     background: linear-gradient(135deg, #5cb85c 0%, #4cae4c 100%);
     color: #fff;
     padding: 20px;
-    font-size: 20px;
+    font-size: 50px;
+    font-family: "Pixel";
     margin-top: 10px;
     box-shadow: 0 8px 20px rgba(92, 184, 92, 0.3);
 }

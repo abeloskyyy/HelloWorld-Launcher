@@ -1,3 +1,22 @@
+// UI Elements
+const selectTrigger = document.getElementById('selectTrigger');
+const selectOptions = document.getElementById('selectOptions');
+const customSelect = document.getElementById('customSelect');
+const originalSelect = document.getElementById('profileSelect');
+const createProfileBtn = document.getElementById('createProfileBtn');
+const profileModal = document.getElementById('modal');
+const cancelModalBtn = document.getElementById('cancelModalBtn');
+const acceptProfileBtn = document.getElementById('acceptProfileBtn');
+const iconInput = document.getElementById('iconInput');
+const iconPreview = document.getElementById('iconPreview');
+const placeholderIcon = document.getElementById('placeholderIcon');
+const iconSelector = document.getElementById('iconSelector');
+
+// Global Variables
+let profiles = {};
+let editingProfileId = null;
+let selectedImageData = null;
+
 // Función global para actualizar el progreso de instalación
 window.updateInstallProgress = function (version, percentage, status) {
     const progressContainer = document.getElementById('installProgress');
@@ -6,19 +25,11 @@ window.updateInstallProgress = function (version, percentage, status) {
     const progressPercentage = document.getElementById('progressPercentage');
 
     if (progressContainer && progressBar && progressText && progressPercentage) {
-        // Mostrar el contenedor de progreso
         progressContainer.style.display = 'block';
-
-        // Actualizar texto
         progressText.textContent = status || `Instalando ${version}...`;
-
-        // Actualizar barra de progreso
         progressBar.style.width = `${percentage}%`;
-
-        // Actualizar porcentaje
         progressPercentage.textContent = `${percentage}%`;
 
-        // Ocultar cuando llegue al 100%
         if (percentage >= 100) {
             setTimeout(() => {
                 progressContainer.style.display = 'none';
@@ -35,66 +46,47 @@ function guardarDatos() {
         .then(() => alert("Guardado!"));
 }
 
+// Event Listeners for Inputs
+if (document.getElementById("nickname")) {
+    document.getElementById("nickname").addEventListener("input", () => {
+        const nick = document.getElementById("nickname").value;
+        const mcdir = document.getElementById("mcdir").value;
+        window.pywebview.api.save_user_json(nick, mcdir);
+    });
+}
 
-document.getElementById("nickname").addEventListener("input", () => {
-    const nick = document.getElementById("nickname").value;
-    const mcdir = document.getElementById("mcdir").value;
+if (document.getElementById("mcdir")) {
+    document.getElementById("mcdir").addEventListener("input", () => {
+        const nick = document.getElementById("nickname").value;
+        const mcdir = document.getElementById("mcdir").value;
+        window.pywebview.api.save_user_json(nick, mcdir);
+    });
+}
 
-    window.pywebview.api.save_user_json(nick, mcdir);
-});
-
-document.getElementById("mcdir").addEventListener("input", () => {
-    const nick = document.getElementById("nickname").value;
-    const mcdir = document.getElementById("mcdir").value;
-
-    window.pywebview.api.save_user_json(nick, mcdir);
-});
-
-
+// PyWebView Ready
 window.addEventListener('pywebviewready', async () => {
-    // ------------------- Cargar perfiles en select ------------------- //
     await loadOptions();
 
-
-    // ------------------- Cargar user.json -------------------- //
     window.pywebview.api.get_user_json().then(data => {
-        document.getElementById("nickname").value = data.username || "";
-        document.getElementById("mcdir").value = data.mcdir || "";
+        if (document.getElementById("nickname")) document.getElementById("nickname").value = data.username || "";
+        if (document.getElementById("mcdir")) document.getElementById("mcdir").value = data.mcdir || "";
     });
 
-    // ------------------- Cargar lista de perfiles -------------------- //
     await cargarPerfiles();
-
-    // ------------------- Cargar versiones disponibles -------------------- //
     await loadVersions();
 });
 
-
-
 async function launchGame() {
-    // Leer selección del select
     const selectedVersion = document.getElementById("profileSelect").value;
-    // Leer texto del input
     const nickname = document.getElementById("nickname").value;
 
-    // Mandar los datos a Python
     await pywebview.api.start_game(selectedVersion, nickname);
 
-    // Actualizar UI inmediatamente para reflejar "Last Played"
     await loadOptions();
     await cargarPerfiles();
 }
 
-
-// UI
-
-const selectTrigger = document.getElementById('selectTrigger');
-const selectOptions = document.getElementById('selectOptions');
-const customSelect = document.getElementById('customSelect');
-const originalSelect = document.getElementById('profileSelect');
-let profiles = {}; // Variable global para perfiles
-
-// Helper para tiempo relativo
+// Helper Functions
 function timeAgo(dateString) {
     const date = new Date(dateString);
     const now = new Date();
@@ -113,41 +105,35 @@ function timeAgo(dateString) {
     return "Hace unos segundos";
 }
 
-// Cargar versiones disponibles
 async function loadVersions() {
     const versionSelect = document.getElementById('profileVersionSelect');
+    if (!versionSelect) return;
     versionSelect.innerHTML = '';
 
     try {
         const versionsData = await window.pywebview.api.get_available_versions();
 
-        // Crear optgroup para versiones instaladas
         if (versionsData.installed && versionsData.installed.length > 0) {
             const installedGroup = document.createElement('optgroup');
-            installedGroup.label = '📦 Instaladas';
-
+            installedGroup.label = 'Instaladas';
             versionsData.installed.forEach(version => {
                 const option = document.createElement('option');
                 option.value = version;
                 option.textContent = version;
                 installedGroup.appendChild(option);
             });
-
             versionSelect.appendChild(installedGroup);
         }
 
-        // Crear optgroup para versiones disponibles
         if (versionsData.available && versionsData.available.length > 0) {
             const availableGroup = document.createElement('optgroup');
-            availableGroup.label = '☁️ Disponibles (Vanilla)';
-
+            availableGroup.label = 'Disponibles (Vanilla)';
             versionsData.available.forEach(version => {
                 const option = document.createElement('option');
                 option.value = version;
                 option.textContent = version;
                 availableGroup.appendChild(option);
             });
-
             versionSelect.appendChild(availableGroup);
         }
     } catch (error) {
@@ -155,22 +141,18 @@ async function loadVersions() {
     }
 }
 
-// Cargar opciones
 async function loadOptions() {
-    // Obtener perfiles del backend
     const profilesData = await window.pywebview.api.get_profiles();
     profiles = profilesData.profiles;
 
-    selectOptions.innerHTML = '';
-    originalSelect.innerHTML = ''; // Limpiar select oculto
+    if (selectOptions) selectOptions.innerHTML = '';
+    if (originalSelect) originalSelect.innerHTML = '';
 
-    // Convertir a array para ordenar
     const profilesArray = Object.entries(profiles).map(([id, profile]) => ({
         id,
         ...profile
     }));
 
-    // Ordenar por last_played (más reciente primero)
     profilesArray.sort((a, b) => {
         const dateA = a.last_played ? new Date(a.last_played) : new Date(0);
         const dateB = b.last_played ? new Date(b.last_played) : new Date(0);
@@ -180,124 +162,105 @@ async function loadOptions() {
     for (const profile of profilesArray) {
         const id = profile.id;
 
-        // 1. Poblar el select oculto (necesario para que funcione .value)
-        const nativeOption = document.createElement("option");
-        nativeOption.value = id;
-        nativeOption.textContent = profile.name;
-        originalSelect.appendChild(nativeOption);
-
-        // 2. Poblar el select personalizado
-        const option = document.createElement('div');
-        option.className = 'select-option';
-        option.dataset.value = id;
-
-        let tags = '';
-        if (profile.type === 'forge') {
-            tags = '<span class="option-tag forge">FORGE</span>';
-        } else if (profile.type === 'fabric') {
-            tags = '<span class="option-tag fabric">FABRIC</span>';
-        } else {
-            tags = '<span class="option-tag">VANILLA</span>';
+        if (originalSelect) {
+            const nativeOption = document.createElement("option");
+            nativeOption.value = id;
+            nativeOption.textContent = profile.name;
+            originalSelect.appendChild(nativeOption);
         }
 
-        if (profile.mods) {
-            tags += `<span class="option-tag">${profile.mods} MODS</span>`;
-        }
+        if (selectOptions) {
+            const option = document.createElement('div');
+            option.className = 'select-option';
+            option.dataset.value = id;
 
-        // Usar get_profile_icon para obtener la ruta correcta de la imagen
-        const iconUrl = await window.pywebview.api.get_profile_icon(profile.icon);
-        profile.iconUrl = iconUrl; // Guardar URL para uso posterior
+            let tags = '';
+            if (profile.type === 'forge') tags = '<span class="option-tag forge">FORGE</span>';
+            else if (profile.type === 'fabric') tags = '<span class="option-tag fabric">FABRIC</span>';
+            else tags = '<span class="option-tag">VANILLA</span>';
 
-        const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Nunca';
+            if (profile.mods) tags += `<span class="option-tag">${profile.mods} MODS</span>`;
 
-        option.innerHTML = `
-            <img src="${iconUrl}" alt="" class="option-icon">
-            <div class="option-content">
-                <div class="option-title">${profile.name}</div>
-                <div class="option-subtitle">Versión ${profile.version} • ${lastPlayedText}</div>
-                <div class="option-tags">
-                    ${tags}
+            const iconUrl = await window.pywebview.api.get_profile_icon(profile.icon);
+            profile.iconUrl = iconUrl;
+
+            const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Nunca';
+
+            option.innerHTML = `
+                <img src="${iconUrl}" alt="" class="option-icon">
+                <div class="option-content">
+                    <div class="option-title">${profile.name}</div>
+                    <div class="option-subtitle">Versión ${profile.version} • ${lastPlayedText}</div>
+                    <div class="option-tags">${tags}</div>
                 </div>
-            </div>
-        `;
+            `;
 
-        option.addEventListener('click', () => selectOption(id, profile));
-        selectOptions.appendChild(option);
+            option.addEventListener('click', () => selectOption(id, profile));
+            selectOptions.appendChild(option);
+        }
     }
 
-    // Seleccionar primera opción (la más reciente) por defecto
     if (profilesArray.length > 0) {
         const firstProfile = profilesArray[0];
         selectOption(firstProfile.id, firstProfile);
     }
 }
 
-// Seleccionar opción
 function selectOption(id, profile) {
-    // Actualizar select original
-    originalSelect.value = id;
+    if (originalSelect) originalSelect.value = id;
 
     const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Nunca';
 
-    // Actualizar visual del trigger
-    document.getElementById('selectedIcon').src = profile.iconUrl || profile.icon;
-    document.getElementById('selectedTitle').textContent = profile.name;
-    document.getElementById('selectedSubtitle').textContent = `Versión ${profile.version} • ${lastPlayedText}`;
+    if (document.getElementById('selectedIcon')) document.getElementById('selectedIcon').src = profile.iconUrl || profile.icon;
+    if (document.getElementById('selectedTitle')) document.getElementById('selectedTitle').textContent = profile.name;
+    if (document.getElementById('selectedSubtitle')) document.getElementById('selectedSubtitle').textContent = `Versión ${profile.version} • ${lastPlayedText}`;
 
-    // Marcar opción como seleccionada
     document.querySelectorAll('.select-option').forEach(opt => {
         opt.classList.remove('selected');
     });
     const selectedOpt = document.querySelector(`[data-value="${id}"]`);
     if (selectedOpt) selectedOpt.classList.add('selected');
 
-    // Cerrar dropdown
     closeSelect();
-
-    // Disparar evento change en el select original
-    originalSelect.dispatchEvent(new Event('change'));
+    if (originalSelect) originalSelect.dispatchEvent(new Event('change'));
 }
 
-// Toggle dropdown
 function toggleSelect() {
-    selectTrigger.classList.toggle('active');
-    selectOptions.classList.toggle('active');
+    if (selectTrigger) selectTrigger.classList.toggle('active');
+    if (selectOptions) selectOptions.classList.toggle('active');
 }
 
 function closeSelect() {
-    selectTrigger.classList.remove('active');
-    selectOptions.classList.remove('active');
+    if (selectTrigger) selectTrigger.classList.remove('active');
+    if (selectOptions) selectOptions.classList.remove('active');
 }
 
-// Event listeners
-selectTrigger.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleSelect();
-});
+if (selectTrigger) {
+    selectTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleSelect();
+    });
+}
 
-// Cerrar al hacer clic fuera
 document.addEventListener('click', (e) => {
-    if (!customSelect.contains(e.target)) {
+    if (customSelect && !customSelect.contains(e.target)) {
         closeSelect();
     }
 });
 
-
 async function cargarPerfiles() {
-    // ------------------- Cargar perfiles -------------------- //
     const profilesData = await window.pywebview.api.get_profiles();
     const profiles = profilesData.profiles;
 
     const list = document.getElementById("profilesList");
-    list.innerHTML = ""; // limpiar
+    if (!list) return;
+    list.innerHTML = "";
 
-    // Convertir a array para ordenar
     const profilesArray = Object.entries(profiles).map(([id, profile]) => ({
         id,
         ...profile
     }));
 
-    // Ordenar por last_played (más reciente primero)
     profilesArray.sort((a, b) => {
         const dateA = a.last_played ? new Date(a.last_played) : new Date(0);
         const dateB = b.last_played ? new Date(b.last_played) : new Date(0);
@@ -318,12 +281,28 @@ async function cargarPerfiles() {
                 <p>Versión: ${profile.version} | Última vez: ${lastPlayedText}</p>
             </div>
             <div class="profile-actions">
-                <button class="btn-secondary btn-small">✏️ Editar</button>
-                <button class="btn-danger btn-small">🗑️ Eliminar</button>
+                <button class="btn-secondary btn-small edit-btn">✏️ Editar</button>
+                <button class="btn-danger btn-small delete-btn">🗑️ Eliminar</button>
             </div>
         `;
 
-        // Opcional: clic para seleccionar el perfil
+        const editBtn = item.querySelector('.edit-btn');
+        const deleteBtn = item.querySelector('.delete-btn');
+
+        editBtn.onclick = (e) => {
+            e.stopPropagation();
+            openEditProfileModal(id, profile);
+        };
+
+        deleteBtn.onclick = async (e) => {
+            e.stopPropagation();
+            if (confirm(`¿Estás seguro de que quieres eliminar el perfil "${profile.name}"?`)) {
+                await window.pywebview.api.delete_profile(id);
+                await cargarPerfiles();
+                await loadOptions();
+            }
+        };
+
         item.onclick = () => {
             console.log("Perfil seleccionado:", id);
         };
@@ -333,89 +312,156 @@ async function cargarPerfiles() {
 }
 
 function showSection(sectionId) {
-    // Ocultar todas las secciones
     document.querySelectorAll('.section').forEach(section => {
         section.classList.remove('active');
     });
 
-    // Desactivar todos los botones
     document.querySelectorAll('.sidebar-button').forEach(button => {
         button.classList.remove('active');
     });
 
-    // Mostrar la sección seleccionada
-    document.getElementById(sectionId).classList.add('active');
+    const section = document.getElementById(sectionId);
+    if (section) section.classList.add('active');
 
-    // Activar el botón correspondiente
     if (event && event.target) {
         event.target.classList.add('active');
     }
 }
 
+function resetProfileModal() {
+    if (document.getElementById('profileName')) document.getElementById('profileName').value = '';
+    if (document.getElementById('profileVersionSelect')) document.getElementById('profileVersionSelect').value = '';
+    if (document.getElementById('profileJVMArgs')) document.getElementById('profileJVMArgs').value = '';
+    if (document.getElementById('profileDir')) document.getElementById('profileDir').value = '';
 
+    selectedImageData = null;
 
+    // Cargar imagen por defecto
+    window.pywebview.api.get_profile_icon('default.png').then(url => {
+        if (iconPreview) {
+            iconPreview.src = url;
+            iconPreview.style.display = 'block';
+        }
+        if (placeholderIcon) placeholderIcon.style.display = 'none';
+        if (iconSelector) iconSelector.classList.add('has-image');
+    });
 
-const createProfileBtn = document.getElementById('createProfileBtn');
-const profileModal = document.getElementById('modal');
-const cancelModalBtn = document.getElementById('cancelModalBtn');
-const acceptProfileBtn = document.getElementById('acceptProfileBtn');
+    if (iconInput) iconInput.value = '';
 
-createProfileBtn.addEventListener('click', () => {
-    profileModal.classList.add('show');
-});
+    editingProfileId = null;
+    if (acceptProfileBtn) acceptProfileBtn.textContent = "Crear Perfil";
+    if (document.querySelector('#modal h2')) document.querySelector('#modal h2').textContent = "Crear Nuevo Perfil";
+}
 
-cancelModalBtn.addEventListener('click', () => {
-    profileModal.classList.remove('show');
-});
+function openEditProfileModal(id, profile) {
+    resetProfileModal();
+    editingProfileId = id;
 
-acceptProfileBtn.addEventListener('click', async () => {
-    const profileName = document.getElementById('profileName').value;
-    const profileVersion = document.getElementById('profileVersionSelect').value;
-    const profileJVMArgs = document.getElementById('profileJVMArgs').value;
-    const profileDir = document.getElementById('profileDir').value;
-    const profileIcon = getSelectedIcon();
+    if (document.getElementById('profileName')) document.getElementById('profileName').value = profile.name;
+    if (document.getElementById('profileVersionSelect')) document.getElementById('profileVersionSelect').value = profile.version;
+    if (document.getElementById('profileJVMArgs')) document.getElementById('profileJVMArgs').value = profile.jvm_args || '';
+    if (document.getElementById('profileDir')) document.getElementById('profileDir').value = profile.directory || '';
 
-    await window.pywebview.api.add_profile(profileName, profileVersion, profileIcon, profileDir, profileJVMArgs);
-    await cargarPerfiles();
-    await loadOptions();
-    profileModal.classList.remove('show');
-});
+    if (profile.icon && profile.icon !== 'default.png') {
+        window.pywebview.api.get_profile_icon(profile.icon).then(url => {
+            if (iconPreview) {
+                iconPreview.src = url;
+                iconPreview.style.display = 'block';
+            }
+            if (placeholderIcon) placeholderIcon.style.display = 'none';
+            if (iconSelector) iconSelector.classList.add('has-image');
+        });
+    }
 
+    if (acceptProfileBtn) acceptProfileBtn.textContent = "Guardar Cambios";
+    if (document.querySelector('#modal h2')) document.querySelector('#modal h2').textContent = "Editar Perfil";
+    if (profileModal) profileModal.classList.add('show');
+}
 
+if (createProfileBtn) {
+    createProfileBtn.addEventListener('click', () => {
+        resetProfileModal();
+        if (profileModal) profileModal.classList.add('show');
+    });
+}
 
-const iconInput = document.getElementById('iconInput');
-const iconPreview = document.getElementById('iconPreview');
-const placeholderIcon = document.getElementById('placeholderIcon');
-const iconSelector = document.getElementById('iconSelector');
+if (cancelModalBtn) {
+    cancelModalBtn.addEventListener('click', () => {
+        if (profileModal) profileModal.classList.remove('show');
+        resetProfileModal();
+    });
+}
 
-let selectedImageData = null;
+if (acceptProfileBtn) {
+    acceptProfileBtn.addEventListener('click', async () => {
+        const profileName = document.getElementById('profileName').value;
+        const profileVersion = document.getElementById('profileVersionSelect').value;
+        const profileJVMArgs = document.getElementById('profileJVMArgs').value;
+        const profileDir = document.getElementById('profileDir').value;
+        const profileIcon = getSelectedIcon();
 
-iconInput.addEventListener('change', function (e) {
-    const file = e.target.files[0];
+        // Validación
+        const missingFields = [];
+        if (!profileName.trim()) missingFields.push("Nombre del Perfil");
+        if (!profileVersion) missingFields.push("Versión");
+        if (!profileDir.trim()) missingFields.push("Directorio");
 
-    if (file && file.type.startsWith('image/')) {
-        const reader = new FileReader();
+        if (missingFields.length > 0) {
+            alert(`No puedes dejar estos campos vacíos:\n- ${missingFields.join('\n- ')}`);
+            return;
+        }
 
-        reader.onload = function (e) {
-            // Guardar los datos de la imagen
-            selectedImageData = {
-                base64: e.target.result,
-                filename: file.name,
-                type: file.type
+        if (editingProfileId) {
+            const updatedData = {
+                name: profileName,
+                version: profileVersion,
+                jvm_args: profileJVMArgs,
+                directory: profileDir
             };
 
-            // Mostrar preview
-            iconPreview.src = e.target.result;
-            iconPreview.style.display = 'block';
-            placeholderIcon.style.display = 'none';
-            iconSelector.classList.add('has-image');
-        };
+            if (profileIcon) {
+                updatedData.icon = profileIcon;
+            }
 
-        reader.readAsDataURL(file);
-    }
-});
+            await window.pywebview.api.edit_profile(editingProfileId, updatedData);
+        } else {
+            await window.pywebview.api.add_profile(profileName, profileVersion, profileIcon, profileDir, profileJVMArgs);
+        }
 
-// Función para obtener la imagen seleccionada (opcional)
+        await cargarPerfiles();
+        await loadOptions();
+        if (profileModal) profileModal.classList.remove('show');
+        resetProfileModal();
+    });
+}
+
+if (iconInput) {
+    iconInput.addEventListener('change', function (e) {
+        const file = e.target.files[0];
+
+        if (file && file.type.startsWith('image/')) {
+            const reader = new FileReader();
+
+            reader.onload = function (e) {
+                selectedImageData = {
+                    base64: e.target.result,
+                    filename: file.name,
+                    type: file.type
+                };
+
+                if (iconPreview) {
+                    iconPreview.src = e.target.result;
+                    iconPreview.style.display = 'block';
+                }
+                if (placeholderIcon) placeholderIcon.style.display = 'none';
+                if (iconSelector) iconSelector.classList.add('has-image');
+            };
+
+            reader.readAsDataURL(file);
+        }
+    });
+}
+
 function getSelectedIcon() {
     return selectedImageData;
 }
