@@ -11,7 +11,9 @@ import io
 from PIL import Image
 from datetime import datetime
 
-
+"""
+puedes hacer que se permita hacer scroll en el modal, y que al clicar en el icono se abra un pequeño modal con todos los iconos que hay en el directorio de iconos de perfil del launcher, y una ultima opcion en el nuevo modal, que ya si que abra el icono? que funcione igual, con los nombres de los archivos.
+"""
 
 
 
@@ -438,29 +440,24 @@ if __name__ == '__main__':
 
     # 6. Crear carpeta profiles-img y copiar iconos iniciales
     profiles_img_dir = os.path.join(launcher_dir, "profiles-img")
-    if not os.path.exists(profiles_img_dir):
-        os.makedirs(profiles_img_dir, exist_ok=True)
+    os.makedirs(profiles_img_dir, exist_ok=True)
 
-        import shutil
-        source_dir = os.path.join(os.path.dirname(__file__), "img", "profiles")
+    import shutil
+    source_dir = os.path.join(os.path.dirname(__file__), "img", "profiles")
 
-        if os.path.exists(source_dir):
-            for filename in os.listdir(source_dir):
-                src = os.path.join(source_dir, filename)
-                dst = os.path.join(profiles_img_dir, filename)
+    if os.path.exists(source_dir):
+        for filename in os.listdir(source_dir):
+            src = os.path.join(source_dir, filename)
+            dst = os.path.join(profiles_img_dir, filename)
 
-                if os.path.isfile(src):
-                    shutil.copy2(src, dst)
+            if os.path.isfile(src):
+                # Optional: Check if file exists to avoid overwriting user changes, 
+                # or use copy2 to overwrite. Here we overwrite to ensure defaults exist.
+                shutil.copy2(src, dst)
 
-            print("Iconos de perfiles copiados a profiles-img")
-        else:
-            print("WARNING: No existe ./img/profiles, no se copiaron iconos.")
-    
-    # 7. Crear directorios para logs y config de Minecraft en launcher_dir
-    logs_dir = os.path.join(launcher_dir, "logs")
-    config_dir = os.path.join(launcher_dir, "config")
-    os.makedirs(logs_dir, exist_ok=True)
-    os.makedirs(config_dir, exist_ok=True)
+        print("Iconos de perfiles copiados a profiles-img")
+    else:
+        print("WARNING: No existe ./img/profiles, no se copiaron iconos.")
 
 
 
