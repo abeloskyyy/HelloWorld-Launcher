@@ -7,7 +7,6 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-
     user-select: none;
     -webkit-user-select: none;
     -ms-user-select: none;
@@ -26,7 +25,6 @@ body {
     height: 100vh;
 }
 
-/* Barra lateral */
 .sidebar {
     width: 260px;
     background: rgba(0, 0, 0, 0.4);
@@ -60,7 +58,6 @@ body {
     border-left: 3px solid #5cb85c;
 }
 
-/* Contenido principal */
 .main-content {
     flex: 1;
     padding: 40px;
@@ -96,7 +93,6 @@ h1 {
     color: #5cb85c;
 }
 
-/* Sección de Jugar */
 .play-section {
     display: flex;
     flex-direction: column;
@@ -240,7 +236,6 @@ button {
     box-shadow: 0 12px 25px rgba(92, 184, 92, 0.5);
 }
 
-/* Sección de Perfiles */
 .profiles-section {
     max-width: 800px;
 }
@@ -307,7 +302,6 @@ button {
     margin-bottom: 20px;
 }
 
-
 .modal {
     position: fixed;
     top: 0;
@@ -354,64 +348,62 @@ button {
     color: #333;
 }
 
-.profile-icon-selector {
-    position: relative;
-    width: 100%;
-    height: 120px;
-    margin: 20px 0;
-    justify-content: center;
-    display: flex;
-    align-items: center;
+.modal-content span {
+    color: #1a1a1a;
+    font-size: 20px;
+    font-weight: 600;
 }
 
-.icon-button {
-    width: 120px;
-    height: 120px;
-    border: 3px dashed #4a90e2;
+/* Mostrar icono del perfil */
+.profile-icon-display {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    margin: 20px auto 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border-radius: 12px;
     background-color: #f8f9fa;
-    cursor: pointer;
+    border: 2px solid #e0e0e0;
     overflow: hidden;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 10px;
 }
 
-.icon-button:hover {
-    border-color: #2c6fbd;
-    background-color: #e8f4f8;
-    transform: scale(1.05);
-}
-
-.icon-preview {
+.profile-icon-img {
     width: 100%;
     height: 100%;
     object-fit: cover;
 }
 
-.placeholder-icon {
+.placeholder-icon-small {
     font-size: 48px;
-    color: #4a90e2;
+    color: #999;
+}
+
+/* Botón simple para añadir icono */
+.btn-add-icon {
+    display: block;
+    margin: 10px auto 20px;
+    padding: 10px 20px;
+    background: #4a90e2;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-add-icon:hover {
+    background: #2c6fbd;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(74, 144, 226, 0.3);
 }
 
 /* Ocultar el input real */
 .icon-input {
     display: none;
-}
-
-.icon-label {
-    text-align: center;
-    margin-top: 12px;
-    color: #666;
-    font-size: 14px;
-}
-
-.modal-content span {
-    color: #1a1a1a;
-    font-size: 20px;
-    font-weight: 600;
 }
 
 .modal-options {
@@ -422,18 +414,15 @@ button {
     margin-top: 40px;
 }
 
-
 #profileSelect {
     display: none;
 }
 
-/* Contenedor del select personalizado */
 .custom-select {
     position: relative;
     width: 100%;
 }
 
-/* Botón principal del select */
 .select-trigger {
     padding: 15px 18px;
     background: rgba(0, 0, 0, 0.4);
@@ -459,7 +448,6 @@ button {
     border-radius: 5px 5px 0 0;
 }
 
-/* Contenido del trigger (texto + icono) */
 .select-trigger-content {
     display: flex;
     align-items: center;
@@ -493,7 +481,6 @@ button {
     color: #aaa;
 }
 
-/* Flecha del select */
 .select-arrow {
     width: 0;
     height: 0;
@@ -507,7 +494,6 @@ button {
     transform: rotate(180deg);
 }
 
-/* Dropdown con opciones */
 .select-options {
     position: absolute;
     top: 100%;
@@ -532,7 +518,6 @@ button {
     transform: translateY(0);
 }
 
-/* Scrollbar personalizado */
 .select-options::-webkit-scrollbar {
     width: 8px;
 }
@@ -550,7 +535,6 @@ button {
     background: rgba(92, 184, 92, 0.7);
 }
 
-/* Opción individual */
 .select-option {
     padding: 15px 18px;
     cursor: pointer;
@@ -573,7 +557,6 @@ button {
     background: rgba(92, 184, 92, 0.25);
 }
 
-/* Icono de la opción */
 .option-icon {
     width: 40px;
     height: 40px;
@@ -583,7 +566,6 @@ button {
     flex-shrink: 0;
 }
 
-/* Contenido de la opción */
 .option-content {
     display: flex;
     flex-direction: column;
@@ -631,7 +613,6 @@ button {
     color: #5c93b8;
 }
 
-/* Indicador de progreso de instalación */
 .install-progress {
     margin: 20px 0;
     padding: 15px;
@@ -672,7 +653,201 @@ button {
     font-weight: 700;
 }
 
-/* Modal de selección de imagen */
+.image-selector-modal {
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.image-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 15px;
+    margin: 25px 0;
+    padding: 10px;
+}
+
+.image-grid-item {
+    width: 80px;
+    height: 80px;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 3px solid transparent;
+    transition: all 0.3s ease;
+    background: #f0f0f0;
+}
+
+.image-grid-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.select-trigger.active .select-arrow {
+    transform: rotate(180deg);
+}
+
+.select-options {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.95);
+    border: 2px solid rgba(92, 184, 92, 0.3);
+    border-top: none;
+    border-radius: 0 0 5px 5px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+}
+
+.select-options.active {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.select-options::-webkit-scrollbar {
+    width: 8px;
+}
+
+.select-options::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.select-options::-webkit-scrollbar-thumb {
+    background: rgba(92, 184, 92, 0.5);
+    border-radius: 4px;
+}
+
+.select-options::-webkit-scrollbar-thumb:hover {
+    background: rgba(92, 184, 92, 0.7);
+}
+
+.select-option {
+    padding: 15px 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.select-option:last-child {
+    border-bottom: none;
+}
+
+.select-option:hover {
+    background: rgba(92, 184, 92, 0.15);
+}
+
+.select-option.selected {
+    background: rgba(92, 184, 92, 0.25);
+}
+
+.option-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 5px;
+    object-fit: cover;
+    background: rgba(92, 184, 92, 0.2);
+    flex-shrink: 0;
+}
+
+.option-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+}
+
+.option-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.option-subtitle {
+    font-size: 12px;
+    color: #aaa;
+}
+
+.option-tags {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+    flex-wrap: wrap;
+}
+
+.option-tag {
+    padding: 2px 8px;
+    background: rgba(92, 184, 92, 0.2);
+    border: 1px solid rgba(92, 184, 92, 0.3);
+    border-radius: 3px;
+    font-size: 10px;
+    color: #5cb85c;
+    font-weight: 500;
+}
+
+.option-tag.forge {
+    background: rgba(184, 92, 92, 0.2);
+    border-color: rgba(184, 92, 92, 0.3);
+    color: #d9534f;
+}
+
+.option-tag.fabric {
+    background: rgba(92, 147, 184, 0.2);
+    border-color: rgba(92, 147, 184, 0.3);
+    color: #5c93b8;
+}
+
+.install-progress {
+    margin: 20px 0;
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.install-progress-text {
+    font-size: 14px;
+    color: #333;
+    margin-bottom: 10px;
+    text-align: center;
+    font-weight: 500;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 10px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4CAF50, #8BC34A);
+    border-radius: 5px;
+    transition: width 0.3s ease;
+    box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
+}
+
+.progress-percentage {
+    font-size: 13px;
+    color: #4CAF50;
+    text-align: center;
+    font-weight: 700;
+}
+
 .image-selector-modal {
     max-width: 600px;
     max-height: 80vh;
@@ -715,26 +890,62 @@ button {
     box-shadow: 0 0 10px rgba(74, 144, 226, 0.5);
 }
 
+/* Botón de upload dentro del grid */
+.upload-item {
+    background: #f8f9fa;
+    border: 3px dashed #4a90e2 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.upload-item:hover {
+    border-color: #2c6fbd !important;
+    background-color: #e8f4f8;
+}
+
+.upload-plus {
+    font-size: 48px;
+    color: #4a90e2;
+    font-weight: 300;
+    line-height: 1;
+}
+
 .upload-custom-section {
     margin: 20px 0;
-    padding: 20px;
-    border-top: 2px solid rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    display: flex;
+    justify-content: center;
 }
 
-.upload-custom-btn {
-    display: inline-block;
-    padding: 12px 20px;
-    background: #4a90e2;
-    color: #fff;
-    border-radius: 8px;
+.upload-custom-box {
+    width: 200px;
+    height: 120px;
+    border: 3px dashed #4a90e2;
+    border-radius: 12px;
+    background-color: #f8f9fa;
     cursor: pointer;
     transition: all 0.3s ease;
-    font-weight: 600;
-    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
 }
 
-.upload-custom-btn:hover {
-    background: #2c6fbd;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
+.upload-custom-box:hover {
+    border-color: #2c6fbd;
+    background-color: #e8f4f8;
+    transform: scale(1.05);
+}
+
+.upload-icon {
+    font-size: 32px;
+}
+
+.upload-text {
+    color: #4a90e2;
+    font-weight: 600;
+    font-size: 14px;
+    text-align: center;
 }

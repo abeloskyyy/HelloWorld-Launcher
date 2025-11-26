@@ -118,13 +118,11 @@
         <div class="modal" id="modal">
             <div class="modal-content">
                 <span>Crear Nuevo Perfil</span>
-                <div class="profile-icon-selector" id="iconSelector">
-                    <button type="button" class="icon-button" id="iconButton">
-                        <img src="" alt="Preview" class="icon-preview" id="iconPreview" style="display: none;">
-                        <span class="placeholder-icon" id="placeholderIcon">👤</span>
-                    </button>
+                <div class="profile-icon-display" id="iconDisplay">
+                    <img src="" alt="Icono del Perfil" class="profile-icon-img" id="iconPreview" style="display: none;">
+                    <span class="placeholder-icon-small" id="placeholderIcon">👤</span>
                 </div>
-                <p class="icon-label">Haz clic para seleccionar una imagen</p>
+                <button type="button" class="btn-add-icon" id="iconButton">Añadir Icono</button>
                 <div class="modal-input-group">
                     <label>Nombre del Perfil</label>
                     <input id="profileName" type="text">
@@ -165,10 +163,9 @@
                 <span>Seleccionar Imagen de Perfil</span>
                 <div class="image-grid" id="imageGrid">
                     <!-- Las imágenes se cargarán dinámicamente aquí -->
-                </div>
-                <div class="upload-custom-section">
-                    <label for="customImageInput" class="upload-custom-btn">
-                        📤 Subir imagen personalizada
+                    <!-- Botón de upload personalizado al final del grid -->
+                    <label for="customImageInput" class="image-grid-item upload-item">
+                        <span class="upload-plus">+</span>
                     </label>
                     <input type="file" id="customImageInput" class="icon-input"
                         accept="image/png,image/jpeg,image/jpg,image/gif">

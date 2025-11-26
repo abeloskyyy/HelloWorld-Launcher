@@ -10,7 +10,7 @@ const acceptProfileBtn = document.getElementById('acceptProfileBtn');
 const iconButton = document.getElementById('iconButton');
 const iconPreview = document.getElementById('iconPreview');
 const placeholderIcon = document.getElementById('placeholderIcon');
-const iconSelector = document.getElementById('iconSelector');
+const iconDisplay = document.getElementById('iconDisplay');
 
 // Image modal elements
 const imageModal = document.getElementById('imageModal');
@@ -349,7 +349,6 @@ function resetProfileModal() {
             iconPreview.style.display = 'block';
         }
         if (placeholderIcon) placeholderIcon.style.display = 'none';
-        if (iconSelector) iconSelector.classList.add('has-image');
     });
 
     editingProfileId = null;
@@ -366,6 +365,9 @@ function openEditProfileModal(id, profile) {
     if (document.getElementById('profileJVMArgs')) document.getElementById('profileJVMArgs').value = profile.jvm_args || '';
     if (document.getElementById('profileDir')) document.getElementById('profileDir').value = profile.directory || '';
 
+    // Guardar el icono actual del perfil para edición
+    selectedImageData = profile.icon;
+
     if (profile.icon && profile.icon !== 'default.png') {
         window.pywebview.api.get_profile_icon(profile.icon).then(url => {
             if (iconPreview) {
@@ -373,7 +375,6 @@ function openEditProfileModal(id, profile) {
                 iconPreview.style.display = 'block';
             }
             if (placeholderIcon) placeholderIcon.style.display = 'none';
-            if (iconSelector) iconSelector.classList.add('has-image');
         });
     }
 
@@ -458,6 +459,11 @@ if (cancelImageModalBtn) {
 async function loadImageModal() {
     if (!imageGrid) return;
 
+    // Guardar el botón de upload antes de limpiar
+    const uploadButton = imageGrid.querySelector('.upload-item');
+    const uploadInput = imageGrid.querySelector('#customImageInput');
+
+    // Limpiar solo los items de imagen
     imageGrid.innerHTML = '';
 
     try {
@@ -482,6 +488,14 @@ async function loadImageModal() {
 
             imageGrid.appendChild(gridItem);
         }
+
+        // Volver a añadir el botón de upload al final
+        if (uploadButton) {
+            imageGrid.appendChild(uploadButton);
+        }
+        if (uploadInput) {
+            imageGrid.appendChild(uploadInput);
+        }
     } catch (error) {
         console.error('Error cargando imágenes:', error);
     }
@@ -490,7 +504,7 @@ async function loadImageModal() {
 // Seleccionar imagen del grid
 function selectImageFromGrid(imageName, imageUrl) {
     // Marcar la imagen seleccionada en el grid
-    document.querySelectorAll('.image-grid-item').forEach(item => {
+    document.querySelectorAll('.image-grid-item:not(.upload-item)').forEach(item => {
         item.classList.remove('selected');
     });
 
@@ -503,9 +517,8 @@ function selectImageFromGrid(imageName, imageUrl) {
         iconPreview.style.display = 'block';
     }
     if (placeholderIcon) placeholderIcon.style.display = 'none';
-    if (iconSelector) iconSelector.classList.add('has-image');
 
-    // Guardar el nombre de la imagen seleccionada
+    // IMPORTANTE: Guardar el nombre de archivo, no un objeto base64
     selectedImageData = imageName;
 
     // Cerrar el modal de imagenes
@@ -532,7 +545,6 @@ if (customImageInput) {
                     iconPreview.style.display = 'block';
                 }
                 if (placeholderIcon) placeholderIcon.style.display = 'none';
-                if (iconSelector) iconSelector.classList.add('has-image');
 
                 // Cerrar el modal de imagenes
                 if (imageModal) imageModal.classList.remove('show');

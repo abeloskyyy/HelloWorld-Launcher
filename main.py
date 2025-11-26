@@ -12,7 +12,7 @@ from PIL import Image
 from datetime import datetime
 
 """
-puedes hacer que al clicar en el icono se abra un pequeño modal con todos los iconos que hay en el directorio de iconos de perfil del launcher, y una ultima opcion en el nuevo modal, que ya si que abra el icono? que funcione igual, con los nombres de los archivos
+EXPLICAME como hago para que al iniciar la app mientras carga la interfaz, que el fonfo sea del color que yo quiera y haya una circular destas de carga
 """
 
 
@@ -119,7 +119,6 @@ def delete_profile(profile_id):
 # ------------ API WEBVIEW ------------
 class Api:
     def get_profile_icon(self, filename):
-        print("Obteniendo icono de perfil:", filename)
         # path absoluto dentro del directorio real
         icon_path = os.path.join(launcher_dir, "profiles-img", filename)
         
@@ -404,14 +403,69 @@ class Api:
                 print(f"Error al guardar imagen: {e}")
                 # Si falla, usar default.png
                 icon = "default.png"
+        elif isinstance(icon, str) and icon:
+            # Si es un string (nombre de archivo existente), usarlo directamente
+            print(f"Usando imagen existente: {icon}")
         else:
-            # Si no se proporciona imagen, usar default.png
+            # Si no se proporciona imagen o es None, usar default.png
             icon = "default.png"
 
         add_profile(profile_id, name, version, icon, directory, jvm_args)
         return {"success": True, "profile_id": profile_id}
 
     def edit_profile(self, profile_id, updated_data):
+        # Procesar el icono si está en updated_data
+        if "icon" in updated_data:
+            icon = updated_data["icon"]
+            
+            # Si es un objeto base64, guardar la imagen
+            if isinstance(icon, dict) and "base64" in icon and icon["base64"]:
+                try:
+                    # Decodificar base64
+                    header, encoded = icon["base64"].split(",", 1)
+                    data = base64.b64decode(encoded)
+                    
+                    # Determinar extensión
+                    ext = "png"
+                    
+                    # Nombre de archivo: profileID.ext
+                    filename = f"{profile_id}.{ext}"
+                    filepath = os.path.join(launcher_dir, "profiles-img", filename)
+                    
+                    # Procesar imagen con Pillow
+                    image = Image.open(io.BytesIO(data))
+                    
+                    # Recorte 1:1 (Center Crop)
+                    width, height = image.size
+                    new_size = min(width, height)
+                    
+                    left = (width - new_size) / 2
+                    top = (height - new_size) / 2
+                    right = (width + new_size) / 2
+                    bottom = (height + new_size) / 2
+                    
+                    image = image.crop((left, top, right, bottom))
+                    
+                    # Guardar imagen recortada
+                    image.save(filepath)
+                    
+                    # Actualizar el campo icon para guardar solo el nombre de archivo
+                    updated_data["icon"] = filename
+                    print(f"Imagen guardada en: {filepath}")
+                except Exception as e:
+                    print(f"Error al guardar imagen: {e}")
+                    # Si falla, mantener el icono anterior (no modificar)
+                    if "icon" in updated_data:
+                        del updated_data["icon"]
+            elif isinstance(icon, str) and icon:
+                # Si es un string (nombre de archivo existente), usarlo directamente
+                print(f"Usando imagen existente: {icon}")
+                updated_data["icon"] = icon
+            else:
+                # Si es None o vacío, no modificar el icono
+                if "icon" in updated_data:
+                    del updated_data["icon"]
+        
         edit_profile(profile_id, updated_data)
         return True
 
