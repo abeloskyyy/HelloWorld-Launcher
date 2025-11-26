@@ -12,7 +12,7 @@ from PIL import Image
 from datetime import datetime
 
 """
-puedes hacer que se permita hacer scroll en el modal, y que al clicar en el icono se abra un pequeño modal con todos los iconos que hay en el directorio de iconos de perfil del launcher, y una ultima opcion en el nuevo modal, que ya si que abra el icono? que funcione igual, con los nombres de los archivos.
+y que al clicar en el icono se abra un pequeño modal con todos los iconos que hay en el directorio de iconos de perfil del launcher, y una ultima opcion en el nuevo modal, que ya si que abra el icono? que funcione igual, con los nombres de los archivos
 """
 
 

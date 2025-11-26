@@ -326,9 +326,10 @@ button {
     background: rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(10px);
     justify-content: center;
-    align-items: center;
+    align-items: flex-start;
     z-index: 1000;
     display: none;
+    overflow-y: auto;
 }
 
 .modal.show {
@@ -336,6 +337,7 @@ button {
 }
 
 .modal-content {
+    margin-top: 60px;
     background: rgb(219, 224, 228);
     padding: 30px;
     border-radius: 10px;
