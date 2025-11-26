@@ -12,9 +12,8 @@ from PIL import Image
 from datetime import datetime
 
 """
+en el JS, a partir de la linea 359 hay errores, porque profile no esta seleccionado
 EXPLICAME como hago para que al iniciar la app mientras carga la interfaz, que el fonfo sea del color que yo quiera y haya una circular destas de carga
-Añade al desplegable de perfiles una opcion que abre el modal de crear un nuevo perfil. haz que esa opcion se diferencie de las demás.
-puedes hacer que si no hay ningun perfil, en el desplegable ponga "No tienes perfiles" y de sub texto "Crea uno para jugar", y que no haya imagen.
 """
 
 
@@ -474,6 +473,17 @@ class Api:
     def delete_profile(self, profile_id):
         delete_profile(profile_id)
         return True
+    
+    def select_folder(self):
+        """Open folder selection dialog and return selected path"""
+        try:
+            result = webview.windows[0].create_file_dialog(webview.FOLDER_DIALOG)
+            if result and len(result) > 0:
+                return result[0]
+            return None
+        except Exception as e:
+            print(f"Error opening folder dialog: {e}")
+            return None
 # ---------------------------------------
 
 
