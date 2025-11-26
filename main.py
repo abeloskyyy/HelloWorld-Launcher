@@ -13,6 +13,8 @@ from datetime import datetime
 
 """
 EXPLICAME como hago para que al iniciar la app mientras carga la interfaz, que el fonfo sea del color que yo quiera y haya una circular destas de carga
+Añade al desplegable de perfiles una opcion que abre el modal de crear un nuevo perfil. haz que esa opcion se diferencie de las demás.
+puedes hacer que si no hay ningun perfil, en el desplegable ponga "No tienes perfiles" y de sub texto "Crea uno para jugar", y que no haya imagen.
 """
 
 
