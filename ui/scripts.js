@@ -7,10 +7,16 @@ const createProfileBtn = document.getElementById('createProfileBtn');
 const profileModal = document.getElementById('modal');
 const cancelModalBtn = document.getElementById('cancelModalBtn');
 const acceptProfileBtn = document.getElementById('acceptProfileBtn');
-const iconInput = document.getElementById('iconInput');
+const iconButton = document.getElementById('iconButton');
 const iconPreview = document.getElementById('iconPreview');
 const placeholderIcon = document.getElementById('placeholderIcon');
 const iconSelector = document.getElementById('iconSelector');
+
+// Image modal elements
+const imageModal = document.getElementById('imageModal');
+const imageGrid = document.getElementById('imageGrid');
+const cancelImageModalBtn = document.getElementById('cancelImageModalBtn');
+const customImageInput = document.getElementById('customImageInput');
 
 // Global Variables
 let profiles = {};
@@ -346,8 +352,6 @@ function resetProfileModal() {
         if (iconSelector) iconSelector.classList.add('has-image');
     });
 
-    if (iconInput) iconInput.value = '';
-
     editingProfileId = null;
     if (acceptProfileBtn) acceptProfileBtn.textContent = "Crear Perfil";
     if (document.querySelector('#modal h2')) document.querySelector('#modal h2').textContent = "Crear Nuevo Perfil";
@@ -435,8 +439,82 @@ if (acceptProfileBtn) {
     });
 }
 
-if (iconInput) {
-    iconInput.addEventListener('change', function (e) {
+// Abrir modal de imágenes cuando se hace clic en el botón de icono
+if (iconButton) {
+    iconButton.addEventListener('click', async () => {
+        await loadImageModal();
+        if (imageModal) imageModal.classList.add('show');
+    });
+}
+
+// Cerrar modal de imágenes
+if (cancelImageModalBtn) {
+    cancelImageModalBtn.addEventListener('click', () => {
+        if (imageModal) imageModal.classList.remove('show');
+    });
+}
+
+// Cargar imágenes en el modal
+async function loadImageModal() {
+    if (!imageGrid) return;
+
+    imageGrid.innerHTML = '';
+
+    try {
+        const images = await window.pywebview.api.get_profile_images();
+
+        for (const imageName of images) {
+            const imageUrl = await window.pywebview.api.get_profile_icon(imageName);
+
+            const gridItem = document.createElement('div');
+            gridItem.className = 'image-grid-item';
+            gridItem.dataset.imageName = imageName;
+
+            const img = document.createElement('img');
+            img.src = imageUrl;
+            img.alt = imageName;
+
+            gridItem.appendChild(img);
+
+            gridItem.addEventListener('click', () => {
+                selectImageFromGrid(imageName, imageUrl);
+            });
+
+            imageGrid.appendChild(gridItem);
+        }
+    } catch (error) {
+        console.error('Error cargando imágenes:', error);
+    }
+}
+
+// Seleccionar imagen del grid
+function selectImageFromGrid(imageName, imageUrl) {
+    // Marcar la imagen seleccionada en el grid
+    document.querySelectorAll('.image-grid-item').forEach(item => {
+        item.classList.remove('selected');
+    });
+
+    const selectedItem = document.querySelector(`[data-image-name="${imageName}"]`);
+    if (selectedItem) selectedItem.classList.add('selected');
+
+    // Actualizar la vista previa en el modal principal
+    if (iconPreview) {
+        iconPreview.src = imageUrl;
+        iconPreview.style.display = 'block';
+    }
+    if (placeholderIcon) placeholderIcon.style.display = 'none';
+    if (iconSelector) iconSelector.classList.add('has-image');
+
+    // Guardar el nombre de la imagen seleccionada
+    selectedImageData = imageName;
+
+    // Cerrar el modal de imagenes
+    if (imageModal) imageModal.classList.remove('show');
+}
+
+// Event listener para subir imagen personalizada
+if (customImageInput) {
+    customImageInput.addEventListener('change', function (e) {
         const file = e.target.files[0];
 
         if (file && file.type.startsWith('image/')) {
@@ -455,6 +533,9 @@ if (iconInput) {
                 }
                 if (placeholderIcon) placeholderIcon.style.display = 'none';
                 if (iconSelector) iconSelector.classList.add('has-image');
+
+                // Cerrar el modal de imagenes
+                if (imageModal) imageModal.classList.remove('show');
             };
 
             reader.readAsDataURL(file);

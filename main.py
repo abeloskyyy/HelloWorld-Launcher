@@ -12,7 +12,7 @@ from PIL import Image
 from datetime import datetime
 
 """
-y que al clicar en el icono se abra un pequeño modal con todos los iconos que hay en el directorio de iconos de perfil del launcher, y una ultima opcion en el nuevo modal, que ya si que abra el icono? que funcione igual, con los nombres de los archivos
+puedes hacer que al clicar en el icono se abra un pequeño modal con todos los iconos que hay en el directorio de iconos de perfil del launcher, y una ultima opcion en el nuevo modal, que ya si que abra el icono? que funcione igual, con los nombres de los archivos
 """
 
 
@@ -137,6 +137,37 @@ class Api:
                 print(f"Error leyendo icono: {e}")
                 return ""
         return ""
+
+    def get_profile_images(self):
+        """
+        Retorna una lista de todas las imágenes disponibles en el directorio profiles-img.
+        Primero devuelve default.png, luego todas las demás ordenadas alfabéticamente.
+        """
+        profiles_img_path = os.path.join(launcher_dir, "profiles-img")
+        if not os.path.exists(profiles_img_path):
+            return []
+        
+        all_images = []
+        image_extensions = ['.png', '.jpg', '.jpeg', '.gif']
+        
+        try:
+            for filename in os.listdir(profiles_img_path):
+                file_path = os.path.join(profiles_img_path, filename)
+                if os.path.isfile(file_path):
+                    ext = os.path.splitext(filename)[1].lower()
+                    if ext in image_extensions:
+                        all_images.append(filename)
+            
+            # Ordenar: default.png primero, luego el resto alfabéticamente
+            all_images.sort()
+            if 'default.png' in all_images:
+                all_images.remove('default.png')
+                all_images.insert(0, 'default.png')
+            
+            return all_images
+        except Exception as e:
+            print(f"Error listando imágenes de perfil: {e}")
+            return []
 
 
     def get_versions(self):

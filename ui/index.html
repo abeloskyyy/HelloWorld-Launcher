@@ -114,16 +114,15 @@
             </div>
         </div>
 
+        <!-- Modal de crear perfil -->
         <div class="modal" id="modal">
             <div class="modal-content">
                 <span>Crear Nuevo Perfil</span>
                 <div class="profile-icon-selector" id="iconSelector">
-                    <label for="iconInput" class="icon-button" id="iconButton">
+                    <button type="button" class="icon-button" id="iconButton">
                         <img src="" alt="Preview" class="icon-preview" id="iconPreview" style="display: none;">
                         <span class="placeholder-icon" id="placeholderIcon">👤</span>
-                    </label>
-                    <input type="file" id="iconInput" class="icon-input"
-                        accept="image/png,image/jpeg,image/jpg,image/gif">
+                    </button>
                 </div>
                 <p class="icon-label">Haz clic para seleccionar una imagen</p>
                 <div class="modal-input-group">
@@ -158,7 +157,26 @@
                     <button id="cancelModalBtn" class="btn-red">Cancelar</button>
                 </div>
             </div>
+        </div>
 
+        <!-- Modal de selección de imagen -->
+        <div class="modal" id="imageModal">
+            <div class="modal-content image-selector-modal">
+                <span>Seleccionar Imagen de Perfil</span>
+                <div class="image-grid" id="imageGrid">
+                    <!-- Las imágenes se cargarán dinámicamente aquí -->
+                </div>
+                <div class="upload-custom-section">
+                    <label for="customImageInput" class="upload-custom-btn">
+                        📤 Subir imagen personalizada
+                    </label>
+                    <input type="file" id="customImageInput" class="icon-input"
+                        accept="image/png,image/jpeg,image/jpg,image/gif">
+                </div>
+                <div class="modal-options">
+                    <button id="cancelImageModalBtn" class="btn-red">Cancelar</button>
+                </div>
+            </div>
         </div>
     </div>
 
