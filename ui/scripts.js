@@ -178,7 +178,7 @@ async function loadOptions() {
             const createOption = document.createElement('div');
             createOption.className = 'select-option';
             createOption.innerHTML = `
-                <div class="option-icon" style="display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff; background: rgba(255, 255, 255, 0.1);">+</div>
+                <div class="option-icon" style="display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff; background: rgba(255, 255, 255, 0.1);"><i class="fas fa-plus"></i></div>
                 <div class="option-content">
                     <div class="option-title">Crear Nuevo Perfil</div>
                     <div class="option-subtitle">Haz clic para empezar</div>
@@ -323,8 +323,8 @@ async function cargarPerfiles() {
                 <p>Versión: ${profile.version} | Última vez: ${lastPlayedText}</p>
             </div>
             <div class="profile-actions">
-                <button class="btn-secondary btn-small edit-btn">✏️ Editar</button>
-                <button class="btn-danger btn-small delete-btn">🗑️ Eliminar</button>
+                <button class="btn-secondary btn-small edit-btn"><i class="fas fa-edit"></i> Editar</button>
+                <button class="btn-danger btn-small delete-btn"><i class="fas fa-trash"></i> Eliminar</button>
             </div>
         `;
 

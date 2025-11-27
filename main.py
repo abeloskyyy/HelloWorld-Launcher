@@ -111,7 +111,15 @@ def delete_profile(profile_id):
     if profile_id in profiles["profiles"]:
         del profiles["profiles"][profile_id]
         save_profiles(profiles)
+
+        try:
+            image_path = os.path.join(launcher_dir, "profiles-img", f"{profile_id}.png")
+            if os.path.exists(image_path):
+                os.remove(image_path)
+        except Exception as e:
+            print(f"Error al eliminar imagen del perfil: {e}")
         return True
+        
     
     return False
 # ----------------------------------------
@@ -473,7 +481,6 @@ class Api:
 
     def delete_profile(self, profile_id):
         delete_profile(profile_id)
-        return True
     
     def select_folder(self, initial_directory=None):
         """Open folder selection dialog and return selected path"""

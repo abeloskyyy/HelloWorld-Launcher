@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
 <body>
@@ -12,13 +13,13 @@
         <!-- Barra lateral -->
         <div class="sidebar">
             <button class="sidebar-button active" onclick="showSection('play')">
-                🎮 Jugar
+                <i class="fas fa-gamepad"></i> Jugar
             </button>
             <button class="sidebar-button" onclick="showSection('profiles')">
-                👤 Perfiles
+                <i class="fas fa-user"></i> Perfiles
             </button>
             <button class="sidebar-button" onclick="showSection('settings')">
-                ⚙️ Configuración
+                <i class="fas fa-cog"></i> Configuración
             </button>
         </div>
 
@@ -29,7 +30,7 @@
                 <h1>Jugar</h1>
                 <div class="play-section">
                     <div class="user-info">
-                        <div class="user-avatar">🧊</div>
+                        <div class="user-avatar"><i class="fas fa-cube"></i></div>
                         <div style="flex: 1;">
                             <div class="input-group">
                                 <label>Nombre de usuario</label>
@@ -50,7 +51,8 @@
                                     <img src="" alt="" class="select-trigger-icon" id="selectedIcon">
                                     <div class="select-trigger-text">
                                         <div class="select-trigger-title" id="selectedTitle">No tienes perfiles</div>
-                                        <div class="select-trigger-subtitle" id="selectedSubtitle">Crea un perfil para jugar</div>
+                                        <div class="select-trigger-subtitle" id="selectedSubtitle">Crea un perfil para
+                                            jugar</div>
                                     </div>
                                 </div>
                                 <div class="select-arrow"></div>
@@ -64,10 +66,10 @@
 
                     <div class="button-group">
                         <button class="btn-secondary" style="flex: 1;">
-                            📥 Instalar versión
+                            <i class="fas fa-download"></i> Instalar versión
                         </button>
                         <button class="btn-secondary" style="flex: 1;">
-                            🔧 Mods & Forge
+                            <i class="fas fa-tools"></i> Mods & Forge
                         </button>
                     </div>
 
@@ -82,7 +84,7 @@
                 <h1>Perfiles</h1>
                 <div class="profiles-section">
                     <button id="createProfileBtn" class="btn-primary create-profile-btn">
-                        Crear nuevo perfil
+                        <i class="fas fa-plus"></i> Crear nuevo perfil
                     </button>
                     <div id="profilesList">
                         <!-- Los perfiles se cargarán aquí dinámicamente -->
@@ -117,9 +119,8 @@
             <div class="modal-content">
                 <span>Crear Nuevo Perfil</span>
                 <div class="profile-icon-display" id="iconDisplay">
-                    <img src="" alt="Icono del Perfil" class="profile-icon-img" id="iconPreview"
-                        style="display: none;">
-                    <span class="placeholder-icon-small" id="placeholderIcon">👤</span>
+                    <img src="" alt="Icono del Perfil" class="profile-icon-img" id="iconPreview" style="display: none;">
+                    <span class="placeholder-icon-small" id="placeholderIcon"><i class="fas fa-user"></i></span>
                 </div>
                 <button type="button" class="btn-add-icon" id="iconButton">Añadir Icono</button>
                 <div class="modal-input-group">
@@ -135,7 +136,8 @@
                     <label>Directorio</label>
                     <div style="display: flex; gap: 8px;">
                         <input id="profileDir" type="text" style="flex: 1;">
-                        <button type="button" id="selectFolderBtn" class="btn-square">📁</button>
+                        <button type="button" id="selectFolderBtn" class="btn-square"><i
+                                class="fas fa-folder-open"></i></button>
                     </div>
                 </div>
                 <div class="modal-input-group">
@@ -168,7 +170,7 @@
                     <!-- Las imágenes se cargarán dinámicamente aquí -->
                     <!-- Botón de upload personalizado al final del grid -->
                     <label for="customImageInput" class="image-grid-item upload-item">
-                        <span class="upload-plus">+</span>
+                        <span class="upload-plus"><i class="fas fa-plus"></i></span>
                     </label>
                     <input type="file" id="customImageInput" class="icon-input"
                         accept="image/png,image/jpeg,image/jpg,image/gif">
