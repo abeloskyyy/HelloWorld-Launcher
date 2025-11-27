@@ -19,6 +19,14 @@ const imageGrid = document.getElementById('imageGrid');
 const cancelImageModalBtn = document.getElementById('cancelImageModalBtn');
 const customImageInput = document.getElementById('customImageInput');
 
+// Login Modal Elements
+const loginButton = document.getElementById('loginButton');
+const loginModal = document.getElementById('loginModal');
+const closeLoginModal = document.getElementById('closeLoginModal');
+const modalTabs = document.querySelectorAll('.modal-tab');
+const saveOfflineBtn = document.getElementById('saveOfflineBtn');
+const loginMicrosoftBtn = document.getElementById('loginMicrosoftBtn');
+
 // Global Variables
 let profiles = {};
 let editingProfileId = null;
@@ -612,4 +620,70 @@ if (customImageInput) {
 
 function getSelectedIcon() {
     return selectedImageData;
+}
+
+// ==============================================
+// LOGIN MODAL FUNCTIONALITY
+// ==============================================
+
+// Open login modal
+if (loginButton) {
+    loginButton.addEventListener('click', () => {
+        if (loginModal) loginModal.classList.add('show');
+    });
+}
+
+// Close login modal
+if (closeLoginModal) {
+    closeLoginModal.addEventListener('click', () => {
+        if (loginModal) loginModal.classList.remove('show');
+    });
+}
+
+// Close login modal when clicking outside
+if (loginModal) {
+    loginModal.addEventListener('click', (e) => {
+        if (e.target === loginModal) {
+            loginModal.classList.remove('show');
+        }
+    });
+}
+
+// Tab switching functionality
+modalTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+        const tabName = tab.getAttribute('data-tab');
+
+        // Remove active class from all tabs and content
+        modalTabs.forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+
+        // Add active class to clicked tab and corresponding content
+        tab.classList.add('active');
+        const targetContent = document.getElementById(`tab-${tabName}`);
+        if (targetContent) targetContent.classList.add('active');
+    });
+});
+
+// Save offline login
+if (saveOfflineBtn) {
+    saveOfflineBtn.addEventListener('click', () => {
+        const nickname = document.getElementById('nickname').value;
+        if (nickname.trim()) {
+            guardarDatos();
+            alert('Nombre guardado: ' + nickname);
+            if (loginModal) loginModal.classList.remove('show');
+        } else {
+            alert('Por favor ingresa un nombre');
+        }
+    });
+}
+
+// Microsoft login (placeholder)
+if (loginMicrosoftBtn) {
+    loginMicrosoftBtn.addEventListener('click', () => {
+        alert('Funcionalidad de Microsoft aún no implementada');
+    });
 }

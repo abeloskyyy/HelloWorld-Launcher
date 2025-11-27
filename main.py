@@ -12,9 +12,7 @@ from PIL import Image
 from datetime import datetime
 
 """
-
-
-
+añade un botón que ponga iniciar sesion. cuado es clicado, abre un modal con dos "pestañas": Offline y Microsoft. el offline tiene: Nombre (input con id nickname) y boton de guardar. en microsoft tiene boton de iniciar sesion, aun sin funcionalidad. tambien tiene al boton de cerrar arriba a la derecha con una cruz.
 """
 
 

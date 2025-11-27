@@ -10,6 +10,11 @@
 
 <body>
     <div class="launcher">
+        <!-- Botón de inicio de sesión -->
+        <button class="login-button" id="loginButton">
+            <i class="fas fa-user"></i> Iniciar Sesión
+        </button>
+
         <!-- Barra lateral -->
         <div class="sidebar">
             <button class="sidebar-button active" onclick="showSection('play')">
@@ -29,38 +34,21 @@
             <div id="play" class="section active">
                 <h1>Jugar</h1>
                 <div class="play-section">
-                    <div class="user-info">
-                        <div class="user-avatar"><i class="fas fa-cube"></i></div>
-                        <div style="flex: 1;">
-                            <div class="input-group">
-                                <label>Nombre de usuario</label>
-                                <input id="nickname" type="text" placeholder="Nickname">
-                            </div>
-                        </div>
-                        <button class="btn-secondary">Iniciar Sesión</button>
-                    </div>
-
-                    <div class="input-group">
-                        <label>Seleccionar perfil</label>
-                        <select id="profileSelect"></select>
-
-                        <!-- Select personalizado -->
-                        <div class="custom-select" id="customSelect">
-                            <div class="select-trigger" id="selectTrigger">
-                                <div class="select-trigger-content">
-                                    <img src="" alt="" class="select-trigger-icon" id="selectedIcon">
-                                    <div class="select-trigger-text">
-                                        <div class="select-trigger-title" id="selectedTitle">No tienes perfiles</div>
-                                        <div class="select-trigger-subtitle" id="selectedSubtitle">Crea un perfil para
-                                            jugar</div>
+                    <div class="custom-select" id="customSelect">
+                        <div class="select-trigger" id="selectTrigger">
+                            <div class="select-trigger-content">
+                                <img src="" alt="" class="select-trigger-icon" id="selectedIcon">
+                                <div class="select-trigger-text">
+                                    <div class="select-trigger-title" id="selectedTitle">No tienes perfiles</div>
+                                    <div class="select-trigger-subtitle" id="selectedSubtitle">Crea un perfil para jugar
                                     </div>
                                 </div>
-                                <div class="select-arrow"></div>
                             </div>
+                            <div class="select-arrow"></div>
+                        </div>
 
-                            <div class="select-options" id="selectOptions">
-                                <!-- Las opciones se cargarán dinámicamente aquí -->
-                            </div>
+                        <div class="select-options" id="selectOptions">
+                            <!-- Las opciones se cargarán dinámicamente aquí -->
                         </div>
                     </div>
 
@@ -100,84 +88,110 @@
                         <label>Directorio de .minecraft</label>
                         <input id="mcdir" type="text" value="">
                     </div>
-                    <div class="input-group">
-                        <label>Memoria RAM asignada</label>
-                        <select>
-                            <option>2 GB</option>
-                            <option selected>4 GB</option>
-                            <option>6 GB</option>
-                            <option>8 GB</option>
-                        </select>
-                    </div>
                     <button class="btn-primary">Guardar Configuración</button>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Modal de crear perfil -->
-        <div class="modal" id="modal">
-            <div class="modal-content">
-                <span>Crear Nuevo Perfil</span>
-                <div class="profile-icon-display" id="iconDisplay">
-                    <img src="" alt="Icono del Perfil" class="profile-icon-img" id="iconPreview" style="display: none;">
-                    <span class="placeholder-icon-small" id="placeholderIcon"><i class="fas fa-user"></i></span>
-                </div>
-                <button type="button" class="btn-add-icon" id="iconButton">Añadir Icono</button>
-                <div class="modal-input-group">
-                    <label>Nombre del Perfil</label>
-                    <input id="profileName" type="text">
-                </div>
-                <div class="modal-input-group">
-                    <label>Versión</label>
-                    <select name="create-profile-version" id="profileVersionSelect">
-                    </select>
-                </div>
-                <div class="modal-input-group">
-                    <label>Directorio</label>
-                    <div style="display: flex; gap: 8px;">
-                        <input id="profileDir" type="text" style="flex: 1;">
-                        <button type="button" id="selectFolderBtn" class="btn-square"><i
-                                class="fas fa-folder-open"></i></button>
-                    </div>
-                </div>
-                <div class="modal-input-group">
-                    <label>Argumentos JVM</label>
-                    <input id="profileJVMArgs" type="text">
-                </div>
-
-                <!-- Indicador de progreso de instalación -->
-                <div id="installProgress" class="install-progress" style="display: none;">
-                    <div class="install-progress-text">Instalando versión...</div>
-                    <div class="progress-bar">
-                        <div id="progressBarFill" class="progress-bar-fill" style="width: 0%;">
-                        </div>
-                    </div>
-                    <div id="progressPercentage" class="progress-percentage">0%</div>
-                </div>
-
-                <div class="modal-options">
-                    <button id="acceptProfileBtn" class="btn-blue">Crear</button>
-                    <button id="cancelModalBtn" class="btn-red">Cancelar</button>
+    <!-- Modal de crear perfil -->
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <span>Crear Nuevo Perfil</span>
+            <div class="profile-icon-display" id="iconDisplay">
+                <img src="" alt="Icono del Perfil" class="profile-icon-img" id="iconPreview" style="display: none;">
+                <span class="placeholder-icon-small" id="placeholderIcon"><i class="fas fa-user"></i></span>
+            </div>
+            <button type="button" class="btn-add-icon" id="iconButton">Añadir Icono</button>
+            <div class="modal-input-group">
+                <label>Nombre del Perfil</label>
+                <input id="profileName" type="text">
+            </div>
+            <div class="modal-input-group">
+                <label>Versión</label>
+                <select name="create-profile-version" id="profileVersionSelect">
+                </select>
+            </div>
+            <div class="modal-input-group">
+                <label>Directorio</label>
+                <div style="display: flex; gap: 8px;">
+                    <input id="profileDir" type="text" style="flex: 1;">
+                    <button type="button" id="selectFolderBtn" class="btn-square"><i
+                            class="fas fa-folder-open"></i></button>
                 </div>
             </div>
-        </div>
+            <div class="modal-input-group">
+                <label>Argumentos JVM</label>
+                <input id="profileJVMArgs" type="text">
+            </div>
 
-        <!-- Modal de selección de imagen -->
-        <div class="modal" id="imageModal">
-            <div class="modal-content image-selector-modal">
-                <span>Seleccionar Imagen de Perfil</span>
-                <div class="image-grid" id="imageGrid">
-                    <!-- Las imágenes se cargarán dinámicamente aquí -->
-                    <!-- Botón de upload personalizado al final del grid -->
-                    <label for="customImageInput" class="image-grid-item upload-item">
-                        <span class="upload-plus"><i class="fas fa-plus"></i></span>
-                    </label>
-                    <input type="file" id="customImageInput" class="icon-input"
-                        accept="image/png,image/jpeg,image/jpg,image/gif">
+            <!-- Indicador de progreso de instalación -->
+            <div id="installProgress" class="install-progress" style="display: none;">
+                <div class="install-progress-text">Instalando versión...</div>
+                <div class="progress-bar">
+                    <div id="progressBarFill" class="progress-bar-fill" style="width: 0%;">
+                    </div>
                 </div>
-                <div class="modal-options">
-                    <button id="cancelImageModalBtn" class="btn-red">Cancelar</button>
+                <div id="progressPercentage" class="progress-percentage">0%</div>
+            </div>
+
+            <div class="modal-options">
+                <button id="acceptProfileBtn" class="btn-blue">Crear</button>
+                <button id="cancelModalBtn" class="btn-red">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de selección de imagen -->
+    <div class="modal" id="imageModal">
+        <div class="modal-content image-selector-modal">
+            <span>Seleccionar Imagen de Perfil</span>
+            <div class="image-grid" id="imageGrid">
+                <!-- Las imágenes se cargarán dinámicamente aquí -->
+                <!-- Botón de upload personalizado al final del grid -->
+                <label for="customImageInput" class="image-grid-item upload-item">
+                    <span class="upload-plus"><i class="fas fa-plus"></i></span>
+                </label>
+                <input type="file" id="customImageInput" class="icon-input"
+                    accept="image/png,image/jpeg,image/jpg,image/gif">
+            </div>
+            <div class="modal-options">
+                <button id="cancelImageModalBtn" class="btn-red">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de inicio de sesión -->
+    <div class="modal" id="loginModal">
+        <div class="modal-content login-modal">
+            <span class="modal-title">Inicio de Sesión</span>
+            <button class="modal-close-btn" id="closeLoginModal">
+                <i class="fas fa-times"></i>
+            </button>
+
+            <!-- Tabs -->
+            <div class="modal-tabs">
+                <button class="modal-tab active" data-tab="offline">Offline</button>
+                <button class="modal-tab" data-tab="microsoft">Microsoft</button>
+            </div>
+
+            <!-- Tab Content: Offline -->
+            <div class="tab-content active" id="tab-offline">
+                <div class="modal-input-group">
+                    <label>Nombre</label>
+                    <input id="nickname" type="text" placeholder="Ingresa tu nombre">
                 </div>
+                <button class="btn-primary" id="saveOfflineBtn">Guardar</button>
+            </div>
+
+            <!-- Tab Content: Microsoft -->
+            <div class="tab-content" id="tab-microsoft">
+                <p style="text-align: center; margin-bottom: 20px; color: rgba(255,255,255,0.7);">
+                    Inicia sesión con tu cuenta de Microsoft
+                </p>
+                <button class="btn-primary" id="loginMicrosoftBtn">
+                    <i class="fab fa-microsoft"></i> Iniciar Sesión con Microsoft
+                </button>
             </div>
         </div>
     </div>
