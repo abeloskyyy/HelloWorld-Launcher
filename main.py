@@ -12,7 +12,9 @@ from PIL import Image
 from datetime import datetime
 
 """
-EXPLICAME como hago para que al iniciar la app mientras carga la interfaz, que el fonfo sea del color que yo quiera y haya una circular destas de carga
+
+
+
 """
 
 
@@ -473,10 +475,18 @@ class Api:
         delete_profile(profile_id)
         return True
     
-    def select_folder(self):
+    def select_folder(self, initial_directory=None):
         """Open folder selection dialog and return selected path"""
         try:
-            result = webview.windows[0].create_file_dialog(webview.FOLDER_DIALOG)
+            # Si initial_directory es None o vacío, usar el directorio por defecto (mc_dir)
+            if not initial_directory:
+                initial_directory = mc_dir
+                
+            result = webview.windows[0].create_file_dialog(
+                webview.FOLDER_DIALOG,
+                directory=initial_directory
+            )
+            
             if result and len(result) > 0:
                 return result[0]
             return None
@@ -565,7 +575,8 @@ if __name__ == '__main__':
         'HelloWorld Launcher',
         'ui/index.html',
         maximized=True,
-        js_api=api
+        js_api=api,
+        background_color="#1a1a1a"
         )
     webview.start(debug=True)
 

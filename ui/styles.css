@@ -221,6 +221,12 @@ button {
     box-shadow: 0 5px 15px rgba(184, 92, 92, 0.4);
 }
 
+.btn-square {
+    padding: 12px 12px;
+    background-color: #333;
+    color: #fff;
+}
+
 .play-button {
     background: linear-gradient(135deg, #5cb85c 0%, #4cae4c 100%);
     color: #fff;

@@ -11,6 +11,7 @@ const iconButton = document.getElementById('iconButton');
 const iconPreview = document.getElementById('iconPreview');
 const placeholderIcon = document.getElementById('placeholderIcon');
 const iconDisplay = document.getElementById('iconDisplay');
+const selectFolderBtn = document.getElementById('selectFolderBtn');
 
 // Image modal elements
 const imageModal = document.getElementById('imageModal');
@@ -165,50 +166,82 @@ async function loadOptions() {
         return dateB - dateA;
     });
 
-    for (const profile of profilesArray) {
-        const id = profile.id;
-
-        if (originalSelect) {
-            const nativeOption = document.createElement("option");
-            nativeOption.value = id;
-            nativeOption.textContent = profile.name;
-            originalSelect.appendChild(nativeOption);
+    if (profilesArray.length === 0) {
+        // No hay perfiles: Ocultar icono y mostrar opción de crear
+        if (document.getElementById('selectedIcon')) {
+            document.getElementById('selectedIcon').style.display = 'none';
         }
+        if (document.getElementById('selectedTitle')) document.getElementById('selectedTitle').textContent = "No tienes perfiles";
+        if (document.getElementById('selectedSubtitle')) document.getElementById('selectedSubtitle').textContent = "Crea un perfil para jugar";
 
         if (selectOptions) {
-            const option = document.createElement('div');
-            option.className = 'select-option';
-            option.dataset.value = id;
-
-            let tags = '';
-            if (profile.type === 'forge') tags = '<span class="option-tag forge">FORGE</span>';
-            else if (profile.type === 'fabric') tags = '<span class="option-tag fabric">FABRIC</span>';
-            else tags = '<span class="option-tag">VANILLA</span>';
-
-            if (profile.mods) tags += `<span class="option-tag">${profile.mods} MODS</span>`;
-
-            const iconUrl = await window.pywebview.api.get_profile_icon(profile.icon);
-            profile.iconUrl = iconUrl;
-
-            const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Nunca';
-
-            option.innerHTML = `
-                <img src="${iconUrl}" alt="" class="option-icon">
+            const createOption = document.createElement('div');
+            createOption.className = 'select-option';
+            createOption.innerHTML = `
+                <div class="option-icon" style="display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff; background: rgba(255, 255, 255, 0.1);">+</div>
                 <div class="option-content">
-                    <div class="option-title">${profile.name}</div>
-                    <div class="option-subtitle">Versión ${profile.version} • ${lastPlayedText}</div>
-                    <div class="option-tags">${tags}</div>
+                    <div class="option-title">Crear Nuevo Perfil</div>
+                    <div class="option-subtitle">Haz clic para empezar</div>
                 </div>
             `;
-
-            option.addEventListener('click', () => selectOption(id, profile));
-            selectOptions.appendChild(option);
+            createOption.addEventListener('click', async () => {
+                closeSelect();
+                await resetProfileModal();
+                if (profileModal) profileModal.classList.add('show');
+            });
+            selectOptions.appendChild(createOption);
         }
-    }
+    } else {
+        // Hay perfiles: Mostrar icono y cargar lista
+        if (document.getElementById('selectedIcon')) {
+            document.getElementById('selectedIcon').style.display = 'block';
+        }
 
-    if (profilesArray.length > 0) {
-        const firstProfile = profilesArray[0];
-        selectOption(firstProfile.id, firstProfile);
+        for (const profile of profilesArray) {
+            const id = profile.id;
+
+            if (originalSelect) {
+                const nativeOption = document.createElement("option");
+                nativeOption.value = id;
+                nativeOption.textContent = profile.name;
+                originalSelect.appendChild(nativeOption);
+            }
+
+            if (selectOptions) {
+                const option = document.createElement('div');
+                option.className = 'select-option';
+                option.dataset.value = id;
+
+                let tags = '';
+                if (profile.type === 'forge') tags = '<span class="option-tag forge">FORGE</span>';
+                else if (profile.type === 'fabric') tags = '<span class="option-tag fabric">FABRIC</span>';
+                else tags = '<span class="option-tag">VANILLA</span>';
+
+                if (profile.mods) tags += `<span class="option-tag">${profile.mods} MODS</span>`;
+
+                const iconUrl = await window.pywebview.api.get_profile_icon(profile.icon);
+                profile.iconUrl = iconUrl;
+
+                const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Nunca';
+
+                option.innerHTML = `
+                    <img src="${iconUrl}" alt="" class="option-icon">
+                    <div class="option-content">
+                        <div class="option-title">${profile.name}</div>
+                        <div class="option-subtitle">Versión ${profile.version} • ${lastPlayedText}</div>
+                        <div class="option-tags">${tags}</div>
+                    </div>
+                `;
+
+                option.addEventListener('click', () => selectOption(id, profile));
+                selectOptions.appendChild(option);
+            }
+        }
+
+        if (profilesArray.length > 0) {
+            const firstProfile = profilesArray[0];
+            selectOption(firstProfile.id, firstProfile);
+        }
     }
 }
 
@@ -217,7 +250,10 @@ function selectOption(id, profile) {
 
     const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Nunca';
 
-    if (document.getElementById('selectedIcon')) document.getElementById('selectedIcon').src = profile.iconUrl || profile.icon;
+    if (document.getElementById('selectedIcon')) {
+        document.getElementById('selectedIcon').src = profile.iconUrl || profile.icon;
+        document.getElementById('selectedIcon').style.display = 'block';
+    }
     if (document.getElementById('selectedTitle')) document.getElementById('selectedTitle').textContent = profile.name;
     if (document.getElementById('selectedSubtitle')) document.getElementById('selectedSubtitle').textContent = `Versión ${profile.version} • ${lastPlayedText}`;
 
@@ -334,11 +370,18 @@ function showSection(sectionId) {
     }
 }
 
-function resetProfileModal() {
+async function resetProfileModal() {
     if (document.getElementById('profileName')) document.getElementById('profileName').value = '';
     if (document.getElementById('profileVersionSelect')) document.getElementById('profileVersionSelect').value = '';
     if (document.getElementById('profileJVMArgs')) document.getElementById('profileJVMArgs').value = '';
     if (document.getElementById('profileDir')) document.getElementById('profileDir').value = '';
+
+    try {
+        const userData = await window.pywebview.api.get_user_json();
+        if (document.getElementById('profileDir')) document.getElementById('profileDir').value = userData.mcdir || '';
+    } catch (e) {
+        console.error("Error fetching default directory:", e);
+    }
 
     selectedImageData = null;
 
@@ -356,8 +399,8 @@ function resetProfileModal() {
     if (document.querySelector('#modal h2')) document.querySelector('#modal h2').textContent = "Crear Nuevo Perfil";
 }
 
-function openEditProfileModal(id, profile) {
-    resetProfileModal();
+async function openEditProfileModal(id, profile) {
+    await resetProfileModal();
     editingProfileId = id;
 
     if (document.getElementById('profileName')) document.getElementById('profileName').value = profile.name;
@@ -384,8 +427,8 @@ function openEditProfileModal(id, profile) {
 }
 
 if (createProfileBtn) {
-    createProfileBtn.addEventListener('click', () => {
-        resetProfileModal();
+    createProfileBtn.addEventListener('click', async () => {
+        await resetProfileModal();
         if (profileModal) profileModal.classList.add('show');
     });
 }
@@ -437,6 +480,18 @@ if (acceptProfileBtn) {
         await loadOptions();
         if (profileModal) profileModal.classList.remove('show');
         resetProfileModal();
+    });
+}
+
+// Botón de selección de carpeta
+if (selectFolderBtn) {
+    selectFolderBtn.addEventListener('click', async () => {
+        const currentDir = document.getElementById('profileDir').value;
+        const selectedPath = await window.pywebview.api.select_folder(currentDir);
+
+        if (selectedPath) {
+            document.getElementById('profileDir').value = selectedPath;
+        }
     });
 }
 
