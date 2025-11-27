@@ -12,7 +12,6 @@ from PIL import Image
 from datetime import datetime
 
 """
-en el JS, a partir de la linea 359 hay errores, porque profile no esta seleccionado
 EXPLICAME como hago para que al iniciar la app mientras carga la interfaz, que el fonfo sea del color que yo quiera y haya una circular destas de carga
 """
 

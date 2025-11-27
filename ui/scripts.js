@@ -206,32 +206,9 @@ async function loadOptions() {
         }
     }
 
-    // Add "Create Profile" option
-    if (selectOptions) {
-        const createOption = document.createElement('div');
-        createOption.className = 'select-option create-profile-option';
-        createOption.innerHTML = `
-            <div class="option-icon create-icon">+</div>
-            <div class="option-content">
-                <div class="option-title">Crear nuevo perfil</div>
-                <div class="option-subtitle">Configura una nueva instancia</div>
-            </div>
-        `;
-        createOption.addEventListener('click', () => {
-            closeSelect();
-            resetProfileModal();
-            if (profileModal) profileModal.classList.add('show');
-        });
-        selectOptions.appendChild(createOption);
-    }
-
     if (profilesArray.length > 0) {
         const firstProfile = profilesArray[0];
         selectOption(firstProfile.id, firstProfile);
-    } else {
-        if (document.getElementById('selectedTitle')) document.getElementById('selectedTitle').textContent = "No tienes perfiles";
-        if (document.getElementById('selectedSubtitle')) document.getElementById('selectedSubtitle').textContent = "Crea uno para jugar";
-        if (document.getElementById('selectedIcon')) document.getElementById('selectedIcon').style.display = 'none';
     }
 }
 
@@ -240,10 +217,7 @@ function selectOption(id, profile) {
 
     const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Nunca';
 
-    if (document.getElementById('selectedIcon')) {
-        document.getElementById('selectedIcon').src = profile.iconUrl || profile.icon;
-        document.getElementById('selectedIcon').style.display = 'block';
-    }
+    if (document.getElementById('selectedIcon')) document.getElementById('selectedIcon').src = profile.iconUrl || profile.icon;
     if (document.getElementById('selectedTitle')) document.getElementById('selectedTitle').textContent = profile.name;
     if (document.getElementById('selectedSubtitle')) document.getElementById('selectedSubtitle').textContent = `Versión ${profile.version} • ${lastPlayedText}`;
 
@@ -355,7 +329,36 @@ function showSection(sectionId) {
     const section = document.getElementById(sectionId);
     if (section) section.classList.add('active');
 
-    
+    if (event && event.target) {
+        event.target.classList.add('active');
+    }
+}
+
+function resetProfileModal() {
+    if (document.getElementById('profileName')) document.getElementById('profileName').value = '';
+    if (document.getElementById('profileVersionSelect')) document.getElementById('profileVersionSelect').value = '';
+    if (document.getElementById('profileJVMArgs')) document.getElementById('profileJVMArgs').value = '';
+    if (document.getElementById('profileDir')) document.getElementById('profileDir').value = '';
+
+    selectedImageData = null;
+
+    // Cargar imagen por defecto
+    window.pywebview.api.get_profile_icon('default.png').then(url => {
+        if (iconPreview) {
+            iconPreview.src = url;
+            iconPreview.style.display = 'block';
+        }
+        if (placeholderIcon) placeholderIcon.style.display = 'none';
+    });
+
+    editingProfileId = null;
+    if (acceptProfileBtn) acceptProfileBtn.textContent = "Crear Perfil";
+    if (document.querySelector('#modal h2')) document.querySelector('#modal h2').textContent = "Crear Nuevo Perfil";
+}
+
+function openEditProfileModal(id, profile) {
+    resetProfileModal();
+    editingProfileId = id;
 
     if (document.getElementById('profileName')) document.getElementById('profileName').value = profile.name;
     if (document.getElementById('profileVersionSelect')) document.getElementById('profileVersionSelect').value = profile.version;
