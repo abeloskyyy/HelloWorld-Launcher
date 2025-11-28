@@ -12,7 +12,10 @@ from PIL import Image
 from datetime import datetime
 
 """
-añade un botón que ponga iniciar sesion. cuado es clicado, abre un modal con dos "pestañas": Offline y Microsoft. el offline tiene: Nombre (input con id nickname) y boton de guardar. en microsoft tiene boton de iniciar sesion, aun sin funcionalidad. tambien tiene al boton de cerrar arriba a la derecha con una cruz.
+perfecto, pero he visto que las versiones de forge están mal ordenadas.
+
+
+
 """
 
 
@@ -126,6 +129,20 @@ def delete_profile(profile_id):
 
 # ------------ API WEBVIEW ------------
 class Api:
+    def confirm(self, mensaje: str) -> bool:
+        respuesta = messagebox.askokcancel("Confirmar", mensaje)
+        return respuesta
+
+    def error(self, mensaje: str):
+        messagebox.showerror("Error", mensaje)
+
+    def info(self, mensaje: str):
+        messagebox.showinfo("Información", mensaje)
+
+    def warning(self, mensaje: str):
+        messagebox.showwarning("Advertencia", mensaje)
+
+
     def get_profile_icon(self, filename):
         # path absoluto dentro del directorio real
         icon_path = os.path.join(launcher_dir, "profiles-img", filename)
@@ -185,85 +202,137 @@ class Api:
 
     def get_available_versions(self):
         """
-        Retorna un diccionario con versiones instaladas y disponibles para descargar.
+        Retorna un diccionario con versiones organizadas por categoría.
         """
         result = {
             "installed": [],
-            "available": []
+            "vanilla": [],
+            "fabric": [],
+            "forge": [],
+            "snapshots": [],
+            "old": []
         }
         
-        # 1. Obtener versiones instaladas
         try:
+            # 1. Versiones Instaladas
             installed_versions = mll.utils.get_installed_versions(mc_dir)
             result["installed"] = [v["id"] for v in installed_versions]
-        except Exception as e:
-            print(f"Error obteniendo versiones instaladas: {e}")
-        
-        # 2. Obtener versiones vanilla disponibles
-        try:
+            
+            # 2. Vanilla (Release, Snapshot, Old)
             all_versions = mll.utils.get_version_list()
-            # Filtrar solo versiones release (vanilla)
-            vanilla_versions = [v["id"] for v in all_versions if v["type"] == "release"]
-            result["available"] = vanilla_versions
+            
+            for v in all_versions:
+                if v["type"] == "release":
+                    result["vanilla"].append(v["id"])
+                elif v["type"] == "snapshot":
+                    result["snapshots"].append(v["id"])
+                else:
+                    result["old"].append(v["id"])
+            
+            # 3. Fabric
+            # Obtener versiones de MC soportadas por Fabric
+            if hasattr(mll, 'fabric'):
+                fabric_mc_versions = mll.fabric.get_stable_minecraft_versions()
+                # Limitamos a las primeras 20 para no saturar, o todas si son importantes
+                # Mostramos formato "Fabric <MC_Version>"
+                for mc_ver in fabric_mc_versions:
+                    result["fabric"].append({
+                        "id": f"fabric-{mc_ver}",
+                        "name": f"Fabric {mc_ver}",
+                        "mc_version": mc_ver
+                    })
+
+            # 4. Forge
+            # Obtener versiones de Forge
+            if hasattr(mll, 'forge'):
+                # Esto puede ser lento si hay muchas, vamos a intentar obtener las más recientes
+                # list_forge_versions retorna una lista de versiones de forge (ej: 1.20.1-47.1.0)
+                forge_versions_list = mll.forge.list_forge_versions()
+                
+                # Vamos a agrupar por versión de MC y tomar la última de cada una
+                seen_mc_versions = set()
+                for forge_ver in forge_versions_list:
+                    # El formato suele ser MC-Forge o similar. mll lo maneja.
+                    # Asumimos que list_forge_versions devuelve strings como "1.20.1-47.1.0"
+                    parts = forge_ver.split('-')
+                    if len(parts) >= 2:
+                        mc_ver = parts[0]
+                        if mc_ver not in seen_mc_versions:
+                            result["forge"].append({
+                                "id": f"forge-{forge_ver}",
+                                "name": f"Forge {mc_ver} ({parts[1]})",
+                                "forge_version": forge_ver
+                            })
+                            seen_mc_versions.add(mc_ver)
+                            
         except Exception as e:
-            print(f"Error obteniendo versiones disponibles: {e}")
+            print(f"Error obteniendo versiones: {e}")
+            self.error(f"Error obteniendo versiones: {e}")
         
         return result
     
-    def install_version(self, version, callback_id=None):
+    def install_version(self, version_id, callback_id=None):
         """
-        Instala una versión de Minecraft.
-        callback_id se usa para identificar el callback en el frontend.
+        Instala una versión de Minecraft (Vanilla, Fabric o Forge).
         """
         try:
             # Variables para calcular progreso
             max_value = 1
             current_status = ""
             
-            # Callback para reportar progreso
+            # Callbacks
             def set_status(status):
                 nonlocal current_status
                 current_status = status
                 print(f"[Install] {status}")
             
             def set_progress(progress):
-                # Calcular porcentaje basado en max_value
                 percentage = int((progress / max_value) * 100) if max_value > 0 else 0
-                # Limitar entre 0 y 100
                 percentage = min(100, max(0, percentage))
-                print(f"[Install Progress] {percentage}%")
-                # Enviar progreso al frontend
                 if callback_id:
                     try:
                         webview.windows[0].evaluate_js(
-                            f"if(window.updateInstallProgress) window.updateInstallProgress('{version}', {percentage}, '{current_status}')"
+                            f"if(window.updateInstallProgress) window.updateInstallProgress('{version_id}', {percentage}, '{current_status}')"
                         )
-                    except Exception as e:
-                        print(f"Error enviando progreso al frontend: {e}")
+                    except Exception:
+                        pass
             
             def set_max(new_max):
                 nonlocal max_value
                 max_value = new_max
-                print(f"[Install Max] {max_value}")
             
-            # Crear callback
             callback = {
                 "setStatus": set_status,
                 "setProgress": set_progress,
                 "setMax": set_max
             }
             
-            print(f"Instalando versión: {version}")
-            set_status(f"Descargando {version}...")
+            print(f"Instalando: {version_id}")
+            set_status("Iniciando instalación...")
             
-            # Instalar la versión
-            mll.install.install_minecraft_version(version, mc_dir, callback=callback)
+            # Determinar tipo de instalación
+            if version_id.startswith("fabric-"):
+                # Instalación de Fabric
+                mc_version = version_id.replace("fabric-", "")
+                set_status(f"Instalando Fabric para {mc_version}...")
+                mll.fabric.install_fabric(mc_version, mc_dir, callback=callback)
+                
+            elif version_id.startswith("forge-"):
+                # Instalación de Forge
+                forge_version = version_id.replace("forge-", "")
+                set_status(f"Instalando Forge {forge_version}...")
+                mll.forge.install_forge_version(forge_version, mc_dir, callback=callback)
+                
+            else:
+                # Instalación Vanilla
+                set_status(f"Descargando Vanilla {version_id}...")
+                mll.install.install_minecraft_version(version_id, mc_dir, callback=callback)
             
-            print(f"Versión {version} instalada correctamente")
-            return {"success": True, "message": f"Versión {version} instalada"}
+            print(f"Instalación completada: {version_id}")
+            return {"success": True, "message": f"Versión {version_id} instalada correctamente"}
             
         except Exception as e:
-            print(f"Error instalando versión {version}: {e}")
+            print(f"Error instalando {version_id}: {e}")
             return {"success": False, "message": str(e)}
     
     def start_game(self, profile_id, nickname):
@@ -342,16 +411,26 @@ class Api:
              print(f"Error al lanzar Minecraft: {e}")
              messagebox.showerror("Error", f"Error al lanzar Minecraft: {e}")
     
-    def save_user_json(self, username, mcdir):
+    def save_user_json(self, username, mcdir, account_type="offline"):
         data = load_user_data()
         data["username"] = username
         data["mcdir"] = mcdir
+        data["account_type"] = account_type
 
         save_user_data(data)
         return data
     
+    
     def get_user_json(self):
         return load_user_data()
+    
+    def logout_user(self):
+        """Clear username and account_type to logout"""
+        data = load_user_data()
+        data["username"] = ""
+        data["account_type"] = ""
+        save_user_data(data)
+        return data
     
     def get_profiles(self):
         return load_profiles()
@@ -546,7 +625,22 @@ if __name__ == '__main__':
         shutil.copy2(temp_profiles_file, PROFILES_FILE)
         print(f"Migrado {temp_profiles_file} a {PROFILES_FILE}")
     
-    # 5. Guardar user_data en la nueva ubicación
+    # 5. Guardar user_data en la nueva ubicación (Merge con datos existentes)
+    if os.path.exists(USER_FILE):
+        try:
+            with open(USER_FILE, "r", encoding="utf-8") as f:
+                persistent_data = json.load(f)
+            
+            # Actualizar persistent_data con user_data (bootstrap) solo si hay valores nuevos/diferentes que no sean vacíos
+            # Esto previene que un bootstrap vacío sobrescriba el nickname guardado
+            for key, value in user_data.items():
+                if value: # Solo sobrescribir si el bootstrap tiene un valor real
+                    persistent_data[key] = value
+            
+            user_data = persistent_data
+        except Exception as e:
+            print(f"Error merging user data: {e}")
+
     save_user_data(user_data)
 
     # 6. Crear carpeta profiles-img y copiar iconos iniciales

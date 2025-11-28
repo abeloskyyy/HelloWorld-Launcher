@@ -10,7 +10,20 @@
 
 <body>
     <div class="launcher">
-        <!-- Botón de inicio de sesión -->
+        <!-- Botón de inicio de sesión / User Badge -->
+        <div id="userBadge" class="user-badge" style="display: none;">
+            <div class="user-avatar">
+                <i class="fas fa-user"></i>
+            </div>
+            <span id="userDisplayName"></span>
+            <!-- Dropdown menu -->
+            <div class="user-dropdown" id="userDropdown">
+                <button class="dropdown-item" id="logoutBtn">
+                    <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+                </button>
+            </div>
+        </div>
+
         <button class="login-button" id="loginButton">
             <i class="fas fa-user"></i> Iniciar Sesión
         </button>
@@ -53,10 +66,8 @@
                     </div>
 
                     <div class="button-group">
-                        <button class="btn-secondary" style="flex: 1;">
-                            <i class="fas fa-download"></i> Instalar versión
-                        </button>
-                        <button class="btn-secondary" style="flex: 1;">
+                        <button class="btn-secondary" style="flex: 1;"
+                            data-tooltip="Gestiona mods, Forge, Fabric y otros loaders de modificaciones">
                             <i class="fas fa-tools"></i> Mods & Forge
                         </button>
                     </div>
@@ -85,7 +96,11 @@
                 <h1>Configuración</h1>
                 <div class="play-section">
                     <div class="input-group">
-                        <label>Directorio de .minecraft</label>
+                        <label>
+                            Directorio de .minecraft
+                            <i class="fa-regular fa-question-circle help-icon"
+                                data-tooltip="Carpeta donde se guardan los mundos, recursos y configuración de Minecraft. Por defecto: %appdata%\.minecraft"></i>
+                        </label>
                         <input id="mcdir" type="text" value="">
                     </div>
                     <button class="btn-primary">Guardar Configuración</button>
@@ -102,18 +117,32 @@
                 <img src="" alt="Icono del Perfil" class="profile-icon-img" id="iconPreview" style="display: none;">
                 <span class="placeholder-icon-small" id="placeholderIcon"><i class="fas fa-user"></i></span>
             </div>
-            <button type="button" class="btn-add-icon" id="iconButton">Añadir Icono</button>
+            <button type="button" class="btn-add-icon" id="iconButton"
+                data-tooltip="Selecciona un icono personalizado para identificar visualmente este perfil">Añadir
+                Icono</button>
             <div class="modal-input-group">
-                <label>Nombre del Perfil</label>
+                <label>
+                    Nombre del Perfil
+                    <i class="fa-regular fa-question-circle help-icon"
+                        data-tooltip="Nombre identificativo para este perfil. Ejemplo: 'Survival 1.20', 'Modpack SkyFactory'"></i>
+                </label>
                 <input id="profileName" type="text">
             </div>
             <div class="modal-input-group">
-                <label>Versión</label>
+                <label>
+                    Versión
+                    <i class="fa-regular fa-question-circle help-icon"
+                        data-tooltip="Versión de Minecraft a usar. Incluye versiones vanilla, snapshots, Forge, Fabric, etc."></i>
+                </label>
                 <select name="create-profile-version" id="profileVersionSelect">
                 </select>
             </div>
             <div class="modal-input-group">
-                <label>Directorio</label>
+                <label>
+                    Directorio
+                    <i class="fa-regular fa-question-circle help-icon"
+                        data-tooltip="Carpeta donde se guardarán los datos de este perfil (mundos, mods, configuración). Cada perfil puede tener su propia carpeta."></i>
+                </label>
                 <div style="display: flex; gap: 8px;">
                     <input id="profileDir" type="text" style="flex: 1;">
                     <button type="button" id="selectFolderBtn" class="btn-square"><i
@@ -121,7 +150,11 @@
                 </div>
             </div>
             <div class="modal-input-group">
-                <label>Argumentos JVM</label>
+                <label>
+                    Argumentos JVM
+                    <i class="fa-regular fa-question-circle help-icon"
+                        data-tooltip="Parámetros avanzados para la máquina virtual de Java. Ejemplo: -Xmx4G (asigna 4GB de RAM). Dejar vacío usa valores por defecto."></i>
+                </label>
                 <input id="profileJVMArgs" type="text">
             </div>
 
@@ -164,34 +197,48 @@
     <!-- Modal de inicio de sesión -->
     <div class="modal" id="loginModal">
         <div class="modal-content login-modal">
-            <span class="modal-title">Inicio de Sesión</span>
             <button class="modal-close-btn" id="closeLoginModal">
                 <i class="fas fa-times"></i>
             </button>
 
-            <!-- Tabs -->
-            <div class="modal-tabs">
-                <button class="modal-tab active" data-tab="offline">Offline</button>
-                <button class="modal-tab" data-tab="microsoft">Microsoft</button>
-            </div>
-
-            <!-- Tab Content: Offline -->
-            <div class="tab-content active" id="tab-offline">
-                <div class="modal-input-group">
-                    <label>Nombre</label>
-                    <input id="nickname" type="text" placeholder="Ingresa tu nombre">
-                </div>
-                <button class="btn-primary" id="saveOfflineBtn">Guardar</button>
-            </div>
-
-            <!-- Tab Content: Microsoft -->
-            <div class="tab-content" id="tab-microsoft">
-                <p style="text-align: center; margin-bottom: 20px; color: rgba(255,255,255,0.7);">
-                    Inicia sesión con tu cuenta de Microsoft
+            <!-- Pantalla 1: Selección de Método -->
+            <div id="loginMethodScreen" class="login-screen active">
+                <span class="modal-title">¿Cómo quieres jugar?</span>
+                <p style="text-align: center; margin-bottom: 30px; color: #666;">
+                    Elige tu método de inicio de sesión
                 </p>
-                <button class="btn-primary" id="loginMicrosoftBtn">
+
+                <button class="btn-primary btn-large" id="selectMicrosoftBtn">
                     <i class="fab fa-microsoft"></i> Iniciar Sesión con Microsoft
                 </button>
+
+                <button class="btn-secondary btn-link" id="selectOfflineBtn">
+                    Continuar en modo Offline
+                </button>
+            </div>
+
+            <!-- Pantalla 2: Modo Offline -->
+            <div id="loginOfflineScreen" class="login-screen">
+                <span class="modal-title">Modo Offline</span>
+                <p style="text-align: center; margin-bottom: 20px; color: #666;">
+                    Ingresa tu nickname para jugar
+                </p>
+
+                <div class="modal-input-group">
+                    <label>
+                        Nickname
+                        <i class="fa-regular fa-question-circle help-icon"
+                            data-tooltip="Tu nombre de usuario en el juego. Solo letras y números, sin espacios ni caracteres especiales."></i>
+                    </label>
+                    <input id="nickname" type="text" placeholder="Escribe tu nickname">
+                </div>
+
+                <div class="modal-options">
+                    <button class="btn-secondary" id="backToMethodBtn" style="color: #131313;">
+                        <i class="fas fa-arrow-left"></i> Atrás
+                    </button>
+                    <button class="btn-primary" id="saveOfflineBtn">Entrar</button>
+                </div>
             </div>
         </div>
     </div>

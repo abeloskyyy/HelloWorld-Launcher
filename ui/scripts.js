@@ -20,12 +20,26 @@ const cancelImageModalBtn = document.getElementById('cancelImageModalBtn');
 const customImageInput = document.getElementById('customImageInput');
 
 // Login Modal Elements
+const modalTabs = document.querySelectorAll('.modal-tab');
+const loginMicrosoftBtn = document.getElementById('loginMicrosoftBtn');
 const loginButton = document.getElementById('loginButton');
+const userBadge = document.getElementById('userBadge');
+const userDisplayName = document.getElementById('userDisplayName');
+const userMenuBtn = document.getElementById('userMenuBtn');
+const logoutBtn = document.getElementById('logoutBtn');
 const loginModal = document.getElementById('loginModal');
 const closeLoginModal = document.getElementById('closeLoginModal');
-const modalTabs = document.querySelectorAll('.modal-tab');
+
+// Login screens
+const loginMethodScreen = document.getElementById('loginMethodScreen');
+const loginOfflineScreen = document.getElementById('loginOfflineScreen');
+const selectMicrosoftBtn = document.getElementById('selectMicrosoftBtn');
+const selectOfflineBtn = document.getElementById('selectOfflineBtn');
+const backToMethodBtn = document.getElementById('backToMethodBtn');
 const saveOfflineBtn = document.getElementById('saveOfflineBtn');
-const loginMicrosoftBtn = document.getElementById('loginMicrosoftBtn');
+
+
+
 
 // Global Variables
 let profiles = {};
@@ -58,16 +72,6 @@ function guardarDatos() {
     const mcdir = document.getElementById("mcdir").value;
 
     window.pywebview.api.save_user_json(username, mcdir)
-        .then(() => alert("Guardado!"));
-}
-
-// Event Listeners for Inputs
-if (document.getElementById("nickname")) {
-    document.getElementById("nickname").addEventListener("input", () => {
-        const nick = document.getElementById("nickname").value;
-        const mcdir = document.getElementById("mcdir").value;
-        window.pywebview.api.save_user_json(nick, mcdir);
-    });
 }
 
 if (document.getElementById("mcdir")) {
@@ -128,31 +132,47 @@ async function loadVersions() {
     try {
         const versionsData = await window.pywebview.api.get_available_versions();
 
-        if (versionsData.installed && versionsData.installed.length > 0) {
-            const installedGroup = document.createElement('optgroup');
-            installedGroup.label = 'Instaladas';
-            versionsData.installed.forEach(version => {
-                const option = document.createElement('option');
-                option.value = version;
-                option.textContent = version;
-                installedGroup.appendChild(option);
-            });
-            versionSelect.appendChild(installedGroup);
-        }
+        // Helper function to create optgroups
+        const createGroup = (label, items, isComplex = false) => {
+            if (items && items.length > 0) {
+                const group = document.createElement('optgroup');
+                group.label = label;
+                items.forEach(item => {
+                    const option = document.createElement('option');
+                    if (isComplex) {
+                        option.value = item.id;
+                        option.textContent = item.name;
+                    } else {
+                        option.value = item;
+                        option.textContent = item;
+                    }
+                    group.appendChild(option);
+                });
+                versionSelect.appendChild(group);
+            }
+        };
 
-        if (versionsData.available && versionsData.available.length > 0) {
-            const availableGroup = document.createElement('optgroup');
-            availableGroup.label = 'Disponibles (Vanilla)';
-            versionsData.available.forEach(version => {
-                const option = document.createElement('option');
-                option.value = version;
-                option.textContent = version;
-                availableGroup.appendChild(option);
-            });
-            versionSelect.appendChild(availableGroup);
-        }
+        // 1. Instaladas
+        createGroup('Instaladas', versionsData.installed);
+
+        // 2. Vanilla
+        createGroup('Vanilla', versionsData.vanilla);
+
+        // 3. Fabric
+        createGroup('Disponibles (Fabric)', versionsData.fabric, true);
+
+        // 4. Forge
+        createGroup('Disponibles (Forge)', versionsData.forge, true);
+
+        // 5. Snapshots
+        createGroup('Snapshots', versionsData.snapshots);
+
+        // 6. Antiguas
+        createGroup('Antiguas', versionsData.old);
+
     } catch (error) {
         console.error('Error cargando versiones:', error);
+        window.pywebview.api.error('Error cargando lista de versiones');
     }
 }
 
@@ -346,7 +366,9 @@ async function cargarPerfiles() {
 
         deleteBtn.onclick = async (e) => {
             e.stopPropagation();
-            if (confirm(`¿Estás seguro de que quieres eliminar el perfil "${profile.name}"?`)) {
+
+            const confirmado = await window.pywebview.api.confirm(`¿Estás seguro de que quieres eliminar el perfil "${profile.name}"?`);
+            if (confirmado) {
                 await window.pywebview.api.delete_profile(id);
                 await cargarPerfiles();
                 await loadOptions();
@@ -463,7 +485,7 @@ if (acceptProfileBtn) {
         if (!profileDir.trim()) missingFields.push("Directorio");
 
         if (missingFields.length > 0) {
-            alert(`No puedes dejar estos campos vacíos:\n- ${missingFields.join('\n- ')}`);
+            window.pywebview.api.error(`No puedes dejar estos campos vacíos:\n- ${missingFields.join('\n- ')}`);
             return;
         }
 
@@ -659,31 +681,278 @@ modalTabs.forEach(tab => {
         document.querySelectorAll('.tab-content').forEach(content => {
             content.classList.remove('active');
         });
-
-        // Add active class to clicked tab and corresponding content
-        tab.classList.add('active');
-        const targetContent = document.getElementById(`tab-${tabName}`);
-        if (targetContent) targetContent.classList.add('active');
     });
 });
 
+
+// ==============================================
+// NEW LOGIN UX LOGIC
+// ==============================================
+
+// Check login state on load
+async function checkLoginState() {
+    try {
+        const userData = await window.pywebview.api.get_user_json();
+        if (userData.username && userData.username.trim()) {
+            showUserBadge(userData.username);
+        } else {
+            showLoginButton();
+        }
+    } catch (error) {
+        console.error('Error checking login state:', error);
+        showLoginButton();
+    }
+}
+
+function showUserBadge(username) {
+    if (loginButton) loginButton.style.display = 'none';
+    if (userBadge) {
+        userBadge.style.display = 'flex';
+        if (userDisplayName) userDisplayName.textContent = username;
+    }
+}
+
+function showLoginButton() {
+    if (userBadge) userBadge.style.display = 'none';
+    if (loginButton) loginButton.style.display = 'flex';
+}
+
+// Open login modal
+if (loginButton) {
+    loginButton.addEventListener('click', () => {
+        showLoginMethodScreen();
+        if (loginModal) loginModal.classList.add('show');
+    });
+}
+
+// Close login modal
+if (closeLoginModal) {
+    closeLoginModal.addEventListener('click', () => {
+        if (loginModal) loginModal.classList.remove('show');
+        showLoginMethodScreen();
+    });
+}
+
+// Close modal when clicking outside
+if (loginModal) {
+    loginModal.addEventListener('click', (e) => {
+        if (e.target === loginModal) {
+            loginModal.classList.remove('show');
+            showLoginMethodScreen();
+        }
+    });
+}
+
+// Screen navigation
+function showLoginMethodScreen() {
+    if (loginMethodScreen) loginMethodScreen.classList.add('active');
+    if (loginOfflineScreen) loginOfflineScreen.classList.remove('active');
+}
+
+function showLoginOfflineScreen() {
+    if (loginMethodScreen) loginMethodScreen.classList.remove('active');
+    if (loginOfflineScreen) loginOfflineScreen.classList.add('active');
+}
+
+// Select offline mode
+if (selectOfflineBtn) {
+    selectOfflineBtn.addEventListener('click', () => {
+        showLoginOfflineScreen();
+    });
+}
+
+// Back to method selection
+if (backToMethodBtn) {
+    backToMethodBtn.addEventListener('click', () => {
+        showLoginMethodScreen();
+    });
+}
+
 // Save offline login
 if (saveOfflineBtn) {
-    saveOfflineBtn.addEventListener('click', () => {
+    saveOfflineBtn.addEventListener('click', async () => {
         const nickname = document.getElementById('nickname').value;
-        if (nickname.trim()) {
-            guardarDatos();
-            alert('Nombre guardado: ' + nickname);
+        const invalido = /[\sñÑáéíóúÁÉÍÓÚçÇ]/.test(nickname);
+        if (nickname.trim() && !invalido) {
+            const mcdir = document.getElementById('mcdir') ? document.getElementById('mcdir').value : '';
+
+            await window.pywebview.api.save_user_json(nickname, mcdir, 'offline');
+            showUserBadge(nickname);
+
             if (loginModal) loginModal.classList.remove('show');
+            showLoginMethodScreen();
         } else {
-            alert('Por favor ingresa un nombre');
+            window.pywebview.api.error('Por favor escribe un nickname válido (sin espacios ni acentos)');
         }
     });
 }
 
 // Microsoft login (placeholder)
-if (loginMicrosoftBtn) {
-    loginMicrosoftBtn.addEventListener('click', () => {
-        alert('Funcionalidad de Microsoft aún no implementada');
+if (selectMicrosoftBtn) {
+    selectMicrosoftBtn.addEventListener('click', () => {
+        window.pywebview.api.error('Funcionalidad de Microsoft aún no implementada');
     });
 }
+
+// User badge toggle (click anywhere on badge)
+if (userBadge) {
+    userBadge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        userBadge.classList.toggle('active');
+    });
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+    if (userBadge && !userBadge.contains(e.target)) {
+        userBadge.classList.remove('active');
+    }
+});
+
+// Logout
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+        try {
+            await window.pywebview.api.logout_user();
+            showLoginButton();
+            if (userBadge) userBadge.classList.remove('active');
+        } catch (error) {
+            console.error('Error logging out:', error);
+            window.pywebview.api.error('Error al cerrar sesión');
+        }
+    });
+}
+
+// Initialize login state when pywebview is ready
+window.addEventListener('pywebviewready', async () => {
+    await checkLoginState();
+});
+
+// ==============================================
+// TOOLTIP SYSTEM
+// ==============================================
+
+// Create tooltip element
+const tooltip = document.createElement('div');
+tooltip.className = 'tooltip';
+document.body.appendChild(tooltip);
+
+let tooltipTimeout = null;
+let currentTooltipElement = null;
+
+// Function to show tooltip
+function showTooltip(element, text, x, y) {
+    tooltip.textContent = text;
+    tooltip.classList.add('show');
+
+    // Position tooltip
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const padding = 10;
+
+    // Calculate position (above the element by default)
+    let left = x - (tooltipRect.width / 2);
+    let top = y - tooltipRect.height - padding;
+
+    // Adjust if tooltip goes off screen
+    if (left < padding) left = padding;
+    if (left + tooltipRect.width > window.innerWidth - padding) {
+        left = window.innerWidth - tooltipRect.width - padding;
+    }
+    if (top < padding) {
+        // Show below if no space above
+        top = y + padding;
+    }
+
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
+}
+
+// Function to hide tooltip
+function hideTooltip() {
+    tooltip.classList.remove('show');
+    currentTooltipElement = null;
+}
+
+// Add event listeners to all elements with data-tooltip
+function initializeTooltips() {
+    const tooltipElements = document.querySelectorAll('[data-tooltip]');
+
+    tooltipElements.forEach(element => {
+        // Mouse enter - start timer
+        element.addEventListener('mouseenter', (e) => {
+            const tooltipText = element.getAttribute('data-tooltip');
+            if (!tooltipText) return;
+
+            currentTooltipElement = element;
+            const rect = element.getBoundingClientRect();
+            const x = rect.left + (rect.width / 2);
+            const y = rect.top;
+
+            // Show tooltip after 0.5 seconds
+            tooltipTimeout = setTimeout(() => {
+                if (currentTooltipElement === element) {
+                    showTooltip(element, tooltipText, x, y);
+                }
+            }, 500);
+        });
+
+        // Mouse leave - cancel timer and hide
+        element.addEventListener('mouseleave', () => {
+            if (tooltipTimeout) {
+                clearTimeout(tooltipTimeout);
+                tooltipTimeout = null;
+            }
+            if (currentTooltipElement === element) {
+                hideTooltip();
+            }
+        });
+
+        // Click - show immediately
+        element.addEventListener('click', (e) => {
+            const tooltipText = element.getAttribute('data-tooltip');
+            if (!tooltipText) return;
+
+            // Only for help icons
+            if (element.classList.contains('help-icon')) {
+                e.stopPropagation();
+                const rect = element.getBoundingClientRect();
+                const x = rect.left + (rect.width / 2);
+                const y = rect.top;
+
+                if (currentTooltipElement === element && tooltip.classList.contains('show')) {
+                    hideTooltip();
+                } else {
+                    showTooltip(element, tooltipText, x, y);
+                    currentTooltipElement = element;
+                }
+            }
+        });
+    });
+}
+
+// Hide tooltip when clicking anywhere else
+document.addEventListener('click', (e) => {
+    if (!e.target.classList.contains('help-icon') && !tooltip.contains(e.target)) {
+        hideTooltip();
+    }
+});
+
+// Hide tooltip on scroll
+window.addEventListener('scroll', hideTooltip, true);
+
+// Initialize tooltips when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeTooltips);
+} else {
+    initializeTooltips();
+}
+
+// Re-initialize tooltips when new content is added (for dynamic content)
+const observer = new MutationObserver(() => {
+    initializeTooltips();
+});
+
+observer.observe(document.body, {
+    childList: true,
+    subtree: true
+});
