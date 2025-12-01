@@ -12,7 +12,7 @@ from PIL import Image
 from datetime import datetime
 
 """
-perfecto, pero he visto que las versiones de forge están mal ordenadas.
+haz que al descargar una version, se desactiven los botones de crear perfil y cancelar, y tambien haya un boton de cancelar la descarga, que solamente cancela la descarga. los campos siguen abiertos y no se cierra el modal. tambien haz que al completar la descarga se actualice la lista de versiones disponibles y instaladas etc. como harias que al cancelar la descarga o al dar error, se elimine la version medio descgada? no lo hagas aun. no ejecutes comandos, que siempre te crasheas
 
 
 
