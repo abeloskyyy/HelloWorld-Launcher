@@ -249,21 +249,39 @@ class Api:
                 # list_forge_versions retorna una lista de versiones de forge (ej: 1.20.1-47.1.0)
                 forge_versions_list = mll.forge.list_forge_versions()
                 
-                # Vamos a agrupar por versión de MC y tomar la última de cada una
-                seen_mc_versions = set()
+                # Agrupar por versión de MC y tomar la última de cada una
+                from packaging import version
+                mc_versions_dict = {}
+                
                 for forge_ver in forge_versions_list:
                     # El formato suele ser MC-Forge o similar. mll lo maneja.
                     # Asumimos que list_forge_versions devuelve strings como "1.20.1-47.1.0"
                     parts = forge_ver.split('-')
                     if len(parts) >= 2:
                         mc_ver = parts[0]
-                        if mc_ver not in seen_mc_versions:
-                            result["forge"].append({
+                        # Guardar solo la primera versión de Forge para cada versión de MC
+                        if mc_ver not in mc_versions_dict:
+                            mc_versions_dict[mc_ver] = {
                                 "id": f"forge-{forge_ver}",
                                 "name": f"Forge {mc_ver} ({parts[1]})",
                                 "forge_version": forge_ver
-                            })
-                            seen_mc_versions.add(mc_ver)
+                            }
+                
+                # Ordenar las versiones de MC de más reciente a más antigua
+                try:
+                    sorted_mc_versions = sorted(
+                        mc_versions_dict.keys(),
+                        key=lambda v: version.parse(v),
+                        reverse=True
+                    )
+                    # Agregar las versiones ordenadas al resultado
+                    for mc_ver in sorted_mc_versions:
+                        result["forge"].append(mc_versions_dict[mc_ver])
+                except Exception as sort_error:
+                    print(f"Error ordenando versiones de Forge: {sort_error}")
+                    # Si falla el ordenamiento, agregar en el orden que estén
+                    for mc_ver, forge_data in mc_versions_dict.items():
+                        result["forge"].append(forge_data)
                             
         except Exception as e:
             print(f"Error obteniendo versiones: {e}")
