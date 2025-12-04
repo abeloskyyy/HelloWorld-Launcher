@@ -46,6 +46,8 @@
             <!-- Sección Jugar -->
             <div id="play" class="section active">
                 <h1>Jugar</h1>
+                <input type="hidden" id="playNickname" value="">
+                <select id="profileSelect" style="display: none;"></select>
                 <div class="play-section">
                     <div class="custom-select" id="customSelect">
                         <div class="select-trigger" id="selectTrigger">
@@ -70,10 +72,18 @@
                             data-tooltip="Gestiona mods, Forge, Fabric y otros loaders de modificaciones">
                             <i class="fas fa-tools"></i> Mods & Forge
                         </button>
+                        <button id="openDownloadModalBtn" class="btn-secondary" style="flex: 1;"
+                            data-tooltip="Descarga nuevas versiones de Minecraft (Vanilla, Forge, Fabric)">
+                            <i class="fas fa-download"></i> Descargar Versiones
+                        </button>
                     </div>
 
-                    <button class="play-button" onclick="launchGame()">
-                        Jugar
+                    <button class="play-button" onclick="launchGame()" id="playButton">
+                        <span class="play-icon">▶</span>
+                        <span class="play-text">Jugar</span>
+                        <span class="play-spinner" style="display: none;">
+                            <i class="fas fa-circle-notch fa-spin"></i>
+                        </span>
                     </button>
                 </div>
             </div>
@@ -132,7 +142,7 @@
                 <label>
                     Versión
                     <i class="fa-regular fa-question-circle help-icon"
-                        data-tooltip="Versión de Minecraft a usar. Incluye versiones vanilla, snapshots, Forge, Fabric, etc."></i>
+                        data-tooltip="Versión de Minecraft a usar. Solo versiones ya instaladas."></i>
                 </label>
                 <select name="create-profile-version" id="profileVersionSelect">
                 </select>
@@ -153,19 +163,9 @@
                 <label>
                     Argumentos JVM
                     <i class="fa-regular fa-question-circle help-icon"
-                        data-tooltip="Parámetros avanzados para la máquina virtual de Java. Ejemplo: -Xmx4G (asigna 4GB de RAM). Dejar vacío usa valores por defecto."></i>
+                        data-tooltip="Parámetros avanzados para la JVM. Por defecto se incluyen: -Xmx4G (4GB RAM), -Xms1G (1GB inicial), y optimizaciones de rendimiento con G1GC."></i>
                 </label>
                 <input id="profileJVMArgs" type="text">
-            </div>
-
-            <!-- Indicador de progreso de instalación -->
-            <div id="installProgress" class="install-progress" style="display: none;">
-                <div class="install-progress-text">Instalando versión...</div>
-                <div class="progress-bar">
-                    <div id="progressBarFill" class="progress-bar-fill" style="width: 0%;">
-                    </div>
-                </div>
-                <div id="progressPercentage" class="progress-percentage">0%</div>
             </div>
 
             <div class="modal-options">
@@ -239,6 +239,69 @@
                     </button>
                     <button class="btn-primary" id="saveOfflineBtn">Entrar</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de descarga de versiones -->
+    <div class="modal" id="downloadModal">
+        <div class="modal-content download-modal">
+            <span>Descargar Versión de Minecraft</span>
+
+            <!-- Loader Type Selection -->
+            <div class="loader-type-selector">
+                <button class="loader-type-btn active" data-type="vanilla">
+                    <i class="fas fa-cube"></i> Vanilla
+                </button>
+                <button class="loader-type-btn" data-type="forge">
+                    <i class="fas fa-hammer"></i> Forge
+                </button>
+                <button class="loader-type-btn" data-type="fabric">
+                    <i class="fas fa-scroll"></i> Fabric
+                </button>
+            </div>
+
+            <!-- MC Version Dropdown -->
+            <div class="modal-input-group">
+                <label>
+                    Versión de Minecraft
+                    <i class="fa-regular fa-question-circle help-icon"
+                        data-tooltip="Selecciona la versión de Minecraft que deseas descargar"></i>
+                </label>
+                <select id="downloadMcVersion">
+                    <option value="">Cargando versiones...</option>
+                </select>
+            </div>
+
+            <!-- Loader Version Dropdown (hidden for vanilla) -->
+            <div class="modal-input-group" id="loaderVersionGroup" style="display: none;">
+                <label id="loaderVersionLabel">
+                    Versión del Loader
+                    <i class="fa-regular fa-question-circle help-icon"
+                        data-tooltip="Selecciona la versión del loader (Forge o Fabric)"></i>
+                </label>
+                <select id="downloadLoaderVersion">
+                    <option value="">Selecciona primero una versión de Minecraft</option>
+                </select>
+            </div>
+
+            <!-- Download Progress -->
+            <div id="downloadProgressContainer" class="install-progress" style="display: none;">
+                <button id="cancelDownloadBtn2" class="cancel-download-icon" title="Cancelar descarga">
+                    <i class="fas fa-times"></i>
+                </button>
+                <div class="install-progress-text" id="downloadProgressText">Descargando...</div>
+                <div class="progress-bar">
+                    <div id="downloadProgressBarFill" class="progress-bar-fill" style="width: 0%;"></div>
+                </div>
+                <div id="downloadProgressPercentage" class="progress-percentage">0%</div>
+            </div>
+
+            <div class="modal-options">
+                <button id="startDownloadBtn" class="btn-blue">
+                    <i class="fas fa-download"></i> Descargar
+                </button>
+                <button id="cancelDownloadModalBtn" class="btn-red">Cancelar</button>
             </div>
         </div>
     </div>

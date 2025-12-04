@@ -230,16 +230,94 @@ button {
 .play-button {
     background: linear-gradient(135deg, #5cb85c 0%, #4cae4c 100%);
     color: #fff;
-    padding: 20px 130px;
+    padding: 20px 40px;
     font-size: 50px;
     font-family: "Pixel";
     margin-top: 10px;
     box-shadow: 0 8px 20px rgba(92, 184, 92, 0.3);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    transition: all 0.3s ease;
+}
+
+.play-button::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(45deg,
+            transparent,
+            rgba(255, 255, 255, 0.1),
+            transparent);
+    transform: rotate(45deg);
+    transition: all 0.6s ease;
+}
+
+.play-button:hover::before {
+    left: 100%;
 }
 
 .play-button:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 12px 25px rgba(92, 184, 92, 0.5);
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 12px 30px rgba(92, 184, 92, 0.5);
+    background: linear-gradient(135deg, #6cc76c 0%, #5cbd5c 100%);
+}
+
+.play-button:active {
+    transform: translateY(-1px) scale(0.98);
+}
+
+.play-button.loading {
+    background: linear-gradient(135deg, #888 0%, #666 100%);
+    cursor: not-allowed;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.play-button.loading:hover {
+    transform: none;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.play-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.play-icon {
+    font-size: 40px;
+    display: inline-block;
+    transition: transform 0.3s ease;
+}
+
+.play-button:hover .play-icon {
+    transform: scale(1.1);
+}
+
+.play-text {
+    font-size: 50px;
+}
+
+.play-spinner {
+    font-size: 40px;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
 }
 
 .profiles-section {
@@ -1288,4 +1366,94 @@ label {
     display: flex;
     align-items: center;
     gap: 4px;
+}
+
+/* Cancel download icon */
+.install-progress {
+    position: relative !important;
+}
+
+.cancel-download-icon {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 28px;
+    height: 28px;
+    background: rgba(217, 21, 21, 0.9);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    z-index: 10;
+}
+
+.cancel-download-icon:hover {
+    background: rgba(170, 15, 15, 1);
+    transform: scale(1.1);
+}
+
+/* Download Modal Styles */
+.download-modal {
+    max-width: 500px;
+}
+
+/* Loader Type Selector */
+.loader-type-selector {
+    display: flex;
+    gap: 10px;
+    margin: 20px 0;
+    padding: 5px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+}
+
+.loader-type-btn {
+    flex: 1;
+    padding: 12px 20px;
+    background: transparent;
+    border: 2px solid transparent;
+    color: #666;
+    font-weight: 600;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.loader-type-btn i {
+    font-size: 16px;
+}
+
+.loader-type-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #333;
+}
+
+.loader-type-btn.active {
+    background: #5cb85c;
+    color: white;
+    border-color: #4cae4c;
+}
+
+.loader-type-btn.active[data-type="forge"] {
+    background: #d9534f;
+    border-color: #c9302c;
+}
+
+.loader-type-btn.active[data-type="fabric"] {
+    background: #5c93b8;
+    border-color: #4a7a9a;
+}
+
+.install-progress {
+    position: relative;
 }

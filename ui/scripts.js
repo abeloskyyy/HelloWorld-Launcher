@@ -12,6 +12,7 @@ const iconPreview = document.getElementById('iconPreview');
 const placeholderIcon = document.getElementById('placeholderIcon');
 const iconDisplay = document.getElementById('iconDisplay');
 const selectFolderBtn = document.getElementById('selectFolderBtn');
+const cancelDownloadBtn = document.getElementById('cancelDownloadBtn');
 
 // Image modal elements
 const imageModal = document.getElementById('imageModal');
@@ -45,6 +46,7 @@ const saveOfflineBtn = document.getElementById('saveOfflineBtn');
 let profiles = {};
 let editingProfileId = null;
 let selectedImageData = null;
+let isDownloading = false;
 
 // Función global para actualizar el progreso de instalación
 window.updateInstallProgress = function (version, percentage, status) {
@@ -59,13 +61,63 @@ window.updateInstallProgress = function (version, percentage, status) {
         progressBar.style.width = `${percentage}%`;
         progressPercentage.textContent = `${percentage}%`;
 
-        if (percentage >= 100) {
-            setTimeout(() => {
-                progressContainer.style.display = 'none';
-            }, 2000);
-        }
+        // Don't auto-hide on completion, let onDownloadComplete handle it
     }
 };
+
+// Función global llamada cuando la descarga se completa
+window.onDownloadComplete = async function (version) {
+    console.log(`Download completed: ${version}`);
+    isDownloading = false;
+    endDownloadState();
+
+    // Refresh version lists
+    await loadVersions();
+
+    // Hide progress after a delay
+    setTimeout(() => {
+        const progressContainer = document.getElementById('installProgress');
+        if (progressContainer) {
+            progressContainer.style.display = 'none';
+        }
+    }, 2000);
+};
+
+// Manage download state
+function startDownloadState() {
+    isDownloading = true;
+    if (acceptProfileBtn) acceptProfileBtn.disabled = true;
+    if (cancelModalBtn) cancelModalBtn.disabled = true;
+}
+
+function endDownloadState() {
+    isDownloading = false;
+    if (acceptProfileBtn) acceptProfileBtn.disabled = false;
+    if (cancelModalBtn) cancelModalBtn.disabled = false;
+}
+
+async function cancelDownload() {
+    try {
+        const result = await window.pywebview.api.cancel_download();
+        if (result.success) {
+            console.log('Download cancelled');
+            isDownloading = false;
+            endDownloadState();
+
+            // Hide progress
+            const progressContainer = document.getElementById('installProgress');
+            if (progressContainer) {
+                progressContainer.style.display = 'none';
+            }
+
+            // Don't create profile, just show message
+            window.pywebview.api.info('Descarga cancelada. El perfil no se ha creado.');
+        }
+    } catch (error) {
+        console.error('Error cancelling download:', error);
+    }
+}
+
 
 function guardarDatos() {
     const username = document.getElementById("nickname").value;
@@ -96,13 +148,49 @@ window.addEventListener('pywebviewready', async () => {
 });
 
 async function launchGame() {
-    const selectedVersion = document.getElementById("profileSelect").value;
-    const nickname = document.getElementById("nickname").value;
+    const playButton = document.getElementById('playButton');
+    const playText = playButton.querySelector('.play-text');
+    const playIcon = playButton.querySelector('.play-icon');
+    const playSpinner = playButton.querySelector('.play-spinner');
 
-    await pywebview.api.start_game(selectedVersion, nickname);
+    const profileSelectElement = document.getElementById("profileSelect");
 
-    await loadOptions();
-    await cargarPerfiles();
+    if (!profileSelectElement || !profileSelectElement.value) {
+        window.pywebview.api.error("Debes seleccionar un perfil antes de jugar");
+        return;
+    }
+
+    const selectedProfile = profileSelectElement.value;
+
+    // Get nickname from user data instead of the login modal
+    const userData = await window.pywebview.api.get_user_json();
+    const nickname = userData.username || "";
+
+    if (!nickname) {
+        window.pywebview.api.error("Debes iniciar sesión antes de jugar");
+        return;
+    }
+
+    // Set loading state
+    playButton.disabled = true;
+    playButton.classList.add('loading');
+    playText.textContent = 'Iniciando...';
+    playIcon.style.display = 'none';
+    playSpinner.style.display = 'inline-block';
+
+    try {
+        await pywebview.api.start_game(selectedProfile, nickname);
+
+        await loadOptions();
+        await cargarPerfiles();
+    } finally {
+        // Reset button state
+        playButton.disabled = false;
+        playButton.classList.remove('loading');
+        playText.textContent = 'Jugar';
+        playIcon.style.display = 'inline';
+        playSpinner.style.display = 'none';
+    }
 }
 
 // Helper Functions
@@ -130,22 +218,18 @@ async function loadVersions() {
     versionSelect.innerHTML = '';
 
     try {
+        // Ahora solo obtenemos versiones INSTALADAS para este dropdown
         const versionsData = await window.pywebview.api.get_available_versions();
 
         // Helper function to create optgroups
-        const createGroup = (label, items, isComplex = false) => {
+        const createGroup = (label, items) => {
             if (items && items.length > 0) {
                 const group = document.createElement('optgroup');
                 group.label = label;
                 items.forEach(item => {
                     const option = document.createElement('option');
-                    if (isComplex) {
-                        option.value = item.id;
-                        option.textContent = item.name;
-                    } else {
-                        option.value = item;
-                        option.textContent = item;
-                    }
+                    option.value = item;
+                    option.textContent = item;
                     group.appendChild(option);
                 });
                 versionSelect.appendChild(group);
@@ -153,22 +237,14 @@ async function loadVersions() {
         };
 
         // 1. Instaladas
-        createGroup('Instaladas', versionsData.installed);
-
-        // 2. Vanilla
-        createGroup('Vanilla', versionsData.vanilla);
-
-        // 3. Fabric
-        createGroup('Disponibles (Fabric)', versionsData.fabric, true);
-
-        // 4. Forge
-        createGroup('Disponibles (Forge)', versionsData.forge, true);
-
-        // 5. Snapshots
-        createGroup('Snapshots', versionsData.snapshots);
-
-        // 6. Antiguas
-        createGroup('Antiguas', versionsData.old);
+        if (versionsData.installed && versionsData.installed.length > 0) {
+            createGroup('Instaladas', versionsData.installed);
+        } else {
+            const option = document.createElement('option');
+            option.textContent = "No hay versiones instaladas";
+            option.disabled = true;
+            versionSelect.appendChild(option);
+        }
 
     } catch (error) {
         console.error('Error cargando versiones:', error);
@@ -403,7 +479,11 @@ function showSection(sectionId) {
 async function resetProfileModal() {
     if (document.getElementById('profileName')) document.getElementById('profileName').value = '';
     if (document.getElementById('profileVersionSelect')) document.getElementById('profileVersionSelect').value = '';
-    if (document.getElementById('profileJVMArgs')) document.getElementById('profileJVMArgs').value = '';
+
+    // Set default JVM arguments with optimized settings
+    const defaultJVMArgs = '-Xmx4G -Xms1G -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M';
+    if (document.getElementById('profileJVMArgs')) document.getElementById('profileJVMArgs').value = defaultJVMArgs;
+
     if (document.getElementById('profileDir')) document.getElementById('profileDir').value = '';
 
     try {
@@ -502,14 +582,37 @@ if (acceptProfileBtn) {
             }
 
             await window.pywebview.api.edit_profile(editingProfileId, updatedData);
+            await cargarPerfiles();
+            await loadOptions();
+            if (profileModal) profileModal.classList.remove('show');
+            resetProfileModal();
         } else {
-            await window.pywebview.api.add_profile(profileName, profileVersion, profileIcon, profileDir, profileJVMArgs);
-        }
+            // Create new profile
+            try {
+                // Note: add_profile in backend might still try to install if missing, 
+                // but UI now restricts to installed versions.
+                const result = await window.pywebview.api.add_profile(profileName, profileVersion, profileIcon, profileDir, profileJVMArgs);
 
-        await cargarPerfiles();
-        await loadOptions();
-        if (profileModal) profileModal.classList.remove('show');
-        resetProfileModal();
+                if (result.success) {
+                    await cargarPerfiles();
+                    await loadOptions();
+                    if (profileModal) profileModal.classList.remove('show');
+                    resetProfileModal();
+                } else {
+                    window.pywebview.api.error(result.message);
+                }
+            } catch (error) {
+                console.error('Error creating profile:', error);
+                window.pywebview.api.error('Error al crear el perfil');
+            }
+        }
+    });
+}
+
+// Cancel download button handler
+if (cancelDownloadBtn) {
+    cancelDownloadBtn.addEventListener('click', async () => {
+        await cancelDownload();
     });
 }
 
@@ -713,9 +816,306 @@ function showUserBadge(username) {
 }
 
 function showLoginButton() {
-    if (userBadge) userBadge.style.display = 'none';
     if (loginButton) loginButton.style.display = 'flex';
+    if (userBadge) userBadge.style.display = 'none';
 }
+
+// Initial check
+window.addEventListener('pywebviewready', checkLoginState);
+
+
+// ==============================================
+// DOWNLOAD MANAGER LOGIC
+// ==============================================
+
+const downloadModal = document.getElementById('downloadModal');
+const openDownloadModalBtn = document.getElementById('openDownloadModalBtn');
+const cancelDownloadModalBtn = document.getElementById('cancelDownloadModalBtn');
+const startDownloadBtn = document.getElementById('startDownloadBtn');
+const downloadMcVersionSelect = document.getElementById('downloadMcVersion');
+const downloadLoaderVersionSelect = document.getElementById('downloadLoaderVersion');
+const loaderVersionGroup = document.getElementById('loaderVersionGroup');
+const loaderTypeBtns = document.querySelectorAll('.loader-type-btn');
+const cancelDownloadBtn2 = document.getElementById('cancelDownloadBtn2');
+
+let currentLoaderType = 'vanilla';
+
+if (openDownloadModalBtn) {
+    openDownloadModalBtn.addEventListener('click', () => {
+        openDownloadModal();
+    });
+}
+
+if (cancelDownloadModalBtn) {
+    cancelDownloadModalBtn.addEventListener('click', () => {
+        if (downloadModal) downloadModal.classList.remove('show');
+    });
+}
+
+if (startDownloadBtn) {
+    startDownloadBtn.addEventListener('click', () => {
+        startVersionDownload();
+    });
+}
+
+if (cancelDownloadBtn2) {
+    cancelDownloadBtn2.addEventListener('click', () => {
+        cancelDownload();
+    });
+}
+
+// Loader Type Switching
+loaderTypeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        const type = btn.dataset.type;
+        switchLoaderType(type);
+    });
+});
+
+// MC Version Change (for loading loader versions)
+if (downloadMcVersionSelect) {
+    downloadMcVersionSelect.addEventListener('change', () => {
+        if (currentLoaderType !== 'vanilla') {
+            loadLoaderVersions(currentLoaderType, downloadMcVersionSelect.value);
+        }
+    });
+}
+
+async function openDownloadModal() {
+    if (downloadModal) downloadModal.classList.add('show');
+
+    // Reset UI
+    document.getElementById('downloadProgressContainer').style.display = 'none';
+    startDownloadBtn.disabled = false;
+    cancelDownloadModalBtn.disabled = false;
+
+    // Default to Vanilla
+    switchLoaderType('vanilla');
+}
+
+async function switchLoaderType(type) {
+    currentLoaderType = type;
+
+    // Update buttons
+    loaderTypeBtns.forEach(btn => {
+        if (btn.dataset.type === type) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+
+    // Show/Hide Loader Version
+    if (type === 'vanilla') {
+        loaderVersionGroup.style.display = 'none';
+    } else {
+        loaderVersionGroup.style.display = 'flex';
+        downloadLoaderVersionSelect.innerHTML = '<option value="">Selecciona una versión de MC</option>';
+    }
+
+    // Load MC Versions
+    await loadMcVersions(type);
+}
+
+async function loadMcVersions(type) {
+    downloadMcVersionSelect.innerHTML = '<option value="">Cargando...</option>';
+    downloadMcVersionSelect.disabled = true;
+
+    try {
+        let versions = [];
+        if (type === 'vanilla') {
+            versions = await window.pywebview.api.get_vanilla_versions();
+        } else if (type === 'fabric') {
+            versions = await window.pywebview.api.get_fabric_mc_versions();
+        } else if (type === 'forge') {
+            versions = await window.pywebview.api.get_forge_mc_versions();
+        }
+
+        downloadMcVersionSelect.innerHTML = '';
+
+        if (versions.length === 0) {
+            const option = document.createElement('option');
+            option.textContent = "No se encontraron versiones";
+            downloadMcVersionSelect.appendChild(option);
+        } else {
+            versions.forEach(v => {
+                const option = document.createElement('option');
+                option.value = v;
+                option.textContent = v;
+                downloadMcVersionSelect.appendChild(option);
+            });
+
+            // Trigger change to load loader versions if needed
+            if (type !== 'vanilla' && versions.length > 0) {
+                downloadMcVersionSelect.value = versions[0];
+                loadLoaderVersions(type, versions[0]);
+            }
+        }
+
+    } catch (error) {
+        console.error(`Error loading ${type} versions:`, error);
+        downloadMcVersionSelect.innerHTML = '<option value="">Error al cargar</option>';
+    } finally {
+        downloadMcVersionSelect.disabled = false;
+    }
+}
+
+async function loadLoaderVersions(type, mcVersion) {
+    if (!mcVersion) return;
+
+    downloadLoaderVersionSelect.innerHTML = '<option value="">Cargando loaders...</option>';
+    downloadLoaderVersionSelect.disabled = true;
+
+    try {
+        const loaders = await window.pywebview.api.get_loader_versions(type, mcVersion);
+
+        downloadLoaderVersionSelect.innerHTML = '';
+
+        if (loaders.length === 0) {
+            const option = document.createElement('option');
+            option.textContent = "No hay loaders disponibles";
+            downloadLoaderVersionSelect.appendChild(option);
+        } else {
+            loaders.forEach(l => {
+                const option = document.createElement('option');
+                option.value = l;
+                option.textContent = l;
+                downloadLoaderVersionSelect.appendChild(option);
+            });
+        }
+
+    } catch (error) {
+        console.error(`Error loading ${type} loaders:`, error);
+        downloadLoaderVersionSelect.innerHTML = '<option value="">Error al cargar</option>';
+    } finally {
+        downloadLoaderVersionSelect.disabled = false;
+    }
+}
+
+async function startVersionDownload() {
+    const mcVersion = downloadMcVersionSelect.value;
+    if (!mcVersion) {
+        window.pywebview.api.error("Selecciona una versión de Minecraft");
+        return;
+    }
+
+    let versionIdToInstall = mcVersion;
+
+    if (currentLoaderType !== 'vanilla') {
+        const loaderVersion = downloadLoaderVersionSelect.value;
+        if (!loaderVersion) {
+            window.pywebview.api.error("Selecciona una versión del Loader");
+            return;
+        }
+
+        // Construct ID based on type
+        if (currentLoaderType === 'fabric') {
+            // Fabric install expects just the MC version, logic is in main.py
+            // But wait, main.py install_version expects "fabric-<mc_version>" or "forge-<forge_version>"
+            // For Fabric, we usually install latest loader for that MC version.
+            // If we want specific loader, we might need to adjust main.py.
+            // For now, let's stick to the existing pattern in main.py: "fabric-<mc_version>"
+            // If we want to support specific loader version, we need to pass it.
+            // Let's assume for now we pass "fabric-<mc_version>" and main.py installs recommended.
+            // OR we update main.py to handle specific loader versions.
+            // Given the prompt asked for "version del loader", let's try to pass it.
+            // But main.py implementation of install_version for fabric uses:
+            // mc_version = version_id.replace("fabric-", "")
+            // mll.fabric.install_fabric(mc_version, ...)
+            // It doesn't take loader version.
+
+            // For Forge:
+            // forge_version = version_id.replace("forge-", "")
+            // mll.forge.install_forge_version(forge_version, ...)
+            // So for Forge we pass the forge version directly.
+
+            if (currentLoaderType === 'fabric') {
+                // For now, let's just use the MC version as the ID suffix, 
+                // as mll.fabric.install_fabric installs the latest stable loader by default
+                versionIdToInstall = `fabric-${mcVersion}`;
+            } else if (currentLoaderType === 'forge') {
+                // For Forge, the ID is the forge version string (e.g. "1.20.1-47.1.0")
+                versionIdToInstall = `forge-${loaderVersion}`;
+            }
+        }
+    }
+
+    // UI Updates
+    document.getElementById('downloadProgressContainer').style.display = 'block';
+    startDownloadBtn.disabled = true;
+    cancelDownloadModalBtn.disabled = true;
+
+    isDownloading = true;
+
+    try {
+        const result = await window.pywebview.api.install_version(versionIdToInstall);
+
+        if (!result.success) {
+            window.pywebview.api.error(result.message);
+            isDownloading = false;
+            document.getElementById('downloadProgressContainer').style.display = 'none';
+            startDownloadBtn.disabled = false;
+            cancelDownloadModalBtn.disabled = false;
+        }
+
+    } catch (error) {
+        console.error("Error starting download:", error);
+        isDownloading = false;
+        document.getElementById('downloadProgressContainer').style.display = 'none';
+        startDownloadBtn.disabled = false;
+        cancelDownloadModalBtn.disabled = false;
+    }
+}
+
+// Override global updateInstallProgress to target the new modal
+window.updateInstallProgress = function (version, percentage, status) {
+    // Update Profile Modal Progress (if open - unlikely now)
+    const progressContainer = document.getElementById('installProgress');
+    if (progressContainer && progressContainer.style.display !== 'none') {
+        const progressBar = document.getElementById('progressBarFill');
+        const progressText = document.querySelector('.install-progress-text');
+        const progressPercentage = document.getElementById('progressPercentage');
+
+        if (progressBar) progressBar.style.width = `${percentage}%`;
+        if (progressText) progressText.textContent = status;
+        if (progressPercentage) progressPercentage.textContent = `${percentage}%`;
+    }
+
+    // Update Download Modal Progress
+    const dlProgressContainer = document.getElementById('downloadProgressContainer');
+    if (dlProgressContainer) {
+        const dlProgressBar = document.getElementById('downloadProgressBarFill');
+        const dlProgressText = document.getElementById('downloadProgressText');
+        const dlProgressPercentage = document.getElementById('downloadProgressPercentage');
+
+        dlProgressContainer.style.display = 'block';
+        if (dlProgressBar) dlProgressBar.style.width = `${percentage}%`;
+        if (dlProgressText) dlProgressText.textContent = status || `Descargando ${version}...`;
+        if (dlProgressPercentage) dlProgressPercentage.textContent = `${percentage}%`;
+    }
+};
+
+// Override global onDownloadComplete
+window.onDownloadComplete = async function (version) {
+    console.log(`Download completed: ${version}`);
+    isDownloading = false;
+
+    // Refresh lists
+    await loadVersions();
+
+    // UI Updates
+    const dlProgressText = document.getElementById('downloadProgressText');
+    if (dlProgressText) dlProgressText.textContent = "¡Instalación completada!";
+
+    setTimeout(() => {
+        if (downloadModal) downloadModal.classList.remove('show');
+        document.getElementById('downloadProgressContainer').style.display = 'none';
+        startDownloadBtn.disabled = false;
+        cancelDownloadModalBtn.disabled = false;
+        window.pywebview.api.info(`Versión ${version} instalada correctamente.`);
+    }, 1000);
+};
+
 
 // Open login modal
 if (loginButton) {

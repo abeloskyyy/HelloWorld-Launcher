@@ -8,11 +8,13 @@ import os
 import shutil
 import base64
 import io
+import threading
 from PIL import Image
 from datetime import datetime
 
 """
-haz que al descargar una version, se desactiven los botones de crear perfil y cancelar, y tambien haya un boton de cancelar la descarga, que solamente cancela la descarga. los campos siguen abiertos y no se cierra el modal. tambien haz que al completar la descarga se actualice la lista de versiones disponibles y instaladas etc. como harias que al cancelar la descarga o al dar error, se elimine la version medio descgada? no lo hagas aun. no ejecutes comandos, que siempre te crasheas
+mejora el splash paara que sea borderless, que esté en el centro de la pantalla y se ejecute al inicio del programa para evitar que tarde en abrirse el splash
+
 
 
 
@@ -129,6 +131,11 @@ def delete_profile(profile_id):
 
 # ------------ API WEBVIEW ------------
 class Api:
+    def __init__(self):
+        self.download_cancelled = False
+        self.current_download_thread = None
+        self.current_downloading_version = None
+    
     def confirm(self, mensaje: str) -> bool:
         respuesta = messagebox.askokcancel("Confirmar", mensaje)
         return respuesta
@@ -202,156 +209,226 @@ class Api:
 
     def get_available_versions(self):
         """
-        Retorna un diccionario con versiones organizadas por categoría.
+        Retorna solo las versiones INSTALADAS para el modal de crear perfil.
         """
         result = {
             "installed": [],
-            "vanilla": [],
-            "fabric": [],
-            "forge": [],
-            "snapshots": [],
-            "old": []
         }
         
         try:
-            # 1. Versiones Instaladas
+            # Versiones Instaladas
             installed_versions = mll.utils.get_installed_versions(mc_dir)
             result["installed"] = [v["id"] for v in installed_versions]
-            
-            # 2. Vanilla (Release, Snapshot, Old)
-            all_versions = mll.utils.get_version_list()
-            
-            for v in all_versions:
-                if v["type"] == "release":
-                    result["vanilla"].append(v["id"])
-                elif v["type"] == "snapshot":
-                    result["snapshots"].append(v["id"])
-                else:
-                    result["old"].append(v["id"])
-            
-            # 3. Fabric
-            # Obtener versiones de MC soportadas por Fabric
-            if hasattr(mll, 'fabric'):
-                fabric_mc_versions = mll.fabric.get_stable_minecraft_versions()
-                # Limitamos a las primeras 20 para no saturar, o todas si son importantes
-                # Mostramos formato "Fabric <MC_Version>"
-                for mc_ver in fabric_mc_versions:
-                    result["fabric"].append({
-                        "id": f"fabric-{mc_ver}",
-                        "name": f"Fabric {mc_ver}",
-                        "mc_version": mc_ver
-                    })
-
-            # 4. Forge
-            # Obtener versiones de Forge
-            if hasattr(mll, 'forge'):
-                # Esto puede ser lento si hay muchas, vamos a intentar obtener las más recientes
-                # list_forge_versions retorna una lista de versiones de forge (ej: 1.20.1-47.1.0)
-                forge_versions_list = mll.forge.list_forge_versions()
-                
-                # Agrupar por versión de MC y tomar la última de cada una
-                from packaging import version
-                mc_versions_dict = {}
-                
-                for forge_ver in forge_versions_list:
-                    # El formato suele ser MC-Forge o similar. mll lo maneja.
-                    # Asumimos que list_forge_versions devuelve strings como "1.20.1-47.1.0"
-                    parts = forge_ver.split('-')
-                    if len(parts) >= 2:
-                        mc_ver = parts[0]
-                        # Guardar solo la primera versión de Forge para cada versión de MC
-                        if mc_ver not in mc_versions_dict:
-                            mc_versions_dict[mc_ver] = {
-                                "id": f"forge-{forge_ver}",
-                                "name": f"Forge {mc_ver} ({parts[1]})",
-                                "forge_version": forge_ver
-                            }
-                
-                # Ordenar las versiones de MC de más reciente a más antigua
-                try:
-                    sorted_mc_versions = sorted(
-                        mc_versions_dict.keys(),
-                        key=lambda v: version.parse(v),
-                        reverse=True
-                    )
-                    # Agregar las versiones ordenadas al resultado
-                    for mc_ver in sorted_mc_versions:
-                        result["forge"].append(mc_versions_dict[mc_ver])
-                except Exception as sort_error:
-                    print(f"Error ordenando versiones de Forge: {sort_error}")
-                    # Si falla el ordenamiento, agregar en el orden que estén
-                    for mc_ver, forge_data in mc_versions_dict.items():
-                        result["forge"].append(forge_data)
                             
         except Exception as e:
-            print(f"Error obteniendo versiones: {e}")
-            self.error(f"Error obteniendo versiones: {e}")
+            print(f"Error obteniendo versiones instaladas: {e}")
+            self.error(f"Error obteniendo versiones instaladas: {e}")
         
         return result
+
+    def get_vanilla_versions(self):
+        """Retorna lista de versiones vanilla (releases)"""
+        try:
+            all_versions = mll.utils.get_version_list()
+            vanilla_versions = []
+            for v in all_versions:
+                if v["type"] == "release":
+                    vanilla_versions.append(v["id"])
+            return vanilla_versions
+        except Exception as e:
+            print(f"Error getting vanilla versions: {e}")
+            return []
+
+    def get_fabric_mc_versions(self):
+        """Retorna versiones de MC soportadas por Fabric"""
+        try:
+            if hasattr(mll, 'fabric'):
+                # Obtener todas las versiones soportadas
+                return mll.fabric.get_stable_minecraft_versions()
+            return []
+        except Exception as e:
+            print(f"Error getting fabric mc versions: {e}")
+            return []
+
+    def get_forge_mc_versions(self):
+        """Retorna versiones de MC soportadas por Forge"""
+        try:
+            if hasattr(mll, 'forge'):
+                # Esto es más complejo en mll, pero podemos obtener la lista completa y extraer las versiones de MC
+                forge_versions = mll.forge.list_forge_versions()
+                mc_versions = set()
+                for fv in forge_versions:
+                    # Formato usual: MC-Forge
+                    parts = fv.split('-')
+                    if len(parts) >= 2:
+                        mc_versions.add(parts[0])
+                
+                # Ordenar versiones (simple sort no funciona bien con versiones semánticas, pero es un inicio)
+                # Para un ordenamiento correcto se necesitaría 'packaging.version'
+                try:
+                    from packaging import version
+                    return sorted(list(mc_versions), key=lambda v: version.parse(v), reverse=True)
+                except ImportError:
+                    return sorted(list(mc_versions), reverse=True)
+            return []
+        except Exception as e:
+            print(f"Error getting forge mc versions: {e}")
+            return []
+
+    def get_loader_versions(self, loader_type, mc_version):
+        """Retorna versiones del loader para una versión de MC específica"""
+        try:
+            if loader_type == 'fabric':
+                if hasattr(mll, 'fabric'):
+                    loaders = mll.fabric.get_all_loader_versions()
+                    # Fabric loader es independiente de la versión de MC, pero devolvemos los loaders disponibles
+                    # O mejor, devolvemos una lista construida de versiones instalables
+                    return [l["version"] for l in loaders]
+            
+            elif loader_type == 'forge':
+                if hasattr(mll, 'forge'):
+                    # Filtrar versiones de forge para esta versión de MC
+                    all_forge = mll.forge.list_forge_versions()
+                    filtered = [v for v in all_forge if v.startswith(f"{mc_version}-")]
+                    return filtered
+            
+            return []
+        except Exception as e:
+            print(f"Error getting loader versions: {e}")
+            return []
     
     def install_version(self, version_id, callback_id=None):
         """
-        Instala una versión de Minecraft (Vanilla, Fabric o Forge).
+        Instala una versión de Minecraft (Vanilla, Fabric o Forge) en un thread separado.
         """
-        try:
-            # Variables para calcular progreso
-            max_value = 1
-            current_status = ""
-            
-            # Callbacks
-            def set_status(status):
-                nonlocal current_status
-                current_status = status
-                print(f"[Install] {status}")
-            
-            def set_progress(progress):
-                percentage = int((progress / max_value) * 100) if max_value > 0 else 0
-                percentage = min(100, max(0, percentage))
-                if callback_id:
+        # Reset cancellation flag
+        self.download_cancelled = False
+        self.current_downloading_version = version_id
+        
+        result = {"success": False, "message": "Download not started", "cancelled": False}
+        
+        def download_thread():
+            nonlocal result
+            try:
+                # Variables para calcular progreso
+                max_value = 1
+                current_status = ""
+                
+                # Callbacks
+                def set_status(status):
+                    nonlocal current_status
+                    current_status = status
+                    print(f"[Install] {status}")
+                
+                def set_progress(progress):
+                    # Check for cancellation
+                    if self.download_cancelled:
+                        raise Exception("Download cancelled by user")
+                    
+                    percentage = int((progress / max_value) * 100) if max_value > 0 else 0
+                    percentage = min(100, max(0, percentage))
+                    if callback_id:
+                        try:
+                            webview.windows[0].evaluate_js(
+                                f"if(window.updateInstallProgress) window.updateInstallProgress('{version_id}', {percentage}, '{current_status}')"
+                            )
+                        except Exception:
+                            pass
+                
+                def set_max(new_max):
+                    nonlocal max_value
+                    max_value = new_max
+                
+                callback = {
+                    "setStatus": set_status,
+                    "setProgress": set_progress,
+                    "setMax": set_max
+                }
+                
+                print(f"Instalando: {version_id}")
+                set_status("Iniciando instalación...")
+                
+                # Determinar tipo de instalación
+                if version_id.startswith("fabric-"):
+                    # Instalación de Fabric
+                    mc_version = version_id.replace("fabric-", "")
+                    set_status(f"Instalando Fabric para {mc_version}...")
+                    mll.fabric.install_fabric(mc_version, mc_dir, callback=callback)
+                    
+                elif version_id.startswith("forge-"):
+                    # Instalación de Forge
+                    forge_version = version_id.replace("forge-", "")
+                    set_status(f"Instalando Forge {forge_version}...")
+                    mll.forge.install_forge_version(forge_version, mc_dir, callback=callback)
+                    
+                else:
+                    # Instalación Vanilla
+                    set_status(f"Descargando Vanilla {version_id}...")
+                    mll.install.install_minecraft_version(version_id, mc_dir, callback=callback)
+                
+                if self.download_cancelled:
+                    result = {"success": False, "message": "Download cancelled", "cancelled": True}
+                    self.cleanup_partial_download(version_id)
+                else:
+                    print(f"Instalación completada: {version_id}")
+                    result = {"success": True, "message": f"Versión {version_id} instalada correctamente", "cancelled": False}
+                    # Notify frontend of completion
                     try:
                         webview.windows[0].evaluate_js(
-                            f"if(window.updateInstallProgress) window.updateInstallProgress('{version_id}', {percentage}, '{current_status}')"
+                            f"if(window.onDownloadComplete) window.onDownloadComplete('{version_id}')"
                         )
                     except Exception:
                         pass
-            
-            def set_max(new_max):
-                nonlocal max_value
-                max_value = new_max
-            
-            callback = {
-                "setStatus": set_status,
-                "setProgress": set_progress,
-                "setMax": set_max
-            }
-            
-            print(f"Instalando: {version_id}")
-            set_status("Iniciando instalación...")
-            
-            # Determinar tipo de instalación
-            if version_id.startswith("fabric-"):
-                # Instalación de Fabric
-                mc_version = version_id.replace("fabric-", "")
-                set_status(f"Instalando Fabric para {mc_version}...")
-                mll.fabric.install_fabric(mc_version, mc_dir, callback=callback)
                 
-            elif version_id.startswith("forge-"):
-                # Instalación de Forge
-                forge_version = version_id.replace("forge-", "")
-                set_status(f"Instalando Forge {forge_version}...")
-                mll.forge.install_forge_version(forge_version, mc_dir, callback=callback)
+            except Exception as e:
+                error_msg = str(e)
+                print(f"Error instalando {version_id}: {error_msg}")
                 
-            else:
-                # Instalación Vanilla
-                set_status(f"Descargando Vanilla {version_id}...")
-                mll.install.install_minecraft_version(version_id, mc_dir, callback=callback)
+                if "cancelled" in error_msg.lower() or self.download_cancelled:
+                    result = {"success": False, "message": "Download cancelled", "cancelled": True}
+                    self.cleanup_partial_download(version_id)
+                else:
+                    result = {"success": False, "message": error_msg, "cancelled": False}
+                    self.cleanup_partial_download(version_id)
+            finally:
+                self.current_downloading_version = None
+                self.current_download_thread = None
+        
+        # Start download in separate thread
+        self.current_download_thread = threading.Thread(target=download_thread, daemon=True)
+        self.current_download_thread.start()
+        
+        # Return immediately (non-blocking)
+        return {"success": True, "message": "Download started", "downloading": True}
+    
+    def cancel_download(self):
+        """
+        Cancela la descarga actual.
+        """
+        if self.current_downloading_version:
+            print(f"Cancelando descarga de {self.current_downloading_version}")
+            self.download_cancelled = True
             
-            print(f"Instalación completada: {version_id}")
-            return {"success": True, "message": f"Versión {version_id} instalada correctamente"}
+            # Wait for thread to finish (with timeout)
+            if self.current_download_thread and self.current_download_thread.is_alive():
+                self.current_download_thread.join(timeout=5.0)
             
+            return {"success": True, "message": "Download cancelled"}
+        else:
+            return {"success": False, "message": "No active download"}
+    
+    def cleanup_partial_download(self, version_id):
+        """
+        Elimina archivos de descarga parcial.
+        """
+        try:
+            version_path = os.path.join(mc_dir, "versions", version_id)
+            if os.path.exists(version_path):
+                print(f"Eliminando descarga parcial: {version_path}")
+                shutil.rmtree(version_path)
+                print(f"Descarga parcial eliminada: {version_id}")
         except Exception as e:
-            print(f"Error instalando {version_id}: {e}")
-            return {"success": False, "message": str(e)}
+            print(f"Error eliminando descarga parcial de {version_id}: {e}")
     
     def start_game(self, profile_id, nickname):
         print(f"Iniciando perfil ID: {profile_id}")
@@ -687,13 +764,40 @@ if __name__ == '__main__':
 
 
 
+
+
+
     api = Api()
+    
+    # Create splash screen
+    splash = webview.create_window(
+        'HelloWorld Launcher',
+        'ui/splash.html',
+        width=400,
+        height=300,
+        frameless=True,
+        on_top=True,
+        resizable=False
+    )
+    
+    # Create main window (hidden initially)
     window = webview.create_window(
         'HelloWorld Launcher',
         'ui/index.html',
         maximized=True,
         js_api=api,
-        background_color="#1a1a1a"
-        )
+        background_color="#1a1a1a",
+        hidden=True
+    )
+    
+    def on_loaded():
+        """Called when main window is loaded"""
+        import time
+        time.sleep(0.5)  # Small delay for smooth transition
+        splash.destroy()
+        window.show()
+    
+    window.events.loaded += on_loaded
+    
     webview.start(debug=True)
 
