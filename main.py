@@ -13,8 +13,7 @@ from PIL import Image
 from datetime import datetime
 
 """
-mejora el splash paara que sea borderless, que esté en el centro de la pantalla y se ejecute al inicio del programa para evitar que tarde en abrirse el splash
-
+haz que se cierre al abrirse la ventana, y que esté en la ultima capa en las ventanas
 
 
 
@@ -680,6 +679,56 @@ class Api:
 
 
 if __name__ == '__main__':
+    import tkinter as tk
+    from tkinter import Label
+    
+    # Create splash screen FIRST (shows immediately)
+    splash_root = tk.Tk()
+    splash_root.overrideredirect(True)  # Borderless
+    splash_root.attributes('-topmost', True)  # Always on top
+    
+    # Set size and center
+    width, height = 400, 300
+    screen_width = splash_root.winfo_screenwidth()
+    screen_height = splash_root.winfo_screenheight()
+    x = (screen_width - width) // 2
+    y = (screen_height - height) // 2
+    splash_root.geometry(f'{width}x{height}+{x}+{y}')
+    
+    # Background color
+    splash_root.configure(bg='#1a1a2e')
+    
+    # Try to load icon
+    try:
+        from PIL import Image, ImageTk
+        icon_path = os.path.join(os.path.dirname(__file__), "img", "icon.png")
+        if not os.path.exists(icon_path):
+            icon_path = os.path.join(os.path.dirname(__file__), "img", "icon.ico")
+        
+        if os.path.exists(icon_path):
+            img = Image.open(icon_path)
+            img = img.resize((150, 150), Image.Resampling.LANCZOS)
+            photo = ImageTk.PhotoImage(img)
+            icon_label = Label(splash_root, image=photo, bg='#1a1a2e')
+            icon_label.image = photo  # Keep reference
+            icon_label.pack(pady=50)
+    except:
+        pass
+    
+    # Title
+    title_label = Label(splash_root, text="HelloWorld Launcher", 
+                       font=("Segoe UI", 24, "bold"), 
+                       fg="#5cb85c", bg='#1a1a2e')
+    title_label.pack(pady=10)
+    
+    # Loading text
+    loading_label = Label(splash_root, text="Cargando...", 
+                         font=("Segoe UI", 12), 
+                         fg="#aaa", bg='#1a1a2e')
+    loading_label.pack()
+    
+    splash_root.update()
+    
     # Definir rutas temporales para cargar configuración inicial
     temp_user_file = "user.json"
     temp_profiles_file = "profiles.json"
@@ -769,35 +818,24 @@ if __name__ == '__main__':
 
     api = Api()
     
-    # Create splash screen
-    splash = webview.create_window(
-        'HelloWorld Launcher',
-        'ui/splash.html',
-        width=400,
-        height=300,
-        frameless=True,
-        on_top=True,
-        resizable=False
-    )
-    
-    # Create main window (hidden initially)
+    # Create main window
     window = webview.create_window(
         'HelloWorld Launcher',
         'ui/index.html',
         maximized=True,
         js_api=api,
-        background_color="#1a1a1a",
-        hidden=True
+        background_color="#1a1a1a"
     )
     
-    def on_loaded():
-        """Called when main window is loaded"""
-        import time
-        time.sleep(0.5)  # Small delay for smooth transition
-        splash.destroy()
-        window.show()
+    def on_shown():
+        """Close splash when main window is shown"""
+        try:
+            splash_root.destroy()
+        except:
+            pass
     
-    window.events.loaded += on_loaded
+    window.events.shown += on_shown
     
+    # Start webview
     webview.start(debug=True)
 
