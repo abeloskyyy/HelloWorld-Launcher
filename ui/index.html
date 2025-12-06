@@ -36,6 +36,9 @@
             <button class="sidebar-button" onclick="showSection('profiles')">
                 <i class="fas fa-user"></i> Perfiles
             </button>
+            <button class="sidebar-button" onclick="showSection('mods')">
+                <i class="fas fa-cube"></i> Mods
+            </button>
             <button class="sidebar-button" onclick="showSection('settings')">
                 <i class="fas fa-cog"></i> Configuración
             </button>
@@ -68,22 +71,14 @@
                     </div>
 
                     <div class="button-group">
-                        <button class="btn-secondary" style="flex: 1;"
-                            data-tooltip="Gestiona mods, Forge, Fabric y otros loaders de modificaciones">
-                            <i class="fas fa-tools"></i> Mods & Forge
-                        </button>
                         <button id="openDownloadModalBtn" class="btn-secondary" style="flex: 1;"
                             data-tooltip="Descarga nuevas versiones de Minecraft (Vanilla, Forge, Fabric)">
                             <i class="fas fa-download"></i> Descargar Versiones
                         </button>
                     </div>
 
-                    <button class="play-button" onclick="launchGame()" id="playButton">
-                        <span class="play-icon">▶</span>
-                        <span class="play-text">Jugar</span>
-                        <span class="play-spinner" style="display: none;">
-                            <i class="fas fa-circle-notch fa-spin"></i>
-                        </span>
+                    <button class="play-button" onclick="launchGame()">
+                        Jugar
                     </button>
                 </div>
             </div>
@@ -97,6 +92,61 @@
                     </button>
                     <div id="profilesList">
                         <!-- Los perfiles se cargarán aquí dinámicamente -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sección Mods -->
+            <div id="mods" class="section">
+                <h1>Mods</h1>
+
+                <div class="mods-container-full">
+                    <!-- Profile Selector for Mods -->
+                    <div class="modal-input-group" style="margin: 0 0 20px 0;">
+                        <label style="color: white;"><i class="fas fa-gamepad"></i> Selecciona el perfil para instalar mods</label>
+                        <select id="modsProfileSelect" class="mods-profile-select">
+                            <option value="">Selecciona un perfil...</option>
+                        </select>
+                    </div>
+
+                    <!-- Search Bar and Header -->
+                    <div class="mods-header-section">
+                        <div class="mods-search-container">
+                            <input type="text" id="modsSearchInput" class="mods-search-input"
+                                placeholder="Buscar mods en Modrinth...">
+                            <div id="modsLoadingSpinner" class="search-loader" style="display: none;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Content Area -->
+                    <div class="mods-content-area">
+                        <!-- Mods Grid -->
+                        <div id="modsGrid" class="mods-grid">
+                            <div style="grid-column: 1 / -1; text-align: center; color: #aaa; padding: 50px;">
+                                <i class="fas fa-search" style="font-size: 48px; margin-bottom: 20px;"></i><br>
+                                Selecciona un perfil y busca mods para empezar.
+                            </div>
+                        </div>
+
+                        <!-- Mod Details View (Hidden by default) -->
+                        <div id="modDetailsView" class="mod-details-view" style="display: none;">
+                            <button id="backToGridBtn" class="btn-secondary btn-small" style="margin-bottom: 20px;">
+                                <i class="fas fa-arrow-left"></i> Volver a la búsqueda
+                            </button>
+
+                            <div class="mod-details-header">
+                                <img id="detailIcon" src="" class="mod-detail-icon">
+                                <div class="mod-detail-title-block">
+                                    <h2 id="detailTitle">Mod Title</h2>
+                                    <span id="detailAuthor">Author</span>
+                                </div>
+                                <button id="detailInstallBtn" class="btn-primary">Instalar</button>
+                            </div>
+
+                            <div class="mod-detail-description" id="detailDescription">
+                                <!-- HTML content from description -->
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -305,6 +355,8 @@
             </div>
         </div>
     </div>
+
+
 
     <script src="scripts.js"></script>
 </body>

@@ -148,11 +148,6 @@ window.addEventListener('pywebviewready', async () => {
 });
 
 async function launchGame() {
-    const playButton = document.getElementById('playButton');
-    const playText = playButton.querySelector('.play-text');
-    const playIcon = playButton.querySelector('.play-icon');
-    const playSpinner = playButton.querySelector('.play-spinner');
-
     const profileSelectElement = document.getElementById("profileSelect");
 
     if (!profileSelectElement || !profileSelectElement.value) {
@@ -171,26 +166,62 @@ async function launchGame() {
         return;
     }
 
-    // Set loading state
-    playButton.disabled = true;
-    playButton.classList.add('loading');
-    playText.textContent = 'Iniciando...';
-    playIcon.style.display = 'none';
-    playSpinner.style.display = 'inline-block';
+    // Try to launch the game
+    const result = await pywebview.api.start_game(selectedProfile, nickname);
 
-    try {
-        await pywebview.api.start_game(selectedProfile, nickname);
-
-        await loadOptions();
-        await cargarPerfiles();
-    } finally {
-        // Reset button state
-        playButton.disabled = false;
-        playButton.classList.remove('loading');
-        playText.textContent = 'Jugar';
-        playIcon.style.display = 'inline';
-        playSpinner.style.display = 'none';
+    // Handle duplicate instance
+    if (result.status === "already_running") {
+        const confirm = await window.pywebview.api.confirm(
+            "Minecraft ya está abierto. ¿Quieres abrir otra instancia?"
+        );
+        if (confirm) {
+            // Force launch
+            const forceResult = await pywebview.api.start_game(selectedProfile, nickname, true);
+            if (forceResult.status === "error") {
+                return;
+            }
+        } else {
+            return;
+        }
+    } else if (result.status === "error") {
+        return;
     }
+
+
+    // Show loading state - will be cleared by onMinecraftReady or onMinecraftClosed
+    const playButton = document.querySelector('.play-button');
+    if (playButton) {
+        playButton.disabled = true;
+        playButton.style.cursor = 'not-allowed';
+        playButton.style.opacity = '0.6';
+        playButton.innerHTML = '<span class="spinner"></span> Cargando...';
+    }
+}
+
+// Callback when Minecraft window is ready
+function onMinecraftReady() {
+    const playButton = document.querySelector('.play-button');
+    if (playButton) {
+        playButton.innerHTML = 'Jugando';
+        playButton.disabled = false;
+        playButton.style.cursor = 'pointer';
+        playButton.style.opacity = '1';
+    }
+}
+
+// Callback when Minecraft closes
+function onMinecraftClosed() {
+    const playButton = document.querySelector('.play-button');
+    if (playButton) {
+        playButton.innerHTML = 'Jugar';
+        playButton.disabled = false;
+        playButton.style.cursor = 'pointer';
+        playButton.style.opacity = '1';
+    }
+
+    // Reload profiles and options
+    loadOptions();
+    cargarPerfiles();
 }
 
 // Helper Functions
@@ -1356,3 +1387,277 @@ observer.observe(document.body, {
     childList: true,
     subtree: true
 });
+
+
+// ==============================================
+// MODS MANAGER
+// ==============================================
+
+const modsSearchInput = document.getElementById('modsSearchInput');
+const modsLoadingSpinner = document.getElementById('modsLoadingSpinner');
+const modsGrid = document.getElementById('modsGrid');
+const modDetailsView = document.getElementById('modDetailsView');
+const modsProfileSelect = document.getElementById('modsProfileSelect');
+
+let currentModsProfileId = null;
+
+// Initialize when section is shown
+function initModsSection() {
+    loadModProfiles();
+}
+
+// Hook into showSection to detect when "mods" is opened
+const originalShowSection = window.showSection; // Assuming showSection is global or I need to find where it is defined
+// Better: Add manual listener or call initModsSection inside showSection if I could edit it.
+// Since showSection is likely defined earlier, I'll just override it if possible OR check on sidebar click.
+// Let's modify showSection separately if needed, but for now let's rely on click.
+// Actually, I can just call loadModProfiles when the section is active.
+// Let's add an observer for section changes? Or simply:
+document.querySelectorAll('.sidebar-button[onclick*="mods"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        loadModProfiles();
+    });
+});
+
+
+// Load Profiles into Mods Profile Select (Only Forge/Fabric)
+async function loadModProfiles() {
+    const profilesData = await window.pywebview.api.get_profiles();
+    const profiles = profilesData.profiles;
+
+    modsProfileSelect.innerHTML = '<option value="">Selecciona un perfil...</option>';
+
+    let hasProfiles = false;
+
+    for (const [id, profile] of Object.entries(profiles)) {
+        // Filter for Forge or Fabric
+        if (profile.version.includes('forge') || profile.version.includes('fabric')) {
+            const option = document.createElement('option');
+            option.value = id;
+            option.textContent = `${profile.name} (${profile.version})`;
+            modsProfileSelect.appendChild(option);
+            hasProfiles = true;
+        }
+    }
+
+    if (!hasProfiles) {
+        const option = document.createElement('option');
+        option.textContent = "No hay perfiles compatibles (Forge/Fabric)";
+        option.disabled = true;
+        modsProfileSelect.appendChild(option);
+    }
+}
+
+modsProfileSelect.addEventListener('change', (e) => {
+    currentModsProfileId = e.target.value;
+    // Clear search and grid when profile changes
+    modsSearchInput.value = '';
+    modsGrid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: #aaa; padding: 50px;">Busca mods para empezar.</div>';
+    modDetailsView.style.display = 'none';
+    modsGrid.style.display = 'grid';
+});
+
+
+// Search Logic
+async function searchMods() {
+    if (!currentModsProfileId) {
+        window.pywebview.api.error("Selecciona un perfil primero.");
+        return;
+    }
+
+    const query = modsSearchInput.value.trim();
+    if (!query) {
+        modsGrid.innerHTML = '';
+        return;
+    }
+
+    // UI Loading State
+    modsLoadingSpinner.style.display = 'block';
+    // Don't clear grid immediately for better UX? Or yes to show result change.
+
+    try {
+        const profilesData = await window.pywebview.api.get_profiles();
+        const profile = profilesData.profiles[currentModsProfileId];
+
+        const { loader, version } = parseMinecraftVersion(profile.version);
+
+        console.log(`Searching for: ${query} [${loader} ${version}]`);
+
+        const hits = await window.pywebview.api.get_mods(query, loader, version);
+
+        modsGrid.innerHTML = '';
+        modDetailsView.style.display = 'none';
+        modsGrid.style.display = 'grid';
+
+        if (hits.length === 0) {
+            modsGrid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: #aaa; padding: 50px;">No se encontraron mods.</div>';
+        } else {
+            for (const mod of hits) {
+                const card = document.createElement('div');
+                card.className = 'mod-card';
+                card.onclick = () => showModDetails(mod); // Set click handler
+
+                const iconUrl = mod.icon_url || 'https://via.placeholder.com/48?text=Mod';
+
+                card.innerHTML = `
+                    <div class="mod-header">
+                        <img src="${iconUrl}" class="mod-icon">
+                        <div class="mod-info">
+                            <div class="mod-title" title="${mod.title}">${mod.title}</div>
+                            <div class="mod-author">${mod.author}</div>
+                        </div>
+                    </div>
+                    <div class="mod-description">${mod.description}</div>
+                    <div class="mod-footer">
+                        <div class="mod-downloads">
+                            <i class="fas fa-download"></i> ${formatCompactNumber(mod.downloads)}
+                        </div>
+                    </div>
+                `;
+                modsGrid.appendChild(card);
+            }
+        }
+
+    } catch (error) {
+        console.error("Search error:", error);
+        modsGrid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: #d9534f; padding: 50px;">Error al buscar mods.</div>';
+    } finally {
+        modsLoadingSpinner.style.display = 'none';
+    }
+}
+
+// Helper: Parse Version String
+function parseMinecraftVersion(versionString) {
+    let loader = null;
+    let version = null;
+
+    if (versionString.includes('fabric')) loader = 'fabric';
+    else if (versionString.includes('forge')) loader = 'forge';
+
+    // Extract MC version logic
+    // Formats: "1.20.1-forge-47.1.0", "fabric-loader-0.14.22-1.20.1", "1.19.2"
+    // Regex looking for 1.X(.Y)
+    const mcVerRegex = /1\.\d+(\.\d+)?/g;
+    const matches = versionString.match(mcVerRegex);
+
+    if (matches && matches.length > 0) {
+        // Usually the last match is the MC version if multiple exist (like loader version having similar numbers? unlikely for 1.x)
+        // Or if format is "fabric-loader-x-1.20.1", it matches 1.20.1
+        // Let's take the one that looks most like a game version.
+        // Actually, sometimes loader version is 0.14.x. 1.x is reserved for MC usually.
+        version = matches.find(v => !v.startsWith('0.')); // simple filter
+        if (!version) version = matches[0];
+    }
+
+    return { loader, version };
+}
+
+
+// Debounce Input
+function debounce(func, wait) {
+    let timeout;
+    return function (...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
+
+if (modsSearchInput) {
+    modsSearchInput.addEventListener('input', debounce(() => {
+        searchMods();
+    }, 500));
+}
+
+// Mod Details Logic
+async function showModDetails(mod) {
+    modsGrid.style.display = 'none';
+    modDetailsView.style.display = 'block';
+
+    document.getElementById('detailTitle').textContent = mod.title;
+    document.getElementById('detailAuthor').textContent = mod.author;
+    document.getElementById('detailIcon').src = mod.icon_url || 'https://via.placeholder.com/80?text=Mod';
+    document.getElementById('detailDescription').innerHTML = '<div style="text-align:center; padding: 20px;">Cargando detalles...</div>';
+
+    const installBtn = document.getElementById('detailInstallBtn');
+    installBtn.textContent = 'Instalar';
+    installBtn.disabled = false;
+    installBtn.onclick = () => installModFromDetails(mod, installBtn);
+
+    // Fetch full description (using body)
+    // We need a new API method for this: get_mod_details
+    try {
+        const details = await window.pywebview.api.get_mod_details(mod.project_id);
+        if (details && details.body) {
+            document.getElementById('detailDescription').innerHTML = details.body; // Warning: content might need sanitization or markdown parsing.
+            // Modrinth returns markdown normally. We might need a markdown parser in JS or just display text.
+            // If it returns HTML (rendered), great. Modrinth API v2 project returns body in markdown.
+            // For simplicity, I'll wrap it in <pre> or simple text, OR try a simple markdown-to-html converter?
+            // Since I can't add libraries easily, I'll display it as is or do basic replace.
+
+            // Basic Markdown to HTML (very simple)
+            let html = details.body
+                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                .replace(/\*\*(.*)\*\*/gim, '<b>$1</b>')
+                .replace(/\*(.*)\*/gim, '<i>$1</i>')
+                .replace(/!\[(.*?)\]\((.*?)\)/gim, '<img src="$2" alt="$1">')
+                .replace(/\[(.*?)\]\((.*?)\)/gim, '<a href="$2" target="_blank">$1</a>')
+                .replace(/\n/gim, '<br>');
+
+            document.getElementById('detailDescription').innerHTML = html;
+        } else {
+            document.getElementById('detailDescription').textContent = mod.description;
+        }
+    } catch (e) {
+        console.error("Error fetching details", e);
+        document.getElementById('detailDescription').textContent = mod.description;
+    }
+}
+
+document.getElementById('backToGridBtn').addEventListener('click', () => {
+    modDetailsView.style.display = 'none';
+    modsGrid.style.display = 'grid';
+});
+
+async function installModFromDetails(mod, btnElement) {
+    btnElement.textContent = "Instalando...";
+    btnElement.disabled = true;
+
+    try {
+        const profilesData = await window.pywebview.api.get_profiles();
+        const profile = profilesData.profiles[currentModsProfileId];
+        const { loader, version } = parseMinecraftVersion(profile.version);
+
+        const versionData = await window.pywebview.api.get_mod_versions(mod.project_id, loader, version);
+
+        if (!versionData) {
+            window.pywebview.api.error("No se encontró una versión compatible.");
+            btnElement.textContent = "Instalar";
+            btnElement.disabled = false;
+            return;
+        }
+
+        const result = await window.pywebview.api.install_mod(currentModsProfileId, versionData.url, versionData.filename);
+
+        if (result.success) {
+            btnElement.textContent = "Instalado";
+            window.pywebview.api.info(`<b>${mod.title}</b> instalado correctamente.`);
+        } else {
+            window.pywebview.api.error(result.message);
+            btnElement.textContent = "Instalar";
+            btnElement.disabled = false;
+        }
+    } catch (error) {
+        console.error("Install error:", error);
+        window.pywebview.api.error("Error instalando mod.");
+        btnElement.textContent = "Instalar";
+        btnElement.disabled = false;
+    }
+}
+
+function formatCompactNumber(number) {
+    if (number < 1000) return number;
+    if (number < 1000000) return (number / 1000).toFixed(1) + 'K';
+    return (number / 1000000).toFixed(1) + 'M';
+}

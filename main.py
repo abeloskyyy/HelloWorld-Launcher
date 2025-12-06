@@ -9,11 +9,98 @@ import shutil
 import base64
 import io
 import threading
+import time
+import psutil
+import pygetwindow as gw
 from PIL import Image
 from datetime import datetime
 
+# ============================================
+# SPLASH SCREEN - Native Tkinter (INSTANT startup)
+# ============================================
+import tkinter as tk
+from PIL import Image, ImageTk
+
+# Global splash window reference
+splash_window = None
+splash_thread = None
+
+def create_splash():
+    global splash_window
+    
+    splash_window = tk.Tk()
+    splash_window.title("HelloWorld Launcher")
+    splash_window.overrideredirect(True)  # Borderless
+    
+    # Make window transparent
+    splash_window.attributes('-alpha', 1.0)  # Window opacity
+    splash_window.attributes('-transparentcolor', '#1a1a2e')  # Make this color transparent
+    
+    # Get screen dimensions
+    screen_width = splash_window.winfo_screenwidth()
+    screen_height = splash_window.winfo_screenheight()
+    
+    # Splash size (just for the image)
+    splash_width = 300
+    splash_height = 300
+    
+    # Center position
+    x = (screen_width - splash_width) // 2
+    y = (screen_height - splash_height) // 2
+    
+    splash_window.geometry(f"{splash_width}x{splash_height}+{x}+{y}")
+    
+    # Background color (will be transparent)
+    splash_window.configure(bg="#1a1a2e")
+    
+    # Load and display icon
+    try:
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "img", "icon.png")
+        img = Image.open(icon_path)
+        
+        # Resize to fit window
+        img = img.resize((splash_width, splash_height), Image.Resampling.LANCZOS)
+        photo = ImageTk.PhotoImage(img)
+        
+        label = tk.Label(splash_window, image=photo, bg="#1a1a2e", borderwidth=0)
+        label.image = photo  # Keep reference
+        label.pack(fill='both', expand=True)
+    except Exception as e:
+        # Fallback: just show text
+        label = tk.Label(splash_window, text="HelloWorld Launcher", 
+                        font=("Segoe UI", 20, "bold"), 
+                        fg="#5cb85c", bg="#1a1a2e")
+        label.pack(expand=True) 
+    
+    splash_window.attributes('-topmost', True)
+    
+    # Run Tkinter event loop in this thread
+    splash_window.mainloop()
+
+def close_splash():
+    global splash_window
+    if splash_window:
+        try:
+            splash_window.quit()  # Stop mainloop
+            splash_window.destroy()
+        except:
+            pass
+        splash_window = None
+
+def start_splash_thread():
+    global splash_thread
+    splash_thread = threading.Thread(target=create_splash, daemon=True)
+    splash_thread.start()
+
+# Create splash in separate thread immediately
+start_splash_thread()
+# Give it a moment to appear
+import time
+time.sleep(0.1)
+# ============================================
+
 """
-haz que se cierre al abrirse la ventana, y que esté en la ultima capa en las ventanas
+
 
 
 
@@ -30,6 +117,66 @@ launcher_dir = None
 # Archivos de configuración (se definirán después de inicializar launcher_dir)
 USER_FILE = None
 PROFILES_FILE = None
+
+# Minecraft process tracking
+minecraft_process = None
+# ---------------------------------------
+
+
+# ------------- ENCRYPTION -------------
+from cryptography.fernet import Fernet
+import ctypes
+
+# Global encryption key (will be loaded after launcher_dir is initialized)
+encryption_key = None
+
+def get_or_create_encryption_key():
+    """Get existing encryption key or create a new one"""
+    global encryption_key
+    
+    if launcher_dir is None:
+        raise Exception("launcher_dir must be initialized before encryption key")
+    
+    key_file = os.path.join(launcher_dir, ".hwl_key")
+    
+    if os.path.exists(key_file):
+        # Load existing key
+        with open(key_file, "rb") as f:
+            encryption_key = f.read()
+    else:
+        # Generate new key
+        encryption_key = Fernet.generate_key()
+        with open(key_file, "wb") as f:
+            f.write(encryption_key)
+        
+        # Hide file on Windows
+        try:
+            ctypes.windll.kernel32.SetFileAttributesW(key_file, 2)  # FILE_ATTRIBUTE_HIDDEN
+        except:
+            pass  # Ignore if not on Windows or fails
+    
+    return encryption_key
+
+def encrypt_sensitive_data(data: dict) -> str:
+    """Encrypt sensitive data dictionary to string"""
+    try:
+        cipher = Fernet(encryption_key)
+        json_str = json.dumps(data)
+        encrypted = cipher.encrypt(json_str.encode())
+        return encrypted.decode()
+    except Exception as e:
+        print(f"Encryption error: {e}")
+        return ""
+
+def decrypt_sensitive_data(encrypted_str: str) -> dict:
+    """Decrypt sensitive data string to dictionary"""
+    try:
+        cipher = Fernet(encryption_key)
+        decrypted = cipher.decrypt(encrypted_str.encode())
+        return json.loads(decrypted.decode())
+    except Exception as e:
+        print(f"Decryption error (data may be tampered): {e}")
+        return {}  # Return empty dict if decryption fails (tampered data)
 # ---------------------------------------
 
 
@@ -37,22 +184,53 @@ PROFILES_FILE = None
 
 # ------- GUARDAR Y CARGAR ARCHIVOS -------
 def save_user_data(data: dict):
+    """Save user data with encryption for sensitive fields"""
+    # Separate sensitive and non-sensitive data
+    sensitive_fields = {
+        "account_type": data.get("account_type", "offline"),  # Default to offline
+    }
+    
+    # Non-sensitive fields - preserve all other fields
+    non_sensitive_fields = {}
+    for key, value in data.items():
+        if key not in ["account_type", "encrypted_data"]:  # Skip sensitive fields
+            non_sensitive_fields[key] = value
+    
+    # Encrypt sensitive data
+    if encryption_key:
+        non_sensitive_fields["encrypted_data"] = encrypt_sensitive_data(sensitive_fields)
+    else:
+        # Fallback if encryption not initialized (shouldn't happen)
+        non_sensitive_fields.update(sensitive_fields)
+    
     with open(USER_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4)
+        json.dump(non_sensitive_fields, f, indent=4)
 
 def load_user_data():
+    """Load user data with decryption for sensitive fields"""
     if not os.path.exists(USER_FILE):
         with open(USER_FILE, "w", encoding="utf-8") as f:
             json.dump({}, f, indent=4)
         return {}
+    
     try:
         with open(USER_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
     except (json.JSONDecodeError, FileNotFoundError):
         # Si el archivo está corrupto o vacío, lo reseteamos
         with open(USER_FILE, "w", encoding="utf-8") as f:
             json.dump({}, f, indent=4)
         return {}
+    
+    # Decrypt sensitive data if present
+    if "encrypted_data" in data and encryption_key:
+        sensitive_data = decrypt_sensitive_data(data["encrypted_data"])
+        # Merge decrypted data
+        data.update(sensitive_data)
+        # Remove encrypted field from returned data
+        del data["encrypted_data"]
+    
+    return data
     
 
 
@@ -652,6 +830,204 @@ class Api:
 
     def delete_profile(self, profile_id):
         delete_profile(profile_id)
+
+    # ---------------------------------------------------------
+    # MODS MANAGER (MODRINTH API)
+    # ---------------------------------------------------------
+    
+    def get_mods(self, query, loader, version):
+        """
+        Busca mods en Modrinth compatible con el loader y version.
+        """
+        import urllib.request
+        import urllib.parse
+        import json
+        
+        print(f"Buscando mods: '{query}' para {loader} {version}")
+        
+        try:
+            # Construir filtros (facets)
+            # [["categories:forge"], ["versions:1.20.1"]]
+            facets = []
+            
+            if loader:
+                facets.append([f"categories:{loader}"])
+                
+            if version:
+                facets.append([f"versions:{version}"])
+                
+            # Filtro adicional: solo mods (no modpacks, no resourcepacks)
+            facets.append(["project_type:mod"])
+                
+            facets_json = json.dumps(facets)
+            encoded_facets = urllib.parse.quote(facets_json)
+            encoded_query = urllib.parse.quote(query)
+            
+            url = f"https://api.modrinth.com/v2/search?query={encoded_query}&facets={encoded_facets}&limit=20"
+            
+            print(f"URL: {url}")
+            
+            req = urllib.request.Request(url, headers={'User-Agent': 'HelloWorld-Launcher/1.0'})
+            
+            with urllib.request.urlopen(req) as response:
+                data = json.loads(response.read().decode())
+                hits = data.get("hits", [])
+                
+                # Si no hay resultados y tenemos filtro de versión, probar sin versión (más laxo)
+                if not hits and version:
+                    print(f"No resultados para {version}, reintentando sin versión...")
+                    facets_lax = []
+                    if loader:
+                        facets_lax.append([f"categories:{loader}"])
+                    facets_lax.append(["project_type:mod"])
+                    
+                    facets_json_lax = json.dumps(facets_lax)
+                    encoded_facets_lax = urllib.parse.quote(facets_json_lax)
+                    
+                    url_lax = f"https://api.modrinth.com/v2/search?query={encoded_query}&facets={encoded_facets_lax}&limit=20"
+                    print(f"URL Lax: {url_lax}")
+                    
+                    req_lax = urllib.request.Request(url_lax, headers={'User-Agent': 'HelloWorld-Launcher/1.0'})
+                    with urllib.request.urlopen(req_lax) as response_lax:
+                        data_lax = json.loads(response_lax.read().decode())
+                        return data_lax.get("hits", [])
+                
+                return hits
+                
+        except Exception as e:
+            print(f"Error buscando mods: {e}")
+            self.error(f"Error buscando mods: {e}")
+            return []
+
+    def install_mod(self, profile_id, mod_url, filename):
+        """
+        Descarga un mod desde la URL proporcionada al directorio del perfil.
+        """
+        import urllib.request
+        
+        print(f"Instalando mod en perfil {profile_id}: {filename}")
+        
+        try:
+            profiles = load_profiles()
+            if profile_id not in profiles["profiles"]:
+                return {"success": False, "message": "Perfil no encontrado"}
+                
+            profile = profiles["profiles"][profile_id]
+            profile_dir = profile.get("directory", mc_dir)
+            
+            # Crear carpeta mods si no existe
+            mods_dir = os.path.join(profile_dir, "mods")
+            if not os.path.exists(mods_dir):
+                os.makedirs(mods_dir)
+                
+            file_path = os.path.join(mods_dir, filename)
+            
+            # Descargar archivo
+            print(f"Descargando de: {mod_url}")
+            # Ensure we can open https urls
+            req = urllib.request.Request(mod_url, headers={'User-Agent': 'HelloWorld-Launcher/1.0'})
+            with urllib.request.urlopen(req) as response:
+                with open(file_path, "wb") as f:
+                    shutil.copyfileobj(response, f)
+            
+            print(f"Mod instalado en: {file_path}")
+            return {"success": True, "message": "Mod instalado correctamente"}
+            
+        except Exception as e:
+            print(f"Error instalando mod: {e}")
+            return {"success": False, "message": str(e)}
+
+    def check_mod_installed(self, profile_id, filename):
+        """Verifica si un archivo existe en la carpeta mods del perfil"""
+        try:
+            profiles = load_profiles()
+            if profile_id not in profiles["profiles"]:
+                return False
+                
+            profile = profiles["profiles"][profile_id]
+            profile_dir = profile.get("directory", mc_dir)
+            mods_dir = os.path.join(profile_dir, "mods")
+            file_path = os.path.join(mods_dir, filename)
+            
+            return os.path.exists(file_path)
+        except:
+            return False
+
+    def get_mod_versions(self, project_id, loader, game_version):
+        """Obtiene la versión correcta del archivo del mod para descargar"""
+        import urllib.request
+        import urllib.parse
+        import json
+        
+        def fetch_versions(l, gv):
+            params = {}
+            if l:
+                params['loaders'] = f'["{l}"]'
+            if gv:
+                params['game_versions'] = f'["{gv}"]'
+                
+            # Use urlencode to handle special characters correctly
+            query_string = urllib.parse.urlencode(params)
+            url = f"https://api.modrinth.com/v2/project/{project_id}/version?{query_string}"
+            
+            print(f"Fetching versions: {url}")
+            # Headers are important, especially User-Agent for Modrinth
+            req = urllib.request.Request(url, headers={'User-Agent': 'HelloWorld-Launcher/1.0'})
+            
+            with urllib.request.urlopen(req) as response:
+                return json.loads(response.read().decode())
+
+        try:
+            # Intento 1: Filtro estricto (Loader + Versión)
+            try:
+                versions = fetch_versions(loader, game_version)
+            except Exception as e:
+                print(f"Error estricto: {e}, intentando flexible...")
+                versions = []
+
+            # Intento 2: Si falla o no hay versiones, probar solo con Loader (más arriesgado pero funcional)
+            if not versions and loader:
+                print("Reintentando solo con filtro de Loader...")
+                versions = fetch_versions(loader, None)
+                
+            # Buscar el mejor candidato
+            # Preferimos versiones que coincidan con la game_version si es posible, aunque el filtro haya sido laxo
+            # Pero Modrinth devuelve ordenado por fecha, así que la primera soler ser la mejor.
+            
+            for v in versions:
+                files = v.get("files", [])
+                for f in files:
+                    # Preferir .jar y primario
+                    if f.get("filename", "").endswith(".jar"):
+                        return {
+                            "url": f["url"],
+                            "filename": f["filename"],
+                            "version_number": v["version_number"]
+                        }
+            return None
+            
+        except Exception as e:
+            print(f"Error obteniendo versiones del mod: {e}")
+            return None
+
+    def get_mod_details(self, project_id):
+        """Obtiene detalles completos de un modo (descripción, galería, etc)"""
+        import urllib.request
+        import json
+        
+        try:
+            url = f"https://api.modrinth.com/v2/project/{project_id}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'HelloWorld-Launcher/1.0'})
+            
+            with urllib.request.urlopen(req) as response:
+                return json.loads(response.read().decode())
+        except Exception as e:
+            print(f"Error obteniendo detalles del mod: {e}")
+            return None
+            
+        except Exception as e:
+            print(f"Error obteniendo versiones del mod: {e}")
+            return None
     
     def select_folder(self, initial_directory=None):
         """Open folder selection dialog and return selected path"""
@@ -671,6 +1047,176 @@ class Api:
         except Exception as e:
             print(f"Error opening folder dialog: {e}")
             return None
+    
+    def start_game(self, profile_id, nickname, force=False):
+        """Launch Minecraft with process monitoring"""
+        global minecraft_process
+        
+        # Check if Minecraft is already running
+        if not force and minecraft_process and minecraft_process.poll() is None:
+            return {"status": "already_running"}
+        
+        # Get profile data
+        profiles_data = load_profiles()
+        profile = profiles_data.get("profiles", {}).get(profile_id)
+        
+        if not profile:
+            self.error("Perfil no encontrado")
+            return {"status": "error", "message": "Perfil no encontrado"}
+        
+        # Get Minecraft directory and profile settings
+        profile_dir = profile.get("directory", mc_dir)
+        version = profile.get("version")
+        jvm_args = profile.get("jvm_args", "")
+        
+        # Generate UUID from nickname
+        player_uuid = str(uuid.uuid3(uuid.NAMESPACE_DNS, nickname))
+        
+        # Get launch command
+        options = {
+            "username": nickname,
+            "uuid": player_uuid,
+            "token": "",
+            "gameDirectory": profile_dir,
+            "jvmArguments": jvm_args.split() if jvm_args else []
+        }
+        
+        try:
+            # Use mc_dir for version lookup, profile_dir for game directory
+            minecraft_command = mll.command.get_minecraft_command(version, mc_dir, options)
+            
+            print(f"Launching Minecraft with command: {' '.join(minecraft_command[:3])}...")
+            
+            # Launch Minecraft
+            minecraft_process = subprocess.Popen(minecraft_command, cwd=profile_dir)
+            
+            print(f"Minecraft process started with PID: {minecraft_process.pid}")
+            
+            # Monitor process in separate thread
+            monitor_thread = threading.Thread(target=self._monitor_minecraft_process, args=(minecraft_process,), daemon=True)
+            monitor_thread.start()
+            print("Monitoring thread started")
+            
+            return {"status": "launching"}
+        except Exception as e:
+            print(f"Error launching Minecraft: {e}")
+            import traceback
+            traceback.print_exc()
+            self.error(f"Error al iniciar Minecraft: {e}")
+            return {"status": "error", "message": str(e)}
+    
+    def _monitor_minecraft_process(self, process):
+        """Monitor Minecraft process and notify frontend when window appears"""
+        try:
+            global minecraft_process
+            
+            # Poll until Minecraft window appears
+            window_found = False
+            max_wait = 180  # Maximum 3 minutes
+            start_time = time.time()
+            
+            print(f"Monitoring Minecraft process (PID: {process.pid})...")
+            
+            while not window_found and time.time() - start_time < max_wait:
+                if process.poll() is not None:
+                    # Process ended before window appeared
+                    print("Minecraft process ended prematurely")
+                    break
+                
+                # Search for Minecraft window by title and verify it's a Java process
+                try:
+                    # Get all windows with "Minecraft" in title
+                    all_windows = gw.getWindowsWithTitle("Minecraft")
+                    
+                    for window in all_windows:
+                        if not window.title.strip():
+                            continue
+                        
+                        # Try to get the window's process
+                        try:
+                            import win32process
+                            import win32gui
+                            
+                            # Get window handle
+                            hwnd = window._hWnd
+                            
+                            # Get process ID from window
+                            _, window_pid = win32process.GetWindowThreadProcessId(hwnd)
+                            
+                            # Get process name
+                            try:
+                                proc = psutil.Process(window_pid)
+                                proc_name = proc.name().lower()
+                                
+                                # Check if it's a Java process
+                                if proc_name in ['javaw.exe', 'java.exe']:
+                                    # Verify it's our launched process or a child of it
+                                    if window_pid == process.pid or self._is_child_process(window_pid, process.pid):
+                                        window_found = True
+                                        elapsed = time.time() - start_time
+                                        print(f"Minecraft window detected after {elapsed:.1f}s")
+                                        print(f"  Window title: '{window.title}'")
+                                        print(f"  Process: {proc_name} (PID: {window_pid})")
+                                        break
+                            except:
+                                pass
+                        except ImportError:
+                            # Fallback if win32process not available
+                            # Just check if title contains Minecraft
+                            if "Minecraft" in window.title:
+                                window_found = True
+                                elapsed = time.time() - start_time
+                                print(f"Minecraft window detected after {elapsed:.1f}s (Window title: '{window.title}')")
+                                break
+                        except Exception as e:
+                            pass
+                            
+                except Exception as e:
+                    print(f"Error checking windows: {e}")
+                    pass
+                
+                time.sleep(0.5)  # Check every 0.5 seconds
+            
+            if window_found:
+                # Notify frontend that Minecraft is ready
+                try:
+                    print("Notifying frontend: Minecraft ready")
+                    webview.windows[0].evaluate_js("if (typeof onMinecraftReady === 'function') onMinecraftReady();")
+                except Exception as e:
+                    print(f"Error notifying frontend: {e}")
+            else:
+                print("Minecraft window detection timed out or process ended")
+            
+            # Wait for process to end
+            print("Waiting for Minecraft to close...")
+            process.wait()
+            print("Minecraft closed")
+            
+            # Notify frontend that Minecraft closed
+            try:
+                print("Notifying frontend: Minecraft closed")
+                webview.windows[0].evaluate_js("if (typeof onMinecraftClosed === 'function') onMinecraftClosed();")
+            except Exception as e:
+                print(f"Error notifying frontend: {e}")
+            
+            # Clear global process
+            minecraft_process = None
+        except Exception as e:
+            print(f"CRITICAL ERROR in monitor thread: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _is_child_process(self, child_pid, parent_pid):
+        """Check if child_pid is a child of parent_pid"""
+        try:
+            child = psutil.Process(child_pid)
+            while child.pid != 0:
+                if child.ppid() == parent_pid:
+                    return True
+                child = psutil.Process(child.ppid())
+        except:
+            pass
+        return False
 # ---------------------------------------
 
 
@@ -679,55 +1225,10 @@ class Api:
 
 
 if __name__ == '__main__':
-    import tkinter as tk
-    from tkinter import Label
+    # ============================================
+    # INITIALIZATION - Load config and setup
+    # ============================================
     
-    # Create splash screen FIRST (shows immediately)
-    splash_root = tk.Tk()
-    splash_root.overrideredirect(True)  # Borderless
-    splash_root.attributes('-topmost', True)  # Always on top
-    
-    # Set size and center
-    width, height = 400, 300
-    screen_width = splash_root.winfo_screenwidth()
-    screen_height = splash_root.winfo_screenheight()
-    x = (screen_width - width) // 2
-    y = (screen_height - height) // 2
-    splash_root.geometry(f'{width}x{height}+{x}+{y}')
-    
-    # Background color
-    splash_root.configure(bg='#1a1a2e')
-    
-    # Try to load icon
-    try:
-        from PIL import Image, ImageTk
-        icon_path = os.path.join(os.path.dirname(__file__), "img", "icon.png")
-        if not os.path.exists(icon_path):
-            icon_path = os.path.join(os.path.dirname(__file__), "img", "icon.ico")
-        
-        if os.path.exists(icon_path):
-            img = Image.open(icon_path)
-            img = img.resize((150, 150), Image.Resampling.LANCZOS)
-            photo = ImageTk.PhotoImage(img)
-            icon_label = Label(splash_root, image=photo, bg='#1a1a2e')
-            icon_label.image = photo  # Keep reference
-            icon_label.pack(pady=50)
-    except:
-        pass
-    
-    # Title
-    title_label = Label(splash_root, text="HelloWorld Launcher", 
-                       font=("Segoe UI", 24, "bold"), 
-                       fg="#5cb85c", bg='#1a1a2e')
-    title_label.pack(pady=10)
-    
-    # Loading text
-    loading_label = Label(splash_root, text="Cargando...", 
-                         font=("Segoe UI", 12), 
-                         fg="#aaa", bg='#1a1a2e')
-    loading_label.pack()
-    
-    splash_root.update()
     
     # Definir rutas temporales para cargar configuración inicial
     temp_user_file = "user.json"
@@ -755,6 +1256,10 @@ if __name__ == '__main__':
     # 2. Inicializar launcher_dir
     launcher_dir = os.path.join(mc_dir, ".HWLauncher")
     os.makedirs(launcher_dir, exist_ok=True)
+    
+    # 2.5. Initialize encryption key
+    get_or_create_encryption_key()
+    print("Encryption key initialized")
     
     # 3. Definir rutas de archivos de configuración en launcher_dir
     USER_FILE = os.path.join(launcher_dir, "user.json")
@@ -808,13 +1313,9 @@ if __name__ == '__main__':
     else:
         print("WARNING: No existe ./img/profiles, no se copiaron iconos.")
 
-
-
-
-
-
-
-
+    # ============================================
+    # MAIN WINDOW - Create hidden, show when ready
+    # ============================================
 
     api = Api()
     
@@ -827,15 +1328,17 @@ if __name__ == '__main__':
         background_color="#1a1a1a"
     )
     
-    def on_shown():
-        """Close splash when main window is shown"""
-        try:
-            splash_root.destroy()
-        except:
-            pass
+    # Close splash when window is shown (in separate thread to avoid blocking)
+    def close_splash_delayed():
+        def callback():
+            import time
+            time.sleep(0.5)  # Wait for window to be fully visible
+            close_splash()
+        threading.Thread(target=callback, daemon=True).start()
     
-    window.events.shown += on_shown
+    # Attach to shown event
+    window.events.shown += close_splash_delayed
     
-    # Start webview
     webview.start(debug=True)
+
 
