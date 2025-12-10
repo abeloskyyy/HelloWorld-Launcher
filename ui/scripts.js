@@ -659,6 +659,18 @@ if (selectFolderBtn) {
     });
 }
 
+// Botón de selección de carpeta
+if (selectMcdirBtn) {
+    selectMcdirBtn.addEventListener('click', async () => {
+        const currentDir = document.getElementById('mcdir').value;
+        const selectedPath = await window.pywebview.api.select_folder(currentDir);
+
+        if (selectedPath) {
+            document.getElementById('mcdir').value = selectedPath;
+        }
+    });
+}
+
 // Abrir modal de imágenes cuando se hace clic en el botón de icono
 if (iconButton) {
     iconButton.addEventListener('click', async () => {
@@ -1285,6 +1297,7 @@ let currentTooltipElement = null;
 function showTooltip(element, text, x, y) {
     tooltip.textContent = text;
     tooltip.classList.add('show');
+    tooltip.classList.remove('bottom'); // Reset class
 
     // Position tooltip
     const tooltipRect = tooltip.getBoundingClientRect();
@@ -1294,14 +1307,26 @@ function showTooltip(element, text, x, y) {
     let left = x - (tooltipRect.width / 2);
     let top = y - tooltipRect.height - padding;
 
-    // Adjust if tooltip goes off screen
+    // Adjust if tooltip goes off screen horizontally
     if (left < padding) left = padding;
     if (left + tooltipRect.width > window.innerWidth - padding) {
         left = window.innerWidth - tooltipRect.width - padding;
     }
+
+    // Check if it fits above, if not, put it below
     if (top < padding) {
         // Show below if no space above
-        top = y + padding;
+        // Use element's bottom position for better accuracy if possible, 
+        // passing element rect or y as bottom would be better, but using y + padding as a heuristic for now 
+        // based on existing call sites (x=center, y=top). 
+        // Wait, call sites pass y=rect.top. So y is top.
+        // If we want below, we need rect.bottom. 
+        // Let's recalculate based on element to be safe since we have it.
+
+        const rect = element.getBoundingClientRect();
+        top = rect.bottom + padding;
+
+        tooltip.classList.add('bottom');
     }
 
     tooltip.style.left = left + 'px';

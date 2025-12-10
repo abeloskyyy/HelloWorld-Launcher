@@ -49,7 +49,6 @@
             <!-- Sección Jugar -->
             <div id="play" class="section active">
                 <h1>Jugar</h1>
-                <input type="hidden" id="playNickname" value="">
                 <select id="profileSelect" style="display: none;"></select>
                 <div class="play-section">
                     <div class="custom-select" id="customSelect">
@@ -104,8 +103,7 @@
                     <div class="input-group">
                         <label>
                             Perfil
-                            <i class="fa-regular fa-question-circle help-icon"
-                                data-tooltip="Selecciona un perfil con Forge o Fabric para gestionar mods"></i>
+                            <i class="fa-regular fa-question-circle help-icon" style="color: #fff;" data-tooltip="Selecciona un perfil con Forge o Fabric para gestionar mods"></i>
                         </label>
                         <select id="modsProfileSelect">
                             <option value="">Cargando perfiles...</option>
@@ -169,21 +167,23 @@
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Sección Configuración -->
-        <div id="settings" class="section">
-            <h1>Configuración</h1>
-            <div class="play-section">
-                <div class="input-group">
-                    <label>
-                        Directorio de .minecraft
-                        <i class="fa-regular fa-question-circle help-icon"
-                            data-tooltip="Carpeta donde se guardan los mundos, recursos y configuración de Minecraft. Por defecto: %appdata%\.minecraft"></i>
-                    </label>
-                    <input id="mcdir" type="text" value="">
+            <!-- Sección Configuración -->
+            <div id="settings" class="section">
+                <h1>Configuración</h1>
+                <div class="play-section">
+                    <div class="input-group">
+                        <label>
+                            Directorio de .minecraft
+                            <i class="fa-regular fa-question-circle help-icon" style="color: #fff;" data-tooltip="Carpeta donde se detectarán las versiones del juego (independientemente de los mods, mundos, que se detectan en el directorio de cada perfil)."></i>
+                        </label>
+                        <div style="display: flex; gap: 8px;">
+                            <input id="mcdir" type="text" style="flex: 1;">
+                            <button type="button" id="selectMcdirBtn" class="btn-square"><i class="fas fa-folder-open"></i></button>
+                        </div>
+                    </div>
+                    <button class="btn-primary">Guardar Configuración</button>
                 </div>
-                <button class="btn-primary">Guardar Configuración</button>
             </div>
         </div>
     </div>

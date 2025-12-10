@@ -57,8 +57,8 @@ def create_splash():
     screen_height = splash_window.winfo_screenheight()
     
     # Splash size (just for the image)
-    splash_width = 300
-    splash_height = 300
+    splash_width = 820
+    splash_height = 460
     
     # Center position
     x = (screen_width - splash_width) // 2
@@ -71,7 +71,7 @@ def create_splash():
     
     # Load and display icon
     try:
-        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "img", "icon.png")
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "img", "splash.png")
         img = Image.open(icon_path)
         
         # Resize to fit window
