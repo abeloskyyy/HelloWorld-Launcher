@@ -1115,14 +1115,24 @@ window.updateInstallProgress = function (version, percentage, status) {
     // Update Download Modal Progress
     const dlProgressContainer = document.getElementById('downloadProgressContainer');
     if (dlProgressContainer) {
+        // Always show the progress container when updating
+        dlProgressContainer.style.display = 'block';
+
         const dlProgressBar = document.getElementById('downloadProgressBarFill');
         const dlProgressText = document.getElementById('downloadProgressText');
         const dlProgressPercentage = document.getElementById('downloadProgressPercentage');
 
-        dlProgressContainer.style.display = 'block';
-        if (dlProgressBar) dlProgressBar.style.width = `${percentage}%`;
-        if (dlProgressText) dlProgressText.textContent = status || `Descargando ${version}...`;
-        if (dlProgressPercentage) dlProgressPercentage.textContent = `${percentage}%`;
+        if (dlProgressBar) {
+            dlProgressBar.style.width = `${percentage}%`;
+        }
+        if (dlProgressText) {
+            dlProgressText.textContent = status || `Descargando ${version}...`;
+        }
+        if (dlProgressPercentage) {
+            dlProgressPercentage.textContent = `${percentage}%`;
+        }
+
+        console.log(`Progress updated: ${percentage}% - ${status}`);
     }
 };
 
@@ -1388,276 +1398,442 @@ observer.observe(document.body, {
     subtree: true
 });
 
-
 // ==============================================
-// MODS MANAGER
+// MODS SECTION FUNCTIONALITY
 // ==============================================
 
-const modsSearchInput = document.getElementById('modsSearchInput');
-const modsLoadingSpinner = document.getElementById('modsLoadingSpinner');
-const modsGrid = document.getElementById('modsGrid');
-const modDetailsView = document.getElementById('modDetailsView');
+// Global variables for mods
+let currentModsProfile = null;
+let currentModTab = 'download';
+let searchTimeout = null;
+
+// Elements
 const modsProfileSelect = document.getElementById('modsProfileSelect');
+const noModdableProfiles = document.getElementById('noModdableProfiles');
+const modsTabsContainer = document.getElementById('modsTabsContainer');
+const modTabs = document.querySelectorAll('.mod-tab');
+const modSearchInput = document.getElementById('modSearchInput');
+const modSearchBtn = document.getElementById('modSearchBtn');
+const modSearchResults = document.getElementById('modSearchResults');
+const modSearchLoading = document.getElementById('modSearchLoading');
+const installedModsList = document.getElementById('installedModsList');
 
-let currentModsProfileId = null;
-
-// Initialize when section is shown
-function initModsSection() {
-    loadModProfiles();
-}
-
-// Hook into showSection to detect when "mods" is opened
-const originalShowSection = window.showSection; // Assuming showSection is global or I need to find where it is defined
-// Better: Add manual listener or call initModsSection inside showSection if I could edit it.
-// Since showSection is likely defined earlier, I'll just override it if possible OR check on sidebar click.
-// Let's modify showSection separately if needed, but for now let's rely on click.
-// Actually, I can just call loadModProfiles when the section is active.
-// Let's add an observer for section changes? Or simply:
-document.querySelectorAll('.sidebar-button[onclick*="mods"]').forEach(btn => {
-    btn.addEventListener('click', () => {
-        loadModProfiles();
-    });
-});
-
-
-// Load Profiles into Mods Profile Select (Only Forge/Fabric)
-async function loadModProfiles() {
-    const profilesData = await window.pywebview.api.get_profiles();
-    const profiles = profilesData.profiles;
-
-    modsProfileSelect.innerHTML = '<option value="">Selecciona un perfil...</option>';
-
-    let hasProfiles = false;
-
-    for (const [id, profile] of Object.entries(profiles)) {
-        // Filter for Forge or Fabric
-        if (profile.version.includes('forge') || profile.version.includes('fabric')) {
-            const option = document.createElement('option');
-            option.value = id;
-            option.textContent = `${profile.name} (${profile.version})`;
-            modsProfileSelect.appendChild(option);
-            hasProfiles = true;
-        }
-    }
-
-    if (!hasProfiles) {
-        const option = document.createElement('option');
-        option.textContent = "No hay perfiles compatibles (Forge/Fabric)";
-        option.disabled = true;
-        modsProfileSelect.appendChild(option);
-    }
-}
-
-modsProfileSelect.addEventListener('change', (e) => {
-    currentModsProfileId = e.target.value;
-    // Clear search and grid when profile changes
-    modsSearchInput.value = '';
-    modsGrid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: #aaa; padding: 50px;">Busca mods para empezar.</div>';
-    modDetailsView.style.display = 'none';
-    modsGrid.style.display = 'grid';
-});
-
-
-// Search Logic
-async function searchMods() {
-    if (!currentModsProfileId) {
-        window.pywebview.api.error("Selecciona un perfil primero.");
-        return;
-    }
-
-    const query = modsSearchInput.value.trim();
-    if (!query) {
-        modsGrid.innerHTML = '';
-        return;
-    }
-
-    // UI Loading State
-    modsLoadingSpinner.style.display = 'block';
-    // Don't clear grid immediately for better UX? Or yes to show result change.
+// Load moddable profiles
+async function loadModdableProfiles() {
+    if (!modsProfileSelect) return;
 
     try {
-        const profilesData = await window.pywebview.api.get_profiles();
-        const profile = profilesData.profiles[currentModsProfileId];
+        const data = await window.pywebview.api.get_moddable_profiles();
+        const profiles = data.profiles || {};
 
-        const { loader, version } = parseMinecraftVersion(profile.version);
+        modsProfileSelect.innerHTML = '';
 
-        console.log(`Searching for: ${query} [${loader} ${version}]`);
-
-        const hits = await window.pywebview.api.get_mods(query, loader, version);
-
-        modsGrid.innerHTML = '';
-        modDetailsView.style.display = 'none';
-        modsGrid.style.display = 'grid';
-
-        if (hits.length === 0) {
-            modsGrid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: #aaa; padding: 50px;">No se encontraron mods.</div>';
-        } else {
-            for (const mod of hits) {
-                const card = document.createElement('div');
-                card.className = 'mod-card';
-                card.onclick = () => showModDetails(mod); // Set click handler
-
-                const iconUrl = mod.icon_url || 'https://via.placeholder.com/48?text=Mod';
-
-                card.innerHTML = `
-                    <div class="mod-header">
-                        <img src="${iconUrl}" class="mod-icon">
-                        <div class="mod-info">
-                            <div class="mod-title" title="${mod.title}">${mod.title}</div>
-                            <div class="mod-author">${mod.author}</div>
-                        </div>
-                    </div>
-                    <div class="mod-description">${mod.description}</div>
-                    <div class="mod-footer">
-                        <div class="mod-downloads">
-                            <i class="fas fa-download"></i> ${formatCompactNumber(mod.downloads)}
-                        </div>
-                    </div>
-                `;
-                modsGrid.appendChild(card);
-            }
-        }
-
-    } catch (error) {
-        console.error("Search error:", error);
-        modsGrid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: #d9534f; padding: 50px;">Error al buscar mods.</div>';
-    } finally {
-        modsLoadingSpinner.style.display = 'none';
-    }
-}
-
-// Helper: Parse Version String
-function parseMinecraftVersion(versionString) {
-    let loader = null;
-    let version = null;
-
-    if (versionString.includes('fabric')) loader = 'fabric';
-    else if (versionString.includes('forge')) loader = 'forge';
-
-    // Extract MC version logic
-    // Formats: "1.20.1-forge-47.1.0", "fabric-loader-0.14.22-1.20.1", "1.19.2"
-    // Regex looking for 1.X(.Y)
-    const mcVerRegex = /1\.\d+(\.\d+)?/g;
-    const matches = versionString.match(mcVerRegex);
-
-    if (matches && matches.length > 0) {
-        // Usually the last match is the MC version if multiple exist (like loader version having similar numbers? unlikely for 1.x)
-        // Or if format is "fabric-loader-x-1.20.1", it matches 1.20.1
-        // Let's take the one that looks most like a game version.
-        // Actually, sometimes loader version is 0.14.x. 1.x is reserved for MC usually.
-        version = matches.find(v => !v.startsWith('0.')); // simple filter
-        if (!version) version = matches[0];
-    }
-
-    return { loader, version };
-}
-
-
-// Debounce Input
-function debounce(func, wait) {
-    let timeout;
-    return function (...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), wait);
-    };
-}
-
-if (modsSearchInput) {
-    modsSearchInput.addEventListener('input', debounce(() => {
-        searchMods();
-    }, 500));
-}
-
-// Mod Details Logic
-async function showModDetails(mod) {
-    modsGrid.style.display = 'none';
-    modDetailsView.style.display = 'block';
-
-    document.getElementById('detailTitle').textContent = mod.title;
-    document.getElementById('detailAuthor').textContent = mod.author;
-    document.getElementById('detailIcon').src = mod.icon_url || 'https://via.placeholder.com/80?text=Mod';
-    document.getElementById('detailDescription').innerHTML = '<div style="text-align:center; padding: 20px;">Cargando detalles...</div>';
-
-    const installBtn = document.getElementById('detailInstallBtn');
-    installBtn.textContent = 'Instalar';
-    installBtn.disabled = false;
-    installBtn.onclick = () => installModFromDetails(mod, installBtn);
-
-    // Fetch full description (using body)
-    // We need a new API method for this: get_mod_details
-    try {
-        const details = await window.pywebview.api.get_mod_details(mod.project_id);
-        if (details && details.body) {
-            document.getElementById('detailDescription').innerHTML = details.body; // Warning: content might need sanitization or markdown parsing.
-            // Modrinth returns markdown normally. We might need a markdown parser in JS or just display text.
-            // If it returns HTML (rendered), great. Modrinth API v2 project returns body in markdown.
-            // For simplicity, I'll wrap it in <pre> or simple text, OR try a simple markdown-to-html converter?
-            // Since I can't add libraries easily, I'll display it as is or do basic replace.
-
-            // Basic Markdown to HTML (very simple)
-            let html = details.body
-                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-                .replace(/\*\*(.*)\*\*/gim, '<b>$1</b>')
-                .replace(/\*(.*)\*/gim, '<i>$1</i>')
-                .replace(/!\[(.*?)\]\((.*?)\)/gim, '<img src="$2" alt="$1">')
-                .replace(/\[(.*?)\]\((.*?)\)/gim, '<a href="$2" target="_blank">$1</a>')
-                .replace(/\n/gim, '<br>');
-
-            document.getElementById('detailDescription').innerHTML = html;
-        } else {
-            document.getElementById('detailDescription').textContent = mod.description;
-        }
-    } catch (e) {
-        console.error("Error fetching details", e);
-        document.getElementById('detailDescription').textContent = mod.description;
-    }
-}
-
-document.getElementById('backToGridBtn').addEventListener('click', () => {
-    modDetailsView.style.display = 'none';
-    modsGrid.style.display = 'grid';
-});
-
-async function installModFromDetails(mod, btnElement) {
-    btnElement.textContent = "Instalando...";
-    btnElement.disabled = true;
-
-    try {
-        const profilesData = await window.pywebview.api.get_profiles();
-        const profile = profilesData.profiles[currentModsProfileId];
-        const { loader, version } = parseMinecraftVersion(profile.version);
-
-        const versionData = await window.pywebview.api.get_mod_versions(mod.project_id, loader, version);
-
-        if (!versionData) {
-            window.pywebview.api.error("No se encontró una versión compatible.");
-            btnElement.textContent = "Instalar";
-            btnElement.disabled = false;
+        if (Object.keys(profiles).length === 0) {
+            // No moddable profiles
+            modsProfileSelect.innerHTML = '<option value="">No hay perfiles con mods</option>';
+            modsProfileSelect.disabled = true;
+            if (noModdableProfiles) noModdableProfiles.style.display = 'block';
+            if (modsTabsContainer) modsTabsContainer.style.display = 'none';
             return;
         }
 
-        const result = await window.pywebview.api.install_mod(currentModsProfileId, versionData.url, versionData.filename);
+        // Has moddable profiles
+        modsProfileSelect.disabled = false;
+        if (noModdableProfiles) noModdableProfiles.style.display = 'none';
+        if (modsTabsContainer) modsTabsContainer.style.display = 'block';
 
-        if (result.success) {
-            btnElement.textContent = "Instalado";
-            window.pywebview.api.info(`<b>${mod.title}</b> instalado correctamente.`);
-        } else {
-            window.pywebview.api.error(result.message);
-            btnElement.textContent = "Instalar";
-            btnElement.disabled = false;
+        // Add profiles to select
+        for (const [id, profile] of Object.entries(profiles)) {
+            const option = document.createElement('option');
+            option.value = id;
+
+            const typeLabel = profile.type === 'forge' ? 'FORGE' : profile.type === 'fabric' ? 'FABRIC' : 'MODDED';
+            option.textContent = `${profile.name} (${typeLabel} - ${profile.version})`;
+
+            modsProfileSelect.appendChild(option);
+        }
+
+        // Select first profile
+        if (modsProfileSelect.options.length > 0) {
+            currentModsProfile = modsProfileSelect.value;
+            await loadInstalledMods();
         }
     } catch (error) {
-        console.error("Install error:", error);
-        window.pywebview.api.error("Error instalando mod.");
-        btnElement.textContent = "Instalar";
-        btnElement.disabled = false;
+        console.error('Error loading moddable profiles:', error);
+    }
+}
+// Profile change handler
+if (modsProfileSelect) {
+    modsProfileSelect.addEventListener('change', async () => {
+        currentModsProfile = modsProfileSelect.value;
+
+        // Clear search input and results
+        if (modSearchInput) {
+            modSearchInput.value = '';
+        }
+        if (modSearchResults) {
+            modSearchResults.innerHTML = `
+                <div class="mod-search-empty">
+                    <i class="fas fa-search"></i>
+                    <p>Busca mods para descargar</p>
+                </div>
+            `;
+        }
+
+        await loadInstalledMods();
+    });
+}
+
+// Tab switching
+modTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+        const tabName = tab.dataset.tab;
+        switchModTab(tabName);
+    });
+});
+
+function switchModTab(tabName) {
+    currentModTab = tabName;
+
+    // Update tab buttons
+    modTabs.forEach(tab => {
+        if (tab.dataset.tab === tabName) {
+            tab.classList.add('active');
+        } else {
+            tab.classList.remove('active');
+        }
+    });
+
+    // Update tab content
+    document.querySelectorAll('.mod-tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+
+    const activeContent = document.getElementById(`modTab${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
+    if (activeContent) {
+        activeContent.classList.add('active');
+    }
+
+    // Load content if needed
+    if (tabName === 'installed') {
+        loadInstalledMods();
     }
 }
 
-function formatCompactNumber(number) {
-    if (number < 1000) return number;
-    if (number < 1000000) return (number / 1000).toFixed(1) + 'K';
-    return (number / 1000000).toFixed(1) + 'M';
+// Search mods - automatic on input
+if (modSearchInput) {
+    // Debounced search on input
+    modSearchInput.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+
+        const query = modSearchInput.value.trim();
+
+        if (query.length === 0) {
+            // Clear results if search is empty
+            modSearchResults.innerHTML = `
+                <div class="mod-search-empty">
+                    <i class="fas fa-search"></i>
+                    <p>Busca mods para descargar</p>
+                </div>
+            `;
+            return;
+        }
+
+        if (query.length >= 3) {
+            searchTimeout = setTimeout(() => {
+                searchMods();
+            }, 500);
+        }
+    });
 }
+
+async function searchMods() {
+    const query = modSearchInput.value.trim();
+
+    if (!query) {
+        window.pywebview.api.error('Escribe algo para buscar');
+        return;
+    }
+
+    // Show loading
+    modSearchLoading.style.display = 'block';
+    modSearchResults.innerHTML = '';
+
+    try {
+        const result = await window.pywebview.api.search_modrinth_mods(query);
+
+        modSearchLoading.style.display = 'none';
+
+        if (!result.success) {
+            modSearchResults.innerHTML = `
+                <div class="mod-search-empty">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Error al buscar mods: ${result.error}</p>
+                </div>
+            `;
+            return;
+        }
+
+        if (result.results.length === 0) {
+            modSearchResults.innerHTML = `
+                <div class="mod-search-empty">
+                    <i class="fas fa-search"></i>
+                    <p>No se encontraron mods para "${query}"</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Display results
+        modSearchResults.innerHTML = '';
+        result.results.forEach(mod => {
+            const card = createModCard(mod);
+            modSearchResults.appendChild(card);
+        });
+    } catch (error) {
+        console.error('Error searching mods:', error);
+        modSearchLoading.style.display = 'none';
+        modSearchResults.innerHTML = `
+            <div class="mod-search-empty">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>Error al buscar mods</p>
+            </div>
+        `;
+    }
+}
+
+function createModCard(mod) {
+    const card = document.createElement('div');
+    card.className = 'mod-card';
+
+    const iconHtml = mod.icon_url
+        ? `<img src="${mod.icon_url}" alt="${mod.title}" class="mod-card-icon">`
+        : `<div class="mod-card-icon placeholder"><i class="fas fa-cube"></i></div>`;
+
+    const downloadsFormatted = mod.downloads >= 1000000
+        ? (mod.downloads / 1000000).toFixed(1) + 'M'
+        : mod.downloads >= 1000
+            ? (mod.downloads / 1000).toFixed(1) + 'K'
+            : mod.downloads;
+
+    const categories = mod.categories.slice(0, 3).map(cat =>
+        `<span class="mod-category-badge">${cat}</span>`
+    ).join('');
+
+    card.innerHTML = `
+        <div class="mod-card-header">
+            ${iconHtml}
+            <div class="mod-card-info">
+                <div class="mod-card-title">${mod.title}</div>
+                <div class="mod-card-author">por ${mod.author}</div>
+            </div>
+        </div>
+        <div class="mod-card-description">${mod.description || 'Sin descripción'}</div>
+        <div class="mod-card-stats">
+            <div class="mod-card-stat">
+                <i class="fas fa-download"></i>
+                <span>${downloadsFormatted}</span>
+            </div>
+        </div>
+        <div class="mod-card-categories">
+            ${categories}
+        </div>
+        <div class="mod-card-actions">
+            <button class="btn-primary" onclick="downloadModFromCard('${mod.id}', '${mod.slug}')">
+                <i class="fas fa-download"></i> Descargar
+            </button>
+        </div>
+    `;
+
+    return card;
+}
+
+window.downloadModFromCard = async function (projectId, slug) {
+    if (!currentModsProfile) {
+        window.pywebview.api.error('Selecciona un perfil primero');
+        return;
+    }
+
+    try {
+        // Get profile info to determine loader and game version
+        const profilesData = await window.pywebview.api.get_moddable_profiles();
+        const profile = profilesData.profiles[currentModsProfile];
+
+        if (!profile) {
+            window.pywebview.api.error('Perfil no encontrado');
+            return;
+        }
+
+        // Determine loader type
+        const loader = profile.type === 'forge' ? 'forge' : 'fabric';
+
+        // Extract game version from profile version
+        let gameVersion = profile.version;
+
+        // For Fabric: handle formats like "fabric-loader-0.17.3-1.21.1" or "fabric-1.21.1"
+        // For Forge: handle formats like "forge-1.20.1-47.1.0" or "1.20.1-forge-47.1.0"
+
+        // Remove loader prefix if present
+        gameVersion = gameVersion.replace(/^(forge-|fabric-)/i, '');
+
+        // For Fabric loader format: "loader-X.X.X-MC_VERSION"
+        // Extract the part after the last hyphen which is the MC version
+        if (gameVersion.startsWith('loader-')) {
+            const parts = gameVersion.split('-');
+            // Last part should be the MC version
+            if (parts.length >= 3) {
+                gameVersion = parts[parts.length - 1];
+            }
+        } else {
+            // For other formats, extract just the MC version (e.g., "1.20.1" from "1.20.1-47.1.0")
+            const versionMatch = gameVersion.match(/^(\d+\.\d+(?:\.\d+)?)/);
+            if (versionMatch) {
+                gameVersion = versionMatch[1];
+            }
+        }
+
+        // Get compatible versions
+        const versionsResult = await window.pywebview.api.get_mod_versions(projectId, gameVersion, loader);
+
+        if (!versionsResult.success || versionsResult.versions.length === 0) {
+            window.pywebview.api.error(`No hay versiones compatibles con ${loader} ${gameVersion}`);
+            return;
+        }
+
+        // Use the first (latest) compatible version
+        const version = versionsResult.versions[0];
+
+        // Download mod
+        const downloadResult = await window.pywebview.api.download_mod(projectId, version.id, currentModsProfile);
+
+        if (downloadResult.success) {
+            window.pywebview.api.info(`Mod descargado: ${downloadResult.filename}`);
+            // Refresh installed mods if on that tab
+            if (currentModTab === 'installed') {
+                await loadInstalledMods();
+            }
+        } else {
+            window.pywebview.api.error(`Error: ${downloadResult.error}`);
+        }
+    } catch (error) {
+        console.error('Error downloading mod:', error);
+        window.pywebview.api.error('Error al descargar el mod');
+    }
+};
+
+// Load installed mods
+async function loadInstalledMods() {
+    if (!currentModsProfile || !installedModsList) return;
+
+    try {
+        const result = await window.pywebview.api.get_installed_mods(currentModsProfile);
+
+        if (!result.success) {
+            installedModsList.innerHTML = `
+                <div class="no-mods-message">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Error al cargar mods: ${result.error}</p>
+                </div>
+            `;
+            return;
+        }
+
+        if (result.mods.length === 0) {
+            installedModsList.innerHTML = `
+                <div class="no-mods-message">
+                    <i class="fas fa-cube"></i>
+                    <p>No hay mods instalados en este perfil</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Display mods
+        installedModsList.innerHTML = '';
+        result.mods.forEach(mod => {
+            const item = createModListItem(mod);
+            installedModsList.appendChild(item);
+        });
+    } catch (error) {
+        console.error('Error loading installed mods:', error);
+        installedModsList.innerHTML = `
+            <div class="no-mods-message">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>Error al cargar mods</p>
+            </div>
+        `;
+    }
+}
+
+function createModListItem(mod) {
+    const item = document.createElement('div');
+    item.className = `mod-list-item ${mod.enabled ? '' : 'disabled'}`;
+
+    item.innerHTML = `
+        <div class="mod-list-icon">
+            <i class="fas fa-cube"></i>
+        </div>
+        <div class="mod-list-info">
+            <div class="mod-list-name">${mod.display_name}</div>
+            <div class="mod-list-details">${mod.size_mb} MB ${mod.enabled ? '• Habilitado' : '• Deshabilitado'}</div>
+        </div>
+        <div class="mod-list-actions">
+            <div class="mod-toggle ${mod.enabled ? 'active' : ''}" onclick="toggleModEnabled('${mod.filename}', ${!mod.enabled})">
+                <div class="mod-toggle-slider"></div>
+            </div>
+            <button class="mod-delete-btn" onclick="deleteModFile('${mod.filename}')">
+                <i class="fas fa-trash"></i> Eliminar
+            </button>
+        </div>
+    `;
+
+    return item;
+}
+
+window.toggleModEnabled = async function (filename, enabled) {
+    if (!currentModsProfile) return;
+
+    try {
+        const result = await window.pywebview.api.toggle_mod(currentModsProfile, filename, enabled);
+
+        if (result.success) {
+            await loadInstalledMods();
+        } else {
+            window.pywebview.api.error(`Error: ${result.error}`);
+        }
+    } catch (error) {
+        console.error('Error toggling mod:', error);
+        window.pywebview.api.error('Error al cambiar estado del mod');
+    }
+};
+
+window.deleteModFile = async function (filename) {
+    if (!currentModsProfile) return;
+
+    const confirmed = await window.pywebview.api.confirm(`¿Eliminar el mod "${filename.replace('.jar.disabled', '').replace('.jar', '')}"?`);
+
+    if (!confirmed) return;
+
+    try {
+        const result = await window.pywebview.api.delete_mod(currentModsProfile, filename);
+
+        if (result.success) {
+            window.pywebview.api.info('Mod eliminado');
+            await loadInstalledMods();
+        } else {
+            window.pywebview.api.error(`Error: ${result.error}`);
+        }
+    } catch (error) {
+        console.error('Error deleting mod:', error);
+        window.pywebview.api.error('Error al eliminar el mod');
+    }
+};
+
+// Load moddable profiles when entering mods section
+window.addEventListener('pywebviewready', async () => {
+    // Wait a bit for other initializations
+    setTimeout(async () => {
+        await loadModdableProfiles();
+    }, 500);
+});
+

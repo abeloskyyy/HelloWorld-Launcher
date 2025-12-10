@@ -37,7 +37,7 @@
                 <i class="fas fa-user"></i> Perfiles
             </button>
             <button class="sidebar-button" onclick="showSection('mods')">
-                <i class="fas fa-cube"></i> Mods
+                <i class="fas fa-puzzle-piece"></i> Mods
             </button>
             <button class="sidebar-button" onclick="showSection('settings')">
                 <i class="fas fa-cog"></i> Configuración
@@ -99,74 +99,94 @@
             <!-- Sección Mods -->
             <div id="mods" class="section">
                 <h1>Mods</h1>
-
-                <div class="mods-container-full">
-                    <!-- Profile Selector for Mods -->
-                    <div class="modal-input-group" style="margin: 0 0 20px 0;">
-                        <label style="color: white;"><i class="fas fa-gamepad"></i> Selecciona el perfil para instalar mods</label>
-                        <select id="modsProfileSelect" class="mods-profile-select">
-                            <option value="">Selecciona un perfil...</option>
+                <div class="mods-section">
+                    <!-- Selector de Perfil -->
+                    <div class="input-group">
+                        <label>
+                            Perfil
+                            <i class="fa-regular fa-question-circle help-icon"
+                                data-tooltip="Selecciona un perfil con Forge o Fabric para gestionar mods"></i>
+                        </label>
+                        <select id="modsProfileSelect">
+                            <option value="">Cargando perfiles...</option>
                         </select>
                     </div>
 
-                    <!-- Search Bar and Header -->
-                    <div class="mods-header-section">
-                        <div class="mods-search-container">
-                            <input type="text" id="modsSearchInput" class="mods-search-input"
-                                placeholder="Buscar mods en Modrinth...">
-                            <div id="modsLoadingSpinner" class="search-loader" style="display: none;"></div>
-                        </div>
+                    <!-- Mensaje si no hay perfiles moddables -->
+                    <div id="noModdableProfiles" class="no-moddable-profiles" style="display: none;">
+                        <i class="fas fa-info-circle"></i>
+                        <p>No tienes perfiles con Forge o Fabric. Crea un perfil con un loader de mods para poder
+                            descargar mods.</p>
                     </div>
 
-                    <!-- Content Area -->
-                    <div class="mods-content-area">
-                        <!-- Mods Grid -->
-                        <div id="modsGrid" class="mods-grid">
-                            <div style="grid-column: 1 / -1; text-align: center; color: #aaa; padding: 50px;">
-                                <i class="fas fa-search" style="font-size: 48px; margin-bottom: 20px;"></i><br>
-                                Selecciona un perfil y busca mods para empezar.
-                            </div>
-                        </div>
-
-                        <!-- Mod Details View (Hidden by default) -->
-                        <div id="modDetailsView" class="mod-details-view" style="display: none;">
-                            <button id="backToGridBtn" class="btn-secondary btn-small" style="margin-bottom: 20px;">
-                                <i class="fas fa-arrow-left"></i> Volver a la búsqueda
+                    <!-- Contenedor de pestañas -->
+                    <div id="modsTabsContainer" style="display: none;">
+                        <!-- Pestañas -->
+                        <div class="mods-tabs">
+                            <button class="mod-tab active" data-tab="download">
+                                <i class="fas fa-download"></i> Descargar
                             </button>
+                            <button class="mod-tab" data-tab="installed">
+                                <i class="fas fa-cube"></i> Instalados
+                            </button>
+                        </div>
 
-                            <div class="mod-details-header">
-                                <img id="detailIcon" src="" class="mod-detail-icon">
-                                <div class="mod-detail-title-block">
-                                    <h2 id="detailTitle">Mod Title</h2>
-                                    <span id="detailAuthor">Author</span>
-                                </div>
-                                <button id="detailInstallBtn" class="btn-primary">Instalar</button>
+                        <!-- Contenido de pestaña: Descargar -->
+                        <div id="modTabDownload" class="mod-tab-content active">
+                            <!-- Barra de búsqueda -->
+                            <div class="mod-search-container">
+                                <input type="text" id="modSearchInput" class="mod-search-bar"
+                                    placeholder="Buscar mods en Modrinth...">
                             </div>
 
-                            <div class="mod-detail-description" id="detailDescription">
-                                <!-- HTML content from description -->
+                            <!-- Estado de carga -->
+                            <div id="modSearchLoading" class="mod-search-loading" style="display: none;">
+                                <div class="spinner"></div>
+                                <p>Buscando mods...</p>
+                            </div>
+
+                            <!-- Grid de resultados -->
+                            <div id="modSearchResults" class="mod-grid">
+                                <!-- Mensaje inicial -->
+                                <div class="mod-search-empty">
+                                    <i class="fas fa-search"></i>
+                                    <p>Busca mods para descargar</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Contenido de pestaña: Instalados -->
+                        <div id="modTabInstalled" class="mod-tab-content">
+                            <!-- Lista de mods instalados -->
+                            <div id="installedModsList" class="installed-mods-list">
+                                <!-- Los mods se cargarán dinámicamente -->
+                                <div class="no-mods-message">
+                                    <i class="fas fa-cube"></i>
+                                    <p>No hay mods instalados en este perfil</p>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- Sección Configuración -->
-            <div id="settings" class="section">
-                <h1>Configuración</h1>
-                <div class="play-section">
-                    <div class="input-group">
-                        <label>
-                            Directorio de .minecraft
-                            <i class="fa-regular fa-question-circle help-icon"
-                                data-tooltip="Carpeta donde se guardan los mundos, recursos y configuración de Minecraft. Por defecto: %appdata%\.minecraft"></i>
-                        </label>
-                        <input id="mcdir" type="text" value="">
-                    </div>
-                    <button class="btn-primary">Guardar Configuración</button>
                 </div>
             </div>
         </div>
+
+        <!-- Sección Configuración -->
+        <div id="settings" class="section">
+            <h1>Configuración</h1>
+            <div class="play-section">
+                <div class="input-group">
+                    <label>
+                        Directorio de .minecraft
+                        <i class="fa-regular fa-question-circle help-icon"
+                            data-tooltip="Carpeta donde se guardan los mundos, recursos y configuración de Minecraft. Por defecto: %appdata%\.minecraft"></i>
+                    </label>
+                    <input id="mcdir" type="text" value="">
+                </div>
+                <button class="btn-primary">Guardar Configuración</button>
+            </div>
+        </div>
+    </div>
     </div>
 
     <!-- Modal de crear perfil -->
@@ -355,8 +375,6 @@
             </div>
         </div>
     </div>
-
-
 
     <script src="scripts.js"></script>
 </body>

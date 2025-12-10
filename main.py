@@ -15,6 +15,22 @@ import pygetwindow as gw
 from PIL import Image
 from datetime import datetime
 
+
+
+"""
+ahora haz que haya un progreso de descarga de los mods, haciendo que el boton de descarga se rellene (al principio gris, se va rellenando de verde). tambien haz que mientras se descarga una version, esten desactivados los botones de descargar y cancelar (no el de cancelar descarga)
+
+
+
+
+
+
+"""
+
+
+
+
+
 # ============================================
 # SPLASH SCREEN - Native Tkinter (INSTANT startup)
 # ============================================
@@ -98,13 +114,6 @@ start_splash_thread()
 import time
 time.sleep(0.1)
 # ============================================
-
-"""
-
-
-
-
-"""
 
 
 
@@ -830,204 +839,6 @@ class Api:
 
     def delete_profile(self, profile_id):
         delete_profile(profile_id)
-
-    # ---------------------------------------------------------
-    # MODS MANAGER (MODRINTH API)
-    # ---------------------------------------------------------
-    
-    def get_mods(self, query, loader, version):
-        """
-        Busca mods en Modrinth compatible con el loader y version.
-        """
-        import urllib.request
-        import urllib.parse
-        import json
-        
-        print(f"Buscando mods: '{query}' para {loader} {version}")
-        
-        try:
-            # Construir filtros (facets)
-            # [["categories:forge"], ["versions:1.20.1"]]
-            facets = []
-            
-            if loader:
-                facets.append([f"categories:{loader}"])
-                
-            if version:
-                facets.append([f"versions:{version}"])
-                
-            # Filtro adicional: solo mods (no modpacks, no resourcepacks)
-            facets.append(["project_type:mod"])
-                
-            facets_json = json.dumps(facets)
-            encoded_facets = urllib.parse.quote(facets_json)
-            encoded_query = urllib.parse.quote(query)
-            
-            url = f"https://api.modrinth.com/v2/search?query={encoded_query}&facets={encoded_facets}&limit=20"
-            
-            print(f"URL: {url}")
-            
-            req = urllib.request.Request(url, headers={'User-Agent': 'HelloWorld-Launcher/1.0'})
-            
-            with urllib.request.urlopen(req) as response:
-                data = json.loads(response.read().decode())
-                hits = data.get("hits", [])
-                
-                # Si no hay resultados y tenemos filtro de versión, probar sin versión (más laxo)
-                if not hits and version:
-                    print(f"No resultados para {version}, reintentando sin versión...")
-                    facets_lax = []
-                    if loader:
-                        facets_lax.append([f"categories:{loader}"])
-                    facets_lax.append(["project_type:mod"])
-                    
-                    facets_json_lax = json.dumps(facets_lax)
-                    encoded_facets_lax = urllib.parse.quote(facets_json_lax)
-                    
-                    url_lax = f"https://api.modrinth.com/v2/search?query={encoded_query}&facets={encoded_facets_lax}&limit=20"
-                    print(f"URL Lax: {url_lax}")
-                    
-                    req_lax = urllib.request.Request(url_lax, headers={'User-Agent': 'HelloWorld-Launcher/1.0'})
-                    with urllib.request.urlopen(req_lax) as response_lax:
-                        data_lax = json.loads(response_lax.read().decode())
-                        return data_lax.get("hits", [])
-                
-                return hits
-                
-        except Exception as e:
-            print(f"Error buscando mods: {e}")
-            self.error(f"Error buscando mods: {e}")
-            return []
-
-    def install_mod(self, profile_id, mod_url, filename):
-        """
-        Descarga un mod desde la URL proporcionada al directorio del perfil.
-        """
-        import urllib.request
-        
-        print(f"Instalando mod en perfil {profile_id}: {filename}")
-        
-        try:
-            profiles = load_profiles()
-            if profile_id not in profiles["profiles"]:
-                return {"success": False, "message": "Perfil no encontrado"}
-                
-            profile = profiles["profiles"][profile_id]
-            profile_dir = profile.get("directory", mc_dir)
-            
-            # Crear carpeta mods si no existe
-            mods_dir = os.path.join(profile_dir, "mods")
-            if not os.path.exists(mods_dir):
-                os.makedirs(mods_dir)
-                
-            file_path = os.path.join(mods_dir, filename)
-            
-            # Descargar archivo
-            print(f"Descargando de: {mod_url}")
-            # Ensure we can open https urls
-            req = urllib.request.Request(mod_url, headers={'User-Agent': 'HelloWorld-Launcher/1.0'})
-            with urllib.request.urlopen(req) as response:
-                with open(file_path, "wb") as f:
-                    shutil.copyfileobj(response, f)
-            
-            print(f"Mod instalado en: {file_path}")
-            return {"success": True, "message": "Mod instalado correctamente"}
-            
-        except Exception as e:
-            print(f"Error instalando mod: {e}")
-            return {"success": False, "message": str(e)}
-
-    def check_mod_installed(self, profile_id, filename):
-        """Verifica si un archivo existe en la carpeta mods del perfil"""
-        try:
-            profiles = load_profiles()
-            if profile_id not in profiles["profiles"]:
-                return False
-                
-            profile = profiles["profiles"][profile_id]
-            profile_dir = profile.get("directory", mc_dir)
-            mods_dir = os.path.join(profile_dir, "mods")
-            file_path = os.path.join(mods_dir, filename)
-            
-            return os.path.exists(file_path)
-        except:
-            return False
-
-    def get_mod_versions(self, project_id, loader, game_version):
-        """Obtiene la versión correcta del archivo del mod para descargar"""
-        import urllib.request
-        import urllib.parse
-        import json
-        
-        def fetch_versions(l, gv):
-            params = {}
-            if l:
-                params['loaders'] = f'["{l}"]'
-            if gv:
-                params['game_versions'] = f'["{gv}"]'
-                
-            # Use urlencode to handle special characters correctly
-            query_string = urllib.parse.urlencode(params)
-            url = f"https://api.modrinth.com/v2/project/{project_id}/version?{query_string}"
-            
-            print(f"Fetching versions: {url}")
-            # Headers are important, especially User-Agent for Modrinth
-            req = urllib.request.Request(url, headers={'User-Agent': 'HelloWorld-Launcher/1.0'})
-            
-            with urllib.request.urlopen(req) as response:
-                return json.loads(response.read().decode())
-
-        try:
-            # Intento 1: Filtro estricto (Loader + Versión)
-            try:
-                versions = fetch_versions(loader, game_version)
-            except Exception as e:
-                print(f"Error estricto: {e}, intentando flexible...")
-                versions = []
-
-            # Intento 2: Si falla o no hay versiones, probar solo con Loader (más arriesgado pero funcional)
-            if not versions and loader:
-                print("Reintentando solo con filtro de Loader...")
-                versions = fetch_versions(loader, None)
-                
-            # Buscar el mejor candidato
-            # Preferimos versiones que coincidan con la game_version si es posible, aunque el filtro haya sido laxo
-            # Pero Modrinth devuelve ordenado por fecha, así que la primera soler ser la mejor.
-            
-            for v in versions:
-                files = v.get("files", [])
-                for f in files:
-                    # Preferir .jar y primario
-                    if f.get("filename", "").endswith(".jar"):
-                        return {
-                            "url": f["url"],
-                            "filename": f["filename"],
-                            "version_number": v["version_number"]
-                        }
-            return None
-            
-        except Exception as e:
-            print(f"Error obteniendo versiones del mod: {e}")
-            return None
-
-    def get_mod_details(self, project_id):
-        """Obtiene detalles completos de un modo (descripción, galería, etc)"""
-        import urllib.request
-        import json
-        
-        try:
-            url = f"https://api.modrinth.com/v2/project/{project_id}"
-            req = urllib.request.Request(url, headers={'User-Agent': 'HelloWorld-Launcher/1.0'})
-            
-            with urllib.request.urlopen(req) as response:
-                return json.loads(response.read().decode())
-        except Exception as e:
-            print(f"Error obteniendo detalles del mod: {e}")
-            return None
-            
-        except Exception as e:
-            print(f"Error obteniendo versiones del mod: {e}")
-            return None
     
     def select_folder(self, initial_directory=None):
         """Open folder selection dialog and return selected path"""
@@ -1217,6 +1028,367 @@ class Api:
         except:
             pass
         return False
+    
+    # ============================================
+    # MOD MANAGEMENT METHODS
+    # ============================================
+    
+    def is_profile_moddable(self, profile):
+        """Detecta si un perfil soporta mods (Forge/Fabric)"""
+        try:
+            version = profile.get('version', '').lower()
+            
+            # Método 1: Verificar campo 'type' si existe
+            if 'type' in profile:
+                profile_type = profile['type'].lower()
+                if profile_type in ['forge', 'fabric']:
+                    return True
+                # Si es explícitamente vanilla, no es moddable
+                if profile_type == 'vanilla':
+                    return False
+            
+            # Método 2: Analizar nombre de versión (más confiable)
+            # Si contiene forge o fabric, es moddable
+            if 'forge' in version or 'fabric' in version:
+                return True
+            
+            # Si la versión parece vanilla (solo números y puntos), no es moddable
+            # incluso si tiene carpeta mods
+            if version and not ('forge' in version or 'fabric' in version):
+                # Es vanilla, no moddable
+                return False
+            
+            # Método 3: Verificar si existe carpeta mods (solo como último recurso)
+            # Este método solo se usa si no pudimos determinar por la versión
+            profile_dir = profile.get('directory', mc_dir)
+            mods_dir = os.path.join(profile_dir, 'mods')
+            if os.path.exists(mods_dir):
+                # Solo considerar moddable si NO es el directorio por defecto
+                # o si ya determinamos que no es vanilla
+                if profile_dir != mc_dir:
+                    return True
+            
+            return False
+        except Exception as e:
+            print(f"Error checking if profile is moddable: {e}")
+            return False
+    
+    def get_moddable_profiles(self):
+        """Retorna solo perfiles Forge/Fabric"""
+        try:
+            profiles_data = load_profiles()
+            profiles = profiles_data.get('profiles', {})
+            
+            moddable = {}
+            for profile_id, profile in profiles.items():
+                if self.is_profile_moddable(profile):
+                    # Detectar tipo específico
+                    version = profile.get('version', '').lower()
+                    if 'forge' in version:
+                        profile['type'] = 'forge'
+                    elif 'fabric' in version:
+                        profile['type'] = 'fabric'
+                    else:
+                        profile['type'] = 'modded'
+                    
+                    moddable[profile_id] = profile
+            
+            return {'profiles': moddable}
+        except Exception as e:
+            print(f"Error getting moddable profiles: {e}")
+            return {'profiles': {}}
+    
+    def search_modrinth_mods(self, query='', filters=None):
+        """Busca mods en Modrinth API"""
+        try:
+            import requests
+            
+            # Base URL
+            url = 'https://api.modrinth.com/v2/search'
+            
+            # Parámetros de búsqueda
+            params = {
+                'query': query,
+                'limit': 20,
+                'facets': '[[\"project_type:mod\"]]'
+            }
+            
+            # Aplicar filtros si existen
+            if filters:
+                facets = [["project_type:mod"]]
+                
+                # Filtro de categorías
+                if 'categories' in filters and filters['categories']:
+                    for category in filters['categories']:
+                        facets.append([f"categories:{category}"])
+                
+                # Filtro de versión de Minecraft
+                if 'game_version' in filters and filters['game_version']:
+                    facets.append([f"versions:{filters['game_version']}"])
+                
+                # Filtro de loader
+                if 'loader' in filters and filters['loader']:
+                    facets.append([f"categories:{filters['loader']}"])
+                
+                params['facets'] = json.dumps(facets)
+            
+            # Realizar petición
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Formatear resultados
+            results = []
+            for hit in data.get('hits', []):
+                results.append({
+                    'id': hit.get('project_id'),
+                    'slug': hit.get('slug'),
+                    'title': hit.get('title'),
+                    'description': hit.get('description'),
+                    'author': hit.get('author'),
+                    'icon_url': hit.get('icon_url'),
+                    'downloads': hit.get('downloads', 0),
+                    'categories': hit.get('categories', []),
+                    'versions': hit.get('versions', []),
+                    'date_modified': hit.get('date_modified')
+                })
+            
+            return {'success': True, 'results': results}
+        except Exception as e:
+            print(f"Error searching Modrinth mods: {e}")
+            return {'success': False, 'error': str(e), 'results': []}
+    
+    def get_mod_versions(self, project_id, game_version=None, loader=None):
+        """Obtiene las versiones disponibles de un mod"""
+        try:
+            import requests
+            
+            url = f'https://api.modrinth.com/v2/project/{project_id}/version'
+            
+            # Parámetros opcionales
+            params = {}
+            if game_version:
+                params['game_versions'] = f'["{game_version}"]'
+            if loader:
+                params['loaders'] = f'["{loader}"]'
+            
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            versions = response.json()
+            
+            # Formatear versiones
+            formatted_versions = []
+            for version in versions:
+                formatted_versions.append({
+                    'id': version.get('id'),
+                    'name': version.get('name'),
+                    'version_number': version.get('version_number'),
+                    'game_versions': version.get('game_versions', []),
+                    'loaders': version.get('loaders', []),
+                    'files': version.get('files', []),
+                    'date_published': version.get('date_published')
+                })
+            
+            return {'success': True, 'versions': formatted_versions}
+        except Exception as e:
+            print(f"Error getting mod versions: {e}")
+            return {'success': False, 'error': str(e), 'versions': []}
+    
+    def download_mod(self, project_id, version_id, profile_id):
+        """Descarga un mod al directorio del perfil"""
+        try:
+            import requests
+            
+            # Obtener información del perfil
+            profiles_data = load_profiles()
+            profile = profiles_data.get('profiles', {}).get(profile_id)
+            
+            if not profile:
+                return {'success': False, 'error': 'Perfil no encontrado'}
+            
+            if not self.is_profile_moddable(profile):
+                return {'success': False, 'error': 'Este perfil no soporta mods'}
+            
+            # Obtener directorio de mods
+            profile_dir = profile.get('directory', mc_dir)
+            mods_dir = os.path.join(profile_dir, 'mods')
+            os.makedirs(mods_dir, exist_ok=True)
+            
+            # Obtener información de la versión
+            version_url = f'https://api.modrinth.com/v2/version/{version_id}'
+            version_response = requests.get(version_url, timeout=10)
+            version_response.raise_for_status()
+            version_data = version_response.json()
+            
+            # Obtener archivo principal
+            files = version_data.get('files', [])
+            if not files:
+                return {'success': False, 'error': 'No se encontró archivo para descargar'}
+            
+            # Buscar archivo principal
+            primary_file = None
+            for file in files:
+                if file.get('primary', False):
+                    primary_file = file
+                    break
+            
+            if not primary_file:
+                primary_file = files[0]
+            
+            # Descargar archivo
+            download_url = primary_file.get('url')
+            filename = primary_file.get('filename')
+            
+            if not download_url or not filename:
+                return {'success': False, 'error': 'URL de descarga no válida'}
+            
+            # Verificar si ya existe
+            file_path = os.path.join(mods_dir, filename)
+            if os.path.exists(file_path):
+                return {'success': False, 'error': 'Este mod ya está instalado'}
+            
+            # Descargar
+            print(f"Descargando mod: {filename}")
+            file_response = requests.get(download_url, timeout=60)
+            file_response.raise_for_status()
+            
+            # Guardar archivo
+            with open(file_path, 'wb') as f:
+                f.write(file_response.content)
+            
+            print(f"Mod descargado: {file_path}")
+            
+            return {
+                'success': True,
+                'filename': filename,
+                'path': file_path
+            }
+        except Exception as e:
+            print(f"Error downloading mod: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'success': False, 'error': str(e)}
+    
+    def get_installed_mods(self, profile_id):
+        """Lista mods instalados en un perfil"""
+        try:
+            # Obtener información del perfil
+            profiles_data = load_profiles()
+            profile = profiles_data.get('profiles', {}).get(profile_id)
+            
+            if not profile:
+                return {'success': False, 'error': 'Perfil no encontrado', 'mods': []}
+            
+            # Obtener directorio de mods
+            profile_dir = profile.get('directory', mc_dir)
+            mods_dir = os.path.join(profile_dir, 'mods')
+            
+            if not os.path.exists(mods_dir):
+                return {'success': True, 'mods': []}
+            
+            # Listar archivos .jar
+            mods = []
+            for filename in os.listdir(mods_dir):
+                file_path = os.path.join(mods_dir, filename)
+                
+                # Solo archivos .jar o .jar.disabled
+                if filename.endswith('.jar') or filename.endswith('.jar.disabled'):
+                    enabled = filename.endswith('.jar')
+                    display_name = filename.replace('.jar.disabled', '').replace('.jar', '')
+                    
+                    # Obtener tamaño del archivo
+                    size = os.path.getsize(file_path)
+                    size_mb = size / (1024 * 1024)
+                    
+                    mods.append({
+                        'filename': filename,
+                        'display_name': display_name,
+                        'enabled': enabled,
+                        'size': size,
+                        'size_mb': round(size_mb, 2)
+                    })
+            
+            # Ordenar por nombre
+            mods.sort(key=lambda x: x['display_name'].lower())
+            
+            return {'success': True, 'mods': mods}
+        except Exception as e:
+            print(f"Error getting installed mods: {e}")
+            return {'success': False, 'error': str(e), 'mods': []}
+    
+    def toggle_mod(self, profile_id, filename, enabled):
+        """Habilita o deshabilita un mod"""
+        try:
+            # Obtener información del perfil
+            profiles_data = load_profiles()
+            profile = profiles_data.get('profiles', {}).get(profile_id)
+            
+            if not profile:
+                return {'success': False, 'error': 'Perfil no encontrado'}
+            
+            # Obtener directorio de mods
+            profile_dir = profile.get('directory', mc_dir)
+            mods_dir = os.path.join(profile_dir, 'mods')
+            
+            old_path = os.path.join(mods_dir, filename)
+            
+            if not os.path.exists(old_path):
+                return {'success': False, 'error': 'Archivo no encontrado'}
+            
+            # Determinar nuevo nombre
+            if enabled:
+                # Habilitar: remover .disabled
+                if filename.endswith('.jar.disabled'):
+                    new_filename = filename.replace('.jar.disabled', '.jar')
+                else:
+                    return {'success': False, 'error': 'El mod ya está habilitado'}
+            else:
+                # Deshabilitar: añadir .disabled
+                if filename.endswith('.jar'):
+                    new_filename = filename + '.disabled'
+                else:
+                    return {'success': False, 'error': 'El mod ya está deshabilitado'}
+            
+            new_path = os.path.join(mods_dir, new_filename)
+            
+            # Renombrar archivo
+            os.rename(old_path, new_path)
+            
+            return {'success': True, 'new_filename': new_filename}
+        except Exception as e:
+            print(f"Error toggling mod: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    def delete_mod(self, profile_id, filename):
+        """Elimina un mod"""
+        try:
+            # Obtener información del perfil
+            profiles_data = load_profiles()
+            profile = profiles_data.get('profiles', {}).get(profile_id)
+            
+            if not profile:
+                return {'success': False, 'error': 'Perfil no encontrado'}
+            
+            # Obtener directorio de mods
+            profile_dir = profile.get('directory', mc_dir)
+            mods_dir = os.path.join(profile_dir, 'mods')
+            
+            file_path = os.path.join(mods_dir, filename)
+            
+            if not os.path.exists(file_path):
+                return {'success': False, 'error': 'Archivo no encontrado'}
+            
+            # Eliminar archivo
+            os.remove(file_path)
+            
+            print(f"Mod eliminado: {file_path}")
+            
+            return {'success': True}
+        except Exception as e:
+            print(f"Error deleting mod: {e}")
+            return {'success': False, 'error': str(e)}
 # ---------------------------------------
 
 
