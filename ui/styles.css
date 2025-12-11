@@ -276,6 +276,15 @@ select:disabled {
     }
 }
 
+.spinner-small {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 59, 48, 0.3);
+    border-top: 2px solid #ff3b30;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
 .play-button:hover {
     transform: translateY(-3px);
     box-shadow: 0 12px 25px rgba(92, 184, 92, 0.5);

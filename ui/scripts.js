@@ -12,7 +12,7 @@ const iconPreview = document.getElementById('iconPreview');
 const placeholderIcon = document.getElementById('placeholderIcon');
 const iconDisplay = document.getElementById('iconDisplay');
 const selectFolderBtn = document.getElementById('selectFolderBtn');
-const cancelDownloadBtn = document.getElementById('cancelDownloadBtn');
+const cancelDownloadBtn = document.getElementById('cancelDownloadBtn2');
 
 // Image modal elements
 const imageModal = document.getElementById('imageModal');
@@ -49,11 +49,12 @@ let selectedImageData = null;
 let isDownloading = false;
 
 // Función global para actualizar el progreso de instalación
+// Función global para actualizar el progreso de instalación
 window.updateInstallProgress = function (version, percentage, status) {
-    const progressContainer = document.getElementById('installProgress');
-    const progressBar = document.getElementById('progressBarFill');
-    const progressText = document.querySelector('.install-progress-text');
-    const progressPercentage = document.getElementById('progressPercentage');
+    const progressContainer = document.getElementById('downloadProgressContainer');
+    const progressBar = document.getElementById('downloadProgressBarFill');
+    const progressText = document.getElementById('downloadProgressText');
+    const progressPercentage = document.getElementById('downloadProgressPercentage');
 
     if (progressContainer && progressBar && progressText && progressPercentage) {
         progressContainer.style.display = 'block';
@@ -76,7 +77,7 @@ window.onDownloadComplete = async function (version) {
 
     // Hide progress after a delay
     setTimeout(() => {
-        const progressContainer = document.getElementById('installProgress');
+        const progressContainer = document.getElementById('downloadProgressContainer');
         if (progressContainer) {
             progressContainer.style.display = 'none';
         }
@@ -104,7 +105,7 @@ async function cancelDownload() {
             closeDownloadProgress();
 
             // Don't create profile, just show message
-            window.pywebview.api.info('Descarga cancelada. El perfil no se ha creado.');
+            window.pywebview.api.info('Descarga cancelada. La versión no se ha instalado.');
         }
     } catch (error) {
         console.error('Error cancelling download:', error);
@@ -472,6 +473,7 @@ async function cargarPerfiles() {
                 await window.pywebview.api.delete_profile(id);
                 await cargarPerfiles();
                 await loadOptions();
+                await loadModdableProfiles();
             }
         };
 
@@ -608,6 +610,7 @@ if (acceptProfileBtn) {
             await window.pywebview.api.edit_profile(editingProfileId, updatedData);
             await cargarPerfiles();
             await loadOptions();
+            await loadModdableProfiles();
             if (profileModal) profileModal.classList.remove('show');
             resetProfileModal();
         } else {
@@ -620,6 +623,7 @@ if (acceptProfileBtn) {
                 if (result.success) {
                     await cargarPerfiles();
                     await loadOptions();
+                    await loadModdableProfiles();
                     if (profileModal) profileModal.classList.remove('show');
                     resetProfileModal();
                 } else {
@@ -636,7 +640,33 @@ if (acceptProfileBtn) {
 // Cancel download button handler
 if (cancelDownloadBtn) {
     cancelDownloadBtn.addEventListener('click', async () => {
-        await cancelDownload();
+        // Guardar contenido original y añadir spinner
+        const originalContent = cancelDownloadBtn.innerHTML;
+        const width = cancelDownloadBtn.offsetWidth;
+        const height = cancelDownloadBtn.offsetHeight;
+
+        // Establecer tamaño fijo para evitar redimensionamiento
+        cancelDownloadBtn.style.width = width + 'px';
+        cancelDownloadBtn.style.height = height + 'px';
+
+        cancelDownloadBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
+        cancelDownloadBtn.disabled = true;
+        cancelDownloadBtn.style.cursor = 'not-allowed';
+        cancelDownloadBtn.style.opacity = '0.7';
+
+        try {
+            await cancelDownload();
+        } finally {
+            // Si el botón sigue existiendo, restaurar estado (aunque probablemente desaparecerá)
+            if (cancelDownloadBtn) {
+                cancelDownloadBtn.innerHTML = originalContent;
+                cancelDownloadBtn.disabled = false;
+                cancelDownloadBtn.style.cursor = 'pointer';
+                cancelDownloadBtn.style.opacity = '1';
+                cancelDownloadBtn.style.width = '';
+                cancelDownloadBtn.style.height = '';
+            }
+        }
     });
 }
 
@@ -894,11 +924,7 @@ if (startDownloadBtn) {
     });
 }
 
-if (cancelDownloadBtn2) {
-    cancelDownloadBtn2.addEventListener('click', () => {
-        cancelDownload();
-    });
-}
+
 
 // Loader Type Switching
 loaderTypeBtns.forEach(btn => {
@@ -1183,10 +1209,6 @@ window.onDownloadComplete = async function (version) {
 
     // Refresh lists
     await loadVersions();
-
-    // UI Updates
-    const dlProgressText = document.getElementById('downloadProgressText');
-    if (dlProgressText) dlProgressText.textContent = "¡Instalación completada!";
 
     setTimeout(() => {
         if (downloadModal) downloadModal.classList.remove('show');
@@ -1697,7 +1719,7 @@ function createModCard(mod) {
             ${categories}
         </div>
         <div class="mod-card-actions">
-            <button class="btn-primary" onclick="downloadModFromCard('${mod.id}', '${mod.slug}')">
+            <button id="btn-mod-${mod.id}" class="btn-primary" onclick="downloadModFromCard('${mod.id}', '${mod.slug}')">
                 <i class="fas fa-download"></i> Descargar
             </button>
         </div>
@@ -1706,19 +1728,96 @@ function createModCard(mod) {
     return card;
 }
 
+// Event Listeners for Mod Download Progress
+window.onModDownloadProgress = function (projectId, percentage, status) {
+    const btn = document.getElementById(`btn-mod-${projectId}`);
+    if (btn) {
+        // Change text
+        const originalText = btn.getAttribute('data-original-text') || 'Descargar';
+        if (!btn.getAttribute('data-original-text')) {
+            btn.setAttribute('data-original-text', originalText);
+        }
+
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${percentage}%`;
+        btn.disabled = true;
+        btn.style.cursor = 'wait';
+
+        // Progress background effect (Grey to Green)
+        // Background starts grey (#95a5a6) and fills with Green (#2ecc71)
+        btn.style.background = `linear-gradient(to right, #2ecc71 ${percentage}%, #95a5a6 ${percentage}%)`;
+        btn.style.borderColor = 'transparent';
+    }
+};
+
+window.onModDownloadComplete = function (projectId, filename) {
+    const btn = document.getElementById(`btn-mod-${projectId}`);
+    if (btn) {
+        btn.innerHTML = `<i class="fas fa-check"></i> Instalado`;
+        btn.style.background = '#2ecc71'; // Solid green
+        btn.disabled = true;
+        btn.style.cursor = 'default';
+
+        // Reset after 3 seconds
+        setTimeout(() => {
+            const originalText = '<i class="fas fa-download"></i> Descargar';
+            btn.innerHTML = originalText;
+            btn.style.background = ''; // Reset to CSS default
+            btn.disabled = false;
+            btn.style.cursor = 'pointer';
+        }, 3000);
+    }
+
+    // Notification
+    window.pywebview.api.info(`Mod descargado: ${filename}`);
+
+    // Refresh installed mods if on that tab
+    if (currentModTab === 'installed') {
+        loadInstalledMods();
+    }
+};
+
+window.onModDownloadError = function (projectId, errorMsg) {
+    const btn = document.getElementById(`btn-mod-${projectId}`);
+    if (btn) {
+        btn.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Error`;
+        btn.style.background = '#e74c3c'; // Red
+
+        // Reset after 3 seconds
+        setTimeout(() => {
+            const originalText = '<i class="fas fa-download"></i> Descargar';
+            btn.innerHTML = originalText;
+            btn.style.background = ''; // Reset
+            btn.disabled = false;
+            btn.style.cursor = 'pointer';
+        }, 3000);
+    }
+    window.pywebview.api.error(`Error: ${errorMsg}`);
+};
+
 window.downloadModFromCard = async function (projectId, slug) {
     if (!currentModsProfile) {
         window.pywebview.api.error('Selecciona un perfil primero');
         return;
     }
 
+    // Check if button exists and already disabled (redundant check)
+    const btn = document.getElementById(`btn-mod-${projectId}`);
+    if (btn && btn.disabled) return;
+
     try {
+        // Set initial loading state
+        if (btn) {
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Iniciando...';
+            btn.disabled = true;
+        }
+
         // Get profile info to determine loader and game version
         const profilesData = await window.pywebview.api.get_moddable_profiles();
         const profile = profilesData.profiles[currentModsProfile];
 
         if (!profile) {
             window.pywebview.api.error('Perfil no encontrado');
+            if (btn) btn.disabled = false;
             return;
         }
 
@@ -1755,27 +1854,30 @@ window.downloadModFromCard = async function (projectId, slug) {
 
         if (!versionsResult.success || versionsResult.versions.length === 0) {
             window.pywebview.api.error(`No hay versiones compatibles con ${loader} ${gameVersion}`);
+            if (btn) {
+                btn.innerHTML = '<i class="fas fa-download"></i> Descargar';
+                btn.disabled = false;
+            }
             return;
         }
 
         // Use the first (latest) compatible version
         const version = versionsResult.versions[0];
 
-        // Download mod
+        // Start Download (Now Async)
         const downloadResult = await window.pywebview.api.download_mod(projectId, version.id, currentModsProfile);
 
-        if (downloadResult.success) {
-            window.pywebview.api.info(`Mod descargado: ${downloadResult.filename}`);
-            // Refresh installed mods if on that tab
-            if (currentModTab === 'installed') {
-                await loadInstalledMods();
-            }
+        // If immediate error
+        if (!downloadResult.success) {
+            window.onModDownloadError(projectId, downloadResult.error);
         } else {
-            window.pywebview.api.error(`Error: ${downloadResult.error}`);
+            // Success means it started
+            console.log("Download started for", projectId);
         }
+
     } catch (error) {
         console.error('Error downloading mod:', error);
-        window.pywebview.api.error('Error al descargar el mod');
+        window.onModDownloadError(projectId, "Error de conexión");
     }
 };
 

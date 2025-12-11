@@ -18,10 +18,6 @@ from datetime import datetime
 
 
 """
-haz que no salga un error si se cancela por el usuario, ya que ya hay un info de que se ha cancelado la descarga
-arregla la descarga de versiones, ya que al descargar se queda en 0% todo el rato.
-ahora haz que haya un progreso de descarga de los mods, haciendo que el boton de descarga se rellene (al principio gris, se va rellenando de verde). 
-
 
 
 
@@ -514,7 +510,7 @@ class Api:
                         raise Exception("Download cancelled by user")
                     
                     # LOGGING FOR DEBUG
-                    # print(f"DEBUG PROGRESS: {progress} / {max_value}")
+                    print(f"DEBUG PROGRESS: {progress} / {max_value}")
                     
                     percentage = int((progress / max_value) * 100) if max_value > 0 else 0
                     percentage = min(100, max(0, percentage))
@@ -522,17 +518,16 @@ class Api:
                     # Ensure we send at least 1 update occasionally or if percentage changes?
                     # For now just trust the calculation.
                     
-                    if callback_id:
-                        try:
-                            webview.windows[0].evaluate_js(
-                                f"if(window.updateInstallProgress) window.updateInstallProgress('{version_id}', {percentage}, '{current_status}')"
-                            )
-                        except Exception:
-                            pass
+                    try:
+                        webview.windows[0].evaluate_js(
+                            f"if(window.updateInstallProgress) window.updateInstallProgress('{version_id}', {percentage}, '{current_status}')"
+                        )
+                    except Exception:
+                        pass
                 
                 def set_max(new_max):
                     nonlocal max_value
-                    # print(f"DEBUG MAX: {new_max}")
+                    print(f"DEBUG MAX: {new_max}")
                     max_value = new_max
                 
                 callback = {
@@ -579,7 +574,7 @@ class Api:
             except Exception as e:
                 error_msg = str(e)
                 print(f"Error instalando {version_id}: {error_msg}")
-                self.error(f"Error instalando {version_id}: {error_msg}")
+                # self.error(f"Error instalando {version_id}: {error_msg}")  <-- REMOVED UNCONDITIONAL CALL
                 
                 if "cancelled" in error_msg.lower() or self.download_cancelled:
                     result = {"success": False, "message": "Download cancelled", "cancelled": True}
@@ -590,6 +585,7 @@ class Api:
                     except Exception:
                         pass
                 else:
+                    self.error(f"Error instalando {version_id}: {error_msg}") # <-- MOVED HERE
                     result = {"success": False, "message": error_msg, "cancelled": False}
                     self.cleanup_partial_download(version_id)
                     # Notify frontend of error
@@ -1218,79 +1214,136 @@ class Api:
             return {'success': False, 'error': str(e), 'versions': []}
     
     def download_mod(self, project_id, version_id, profile_id):
-        """Descarga un mod al directorio del perfil"""
+        """Descarga un mod al directorio del perfil en segundo plano con progreso"""
+        
+        # Check active download (simple lock)
+        if hasattr(self, 'current_mod_download') and self.current_mod_download:
+             return {'success': False, 'error': 'Ya hay una descarga en curso'}
+
+        def download_thread():
+            self.current_mod_download = project_id
+            try:
+                import requests
+                
+                # Obtener información del perfil
+                profiles_data = load_profiles()
+                profile = profiles_data.get('profiles', {}).get(profile_id)
+                
+                if not profile:
+                    self._send_mod_error(project_id, 'Perfil no encontrado')
+                    return
+                
+                if not self.is_profile_moddable(profile):
+                    self._send_mod_error(project_id, 'Este perfil no soporta mods')
+                    return
+                
+                # Obtener directorio de mods
+                profile_dir = profile.get('directory', mc_dir)
+                mods_dir = os.path.join(profile_dir, 'mods')
+                os.makedirs(mods_dir, exist_ok=True)
+                
+                # Obtener información de la versión
+                version_url = f'https://api.modrinth.com/v2/version/{version_id}'
+                
+                # Reportar inicio
+                self._send_mod_progress(project_id, 0, "Iniciando...")
+                
+                version_response = requests.get(version_url, timeout=10)
+                version_response.raise_for_status()
+                version_data = version_response.json()
+                
+                # Obtener archivo principal
+                files = version_data.get('files', [])
+                if not files:
+                    self._send_mod_error(project_id, 'No se encontró archivo para descargar')
+                    return
+                
+                # Buscar archivo principal
+                primary_file = None
+                for file in files:
+                    if file.get('primary', False):
+                        primary_file = file
+                        break
+                
+                if not primary_file:
+                    primary_file = files[0]
+                
+                # Descargar archivo
+                download_url = primary_file.get('url')
+                filename = primary_file.get('filename')
+                
+                if not download_url or not filename:
+                    self._send_mod_error(project_id, 'URL de descarga no válida')
+                    return
+                
+                # Verificar si ya existe
+                file_path = os.path.join(mods_dir, filename)
+                if os.path.exists(file_path):
+                    self._send_mod_error(project_id, 'Este mod ya está instalado')
+                    return
+                
+                # Descargar con streaming
+                print(f"Descargando mod: {filename}")
+                self._send_mod_progress(project_id, 5, "Conectando...")
+                
+                response = requests.get(download_url, stream=True, timeout=60)
+                response.raise_for_status()
+                
+                total_size = int(response.headers.get('content-length', 0))
+                block_size = 8192
+                downloaded = 0
+                
+                with open(file_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=block_size):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if total_size > 0:
+                                percent = int((downloaded / total_size) * 100)
+                                # Cap at 99 until finished
+                                percent = min(99, percent)
+                                self._send_mod_progress(project_id, percent, "Descargando...")
+                
+                print(f"Mod descargado: {file_path}")
+                self._send_mod_progress(project_id, 100, "Completado")
+                
+                # Notify success
+                try:
+                    webview.windows[0].evaluate_js(
+                        f"if(window.onModDownloadComplete) window.onModDownloadComplete('{project_id}', '{filename}')"
+                    )
+                except:
+                    pass
+                
+            except Exception as e:
+                print(f"Error downloading mod: {e}")
+                import traceback
+                traceback.print_exc()
+                self._send_mod_error(project_id, str(e))
+            finally:
+                self.current_mod_download = None
+
+        # Start thread
+        threading.Thread(target=download_thread, daemon=True).start()
+        
+        # Return immediately indicating started
+        return {'success': True, 'status': 'started'}
+
+    def _send_mod_progress(self, project_id, percentage, status):
         try:
-            import requests
-            
-            # Obtener información del perfil
-            profiles_data = load_profiles()
-            profile = profiles_data.get('profiles', {}).get(profile_id)
-            
-            if not profile:
-                return {'success': False, 'error': 'Perfil no encontrado'}
-            
-            if not self.is_profile_moddable(profile):
-                return {'success': False, 'error': 'Este perfil no soporta mods'}
-            
-            # Obtener directorio de mods
-            profile_dir = profile.get('directory', mc_dir)
-            mods_dir = os.path.join(profile_dir, 'mods')
-            os.makedirs(mods_dir, exist_ok=True)
-            
-            # Obtener información de la versión
-            version_url = f'https://api.modrinth.com/v2/version/{version_id}'
-            version_response = requests.get(version_url, timeout=10)
-            version_response.raise_for_status()
-            version_data = version_response.json()
-            
-            # Obtener archivo principal
-            files = version_data.get('files', [])
-            if not files:
-                return {'success': False, 'error': 'No se encontró archivo para descargar'}
-            
-            # Buscar archivo principal
-            primary_file = None
-            for file in files:
-                if file.get('primary', False):
-                    primary_file = file
-                    break
-            
-            if not primary_file:
-                primary_file = files[0]
-            
-            # Descargar archivo
-            download_url = primary_file.get('url')
-            filename = primary_file.get('filename')
-            
-            if not download_url or not filename:
-                return {'success': False, 'error': 'URL de descarga no válida'}
-            
-            # Verificar si ya existe
-            file_path = os.path.join(mods_dir, filename)
-            if os.path.exists(file_path):
-                return {'success': False, 'error': 'Este mod ya está instalado'}
-            
-            # Descargar
-            print(f"Descargando mod: {filename}")
-            file_response = requests.get(download_url, timeout=60)
-            file_response.raise_for_status()
-            
-            # Guardar archivo
-            with open(file_path, 'wb') as f:
-                f.write(file_response.content)
-            
-            print(f"Mod descargado: {file_path}")
-            
-            return {
-                'success': True,
-                'filename': filename,
-                'path': file_path
-            }
-        except Exception as e:
-            print(f"Error downloading mod: {e}")
-            import traceback
-            traceback.print_exc()
-            return {'success': False, 'error': str(e)}
+            webview.windows[0].evaluate_js(
+                f"if(window.onModDownloadProgress) window.onModDownloadProgress('{project_id}', {percentage}, '{status}')"
+            )
+        except:
+            pass
+
+    def _send_mod_error(self, project_id, error_msg):
+        try:
+            webview.windows[0].evaluate_js(
+                f"if(window.onModDownloadError) window.onModDownloadError('{project_id}', '{error_msg.replace(chr(39), chr(34))}')"
+            )
+        except:
+            pass
     
     def get_installed_mods(self, profile_id):
         """Lista mods instalados en un perfil"""
