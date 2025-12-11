@@ -101,14 +101,7 @@ async function cancelDownload() {
         const result = await window.pywebview.api.cancel_download();
         if (result.success) {
             console.log('Download cancelled');
-            isDownloading = false;
-            endDownloadState();
-
-            // Hide progress
-            const progressContainer = document.getElementById('installProgress');
-            if (progressContainer) {
-                progressContainer.style.display = 'none';
-            }
+            closeDownloadProgress();
 
             // Don't create profile, just show message
             window.pywebview.api.info('Descarga cancelada. El perfil no se ha creado.');
@@ -1085,8 +1078,17 @@ async function startVersionDownload() {
 
     // UI Updates
     document.getElementById('downloadProgressContainer').style.display = 'block';
+
+    // Disable inputs
     startDownloadBtn.disabled = true;
     cancelDownloadModalBtn.disabled = true;
+    downloadMcVersionSelect.disabled = true;
+    downloadLoaderVersionSelect.disabled = true;
+    loaderTypeBtns.forEach(btn => {
+        btn.disabled = true;
+        btn.style.pointerEvents = 'none'; // Ensure clicks are blocked
+        btn.style.opacity = '0.6';
+    });
 
     isDownloading = true;
 
@@ -1095,19 +1097,32 @@ async function startVersionDownload() {
 
         if (!result.success) {
             window.pywebview.api.error(result.message);
-            isDownloading = false;
-            document.getElementById('downloadProgressContainer').style.display = 'none';
-            startDownloadBtn.disabled = false;
-            cancelDownloadModalBtn.disabled = false;
+            closeDownloadProgress();
         }
 
     } catch (error) {
         console.error("Error starting download:", error);
-        isDownloading = false;
-        document.getElementById('downloadProgressContainer').style.display = 'none';
-        startDownloadBtn.disabled = false;
-        cancelDownloadModalBtn.disabled = false;
+        closeDownloadProgress();
     }
+}
+
+// Helper to close download progress and re-enable inputs
+function closeDownloadProgress() {
+    isDownloading = false;
+    const container = document.getElementById('downloadProgressContainer');
+    if (container) container.style.display = 'none';
+
+    // Re-enable inputs
+    if (startDownloadBtn) startDownloadBtn.disabled = false;
+    if (cancelDownloadModalBtn) cancelDownloadModalBtn.disabled = false;
+    if (downloadMcVersionSelect) downloadMcVersionSelect.disabled = false;
+    if (downloadLoaderVersionSelect) downloadLoaderVersionSelect.disabled = false;
+
+    loaderTypeBtns.forEach(btn => {
+        btn.disabled = false;
+        btn.style.pointerEvents = '';
+        btn.style.opacity = '';
+    });
 }
 
 // Override global updateInstallProgress to target the new modal
@@ -1148,6 +1163,7 @@ window.updateInstallProgress = function (version, percentage, status) {
     }
 };
 
+
 // Override global onDownloadComplete
 window.onDownloadComplete = async function (version) {
     console.log(`Download completed: ${version}`);
@@ -1162,11 +1178,16 @@ window.onDownloadComplete = async function (version) {
 
     setTimeout(() => {
         if (downloadModal) downloadModal.classList.remove('show');
-        document.getElementById('downloadProgressContainer').style.display = 'none';
-        startDownloadBtn.disabled = false;
-        cancelDownloadModalBtn.disabled = false;
+        closeDownloadProgress();
         window.pywebview.api.info(`Versión ${version} instalada correctamente.`);
     }, 1000);
+};
+
+window.onDownloadError = function (errorMsg) {
+    console.error(`Download error: ${errorMsg}`);
+    isDownloading = false;
+    closeDownloadProgress();
+    // Error is already shown by backend popup, but we ensure UI is reset
 };
 
 

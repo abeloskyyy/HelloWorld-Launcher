@@ -18,7 +18,9 @@ from datetime import datetime
 
 
 """
-ahora haz que haya un progreso de descarga de los mods, haciendo que el boton de descarga se rellene (al principio gris, se va rellenando de verde). tambien haz que mientras se descarga una version, esten desactivados los botones de descargar y cancelar (no el de cancelar descarga)
+la descarga de forge no va, instala vanilla.
+arregla la descarga de versiones, ya que al descargar se queda en 0% todo el rato.
+ahora haz que haya un progreso de descarga de los mods, haciendo que el boton de descarga se rellene (al principio gris, se va rellenando de verde). 
 
 
 
@@ -569,13 +571,24 @@ class Api:
             except Exception as e:
                 error_msg = str(e)
                 print(f"Error instalando {version_id}: {error_msg}")
+                self.error(f"Error instalando {version_id}: {error_msg}")
                 
                 if "cancelled" in error_msg.lower() or self.download_cancelled:
                     result = {"success": False, "message": "Download cancelled", "cancelled": True}
                     self.cleanup_partial_download(version_id)
+                    # Notify frontend of cancellation (if not already handled)
+                    try:
+                        webview.windows[0].evaluate_js("if(window.onDownloadError) window.onDownloadError('Cancelled')")
+                    except Exception:
+                        pass
                 else:
                     result = {"success": False, "message": error_msg, "cancelled": False}
                     self.cleanup_partial_download(version_id)
+                    # Notify frontend of error
+                    try:
+                        webview.windows[0].evaluate_js(f"if(window.onDownloadError) window.onDownloadError('{error_msg.replace(chr(39), chr(34))}')")
+                    except Exception:
+                        pass
             finally:
                 self.current_downloading_version = None
                 self.current_download_thread = None

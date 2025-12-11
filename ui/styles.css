@@ -184,6 +184,7 @@ button {
     background: #5cb85c;
     color: #fff;
     flex: 1;
+    overflow: hidden;
 }
 
 .btn-primary:hover {
@@ -205,6 +206,7 @@ button {
     background: #158ad8;
     color: #fff;
     flex: 1;
+    overflow: hidden;
 }
 
 .btn-blue:hover {
@@ -213,10 +215,19 @@ button {
     box-shadow: 0 5px 15px rgba(92, 147, 184, 0.4);
 }
 
+button:disabled,
+select:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+
 .btn-red {
     background: #d81515;
     color: #fff;
     flex: 1;
+    overflow: hidden;
 }
 
 .btn-red:hover {
@@ -1336,36 +1347,37 @@ label {
 
 .cancel-download-icon {
     position: absolute;
-    top: 12px;
-    right: 12px;
-    background: linear-gradient(135deg, #ff6b6b 0%, #ff3b30 100%);
-    border: none;
-    color: white;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
+    top: 10px;
+    right: 10px;
+    background: transparent;
+    border: 1px solid rgba(255, 59, 48, 0.3);
+    color: #ff3b30;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    font-size: 16px;
-    box-shadow: 0 2px 8px rgba(255, 59, 48, 0.3);
+    transition: all 0.2s ease;
+    font-size: 14px;
 }
 
 .cancel-download-icon:hover {
-    background: linear-gradient(135deg, #ff5252 0%, #e53935 100%);
-    transform: scale(1.1) rotate(90deg);
-    box-shadow: 0 4px 12px rgba(255, 59, 48, 0.5);
+    background: rgba(255, 59, 48, 0.1);
+    border-color: #ff3b30;
+    transform: scale(1.05);
 }
 
 .cancel-download-icon:active {
-    transform: scale(0.95) rotate(90deg);
+    transform: scale(0.95);
+    background: rgba(255, 59, 48, 0.2);
 }
 
 /* Download Modal Styles */
 .download-modal {
-    max-width: 500px;
+    max-width: 560px;
+    width: 100%;
 }
 
 /* Loader Type Selector */
@@ -1376,6 +1388,8 @@ label {
     padding: 5px;
     background: rgba(0, 0, 0, 0.1);
     border-radius: 8px;
+
+    align-items: stretch;
 }
 
 .loader-type-btn {
@@ -1393,6 +1407,8 @@ label {
     gap: 8px;
     text-transform: none;
     letter-spacing: 0;
+
+    box-sizing: border-box;
 }
 
 .loader-type-btn i {
