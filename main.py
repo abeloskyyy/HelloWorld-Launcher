@@ -18,7 +18,7 @@ from datetime import datetime
 
 
 """
-la descarga de forge no va, instala vanilla.
+haz que no salga un error si se cancela por el usuario, ya que ya hay un info de que se ha cancelado la descarga
 arregla la descarga de versiones, ya que al descargar se queda en 0% todo el rato.
 ahora haz que haya un progreso de descarga de los mods, haciendo que el boton de descarga se rellene (al principio gris, se va rellenando de verde). 
 
@@ -513,8 +513,15 @@ class Api:
                     if self.download_cancelled:
                         raise Exception("Download cancelled by user")
                     
+                    # LOGGING FOR DEBUG
+                    # print(f"DEBUG PROGRESS: {progress} / {max_value}")
+                    
                     percentage = int((progress / max_value) * 100) if max_value > 0 else 0
                     percentage = min(100, max(0, percentage))
+                    
+                    # Ensure we send at least 1 update occasionally or if percentage changes?
+                    # For now just trust the calculation.
+                    
                     if callback_id:
                         try:
                             webview.windows[0].evaluate_js(
@@ -525,6 +532,7 @@ class Api:
                 
                 def set_max(new_max):
                     nonlocal max_value
+                    # print(f"DEBUG MAX: {new_max}")
                     max_value = new_max
                 
                 callback = {

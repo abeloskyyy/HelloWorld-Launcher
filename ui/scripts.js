@@ -1028,8 +1028,20 @@ async function loadLoaderVersions(type, mcVersion) {
     }
 }
 
+// Add Change Listener for MC Version Select
+if (downloadMcVersionSelect) {
+    downloadMcVersionSelect.addEventListener('change', () => {
+        const version = downloadMcVersionSelect.value;
+        if (currentLoaderType !== 'vanilla' && version) {
+            loadLoaderVersions(currentLoaderType, version);
+        }
+    });
+}
+
 async function startVersionDownload() {
     const mcVersion = downloadMcVersionSelect.value;
+    console.log(`[StartDownload] Type: ${currentLoaderType}, MC Version: ${mcVersion}`);
+
     if (!mcVersion) {
         window.pywebview.api.error("Selecciona una versión de Minecraft");
         return;
