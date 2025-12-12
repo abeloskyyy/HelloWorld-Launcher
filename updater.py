@@ -230,9 +230,17 @@ def check_and_update(window, api):
         apply_update("update_temp.zip", remote_data["download_url"])
     except Exception as e:
         print(f"Error aplicando actualización: {e}")
-        # Continuar de todos modos, la descarga fue exitosa
     
-    window.destroy()
+    # Programar cierre de ventana en un thread separado
+    def close_window():
+        time.sleep(1)
+        try:
+            window.destroy()
+        except:
+            pass
+    
+    threading.Thread(target=close_window, daemon=True).start()
+    
     return True
 
 
@@ -318,8 +326,8 @@ def apply_update(downloaded_file, download_url):
     subprocess.Popen(['cmd', '/c', update_script], 
                      creationflags=subprocess.CREATE_NO_WINDOW)
     
-    print("Actualización programada, reiniciando...")
-    sys.exit(0)
+    # NO hacer sys.exit aquí, dejar que el updater se cierre normalmente
+    print("Actualización programada")
 
 
 def run_updater_check():

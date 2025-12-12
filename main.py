@@ -29,7 +29,8 @@ def resource_path(relative_path):
 
 
 """
- 
+- soporte para Linux
+
 
 
 - reseñas
