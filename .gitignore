@@ -1,0 +1,10 @@
+# Archivos de configuración
+version.json
+package.ps1
+
+# Archivos de construcción
+build/
+
+# Archivos de distribución
+dist/
+

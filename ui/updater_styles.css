@@ -97,7 +97,7 @@ body {
 }
 
 .progress-ring-circle.spinning {
-    animation: spin 2s linear infinite;
+    animation: spin 2s ease infinite;
     stroke-dasharray: 163.36;
 }
 

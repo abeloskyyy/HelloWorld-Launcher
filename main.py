@@ -14,11 +14,24 @@ import psutil
 import pygetwindow as gw
 from PIL import Image
 from datetime import datetime
+import sys
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+
+    return os.path.join(base_path, relative_path)
 
 
 
 """
-- actualizador
+ 
+
+
 - reseñas
 - microsoft login
 
@@ -70,7 +83,7 @@ def create_splash():
     
     # Load and display icon
     try:
-        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "img", "splash.png")
+        icon_path = resource_path(os.path.join("ui", "img", "splash.png"))
         img = Image.open(icon_path)
         
         # Resize to fit window
@@ -93,13 +106,31 @@ def create_splash():
     splash_window.mainloop()
 
 def close_splash():
+    """Safely close the splash screen"""
     global splash_window
     if splash_window:
         try:
-            splash_window.quit()  # Stop mainloop
+            # Schedule close on the splash window's thread
+            splash_window.after(0, lambda: _do_close_splash())
+        except Exception as e:
+            print(f"Error scheduling splash close: {e}")
+            # Fallback: force close
+            try:
+                splash_window = None
+            except:
+                pass
+
+def _do_close_splash():
+    """Internal function to actually close the splash"""
+    global splash_window
+    try:
+        if splash_window:
+            splash_window.quit()
             splash_window.destroy()
-        except:
-            pass
+            splash_window = None
+            print("Splash screen closed successfully")
+    except Exception as e:
+        print(f"Error closing splash: {e}")
         splash_window = None
 
 def start_splash_thread():
@@ -273,8 +304,12 @@ def load_profiles():
         return {"profiles": {}}
     
 def save_profiles(data):
-    with open(PROFILES_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4)
+    try:
+        print(f"DEBUG: Saving profiles to {PROFILES_FILE}") # DEBUG LOG
+        with open(PROFILES_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+    except Exception as e:
+        print(f"Error saving profiles: {e}")
 # ----------------------------------------
 
 
@@ -347,6 +382,27 @@ class Api:
 
     def warning(self, mensaje: str):
         messagebox.showwarning("Advertencia", mensaje)
+    
+    def check_internet(self):
+        """Verifica si hay conexión a internet"""
+        try:
+            import socket
+            # Intentar conectar a DNS de Google
+            socket.create_connection(("8.8.8.8", 53), timeout=3)
+            return True
+        except OSError:
+            return False
+    
+    def close_app(self):
+        """Cierra la aplicación"""
+        try:
+            # Cerrar todas las ventanas de webview
+            for window in webview.windows:
+                window.destroy()
+        except:
+            pass
+        import sys
+        sys.exit(0)
 
 
     def get_profile_icon(self, filename):
@@ -524,8 +580,7 @@ class Api:
                     if self.download_cancelled:
                         raise Exception("Download cancelled by user")
                     
-                    # LOGGING FOR DEBUG
-                    print(f"DEBUG PROGRESS: {progress} / {max_value}")
+                    # Progress tracking
                     
                     percentage = int((progress / max_value) * 100) if max_value > 0 else 0
                     percentage = min(100, max(0, percentage))
@@ -542,7 +597,7 @@ class Api:
                 
                 def set_max(new_max):
                     nonlocal max_value
-                    print(f"DEBUG MAX: {new_max}")
+                    # Max value updated
                     max_value = new_max
                 
                 callback = {
@@ -648,81 +703,6 @@ class Api:
         except Exception as e:
             print(f"Error eliminando descarga parcial de {version_id}: {e}")
     
-    def start_game(self, profile_id, nickname):
-        print(f"Iniciando perfil ID: {profile_id}")
-        print(f"Nickname: {nickname}")
-
-        if not nickname:
-            messagebox.showerror("Error", "No has introducido tu nickname")
-            return
-        
-        # Cargar perfiles para obtener datos del perfil seleccionado
-        profiles_data = load_profiles()
-        if profile_id not in profiles_data["profiles"]:
-             messagebox.showerror("Error", "Perfil no encontrado")
-             return
-
-        profile = profiles_data["profiles"][profile_id]
-        version = profile["version"]
-        profile_directory = profile.get("directory", mc_dir)  # Usar directorio del perfil o mc_dir por defecto
-        jvm_args = profile.get("jvm_args", "")  # Obtener argumentos JVM del perfil
-
-        print(f"Versión del perfil: {version}")
-        print(f"Directorio del perfil: {profile_directory}")
-
-        if not version:
-            messagebox.showerror("Error", "El perfil no tiene una versión de Minecraft seleccionada.")
-            return
-
-        # Actualizar last_played
-        profile["last_played"] = datetime.now().isoformat()
-        save_profiles(profiles_data)
-
-
-        player_uuid = str(uuid.uuid3(uuid.NAMESPACE_DNS, nickname))
-
-        # Procesar argumentos JVM
-        jvm_arguments_list = []
-        if jvm_args and jvm_args.strip():
-            # Dividir por espacios para obtener argumentos individuales
-            jvm_arguments_list = jvm_args.strip().split()
-
-        options = {
-        'username': nickname,
-        'uuid': player_uuid,
-        'token': '',
-        'jvmArguments': jvm_arguments_list
-        }
-
-        try:
-            # Generar el comando usando mc_dir (donde están las versiones)
-            minecraft_command = mll.command.get_minecraft_command(
-                version, 
-                mc_dir,  # Usar mc_dir para que encuentre las versiones
-                options
-            )
-            
-            # Si el perfil tiene un directorio personalizado, modificar el comando
-            # para usar ese directorio como --gameDir
-            if profile_directory and profile_directory != mc_dir:
-                # Buscar el índice de --gameDir en el comando
-                try:
-                    game_dir_index = minecraft_command.index('--gameDir')
-                    # Reemplazar el valor siguiente (que sería mc_dir) con profile_directory
-                    minecraft_command[game_dir_index + 1] = profile_directory
-                    print(f"Usando directorio personalizado: {profile_directory}")
-                except ValueError:
-                    # Si no hay --gameDir, agregarlo
-                    minecraft_command.extend(['--gameDir', profile_directory])
-                    print(f"Agregando directorio personalizado: {profile_directory}")
-            
-            print(f"Comando de Minecraft: {' '.join(minecraft_command)}")
-            
-            # Usar Popen para no bloquear la UI
-            subprocess.Popen(minecraft_command)
-        except Exception as e:
-             print(f"Error al lanzar Minecraft: {e}")
-             messagebox.showerror("Error", f"Error al lanzar Minecraft: {e}")
     
     def save_user_json(self, username, mcdir, account_type="offline"):
         data = load_user_data()
@@ -736,6 +716,24 @@ class Api:
     
     def get_user_json(self):
         return load_user_data()
+    
+    def save_dev_mode(self, dev_mode):
+        """Save developer mode setting"""
+        data = load_user_data()
+        data["dev_mode"] = dev_mode
+        save_user_data(data)
+        return {"success": True}
+    
+    def get_launcher_version(self):
+        """Get launcher version from version.json"""
+        try:
+            version_file = resource_path("version.json")
+            with open(version_file, "r", encoding="utf-8") as f:
+                version_data = json.load(f)
+                return version_data.get("version", "Unknown")
+        except Exception as e:
+            print(f"Error reading version: {e}")
+            return "Unknown"
     
     def logout_user(self):
         """Clear username and account_type to logout"""
@@ -912,6 +910,14 @@ class Api:
         version = profile.get("version")
         jvm_args = profile.get("jvm_args", "")
         
+        # Update last_played timestamp
+        print(f"DEBUG: Updating last_played for profile {profile_id}")
+        profile["last_played"] = datetime.now().isoformat()
+        print(f"DEBUG: last_played set to: {profile['last_played']}")
+        print(f"DEBUG: Calling save_profiles...")
+        save_profiles(profiles_data)
+        print(f"DEBUG: save_profiles completed")
+        
         # Generate UUID from nickname
         player_uuid = str(uuid.uuid3(uuid.NAMESPACE_DNS, nickname))
         
@@ -931,7 +937,16 @@ class Api:
             print(f"Launching Minecraft with command: {' '.join(minecraft_command[:3])}...")
             
             # Launch Minecraft
-            minecraft_process = subprocess.Popen(minecraft_command, cwd=profile_dir)
+            # Check developer mode for console visibility
+            user_data = load_user_data()
+            dev_mode = user_data.get("dev_mode", False)
+            
+            if dev_mode:
+                # Show console in developer mode
+                minecraft_process = subprocess.Popen(minecraft_command, cwd=profile_dir)
+            else:
+                # Hide console in normal mode
+                minecraft_process = subprocess.Popen(minecraft_command, cwd=profile_dir, creationflags=subprocess.CREATE_NO_WINDOW)
             
             print(f"Minecraft process started with PID: {minecraft_process.pid}")
             
@@ -1558,7 +1573,7 @@ if __name__ == '__main__':
     os.makedirs(profiles_img_dir, exist_ok=True)
 
     import shutil
-    source_dir = os.path.join(os.path.dirname(__file__), "img", "profiles")
+    source_dir = resource_path(os.path.join("ui", "img", "profiles"))
 
     if os.path.exists(source_dir):
         for filename in os.listdir(source_dir):
@@ -1572,7 +1587,7 @@ if __name__ == '__main__':
 
         print("Iconos de perfiles copiados a profiles-img")
     else:
-        print("WARNING: No existe ./img/profiles, no se copiaron iconos.")
+        print("WARNING: No existe ./ui/img/profiles, no se copiaron iconos.")
 
     # ============================================
     # MAIN WINDOW - Create hidden, show when ready
@@ -1583,23 +1598,31 @@ if __name__ == '__main__':
     # Create main window
     window = webview.create_window(
         'HelloWorld Launcher',
-        'ui/index.html',
+        resource_path('ui/index.html'),
         maximized=True,
         js_api=api,
         background_color="#1a1a1a"
     )
     
-    # Close splash when window is shown (in separate thread to avoid blocking)
+    # Close splash when window is shown
     def close_splash_delayed():
+        """Close splash with a small delay to ensure window is visible"""
         def callback():
-            import time
-            time.sleep(0.5)  # Wait for window to be fully visible
-            close_splash()
+            try:
+                import time
+                time.sleep(0.3)  # Reduced delay for faster startup
+                close_splash()
+            except Exception as e:
+                print(f"Error in splash close callback: {e}")
         threading.Thread(target=callback, daemon=True).start()
     
     # Attach to shown event
     window.events.shown += close_splash_delayed
     
-    webview.start(debug=True)
+    # Check developer mode setting
+    user_data = load_user_data()
+    dev_mode = user_data.get("dev_mode", False)
+    
+    webview.start(debug=dev_mode)
 
 

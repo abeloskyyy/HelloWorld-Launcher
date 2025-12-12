@@ -196,12 +196,33 @@
                             <button type="button" id="selectMcdirBtn" class="btn-square"><i
                                     class="fas fa-folder-open"></i></button>
                         </div>
+                        <div class="input-group">
+                            <div class="toggle-container">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="devModeCheckbox">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <span class="toggle-label">
+                                    Modo Desarrollador
+                                    <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
+                                        data-tooltip="Activa herramientas de desarrollo: F5 para recargar, consola de Minecraft visible, y DevTools del navegador. Requiere reiniciar el launcher."></i>
+                                </span>
+                            </div>
+                        </div>
+                        <button class="btn-primary" onclick="guardarDatos()">Guardar Configuración</button>
+
+                        <!-- Versión del launcher -->
+                        <div
+                            style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); text-align: center;">
+                            <p style="color: #aaa; font-size: 13px;">
+                                Versión del launcher: <span id="launcherVersion"
+                                    style="color: #5cb85c; font-weight: 600;">Cargando...</span>
+                            </p>
+                        </div>
                     </div>
-                    <button class="btn-primary">Guardar Configuración</button>
                 </div>
             </div>
         </div>
-    </div>
     </div>
 
     <!-- Modal de crear perfil -->
@@ -388,6 +409,32 @@
                 </button>
                 <button id="cancelDownloadModalBtn" class="btn-red">Cancelar</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal de Sin Internet -->
+    <div class="modal" id="noInternetModal" style="display: none;">
+        <div class="modal-content no-internet-modal">
+            <div class="no-internet-icon">
+                <span class="no-internet-symbol">⚠</span>
+            </div>
+            <span class="modal-title">Sin Conexión a Internet</span>
+            <p class="no-internet-message">
+                No se pudo detectar una conexión a internet. Algunas funciones pueden no estar disponibles:
+            </p>
+            <ul class="no-internet-features">
+                <li>Búsqueda y descarga de mods</li>
+                <li>Actualizaciones automáticas</li>
+                <li>Descarga de nuevas versiones de Minecraft</li>
+            </ul>
+
+            <button class="btn-primary btn-large" id="closeAppBtn">
+                ✕ Cerrar Aplicación
+            </button>
+
+            <button class="btn-continue-anyway" id="continueAnywayBtn">
+                Continuar sin conexión
+            </button>
         </div>
     </div>
 

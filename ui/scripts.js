@@ -116,8 +116,24 @@ async function cancelDownload() {
 function guardarDatos() {
     const username = document.getElementById("nickname").value;
     const mcdir = document.getElementById("mcdir").value;
+    const devModeCheckbox = document.getElementById("devModeCheckbox");
+    const devMode = devModeCheckbox ? devModeCheckbox.checked : false;
 
-    window.pywebview.api.save_user_json(username, mcdir)
+    // Get current dev mode to check if it changed
+    window.pywebview.api.get_user_json().then(currentData => {
+        const devModeChanged = currentData.dev_mode !== devMode;
+
+        window.pywebview.api.save_user_json(username, mcdir).then(() => {
+            // Save dev_mode separately
+            window.pywebview.api.save_dev_mode(devMode).then(() => {
+                if (devModeChanged) {
+                    window.pywebview.api.info('Configuración guardada. Por favor, reinicia el launcher para que los cambios del modo desarrollador tomen efecto.');
+                } else {
+                    window.pywebview.api.info('Configuración guardada correctamente.');
+                }
+            });
+        });
+    });
 }
 
 if (document.getElementById("mcdir")) {
@@ -130,12 +146,60 @@ if (document.getElementById("mcdir")) {
 
 // PyWebView Ready
 window.addEventListener('pywebviewready', async () => {
+    // Check internet connection first
+    try {
+        const hasInternet = await window.pywebview.api.check_internet();
+
+        if (!hasInternet) {
+            // Show no internet modal
+            const noInternetModal = document.getElementById('noInternetModal');
+            if (noInternetModal) {
+                noInternetModal.style.display = 'flex';
+
+                // Close app button
+                const closeAppBtn = document.getElementById('closeAppBtn');
+                if (closeAppBtn) {
+                    closeAppBtn.addEventListener('click', async () => {
+                        await window.pywebview.api.close_app();
+                    });
+                }
+
+                // Continue anyway button
+                const continueAnywayBtn = document.getElementById('continueAnywayBtn');
+                if (continueAnywayBtn) {
+                    continueAnywayBtn.addEventListener('click', () => {
+                        noInternetModal.style.display = 'none';
+                    });
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Error checking internet:", error);
+    }
+
     try {
         await loadOptions();
 
         const data = await window.pywebview.api.get_user_json();
         if (document.getElementById("nickname")) document.getElementById("nickname").value = data.username || "";
         if (document.getElementById("mcdir")) document.getElementById("mcdir").value = data.mcdir || "";
+
+        // Load developer mode checkbox
+        const devModeCheckbox = document.getElementById("devModeCheckbox");
+        if (devModeCheckbox) {
+            devModeCheckbox.checked = data.dev_mode || false;
+        }
+
+        // Load launcher version
+        try {
+            const version = await window.pywebview.api.get_launcher_version();
+            const versionElement = document.getElementById("launcherVersion");
+            if (versionElement) {
+                versionElement.textContent = version;
+            }
+        } catch (err) {
+            console.error("Error loading version:", err);
+        }
 
         await cargarPerfiles();
         await loadVersions();
@@ -598,7 +662,13 @@ if (acceptProfileBtn) {
 
         // Validación
         const missingFields = [];
-        if (!profileName.trim()) missingFields.push("Nombre del Perfil");
+        const trimmedName = profileName.trim();
+        if (!trimmedName) {
+            missingFields.push("Nombre del Perfil");
+        } else if (trimmedName.length < 2) {
+            window.pywebview.api.error('El nombre del perfil debe tener al menos 2 caracteres');
+            return;
+        }
         if (!profileVersion) missingFields.push("Versión");
         if (!profileDir.trim()) missingFields.push("Directorio");
 
@@ -1464,12 +1534,7 @@ function initializeTooltips() {
     });
 }
 
-// Hide tooltip when clicking anywhere else
-document.addEventListener('click', (e) => {
-    if (!e.target.classList.contains('help-icon') && !tooltip.contains(e.target)) {
-        hideTooltip();
-    }
-});
+
 
 // Hide tooltip on scroll
 window.addEventListener('scroll', hideTooltip, true);
@@ -1996,6 +2061,86 @@ window.toggleModEnabled = async function (filename, enabled) {
     }
 };
 
+// ============================================
+// DISABLE BROWSER SHORTCUTS (unless dev mode is on)
+// ============================================
+document.addEventListener('keydown', async function (e) {
+    // Check if developer mode is enabled
+    let devMode = false;
+    try {
+        const userData = await window.pywebview.api.get_user_json();
+        devMode = userData.dev_mode || false;
+    } catch (err) {
+        // If we can't check, assume dev mode is off
+        devMode = false;
+    }
+
+    // If developer mode is enabled, allow all shortcuts
+    if (devMode) {
+        return true;
+    }
+
+    // Otherwise, block developer shortcuts
+    // F5 - Refresh
+    if (e.key === 'F5') {
+        e.preventDefault();
+        return false;
+    }
+
+    // Ctrl+R - Refresh
+    if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+        e.preventDefault();
+        return false;
+    }
+
+    // F12 - Dev Tools
+    if (e.key === 'F12') {
+        e.preventDefault();
+        return false;
+    }
+
+    // Ctrl+Shift+I - Dev Tools
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'I') {
+        e.preventDefault();
+        return false;
+    }
+
+    // Ctrl+Shift+J - Console
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'J') {
+        e.preventDefault();
+        return false;
+    }
+
+    // Ctrl+Shift+C - Inspect Element
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') {
+        e.preventDefault();
+        return false;
+    }
+
+    // Ctrl+U - View Source
+    if ((e.ctrlKey || e.metaKey) && e.key === 'u') {
+        e.preventDefault();
+        return false;
+    }
+
+    // Shift+F10 - Context Menu (keyboard)
+    if (e.shiftKey && e.key === 'F10') {
+        e.preventDefault();
+        return false;
+    }
+
+    // F11 - Fullscreen (optional, uncomment if you want to disable)
+    // if (e.key === 'F11') {
+    //     e.preventDefault();
+    //     return false;
+    // }
+});
+
+// Disable right-click context menu
+document.addEventListener('contextmenu', function (e) {
+    e.preventDefault();
+    return false;
+});
 window.deleteModFile = async function (filename) {
     if (!currentModsProfile) return;
 
