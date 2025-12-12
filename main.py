@@ -18,7 +18,7 @@ from datetime import datetime
 
 
 """
-
+quitar nombre al cerrar sesion del id "nickname"
 
 
 
