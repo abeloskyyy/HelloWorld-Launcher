@@ -1,0 +1,365 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #fff;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.updater-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.updater-card {
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(92, 184, 92, 0.2);
+    border-radius: 20px;
+    padding: 50px 60px;
+    min-width: 450px;
+    max-width: 500px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    text-align: center;
+}
+
+.updater-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #5cb85c;
+    margin-bottom: 40px;
+    text-shadow: 0 0 20px rgba(92, 184, 92, 0.3);
+}
+
+/* Estados */
+.updater-state {
+    display: none;
+    animation: fadeIn 0.4s ease;
+}
+
+.updater-state.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Progress Ring */
+.progress-ring {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 30px;
+}
+
+.progress-ring-svg {
+    transform: rotate(-90deg);
+}
+
+.progress-ring-circle-bg {
+    fill: none;
+    stroke: rgba(92, 184, 92, 0.1);
+    stroke-width: 8;
+}
+
+.progress-ring-circle {
+    fill: none;
+    stroke: #5cb85c;
+    stroke-width: 8;
+    stroke-linecap: round;
+    stroke-dasharray: 326.73;
+    stroke-dashoffset: 326.73;
+    transition: stroke-dashoffset 0.3s ease;
+    filter: drop-shadow(0 0 8px rgba(92, 184, 92, 0.6));
+}
+
+.progress-ring-circle.spinning {
+    animation: spin 2s linear infinite;
+    stroke-dasharray: 163.36;
+}
+
+@keyframes spin {
+    0% {
+        stroke-dashoffset: 326.73;
+    }
+
+    50% {
+        stroke-dashoffset: 81.68;
+    }
+
+    100% {
+        stroke-dashoffset: 326.73;
+    }
+}
+
+.progress-ring-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 36px;
+    color: #5cb85c;
+    animation: rotate 2s linear infinite;
+}
+
+@keyframes rotate {
+    from {
+        transform: translate(-50%, -50%) rotate(0deg);
+    }
+
+    to {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
+}
+
+.progress-ring-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+.progress-ring-content i {
+    font-size: 28px;
+    color: #5cb85c;
+}
+
+.progress-ring-content span {
+    font-size: 18px;
+    font-weight: 700;
+    color: #5cb85c;
+}
+
+/* Success Icon */
+.success-icon {
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(92, 184, 92, 0.1);
+    border-radius: 50%;
+    border: 3px solid #5cb85c;
+    animation: successPulse 1.5s ease infinite;
+}
+
+.success-icon i {
+    font-size: 60px;
+    color: #5cb85c;
+}
+
+@keyframes successPulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(92, 184, 92, 0.7);
+    }
+
+    50% {
+        box-shadow: 0 0 0 20px rgba(92, 184, 92, 0);
+    }
+}
+
+/* Error Icon */
+.error-icon {
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(217, 83, 79, 0.1);
+    border-radius: 50%;
+    border: 3px solid #d9534f;
+}
+
+.error-icon i {
+    font-size: 60px;
+    color: #d9534f;
+}
+
+/* Warning Icon */
+.warning-icon {
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(240, 173, 78, 0.1);
+    border-radius: 50%;
+    border: 3px solid #f0ad4e;
+}
+
+.warning-icon i {
+    font-size: 60px;
+    color: #f0ad4e;
+}
+
+/* Text Styles */
+.status-text {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #fff;
+}
+
+.status-text.success {
+    color: #5cb85c;
+}
+
+.status-text.error {
+    color: #d9534f;
+}
+
+.status-text.warning {
+    color: #f0ad4e;
+}
+
+.status-subtext {
+    font-size: 14px;
+    color: #aaa;
+    margin-bottom: 15px;
+}
+
+.version-text {
+    font-size: 13px;
+    color: #666;
+    margin-top: 10px;
+}
+
+.version-update {
+    font-size: 15px;
+    color: #5cb85c;
+    margin-top: 15px;
+    font-weight: 600;
+}
+
+.error-message {
+    font-size: 14px;
+    color: #aaa;
+    margin-bottom: 25px;
+    padding: 15px;
+    background: rgba(217, 83, 79, 0.1);
+    border-radius: 8px;
+    border: 1px solid rgba(217, 83, 79, 0.3);
+}
+
+/* Download Info */
+.download-info {
+    display: flex;
+    justify-content: space-between;
+    margin: 20px 0 10px;
+    font-size: 13px;
+    color: #aaa;
+}
+
+/* Progress Bar */
+.progress-bar-container {
+    width: 100%;
+    height: 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #5cb85c, #4cae4c);
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.3s ease;
+    box-shadow: 0 0 10px rgba(92, 184, 92, 0.5);
+}
+
+/* Buttons */
+button {
+    padding: 12px 25px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.btn-cancel {
+    background: rgba(217, 83, 79, 0.2);
+    color: #d9534f;
+    border: 1px solid rgba(217, 83, 79, 0.4);
+    margin-top: 10px;
+}
+
+.btn-cancel:hover {
+    background: rgba(217, 83, 79, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(217, 83, 79, 0.3);
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.btn-retry {
+    flex: 1;
+    background: #5cb85c;
+    color: #fff;
+}
+
+.btn-retry:hover {
+    background: #4cae4c;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(92, 184, 92, 0.4);
+}
+
+.btn-continue {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.btn-continue:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+button:active {
+    transform: translateY(0);
+}
+
+button i {
+    margin-right: 5px;
+}

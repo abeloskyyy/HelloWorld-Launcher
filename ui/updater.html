@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HelloWorld Launcher - Actualizador</title>
+    <link rel="stylesheet" href="updater_styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="updater-container">
+        <div class="updater-card">
+            <h1 class="updater-title">HelloWorld Launcher</h1>
+
+            <!-- Estado: Verificando -->
+            <div id="state-checking" class="updater-state active">
+                <div class="progress-ring">
+                    <svg class="progress-ring-svg" width="120" height="120">
+                        <circle class="progress-ring-circle-bg" cx="60" cy="60" r="52"></circle>
+                        <circle class="progress-ring-circle spinning" cx="60" cy="60" r="52"></circle>
+                    </svg>
+                    <div class="progress-ring-icon">
+                        <i class="fas fa-sync-alt"></i>
+                    </div>
+                </div>
+                <p class="status-text">Verificando actualizaciones...</p>
+                <p class="version-text" id="currentVersion">v1.0.0</p>
+            </div>
+
+            <!-- Estado: Descargando -->
+            <div id="state-downloading" class="updater-state">
+                <div class="progress-ring">
+                    <svg class="progress-ring-svg" width="120" height="120">
+                        <circle class="progress-ring-circle-bg" cx="60" cy="60" r="52"></circle>
+                        <circle class="progress-ring-circle" id="downloadProgressCircle" cx="60" cy="60" r="52">
+                        </circle>
+                    </svg>
+                    <div class="progress-ring-content">
+                        <i class="fas fa-download"></i>
+                        <span id="downloadPercentage">0%</span>
+                    </div>
+                </div>
+                <p class="status-text">Descargando actualización...</p>
+                <div class="download-info">
+                    <span id="downloadSpeed">0 MB/s</span>
+                    <span id="downloadSize">0 MB / 0 MB</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar-fill" id="downloadProgressBar"></div>
+                </div>
+                <button class="btn-cancel" id="cancelBtn">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
+            </div>
+
+            <!-- Estado: Éxito -->
+            <div id="state-success" class="updater-state">
+                <div class="success-icon">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <p class="status-text success">¡Actualización completada!</p>
+                <p class="status-subtext">Iniciando launcher...</p>
+                <p class="version-update" id="versionUpdate">v1.0.0 → v1.1.0</p>
+            </div>
+
+            <!-- Estado: Error -->
+            <div id="state-error" class="updater-state">
+                <div class="error-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <p class="status-text error">Error al actualizar</p>
+                <p class="error-message" id="errorMessage">No se pudo descargar la actualización</p>
+                <div class="button-group">
+                    <button class="btn-retry" id="retryBtn">
+                        <i class="fas fa-redo"></i> Reintentar
+                    </button>
+                    <button class="btn-continue" id="continueBtn">
+                        Continuar de todos modos
+                    </button>
+                </div>
+            </div>
+
+            <!-- Estado: Sin Internet -->
+            <div id="state-no-internet" class="updater-state">
+                <div class="warning-icon">
+                    <i class="fas fa-wifi-slash"></i>
+                </div>
+                <p class="status-text warning">Sin conexión a internet</p>
+                <p class="status-subtext">Continuando sin actualizar...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API para comunicación con Python
+        class UpdaterAPI {
+            setState(state) {
+                // Ocultar todos los estados
+                document.querySelectorAll('.updater-state').forEach(el => {
+                    el.classList.remove('active');
+                });
+
+                // Mostrar el estado solicitado
+                const stateElement = document.getElementById(`state-${state}`);
+                if (stateElement) {
+                    stateElement.classList.add('active');
+                }
+            }
+
+            setVersion(version) {
+                document.getElementById('currentVersion').textContent = `v${version}`;
+            }
+
+            setDownloadProgress(percentage, downloaded, total, speed) {
+                // Actualizar porcentaje
+                document.getElementById('downloadPercentage').textContent = `${percentage}%`;
+
+                // Actualizar círculo de progreso
+                const circle = document.getElementById('downloadProgressCircle');
+                const radius = circle.r.baseVal.value;
+                const circumference = radius * 2 * Math.PI;
+                const offset = circumference - (percentage / 100) * circumference;
+                circle.style.strokeDashoffset = offset;
+
+                // Actualizar barra de progreso
+                document.getElementById('downloadProgressBar').style.width = `${percentage}%`;
+
+                // Actualizar velocidad y tamaño
+                document.getElementById('downloadSpeed').textContent = `${speed} MB/s`;
+                document.getElementById('downloadSize').textContent = `${downloaded} MB / ${total} MB`;
+            }
+
+            setVersionUpdate(oldVersion, newVersion) {
+                document.getElementById('versionUpdate').textContent = `v${oldVersion} → v${newVersion}`;
+            }
+
+            setError(message) {
+                document.getElementById('errorMessage').textContent = message;
+            }
+
+            // Event handlers
+            onCancel(callback) {
+                document.getElementById('cancelBtn').addEventListener('click', callback);
+            }
+
+            onRetry(callback) {
+                document.getElementById('retryBtn').addEventListener('click', callback);
+            }
+
+            onContinue(callback) {
+                document.getElementById('continueBtn').addEventListener('click', callback);
+            }
+        }
+
+        // Exponer API globalmente
+        window.updaterAPI = new UpdaterAPI();
+    </script>
+</body>
+
+</html>

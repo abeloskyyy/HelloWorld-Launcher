@@ -18,8 +18,9 @@ from datetime import datetime
 
 
 """
-quitar nombre al cerrar sesion del id "nickname"
-
+- actualizador
+- reseñas
+- microsoft login
 
 
 
@@ -111,6 +112,20 @@ start_splash_thread()
 # Give it a moment to appear
 import time
 time.sleep(0.1)
+
+# ============================================
+# UPDATER - Check for updates before launching
+# ============================================
+try:
+    from updater import run_updater_check
+    print("Verificando actualizaciones...")
+    should_restart = run_updater_check()
+    if should_restart:
+        # Si se aplicó una actualización, el updater reiniciará el launcher
+        import sys
+        sys.exit(0)
+except Exception as e:
+    print(f"Error en updater (continuando): {e}")
 # ============================================
 
 

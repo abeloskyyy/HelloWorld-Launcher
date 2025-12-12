@@ -1334,7 +1334,7 @@ if (logoutBtn) {
     logoutBtn.addEventListener('click', async () => {
         try {
             await window.pywebview.api.logout_user();
-            nickname = '';
+            nickname.value = '';
             showLoginButton();
             if (userBadge) userBadge.classList.remove('active');
         } catch (error) {
