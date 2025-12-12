@@ -130,15 +130,27 @@ if (document.getElementById("mcdir")) {
 
 // PyWebView Ready
 window.addEventListener('pywebviewready', async () => {
-    await loadOptions();
+    try {
+        await loadOptions();
 
-    window.pywebview.api.get_user_json().then(data => {
+        const data = await window.pywebview.api.get_user_json();
         if (document.getElementById("nickname")) document.getElementById("nickname").value = data.username || "";
         if (document.getElementById("mcdir")) document.getElementById("mcdir").value = data.mcdir || "";
-    });
 
-    await cargarPerfiles();
-    await loadVersions();
+        await cargarPerfiles();
+        await loadVersions();
+    } catch (error) {
+        console.error("Error loading initial data:", error);
+    } finally {
+        // Ocultar loader
+        const loader = document.getElementById('initialLoader');
+        if (loader) {
+            loader.classList.add('hidden');
+            setTimeout(() => {
+                loader.style.display = 'none';
+            }, 500);
+        }
+    }
 });
 
 async function launchGame() {
@@ -1322,6 +1334,7 @@ if (logoutBtn) {
     logoutBtn.addEventListener('click', async () => {
         try {
             await window.pywebview.api.logout_user();
+            nickname = '';
             showLoginButton();
             if (userBadge) userBadge.classList.remove('active');
         } catch (error) {
@@ -1552,6 +1565,9 @@ if (modsProfileSelect) {
             modSearchInput.value = '';
         }
         if (modSearchResults) {
+            modSearchResults.style.display = 'flex';
+            modSearchResults.style.justifyContent = 'center';
+            modSearchResults.style.alignItems = 'center';
             modSearchResults.innerHTML = `
                 <div class="mod-search-empty">
                     <i class="fas fa-search"></i>
@@ -1610,6 +1626,9 @@ if (modSearchInput) {
 
         if (query.length === 0) {
             // Clear results if search is empty
+            modSearchResults.style.display = 'flex';
+            modSearchResults.style.justifyContent = 'center';
+            modSearchResults.style.alignItems = 'center';
             modSearchResults.innerHTML = `
                 <div class="mod-search-empty">
                     <i class="fas fa-search"></i>
@@ -1621,6 +1640,7 @@ if (modSearchInput) {
 
         if (query.length >= 3) {
             searchTimeout = setTimeout(() => {
+                modSearchResults.style.display = 'grid';
                 searchMods();
             }, 500);
         }
@@ -1645,6 +1665,9 @@ async function searchMods() {
         modSearchLoading.style.display = 'none';
 
         if (!result.success) {
+            modSearchResults.style.display = 'flex';
+            modSearchResults.style.justifyContent = 'center';
+            modSearchResults.style.alignItems = 'center';
             modSearchResults.innerHTML = `
                 <div class="mod-search-empty">
                     <i class="fas fa-exclamation-triangle"></i>
@@ -1655,6 +1678,9 @@ async function searchMods() {
         }
 
         if (result.results.length === 0) {
+            modSearchResults.style.display = 'flex';
+            modSearchResults.style.justifyContent = 'center';
+            modSearchResults.style.alignItems = 'center';
             modSearchResults.innerHTML = `
                 <div class="mod-search-empty">
                     <i class="fas fa-search"></i>
@@ -1673,6 +1699,9 @@ async function searchMods() {
     } catch (error) {
         console.error('Error searching mods:', error);
         modSearchLoading.style.display = 'none';
+        modSearchResults.style.display = 'flex';
+        modSearchResults.style.justifyContent = 'center';
+        modSearchResults.style.alignItems = 'center';
         modSearchResults.innerHTML = `
             <div class="mod-search-empty">
                 <i class="fas fa-exclamation-triangle"></i>

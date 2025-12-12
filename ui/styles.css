@@ -1617,6 +1617,7 @@ label {
     text-align: center;
     padding: 80px 20px;
     color: #666;
+    align-self: center;
 }
 
 .mod-search-empty i {
@@ -1631,7 +1632,7 @@ label {
 
 /* Mod Grid */
 .mod-grid {
-    display: grid;
+    display: flex;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 20px;
     margin-top: 20px;
@@ -1641,6 +1642,9 @@ label {
     padding-right: 10px;
     /* Space for scrollbar */
     padding-bottom: 10px;
+
+    justify-content: center;
+    align-items: center;
 }
 
 /* Custom scrollbar for the grid */
@@ -1964,4 +1968,91 @@ label {
     border-radius: 10px;
     font-size: 11px;
     color: #5cb85c;
+}
+
+/* Initial Loader Styles */
+.loader-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.5s ease-out, visibility 0.5s ease-out;
+}
+
+.loader-container.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.cube-spinner {
+    width: 80px;
+    height: 80px;
+    transform-style: preserve-3d;
+    animation: spinner-rotate 2s infinite ease;
+}
+
+.cube-spinner div {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.5);
+}
+
+/* Faces */
+/* Translate Z is half of width (40px) */
+
+.cube-spinner .face-front {
+    transform: translateZ(40px);
+    background-image: url('img/grass_block_side.png');
+}
+
+.cube-spinner .face-back {
+    transform: rotateY(180deg) translateZ(40px);
+    background-image: url('img/grass_block_side.png');
+}
+
+.cube-spinner .face-right {
+    transform: rotateY(90deg) translateZ(40px);
+    background-image: url('img/grass_block_side.png');
+}
+
+.cube-spinner .face-left {
+    transform: rotateY(-90deg) translateZ(40px);
+    background-image: url('img/grass_block_side.png');
+}
+
+.cube-spinner .face-top {
+    transform: rotateX(90deg) translateZ(40px);
+    background-image: url('img/grass_block_top.png');
+}
+
+.cube-spinner .face-bottom {
+    transform: rotateX(-90deg) translateZ(40px);
+    background-image: url('img/grass_block_bottom.png');
+}
+
+@keyframes spinner-rotate {
+    0% {
+        transform: rotate(45deg) rotateX(-25deg) rotateY(25deg);
+    }
+
+    50% {
+        transform: rotate(45deg) rotateX(-385deg) rotateY(25deg);
+    }
+
+    100% {
+        transform: rotate(45deg) rotateX(-385deg) rotateY(385deg);
+    }
 }
