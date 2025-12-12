@@ -482,12 +482,13 @@ class Api:
         return result
 
     def get_vanilla_versions(self):
-        """Retorna lista de versiones vanilla (releases)"""
+        """Retorna lista de versiones vanilla (releases, snapshots, betas, alphas)"""
         try:
             all_versions = mll.utils.get_version_list()
             vanilla_versions = []
             for v in all_versions:
-                if v["type"] == "release":
+                # Incluir releases, snapshots, old_beta y old_alpha
+                if v["type"] in ["release", "snapshot", "old_beta", "old_alpha"]:
                     vanilla_versions.append(v["id"])
             return vanilla_versions
         except Exception as e:
