@@ -2,6 +2,7 @@ import webview
 import requests
 import json
 import os
+import sys
 import time
 import threading
 from packaging import version
@@ -304,28 +305,54 @@ def apply_update(downloaded_file, download_url):
         new_exe = downloaded_file
         extract_dir = None
     
-    # Crear script de actualización (batch file para Windows)
-    update_script = os.path.join(current_dir, "update.bat")
-    
-    with open(update_script, 'w') as f:
-        f.write('@echo off\n')
-        f.write('echo Aplicando actualizacion...\n')
-        f.write('timeout /t 2 /nobreak >nul\n')  # Esperar 2 segundos
-        f.write(f'move /y "{new_exe}" "{current_exe}"\n')  # Reemplazar ejecutable
+    # Crear script de actualización (batch file para Windows, sh para Linux)
+    if sys.platform.startswith('win'):
+        update_script = os.path.join(current_dir, "update.bat")
         
-        # Limpiar archivos temporales
-        if is_zip and extract_dir:
-            f.write(f'rmdir /s /q "{extract_dir}"\n')
-        f.write(f'del "{downloaded_file}"\n')
-        f.write(f'del "%~f0"\n')  # Eliminar el propio script
+        with open(update_script, 'w') as f:
+            f.write('@echo off\n')
+            f.write('echo Aplicando actualizacion...\n')
+            f.write('timeout /t 2 /nobreak >nul\n')  # Esperar 2 segundos
+            f.write(f'move /y "{new_exe}" "{current_exe}"\n')  # Reemplazar ejecutable
+            
+            # Limpiar archivos temporales
+            if is_zip and extract_dir:
+                f.write(f'rmdir /s /q "{extract_dir}"\n')
+            f.write(f'del "{downloaded_file}"\n')
+            f.write(f'del "%~f0"\n')  # Eliminar el propio script
+            
+            # Reiniciar el launcher
+            f.write(f'start "" "{current_exe}"\n')
         
-        # Reiniciar el launcher
-        f.write(f'start "" "{current_exe}"\n')
-    
-    # Ejecutar el script y cerrar el launcher actual
-    subprocess.Popen(['cmd', '/c', update_script], 
-                     creationflags=subprocess.CREATE_NO_WINDOW)
-    
+        # Ejecutar el script y cerrar el launcher actual
+        subprocess.Popen(['cmd', '/c', update_script], 
+                        creationflags=subprocess.CREATE_NO_WINDOW)
+                        
+    else:
+        # Linux / MacOS
+        update_script = os.path.join(current_dir, "update.sh")
+        
+        with open(update_script, 'w') as f:
+            f.write('#!/bin/sh\n')
+            f.write('echo "Aplicando actualizacion..."\n')
+            f.write('sleep 2\n')
+            f.write(f'mv -f "{new_exe}" "{current_exe}"\n')
+            f.write(f'chmod +x "{current_exe}"\n')
+            
+            if is_zip and extract_dir:
+                f.write(f'rm -rf "{extract_dir}"\n')
+            f.write(f'rm -f "{downloaded_file}"\n')
+            f.write(f'rm -f "{update_script}"\n')
+            
+            # Reiniciar el launcher
+            f.write(f'./"{os.path.basename(current_exe)}" &\n')
+            
+        # Dar permisos de ejecución al script
+        os.chmod(update_script, 0o755)
+        
+        # Ejecutar
+        subprocess.Popen(['/bin/sh', update_script])
+
     # NO hacer sys.exit aquí, dejar que el updater se cierre normalmente
     print("Actualización programada")
 

@@ -20,7 +20,6 @@ a = Analysis(
         'packaging.specifiers',
         'packaging.requirements',
         'minecraft_launcher_lib',
-        'messagebox._win32',
     ],
     hookspath=[],
     hooksconfig={},

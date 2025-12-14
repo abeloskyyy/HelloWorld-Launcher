@@ -1,6 +1,6 @@
 import webview
 import minecraft_launcher_lib as mll
-import messagebox
+from tkinter import messagebox
 import uuid
 import subprocess
 import json
@@ -11,10 +11,16 @@ import io
 import threading
 import time
 import psutil
-import pygetwindow as gw
+try:
+    import pygetwindow as gw
+except Exception:
+    gw = None
 from PIL import Image
 from datetime import datetime
 import sys
+
+# Platform detection
+IS_WINDOWS = sys.platform.startswith('win')
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -29,7 +35,62 @@ def resource_path(relative_path):
 
 
 """
-- soporte para Linux
+(myenv) ubuntu@ubuntu:/mnt/HelloWorld-Launcher$ python3 main.py
+Verificando actualizaciones...
+VMware: No 3D enabled (0, Success).
+MESA: error: ZINK: failed to choose pdev
+VMware: No 3D enabled (0, Success).
+MESA: error: ZINK: failed to choose pdev
+[pywebview] Main window failed to start
+Traceback (most recent call last):
+  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/event.py", line 41, in execute
+    value = func()
+            ^^^^^^
+  File "/mnt/HelloWorld-Launcher/updater.py", line 419, in start_update
+    check_and_update(window, api)
+  File "/mnt/HelloWorld-Launcher/updater.py", line 168, in check_and_update
+    window.evaluate_js(f"window.updaterAPI.setVersion('{local_version}')")
+  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/window.py", line 45, in wrapper
+    raise WebViewException('Main window failed to start')
+webview.errors.WebViewException: Main window failed to start
+[pywebview] Main window failed to start
+Traceback (most recent call last):
+  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/util.py", line 183, in inject_pywebview
+    func_list = generate_func()
+                ^^^^^^^^^^^^^^^
+  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/util.py", line 171, in generate_func
+    functions = get_functions(window._js_api)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/util.py", line 166, in get_functions
+    get_functions(attr, full_name, functions)
+  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/util.py", line 166, in get_functions
+    get_functions(attr, full_name, functions)
+  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/util.py", line 161, in get_functions
+    attr = getattr(obj, name)
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/dom/dom.py", line 18, in body
+    self._elements.get('body', Element(self.__window, 'body'))
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/dom/element.py", line 77, in __init__
+    self.__generate_events()
+  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/dom/element.py", line 36, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/dom/element.py", line 410, in __generate_events
+    events = self._window.evaluate_js(f""
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/window.py", line 45, in wrapper
+    raise WebViewException('Main window failed to start')
+webview.errors.WebViewException: Main window failed to start
+Encryption key initialized
+Iconos de perfiles copiados a profiles-img
+VMware: No 3D enabled (0, Success).
+MESA: error: ZINK: failed to choose pdev
+Splash screen closed successfully
+
+
+
+pasa que se abre el actualizador, bien. pero nunca se cierra. luego, cuando lo cierro yo, ya si se abre el main. ademas, el html del updater tarda mucho en cargar, parecen errores de la consola, miralo
 
 
 
@@ -63,7 +124,10 @@ def create_splash():
     
     # Make window transparent
     splash_window.attributes('-alpha', 1.0)  # Window opacity
-    splash_window.attributes('-transparentcolor', '#1a1a2e')  # Make this color transparent
+    try:
+        splash_window.attributes('-transparentcolor', '#1a1a2e')  # Make this color transparent
+    except Exception:
+        pass  # Not supported on Linux/Mac
     
     # Get screen dimensions
     screen_width = splash_window.winfo_screenwidth()
@@ -163,8 +227,13 @@ except Exception as e:
 
 
 # ------------- DIRECTORIOS -------------
-APPDATA = os.getenv("APPDATA")
-default_mc_dir = os.path.join(APPDATA, ".minecraft")
+if IS_WINDOWS:
+    APPDATA = os.getenv("APPDATA")
+    default_mc_dir = os.path.join(APPDATA, ".minecraft")
+else:
+    # Linux / macOS
+    default_mc_dir = os.path.expanduser("~/.minecraft")
+
 mc_dir = None
 launcher_dir = None
 
@@ -204,10 +273,12 @@ def get_or_create_encryption_key():
             f.write(encryption_key)
         
         # Hide file on Windows
-        try:
-            ctypes.windll.kernel32.SetFileAttributesW(key_file, 2)  # FILE_ATTRIBUTE_HIDDEN
-        except:
-            pass  # Ignore if not on Windows or fails
+        if IS_WINDOWS:
+            try:
+                ctypes.windll.kernel32.SetFileAttributesW(key_file, 2)  # FILE_ATTRIBUTE_HIDDEN
+            except:
+                pass  # Ignore if/when fails
+
     
     return encryption_key
 
@@ -948,7 +1019,11 @@ class Api:
                 minecraft_process = subprocess.Popen(minecraft_command, cwd=profile_dir)
             else:
                 # Hide console in normal mode
-                minecraft_process = subprocess.Popen(minecraft_command, cwd=profile_dir, creationflags=subprocess.CREATE_NO_WINDOW)
+                if IS_WINDOWS:
+                    minecraft_process = subprocess.Popen(minecraft_command, cwd=profile_dir, creationflags=subprocess.CREATE_NO_WINDOW)
+                else:
+                    # Linux/Mac doesn't have creationflags, and usually doesn't show console by default if not called from one
+                    minecraft_process = subprocess.Popen(minecraft_command, cwd=profile_dir)
             
             print(f"Minecraft process started with PID: {minecraft_process.pid}")
             
@@ -1021,7 +1096,7 @@ class Api:
                             except:
                                 pass
                         except ImportError:
-                            # Fallback if win32process not available
+                            # Fallback if win32process not available (Linux/Mac)
                             # Just check if title contains Minecraft
                             if "Minecraft" in window.title:
                                 window_found = True
@@ -1032,7 +1107,9 @@ class Api:
                             pass
                             
                 except Exception as e:
-                    print(f"Error checking windows: {e}")
+                    # If gw fails or not windows
+                    if IS_WINDOWS:
+                        print(f"Error checking windows: {e}")
                     pass
                 
                 time.sleep(0.5)  # Check every 0.5 seconds
