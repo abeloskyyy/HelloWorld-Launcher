@@ -35,67 +35,9 @@ def resource_path(relative_path):
 
 
 """
-(myenv) ubuntu@ubuntu:/mnt/HelloWorld-Launcher$ python3 main.py
-Verificando actualizaciones...
-VMware: No 3D enabled (0, Success).
-MESA: error: ZINK: failed to choose pdev
-VMware: No 3D enabled (0, Success).
-MESA: error: ZINK: failed to choose pdev
-[pywebview] Main window failed to start
-Traceback (most recent call last):
-  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/event.py", line 41, in execute
-    value = func()
-            ^^^^^^
-  File "/mnt/HelloWorld-Launcher/updater.py", line 419, in start_update
-    check_and_update(window, api)
-  File "/mnt/HelloWorld-Launcher/updater.py", line 168, in check_and_update
-    window.evaluate_js(f"window.updaterAPI.setVersion('{local_version}')")
-  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/window.py", line 45, in wrapper
-    raise WebViewException('Main window failed to start')
-webview.errors.WebViewException: Main window failed to start
-[pywebview] Main window failed to start
-Traceback (most recent call last):
-  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/util.py", line 183, in inject_pywebview
-    func_list = generate_func()
-                ^^^^^^^^^^^^^^^
-  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/util.py", line 171, in generate_func
-    functions = get_functions(window._js_api)
-                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/util.py", line 166, in get_functions
-    get_functions(attr, full_name, functions)
-  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/util.py", line 166, in get_functions
-    get_functions(attr, full_name, functions)
-  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/util.py", line 161, in get_functions
-    attr = getattr(obj, name)
-           ^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/dom/dom.py", line 18, in body
-    self._elements.get('body', Element(self.__window, 'body'))
-                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/dom/element.py", line 77, in __init__
-    self.__generate_events()
-  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/dom/element.py", line 36, in wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/dom/element.py", line 410, in __generate_events
-    events = self._window.evaluate_js(f""
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ubuntu/myenv/lib/python3.12/site-packages/webview/window.py", line 45, in wrapper
-    raise WebViewException('Main window failed to start')
-webview.errors.WebViewException: Main window failed to start
-Encryption key initialized
-Iconos de perfiles copiados a profiles-img
-VMware: No 3D enabled (0, Success).
-MESA: error: ZINK: failed to choose pdev
-Splash screen closed successfully
-
-
-
-pasa que se abre el actualizador, bien. pero nunca se cierra. luego, cuando lo cierro yo, ya si se abre el main. ademas, el html del updater tarda mucho en cargar, parecen errores de la consola, miralo
-
-
-
 - reseñas
 - microsoft login
+- noticias de minecraft (mll.get_minecraft_news())
 
 
 
@@ -1009,23 +951,38 @@ class Api:
             
             print(f"Launching Minecraft with command: {' '.join(minecraft_command[:3])}...")
             
+            # Prepare log file
+            log_path = os.path.join(launcher_dir, "game_output.log")
+            log_file = open(log_path, "w", encoding="utf-8")
+            
             # Launch Minecraft
             # Check developer mode for console visibility
             user_data = load_user_data()
             dev_mode = user_data.get("dev_mode", False)
             
-            if dev_mode:
-                # Show console in developer mode
-                minecraft_process = subprocess.Popen(minecraft_command, cwd=profile_dir)
-            else:
-                # Hide console in normal mode
-                if IS_WINDOWS:
-                    minecraft_process = subprocess.Popen(minecraft_command, cwd=profile_dir, creationflags=subprocess.CREATE_NO_WINDOW)
-                else:
-                    # Linux/Mac doesn't have creationflags, and usually doesn't show console by default if not called from one
-                    minecraft_process = subprocess.Popen(minecraft_command, cwd=profile_dir)
+            # Siempre capturamos stderr/stdout en el archivo para debug
+            # Si dev_mode es True, subprocess.Popen se comportará normalmente escribiendo al archivo
             
-            print(f"Minecraft process started with PID: {minecraft_process.pid}")
+            if IS_WINDOWS:
+                creation_flags = subprocess.CREATE_NO_WINDOW if not dev_mode else 0
+                minecraft_process = subprocess.Popen(
+                    minecraft_command, 
+                    cwd=profile_dir, 
+                    stdout=log_file, 
+                    stderr=subprocess.STDOUT,
+                    creationflags=creation_flags,
+                    text=True
+                )
+            else:
+                minecraft_process = subprocess.Popen(
+                    minecraft_command, 
+                    cwd=profile_dir,
+                    stdout=log_file, 
+                    stderr=subprocess.STDOUT,
+                    text=True
+                )
+            
+            print(f"Minecraft process started with PID: {minecraft_process.pid}. Logs redirected to {log_path}")
             
             # Monitor process in separate thread
             monitor_thread = threading.Thread(target=self._monitor_minecraft_process, args=(minecraft_process,), daemon=True)
@@ -1056,6 +1013,34 @@ class Api:
                 if process.poll() is not None:
                     # Process ended before window appeared
                     print("Minecraft process ended prematurely")
+                    
+                    # Read log file to find error
+                    log_file_path = os.path.join(launcher_dir, "game_output.log")
+                    error_message = "Minecraft se cerró inesperadamente."
+                    error_type = "crash"
+                    
+                    try:
+                        if os.path.exists(log_file_path):
+                            with open(log_file_path, "r", encoding="utf-8", errors="ignore") as f:
+                                log_content = f.read()
+                                
+                                # Analyze log for known errors
+                                if "UnsupportedClassVersionError" in log_content:
+                                    error_type = "java"
+                                    error_message = "Tu versión de Java es incompatible (se requiere una más reciente)."
+                                elif "Could not reserve enough space" in log_content:
+                                    error_type = "memory"
+                                    error_message = "No se pudo reservar suficiente memoria RAM."
+                                    
+                                # Escape for JS
+                                log_content_js = log_content.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
+                                
+                                # Send to frontend
+                                self._send_launch_error(error_type, error_message, log_content_js)
+                    except Exception as e:
+                        print(f"Error reading log file: {e}")
+                        self._send_launch_error("crash", f"Error desconocido: {e}", "")
+                        
                     break
                 
                 # Search for Minecraft window by title and verify it's a Java process
@@ -1142,7 +1127,16 @@ class Api:
             print(f"CRITICAL ERROR in monitor thread: {e}")
             import traceback
             traceback.print_exc()
-    
+    def _send_launch_error(self, error_type, message, log_content):
+        """Send launch error to frontend"""
+        print(f"Sending launch error: {error_type} - {message}")
+        try:
+            webview.windows[0].evaluate_js(
+                f"if(typeof showLaunchError === 'function') showLaunchError('{error_type}', '{message}', '{log_content}');"
+            )
+        except Exception as e:
+            print(f"Error sending launch error to UI: {e}")
+
     def _is_child_process(self, child_pid, parent_pid):
         """Check if child_pid is a child of parent_pid"""
         try:

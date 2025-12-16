@@ -657,6 +657,20 @@ select:disabled {
     font-size: 10px;
     color: #5cb85c;
     font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.option-tag:hover {
+    filter: brightness(1.2);
+    transform: translateY(-1px);
+}
+
+.option-tag.active {
+    box-shadow: 0 0 5px currentColor;
+    border-width: 1px;
+    font-weight: 700;
+    background-color: rgba(92, 184, 92, 0.4);
 }
 
 .option-tag.forge {

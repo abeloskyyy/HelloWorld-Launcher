@@ -47,6 +47,7 @@ let profiles = {};
 let editingProfileId = null;
 let selectedImageData = null;
 let isDownloading = false;
+let activeProfileFilter = null;
 
 // Función global para actualizar el progreso de instalación
 // Función global para actualizar el progreso de instalación
@@ -371,6 +372,21 @@ async function loadOptions() {
         return dateB - dateA;
     });
 
+    // Filtering logic
+    const filteredProfiles = activeProfileFilter
+        ? profilesArray.filter(p => {
+            const versionLower = p.version.toLowerCase();
+            let type = 'vanilla';
+            if (versionLower.includes('forge')) type = 'forge';
+            else if (versionLower.includes('fabric')) type = 'fabric';
+
+            return type === activeProfileFilter;
+        })
+        : profilesArray;
+
+    const displayProfiles = activeProfileFilter ? filteredProfiles : profilesArray;
+
+
     if (profilesArray.length === 0) {
         // No hay perfiles: Ocultar icono y mostrar opción de crear
         if (document.getElementById('selectedIcon')) {
@@ -402,7 +418,33 @@ async function loadOptions() {
             document.getElementById('selectedIcon').style.display = 'block';
         }
 
-        for (const profile of profilesArray) {
+        // If filtering and no results, show message
+        if (activeProfileFilter && displayProfiles.length === 0) {
+            if (selectOptions) {
+                const emptyMsg = document.createElement('div');
+                emptyMsg.style.padding = '20px';
+                emptyMsg.style.textAlign = 'center';
+                emptyMsg.style.color = '#aaa';
+                emptyMsg.innerHTML = `<i class="fas fa-filter"></i> No hay perfiles ${activeProfileFilter}`;
+
+                // Add clear filter button
+                const clearBtn = document.createElement('button');
+                clearBtn.className = 'btn-secondary btn-small';
+                clearBtn.style.marginTop = '10px';
+                clearBtn.textContent = 'Limpiar filtro';
+                clearBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    filterProfiles(activeProfileFilter, e); // Toggle off
+                };
+
+                emptyMsg.appendChild(document.createElement('br'));
+                emptyMsg.appendChild(clearBtn);
+
+                selectOptions.appendChild(emptyMsg);
+            }
+        }
+
+        for (const profile of displayProfiles) {
             const id = profile.id;
 
             if (originalSelect) {
@@ -418,9 +460,18 @@ async function loadOptions() {
                 option.dataset.value = id;
 
                 let tags = '';
-                if (profile.type === 'forge') tags = '<span class="option-tag forge">FORGE</span>';
-                else if (profile.type === 'fabric') tags = '<span class="option-tag fabric">FABRIC</span>';
-                else tags = '<span class="option-tag">VANILLA</span>';
+                const versionLower = profile.version.toLowerCase();
+                let type = 'vanilla';
+                if (versionLower.includes('forge')) type = 'forge';
+                else if (versionLower.includes('fabric')) type = 'fabric';
+
+                const isForgeActive = activeProfileFilter === 'forge' ? 'active' : '';
+                const isFabricActive = activeProfileFilter === 'fabric' ? 'active' : '';
+                const isVanillaActive = activeProfileFilter === 'vanilla' ? 'active' : '';
+
+                if (type === 'forge') tags = `<span class="option-tag forge ${isForgeActive}" onclick="filterProfiles('forge', event)">FORGE</span>`;
+                else if (type === 'fabric') tags = `<span class="option-tag fabric ${isFabricActive}" onclick="filterProfiles('fabric', event)">FABRIC</span>`;
+                else tags = `<span class="option-tag ${isVanillaActive}" onclick="filterProfiles('vanilla', event)">VANILLA</span>`;
 
                 if (profile.mods) tags += `<span class="option-tag">${profile.mods} MODS</span>`;
 
@@ -438,17 +489,86 @@ async function loadOptions() {
                     </div>
                 `;
 
-                option.addEventListener('click', () => selectOption(id, profile));
+                option.addEventListener('click', (e) => {
+                    // Prevent selection if clicking a tag
+                    if (e.target.classList.contains('option-tag')) return;
+                    selectOption(id, profile);
+                });
                 selectOptions.appendChild(option);
             }
         }
 
-        if (profilesArray.length > 0) {
+        if (profilesArray.length > 0 && !activeProfileFilter) {
             const firstProfile = profilesArray[0];
             selectOption(firstProfile.id, firstProfile);
         }
     }
 }
+
+window.filterProfiles = function (type, event) {
+    if (event) event.stopPropagation();
+
+    if (activeProfileFilter === type) {
+        activeProfileFilter = null; // Toggle off
+    } else {
+        activeProfileFilter = type;
+    }
+
+    // Reload options to apply filter
+    loadOptions();
+
+    // Keep dropdown open
+    if (selectTrigger && !selectTrigger.classList.contains('active')) {
+        toggleSelect();
+    }
+
+    // Focus search or something? No, just keep open.
+    // If we closed it, re-open it.
+    if (selectOptions && !selectOptions.classList.contains('active')) {
+        selectOptions.classList.add('active');
+        selectTrigger.classList.add('active');
+    }
+};
+
+// Error Modal Handling
+window.showLaunchError = function (type, message, log) {
+    const modal = document.getElementById('errorModal');
+    const title = document.getElementById('errorModalTitle');
+    const msg = document.getElementById('errorModalMessage');
+    const logArea = document.getElementById('errorLogContent');
+    const javaSection = document.getElementById('javaDownloadSection');
+
+    if (!modal) return;
+
+    msg.textContent = message;
+    logArea.value = log;
+
+    // Reset specific sections
+    javaSection.style.display = 'none';
+
+    if (type === 'java') {
+        title.textContent = 'Error de Java';
+        javaSection.style.display = 'block';
+    } else {
+        title.textContent = 'Error de Lanzamiento';
+    }
+
+    modal.classList.add('show');
+};
+
+window.closeErrorModal = function () {
+    const modal = document.getElementById('errorModal');
+    if (modal) modal.classList.remove('show');
+};
+
+window.copyErrorLog = function () {
+    const logArea = document.getElementById('errorLogContent');
+    if (logArea) {
+        logArea.select();
+        document.execCommand('copy');
+        alert('Log copiado al portapapeles');
+    }
+};
 
 function selectOption(id, profile) {
     if (originalSelect) originalSelect.value = id;

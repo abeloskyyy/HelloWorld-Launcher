@@ -94,9 +94,9 @@ def get_remote_version(repo_url, timeout=TIMEOUT_API):
             remote_version = data["tag_name"].lstrip("v")
             download_url = None
             
-            # Buscar el asset .exe o .zip
+            # Buscar el asset .exe
             for asset in data.get("assets", []):
-                if asset["name"].endswith((".exe", ".zip")):
+                if asset["name"].endswith(".exe"):
                     download_url = asset["browser_download_url"]
                     break
             
@@ -204,7 +204,7 @@ def check_and_update(window, api):
     # Descargar actualización
     download_success = download_file_with_progress(
         remote_data["download_url"],
-        "update_temp.zip",
+        "update_temp.exe",
         window,
         api  # Pasar la API correctamente
     )
@@ -228,7 +228,7 @@ def check_and_update(window, api):
     
     # Aplicar actualización
     try:
-        apply_update("update_temp.zip", remote_data["download_url"])
+        apply_update("update_temp.exe")
     except Exception as e:
         print(f"Error aplicando actualización: {e}")
     
@@ -245,18 +245,13 @@ def check_and_update(window, api):
     return True
 
 
-def apply_update(downloaded_file, download_url):
+def apply_update(downloaded_file):
     """
-    Aplica la actualización descargada.
-    Soporta archivos .zip y .exe
+    Aplica la actualización descargada (solo .exe).
     """
-    import zipfile
     import shutil
     import sys
     import subprocess
-    
-    # Determinar si es .zip o .exe por la URL o nombre
-    is_zip = downloaded_file.endswith('.zip') or download_url.endswith('.zip')
     
     # Obtener ruta del ejecutable actual
     if getattr(sys, 'frozen', False):
@@ -268,42 +263,10 @@ def apply_update(downloaded_file, download_url):
         return
     
     current_dir = os.path.dirname(current_exe)
-    exe_name = os.path.basename(current_exe)
     
-    if is_zip:
-        # Extraer el .zip
-        extract_dir = os.path.join(current_dir, "update_temp")
-        
-        try:
-            # Crear directorio temporal
-            if os.path.exists(extract_dir):
-                shutil.rmtree(extract_dir)
-            os.makedirs(extract_dir)
-            
-            # Extraer contenido
-            with zipfile.ZipFile(downloaded_file, 'r') as zip_ref:
-                zip_ref.extractall(extract_dir)
-            
-            # Buscar el nuevo .exe en el directorio extraído
-            new_exe = None
-            for root, dirs, files in os.walk(extract_dir):
-                for file in files:
-                    if file.endswith('.exe'):
-                        new_exe = os.path.join(root, file)
-                        break
-                if new_exe:
-                    break
-            
-            if not new_exe:
-                raise Exception("No se encontró .exe en el archivo descargado")
-            
-        except Exception as e:
-            print(f"Error extrayendo actualización: {e}")
-            raise
-    else:
-        # Es un .exe directo
-        new_exe = downloaded_file
-        extract_dir = None
+    # Es un .exe directo
+    new_exe = downloaded_file
+    extract_dir = None
     
     # Crear script de actualización (batch file para Windows, sh para Linux)
     if sys.platform.startswith('win'):
