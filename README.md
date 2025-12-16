@@ -48,7 +48,7 @@ HelloWorld Launcher es un launcher para Minecraft: Java Edition. Es de código a
 1. Descarga la última versión desde la sección **Releases**.
 2. Asegúrate de tener **Java 17+** instalado.
 3. Ejecuta el archivo del launcher.
-> SI APARECE UN AVISO DE VIRUS, TRANQUILO, LA APP NO ESTÁ FIRMADA, YA QUE CUESTA DINERO.
+> SI APARECE UN AVISO DE VIRUS, TRANQUILO, ES PORQUE LA APP NO ESTÁ FIRMADA, YA QUE CUESTA DINERO.
 4. Inicia sesión o usa el modo offline.
 
 > No se instalan programas adicionales ni se modifica el sistema.
