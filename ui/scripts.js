@@ -1,4 +1,4 @@
-// UI Elements
+﻿// UI Elements
 const selectTrigger = document.getElementById('selectTrigger');
 const selectOptions = document.getElementById('selectOptions');
 const customSelect = document.getElementById('customSelect');
@@ -1107,6 +1107,11 @@ const loaderTypeBtns = document.querySelectorAll('.loader-type-btn');
 const cancelDownloadBtn2 = document.getElementById('cancelDownloadBtn2');
 
 let currentLoaderType = 'vanilla';
+const versionCache = {
+    vanilla: null,
+    fabric: null,
+    forge: null
+};
 
 if (openDownloadModalBtn) {
     openDownloadModalBtn.addEventListener('click', () => {
@@ -1145,6 +1150,26 @@ if (downloadMcVersionSelect) {
     });
 }
 
+// Preload versions on startup
+async function preloadVersions() {
+    console.log("Preloading versions...");
+    try {
+        // Fetch in parallel
+        const [vanilla, fabric, forge] = await Promise.all([
+            window.pywebview.api.get_vanilla_versions(),
+            window.pywebview.api.get_fabric_mc_versions(),
+            window.pywebview.api.get_forge_mc_versions()
+        ]);
+
+        versionCache.vanilla = vanilla;
+        versionCache.fabric = fabric;
+        versionCache.forge = forge;
+        console.log("Versions preloaded successfully");
+    } catch (err) {
+        console.error("Error preloading versions:", err);
+    }
+}
+
 async function openDownloadModal() {
     if (downloadModal) downloadModal.classList.add('show');
 
@@ -1174,7 +1199,7 @@ async function switchLoaderType(type) {
         loaderVersionGroup.style.display = 'none';
     } else {
         loaderVersionGroup.style.display = 'flex';
-        downloadLoaderVersionSelect.innerHTML = '<option value="">Selecciona una versión de MC</option>';
+        downloadLoaderVersionSelect.innerHTML = '<option value="">Cargando...</option>';
     }
 
     // Load MC Versions
@@ -1187,12 +1212,20 @@ async function loadMcVersions(type) {
 
     try {
         let versions = [];
-        if (type === 'vanilla') {
-            versions = await window.pywebview.api.get_vanilla_versions();
-        } else if (type === 'fabric') {
-            versions = await window.pywebview.api.get_fabric_mc_versions();
-        } else if (type === 'forge') {
-            versions = await window.pywebview.api.get_forge_mc_versions();
+
+        // Check cache first
+        if (versionCache[type]) {
+            versions = versionCache[type];
+        } else {
+            // Fallback to fetch if not cached (and update cache)
+            if (type === 'vanilla') {
+                versions = await window.pywebview.api.get_vanilla_versions();
+            } else if (type === 'fabric') {
+                versions = await window.pywebview.api.get_fabric_mc_versions();
+            } else if (type === 'forge') {
+                versions = await window.pywebview.api.get_forge_mc_versions();
+            }
+            versionCache[type] = versions;
         }
 
         downloadMcVersionSelect.innerHTML = '';
@@ -1227,7 +1260,7 @@ async function loadMcVersions(type) {
 async function loadLoaderVersions(type, mcVersion) {
     if (!mcVersion) return;
 
-    downloadLoaderVersionSelect.innerHTML = '<option value="">Cargando loaders...</option>';
+    downloadLoaderVersionSelect.innerHTML = '<option value="">Cargando...</option>';
     downloadLoaderVersionSelect.disabled = true;
 
     try {
@@ -1536,6 +1569,8 @@ if (logoutBtn) {
 
 // Initialize login state when pywebview is ready
 window.addEventListener('pywebviewready', async () => {
+    // Start initializing things in parallel
+    preloadVersions(); // Don't await, let it run in background
     await checkLoginState();
 });
 
@@ -1914,6 +1949,8 @@ function createModCard(mod) {
         `<span class="mod-category-badge">${cat}</span>`
     ).join('');
 
+    card.onclick = () => openModDetails(mod.id);
+
     card.innerHTML = `
         <div class="mod-card-header">
             ${iconHtml}
@@ -1933,7 +1970,7 @@ function createModCard(mod) {
             ${categories}
         </div>
         <div class="mod-card-actions">
-            <button id="btn-mod-${mod.id}" class="btn-primary" onclick="downloadModFromCard('${mod.id}', '${mod.slug}')">
+            <button id="btn-mod-${mod.id}" class="btn-primary" onclick="event.stopPropagation(); downloadModFromCard('${mod.id}', '${mod.slug}')">
                 <i class="fas fa-download"></i> Descargar
             </button>
         </div>
@@ -1941,6 +1978,101 @@ function createModCard(mod) {
 
     return card;
 }
+
+// Mod Details Modal Logic
+window.openModDetails = async function (projectId) {
+    const modal = document.getElementById('modDetailsModal');
+    if (!modal) return;
+
+    // Reset content
+    document.getElementById('modDetailTitle').textContent = 'Cargando...';
+    document.getElementById('modDetailAuthor').textContent = '';
+    document.getElementById('modDetailDescription').innerHTML = '<div style="text-align: center; padding: 50px;"><span class="spinner"></span></div>';
+    document.getElementById('modDetailIcon').src = '';
+    document.getElementById('modDetailIcon').style.display = 'none';
+    document.getElementById('modDetailGallery').innerHTML = '';
+    document.getElementById('modDetailCategories').innerHTML = '';
+
+    modal.classList.add('show');
+
+    try {
+        // First set preliminary data if we have it from the search results? 
+        // We could pass the whole mod object to openModDetails but for now let's just fetch full details.
+
+        const result = await window.pywebview.api.get_mod_details(projectId);
+
+        if (!result.success) {
+            document.getElementById('modDetailDescription').innerHTML = `<p style="color: red;">Error: ${result.error}</p>`;
+            return;
+        }
+
+        const details = result.details;
+
+        // Update UI
+        document.getElementById('modDetailTitle').textContent = details.title;
+        // document.getElementById('modDetailAuthor').textContent = `por ${details.author}`; // Author often unknown via this endpoint
+        document.getElementById('modDetailAuthor').style.display = 'none'; // Hide if unknown
+
+        if (details.icon_url) {
+            document.getElementById('modDetailIcon').src = details.icon_url;
+            document.getElementById('modDetailIcon').style.display = 'block';
+        }
+
+        // Render Markdown
+        if (details.body && window.marked) {
+            document.getElementById('modDetailDescription').innerHTML = marked.parse(details.body);
+        } else {
+            document.getElementById('modDetailDescription').textContent = details.description || 'Sin descripción';
+        }
+
+        // Stats
+        document.getElementById('modDetailDownloads').textContent = details.downloads.toLocaleString();
+
+        // Helper date format
+        const date = new Date(details.updated);
+        document.getElementById('modDetailUpdated').textContent = date.toLocaleDateString();
+
+        document.getElementById('modDetailLicense').textContent = details.license;
+
+        // Categories
+        const catsHtml = details.categories.map(cat =>
+            `<span class="mod-category-badge">${cat}</span>`
+        ).join('');
+        document.getElementById('modDetailCategories').innerHTML = catsHtml;
+
+        // Gallery
+        const galleryContainer = document.getElementById('modDetailGallery');
+        if (details.gallery && details.gallery.length > 0) {
+            details.gallery.forEach(img => {
+                const imgEl = document.createElement('img');
+                imgEl.src = img.url;
+                imgEl.className = 'gallery-image';
+                imgEl.onclick = () => window.open(img.url, '_blank'); // Simple view
+                galleryContainer.appendChild(imgEl);
+            });
+        } else {
+            galleryContainer.innerHTML = '<span style="color: #666; font-size: 13px;">Sin imágenes</span>';
+        }
+
+        // Update install button
+        const installBtn = document.getElementById('modDetailInstallBtn');
+        installBtn.onclick = () => {
+            closeModDetails();
+            downloadModFromCard(details.id, details.slug);
+        };
+
+    } catch (error) {
+        console.error("Error opening mod details:", error);
+        document.getElementById('modDetailDescription').innerHTML = `<p style="color: red;">Error inesperado</p>`;
+    }
+};
+
+window.closeModDetails = function () {
+    const modal = document.getElementById('modDetailsModal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+};
 
 // Event Listeners for Mod Download Progress
 window.onModDownloadProgress = function (projectId, percentage, status) {
@@ -2291,3 +2423,70 @@ window.addEventListener('pywebviewready', async () => {
     }, 500);
 });
 
+// --- Starfield Animation (Canvas) ---
+const canvas = document.getElementById('starfield');
+if (canvas) {
+    const ctx = canvas.getContext('2d');
+    let width, height;
+
+    // Star properties
+    const stars = [];
+    const numStars = 200;
+    const speed = 0.5;
+
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+    }
+
+    function initStars() {
+        stars.length = 0;
+        for (let i = 0; i < numStars; i++) {
+            stars.push({
+                x: Math.random() * width,
+                y: Math.random() * height,
+                size: Math.random() * 2,
+                opacity: Math.random(),
+                speed: Math.random() * speed + 0.1
+            });
+        }
+    }
+
+    function animate() {
+        ctx.clearRect(0, 0, width, height);
+
+        ctx.fillStyle = "white";
+
+        for (let i = 0; i < stars.length; i++) {
+            const star = stars[i];
+
+            // Move star
+            star.y -= star.speed;
+
+            // Reset if off screen
+            if (star.y < 0) {
+                star.y = height;
+                star.x = Math.random() * width;
+            }
+
+            // Draw star
+            ctx.globalAlpha = star.opacity;
+            ctx.beginPath();
+            ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    window.addEventListener('resize', () => {
+        resize();
+        initStars(); // Re-init on resize to fill screen
+    });
+
+    resize();
+    initStars();
+    animate();
+}

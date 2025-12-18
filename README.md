@@ -1,134 +1,147 @@
 # HelloWorld Launcher
 
-HelloWorld Launcher es un launcher para Minecraft: Java Edition. Es de código abierto, totalmente gratis y libre de virus. Tiene funcionalidades que otros launchers no tienen, como la instalación de mods, la personalización de perfiles para jugar, y hasta la posibilidad de abrir más de un solo juego a la vez.
+HelloWorld Launcher is a launcher for Minecraft: Java Edition. It is open source, completely free, and virus-free. It has features that other launchers do not have, such as mod installation, profile customization, and even the ability to open more than one game instance at a time.
 
-
-### Comparativa con otros launchers
-|                       |     HelloWorld     |     Launcher Oficial     | TLauncher |
-|-----------------------|--------------------|--------------------------|-----------|
-| Instalación de mods            |     ✅     |        ❌       |     ✅    |
-| Velocidad de ejecución         | ~7 s       |      ~35 s       |   ~55 s   |
-| Uso de RAM                     |   Bajo     |      Medio       |    Alto   |
-| Seguridad                      |     Alta   |       Muy alta   |    ...    |
-| Modo offline                   |     Sí     |        Sí        |    No     |
-| Arranque sin telemetría        |     Sí     |        No        |    No     |
-| Tamaño del programa            |   Ligero   |      Pesado      |   Pesado  |
-| Personalización de JVM            |    Alta    |        Baja     |    Media    |
-| Rendimiento en PCs flojos         |    Muy bueno |    Decente   |    Normal   |
-| Obligatorio cuenta Microsoft         |     No     |        Sí       |     No      |
-| Gestión avanzada de perfiles      |     Sí     |        Limitado |     Poca      |
-
+## Comparison with other launchers
+| | HelloWorld | Official Launcher | TLauncher |
+|---|---|---|---|
+| Mod Installation | ✅ | ❌ | ✅ |
+| Execution Speed | ~7 s | ~35 s | ~55 s |
+| RAM Usage | Low | Medium | High |
+| Security | High | Very High | ... |
+| Offline Mode | Yes | Yes | No |
+| No Telemetry | Yes | No | No |
+| Program Size | Lightweight | Heavy | Heavy |
+| JVM Customization | High | Low | Medium |
+| Performance on Low-end PCs | Very Good | Decent | Normal |
+| Microsoft Account Mandatory | No | Yes | No |
+| Advanced Profile Management | Yes | Limited | Low |
 
 ---
 
-
-### Requisitos mínimos del sistema
+### Minimum System Requirements
 - Windows 32bit
 - Java 17
 - 1 GB RAM
-- 100 MB libres
+- 100 MB free space
 
-### Requisitos recomendados del sistema
+### Recommended System Requirements
 - Windows 64bit
 - Java 17
 - 6 GB RAM
-- 2 GB libres
+- 2 GB free space
 
 ---
 
-### Capturas de pantalla
+### Screenshots
 
+![Play Screen](screenshots/play.png)
+*Main Play Screen*
 
+![Profiles](screenshots/profiles.png)
+*Profile Management*
 
+![Create Profile](screenshots/create_profile.png)
+*Creating a New Profile*
 
----
+![Version Download](screenshots/version_download.png)
+*Downloading Minecraft Versions*
 
-## Instalación
+![Download Mods](screenshots/download_mods.png)
+*Mod Search and Download*
 
-1. Descarga la última versión desde la sección **Releases**.
-2. Asegúrate de tener **Java 17+** instalado.
-3. Ejecuta el archivo del launcher.
-> SI APARECE UN AVISO DE VIRUS, TRANQUILO, ES PORQUE LA APP NO ESTÁ FIRMADA, YA QUE CUESTA DINERO.
-4. Inicia sesión o usa el modo offline.
-
-> No se instalan programas adicionales ni se modifica el sistema.
-
----
-
-## Uso rápido
-
-* **Instalar versión:** Versiones vanilla, Forge o Fabric.
-* **Iniciar sesión:** Inicia sesión con tu cuenta de Microsoft o usa el modo offline.
-* **Crear perfil:** Personaliza el directorio de juego y la versión.
-* **Mods:** Añade, elimina o desactiva mods por perfil.
-* **JVM:** Ajusta RAM, argumentos y versión de Java.
-* **Múltiples instancias:** Abre varios juegos a la vez.
+![Downloaded Mods](screenshots/downloaded_mods.png)
+*Installed Mods Management*
 
 ---
 
-## Funciones destacadas
+## Installation
 
-* **Privacidad primero:** sin telemetría ni rastreadores.
-* **Arranque rápido:** optimizado para abrir en segundos.
-* **Gestión de mods integrada:** sin herramientas externas.
-* **Perfiles inteligentes:** cada mundo con su configuración.
-* **Ligero:** ideal para PCs antiguos o con pocos recursos.
-* **Open Source:** código auditable y modificable.
+1. Download the latest version from the **Releases** section.
+2. Make sure you have **Java 17+** installed.
+3. Run the launcher file.
+> IF A VIRUS WARNING APPEARS, DON'T WORRY, IT IS BECAUSE THE APP IS NOT SIGNED, AS IT COSTS MONEY.
+4. Log in or use offline mode.
 
----
-
-## Seguridad y privacidad
-
-* No recopila datos del usuario.
-* No envía información a servidores externos.
-* Código abierto para auditoría completa.
-* Sin instaladores ocultos ni software añadido.
+> No additional programs are installed and the system is not modified.
 
 ---
 
-## Preguntas frecuentes (FAQ)
+## Quick Start
 
-**¿Por qué pone que el launcher tiene virus?**
-Porque la app no está firmada, ya que cuesta dinero.
-
-**¿Es legal?**
-El launcher es legal. El uso de Minecraft utiliza una copia del juego conforme a los términos de Mojang/Microsoft.
-
-**¿Funciona con mods grandes?**
-Sí, incluyendo modpacks pesados si tu sistema lo permite.
-
-**¿Soporta Fabric y Forge?**
-Sí, con perfiles independientes.
-
-**¿Puedo usarlo sin Internet?**
-Sí, mediante el modo offline.
+* **Install Version:** Vanilla, Forge, or Fabric versions.
+* **Log In:** Log in with your Microsoft account or use offline mode.
+* **Create Profile:** Customize the game directory and version.
+* **Mods:** Add, remove, or disable mods per profile.
+* **JVM:** Adjust RAM, arguments, and Java version.
+* **Multiple Instances:** Open multiple games at once.
 
 ---
 
-## Desarrollo
+## Key Features
 
-* Lenguaje principal: Python
-* Compatible con Windows
-* Arquitectura modular para añadir funciones fácilmente
+* **Privacy First:** No telemetry or trackers.
+* **Fast Startup:** Optimized to open in seconds.
+* **Integrated Mod Management:** No external tools needed.
+* **Smart Profiles:** Each world with its own configuration.
+* **Lightweight:** Ideal for old PCs or those with few resources.
+* **Open Source:** Auditable and modifiable code.
 
-### Contribuir
+---
 
-1. Haz un fork del repositorio.
-2. Crea una rama con tu mejora.
-3. Envía un Pull Request.
+## Security and Privacy
 
-Las ideas y sugerencias son bienvenidas.
+* Does not collect user data.
+* Does not send information to external servers.
+* Open source for full auditing.
+* No hidden installers or added software.
+
+---
+
+## FAQ
+
+**Why does it say the launcher has a virus?**
+Because the app is not signed, as code signing certificates cost money.
+
+**Is it legal?**
+The launcher is legal. Using Minecraft utilizes a copy of the game in accordance with Mojang/Microsoft terms.
+
+**Does it work with large mods?**
+Yes, including heavy modpacks if your system allows it.
+
+**Does it support Fabric and Forge?**
+Yes, with independent profiles.
+
+**Can I use it without Internet?**
+Yes, via offline mode.
+
+---
+
+## Development
+
+* Main Language: Python
+* Compatible with Windows
+* Modular architecture to easily add features
+
+### Contributing
+
+1. Fork the repository.
+2. Create a branch with your improvement.
+3. Submit a Pull Request.
+
+Ideas and suggestions are welcome.
 
 ---
 
 ## Roadmap
 
-* Sistema de actualizaciones automáticas
-* Descarga de mods
-* Mejoras en la interfaz
+* Automatic update system
+* Mod downloading
+* Interface improvements
 
 ---
 
-## Soporte
+## Support
 
-Si encuentras errores o tienes sugerencias, abre un **Issue** en GitHub Issues.
+If you find bugs or have suggestions, open an **Issue** on GitHub Issues.
+

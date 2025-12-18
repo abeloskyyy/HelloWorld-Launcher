@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 
 <body>
@@ -19,6 +20,11 @@
             <div class="face-bottom"></div>
             <div class="face-front"></div>
         </div>
+    </div>
+
+    <!-- Background Animation Container -->
+    <div id="background-animation">
+        <canvas id="starfield"></canvas>
     </div>
 
     <div class="launcher">
@@ -375,7 +381,7 @@
                         data-tooltip="Selecciona la versión de Minecraft que deseas descargar"></i>
                 </label>
                 <select id="downloadMcVersion">
-                    <option value="">Cargando versiones...</option>
+                    <option value="">Cargando...</option>
                 </select>
             </div>
 
@@ -387,7 +393,7 @@
                         data-tooltip="Selecciona la versión del loader (Forge o Fabric)"></i>
                 </label>
                 <select id="downloadLoaderVersion">
-                    <option value="">Selecciona primero una versión de Minecraft</option>
+                    <option value="">Cargando...</option>
                 </select>
             </div>
 
@@ -435,6 +441,62 @@
             <button class="btn-continue-anyway" id="continueAnywayBtn">
                 Continuar sin conexión
             </button>
+        </div>
+    </div>
+
+    <!-- Mod Details Modal -->
+    <div id="modDetailsModal" class="modal">
+        <div class="modal-content mod-details-modal">
+            <button class="modal-close-btn" onclick="closeModDetails()" style="z-index: 10;">
+                <i class="fas fa-times"></i>
+            </button>
+
+            <div class="mod-details-header">
+                <img src="" alt="" class="mod-details-icon" id="modDetailIcon">
+                <div class="mod-details-title-section">
+                    <div class="mod-details-title" id="modDetailTitle">Titulo del Mod</div>
+                    <div class="mod-details-author" id="modDetailAuthor">por Autor</div>
+                    <div class="mod-card-categories" id="modDetailCategories"></div>
+                </div>
+                <div style="width: 200px; margin-right: 40px;">
+                    <button id="modDetailInstallBtn" class="btn-primary" style="width: 100%; height: 50px;">
+                        <i class="fas fa-download"></i> Instalar
+                    </button>
+                </div>
+            </div>
+
+            <div class="mod-details-content">
+                <div class="mod-details-main">
+                    <div id="modDetailDescription" class="markdown-body">
+                        <div style="text-align: center; padding: 50px;">
+                            <span class="spinner"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mod-details-sidebar">
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Información</div>
+                        <div class="info-row">
+                            <span class="info-label">Descargas</span>
+                            <span class="info-value" id="modDetailDownloads">Cargando...</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Actualizado</span>
+                            <span class="info-value" id="modDetailUpdated">Cargando...</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Licencia</span>
+                            <span class="info-value" id="modDetailLicense">Cargando...</span>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Galería</div>
+                        <div class="mod-gallery" id="modDetailGallery"></div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 

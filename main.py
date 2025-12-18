@@ -11,10 +11,7 @@ import io
 import threading
 import time
 import psutil
-try:
-    import pygetwindow as gw
-except Exception:
-    gw = None
+import pygetwindow as gw
 from PIL import Image
 from datetime import datetime
 import sys
@@ -35,9 +32,10 @@ def resource_path(relative_path):
 
 
 """
+- minecraft news
 - reseñas
 - microsoft login
-- noticias de minecraft (mll.get_minecraft_news())
+- traducciones
 
 
 
@@ -1315,6 +1313,42 @@ class Api:
         except Exception as e:
             print(f"Error getting mod versions: {e}")
             return {'success': False, 'error': str(e), 'versions': []}
+    
+    def get_mod_details(self, project_id):
+        """Obtiene detalles completos de un mod incluyendo descripción (markdown) y galería"""
+        try:
+            import requests
+            
+            url = f'https://api.modrinth.com/v2/project/{project_id}'
+            
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            details = {
+                'id': data.get('id'),
+                'slug': data.get('slug'),
+                'title': data.get('title'),
+                'description': data.get('description'),
+                'body': data.get('body'), # Markdown content
+                'author': 'Unknown', # Modrinth project endpoint doesn't return author name directly sometimes, checked below
+                'icon_url': data.get('icon_url'),
+                'downloads': data.get('downloads', 0),
+                'categories': data.get('categories', []),
+                'updated': data.get('updated'),
+                'license': data.get('license', {}).get('name', 'Unknown'),
+                'gallery': data.get('gallery', [])
+            }
+
+            # Try to get team members to find owner/author if needed, but for now we might rely on what we have
+            # Or use the team endpoint if strictly necessary. 
+            # For efficiency we might skip it or use the cached author from search if passed, but here we only have project_id.
+            
+            return {'success': True, 'details': details}
+        except Exception as e:
+            print(f"Error getting mod details: {e}")
+            return {'success': False, 'error': str(e)}
     
     def download_mod(self, project_id, version_id, profile_id):
         """Descarga un mod al directorio del perfil en segundo plano con progreso"""
