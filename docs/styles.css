@@ -19,6 +19,11 @@
     --radius-md: 1rem;
     --radius-sm: 0.5rem;
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Cube Scaling */
+    --cube-size: 200px;
+    --cube-size-overlap: 201px;
+    --cube-z: 100px;
 }
 
 * {
@@ -240,7 +245,7 @@ h4,
 
 .hero-content {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1.25fr 0.75fr;
     gap: 4rem;
     align-items: center;
 }
@@ -310,51 +315,135 @@ h4,
 .hero-visual {
     position: relative;
     perspective: 1000px;
-}
-
-.card-glass {
-    background: rgba(25, 25, 40, 0.6);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: var(--radius-md);
-    padding: 1rem;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
-    transform: rotateY(-10deg) rotateX(5deg);
-    transition: transform 0.5s ease;
-}
-
-.hero-visual:hover .card-glass {
-    transform: rotateY(0) rotateX(0);
-}
-
-.window-controls {
     display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
+    justify-content: center;
+    align-items: center;
+    min-height: 400px;
+    /* Cube sizing variables */
+    --cube-size: 200px;
+    --cube-size-overlap: 201px;
+    --cube-z: 100px;
 }
 
-.window-controls span {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
+.scene {
+    width: var(--cube-size);
+    height: var(--cube-size);
+    perspective: 1000px;
 }
 
-.window-controls .red {
-    background: #ff5f56;
-}
-
-.window-controls .yellow {
-    background: #ffbd2e;
-}
-
-.window-controls .green {
-    background: #27c93f;
-}
-
-.hero-img {
+.cube {
     width: 100%;
-    border-radius: calc(var(--radius-md) - 0.5rem);
-    display: block;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transform: rotateX(-20deg) rotateY(30deg);
+    cursor: grab;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.cube:active {
+    cursor: grabbing;
+}
+
+.face {
+    position: absolute;
+    width: var(--cube-size-overlap);
+    /* Slightly larger to prevent gaps */
+    height: var(--cube-size-overlap);
+    background-size: cover;
+    image-rendering: pixelated;
+    pointer-events: none;
+    /* Let clicks pass through to container */
+    backface-visibility: visible;
+}
+
+.top {
+    background-image: url('https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/grass_block_top.png');
+    transform: rotateX(90deg) translateZ(var(--cube-z));
+}
+
+.bottom {
+    background-image: url('https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/grass_block_bottom.png');
+    transform: rotateX(-90deg) translateZ(var(--cube-z));
+}
+
+.front {
+    background-image: url('https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/grass_block_side.png');
+    transform: rotateY(0deg) translateZ(var(--cube-z));
+}
+
+.back {
+    background-image: url('https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/grass_block_side.png');
+    transform: rotateY(180deg) translateZ(var(--cube-z));
+}
+
+.left {
+    background-image: url('https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/grass_block_side.png');
+    transform: rotateY(-90deg) translateZ(var(--cube-z));
+}
+
+.right {
+    background-image: url('https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/grass_block_side.png');
+    transform: rotateY(90deg) translateZ(var(--cube-z));
+}
+
+@media (max-width: 992px) {
+    .hero-content {
+        grid-template-columns: 1fr;
+        text-align: center;
+    }
+
+    .hero-visual {
+        order: -1;
+        /* Move visual above text on smaller screens */
+        margin-bottom: 3rem;
+    }
+
+    .hero-text h1 {
+        font-size: 3rem;
+    }
+
+    .lead {
+        max-width: 100%;
+    }
+
+    .hero-buttons {
+        justify-content: center;
+    }
+
+    .hero-stats {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .hero-visual {
+        --cube-size: 150px;
+        --cube-size-overlap: 151px;
+        --cube-z: 75px;
+    }
+}
+
+@media (max-width: 576px) {
+    .hero-text h1 {
+        font-size: 2.5rem;
+    }
+
+    .hero-buttons {
+        flex-direction: column;
+    }
+
+    .hero-stats {
+        flex-direction: column;
+        gap: 2rem;
+    }
+
+    .hero-visual {
+        --cube-size: 120px;
+        --cube-size-overlap: 121px;
+        --cube-z: 60px;
+    }
 }
 
 /* Features */
@@ -585,7 +674,32 @@ h4,
     border-top: 1px solid var(--card-border);
 }
 
-/* Tablet & Mobile */
+/* Tablet & Large Mobile */
+@media (max-width: 1024px) {
+    :root {
+        --cube-size: 160px;
+        --cube-size-overlap: 161px;
+        --cube-z: 80px;
+    }
+
+    .container {
+        width: 95%;
+    }
+
+    .hero-content {
+        gap: 2rem;
+        grid-template-columns: 1.1fr 0.9fr;
+    }
+
+    .hero-text h1 {
+        font-size: 3rem;
+    }
+
+    .hero-visual {
+        min-height: 300px;
+    }
+}
+
 @media (max-width: 768px) {
 
     .nav-links,
@@ -597,23 +711,87 @@ h4,
         grid-template-columns: 1fr;
         text-align: center;
         gap: 3rem;
+        padding-top: 2rem;
+    }
+
+    .hero-text {
+        order: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .hero-visual {
+        order: 1;
+        min-height: 250px;
     }
 
     .hero-buttons {
         justify-content: center;
+        width: 100%;
         flex-direction: column;
     }
 
     .hero-stats {
         justify-content: center;
+        flex-wrap: wrap;
+        gap: 2rem;
     }
 
     .hero-text h1 {
         font-size: 2.5rem;
     }
 
+    .lead {
+        margin: 0 auto 2.5rem;
+    }
+
     .carousel-container {
-        height: 400px;
+        height: 350px;
+    }
+
+    .grid-3 {
+        grid-template-columns: 1fr;
+    }
+
+    .footer-content {
+        flex-direction: column;
+        gap: 3rem;
+        text-align: center;
+    }
+
+    .footer-brand {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .footer-brand p {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    :root {
+        --cube-size: 140px;
+        --cube-size-overlap: 141px;
+        --cube-z: 70px;
+    }
+
+    .hero-text h1 {
+        font-size: 2.2rem;
+    }
+
+    .hero-stats {
+        gap: 1.5rem;
+    }
+
+    .stat-value {
+        font-size: 1.2rem;
+    }
+
+    .section-header h2 {
+        font-size: 2rem;
     }
 }
 

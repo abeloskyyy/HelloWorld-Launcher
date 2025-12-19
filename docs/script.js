@@ -109,4 +109,79 @@ document.addEventListener('DOMContentLoaded', () => {
             navbar.style.padding = '1.5rem 0';
         }
     });
+
+    // === 3D Cube Rotation with Inertia ===
+    const cube = document.getElementById('blockCube');
+    const heroVisual = document.querySelector('.hero-visual');
+    if (cube && heroVisual) {
+        // --- Configuration ---
+        const friction = 0.95;       // Friction amount (0 to 1). Lower = more friction.
+        const sensitivity = 0.5;    // Drag sensitivity.
+        const autoSpinSpeed = 0.2;  // Speed of auto-rotation.
+        const minRotationX = -90;   // Minimum vertical rotation (degrees)
+        const maxRotationX = 90;    // Maximum vertical rotation (degrees)
+        // ---------------------
+
+        let isDragging = false;
+        let startX, startY;
+        let rotationX = -20;
+        let rotationY = 30;
+        let velocityX = 0;
+        let velocityY = 0;
+
+        heroVisual.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            cube.style.transition = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const deltaX = e.clientX - startX;
+            const deltaY = e.clientY - startY;
+
+            // Update velocities based on movement
+            velocityY = deltaX * sensitivity;
+            velocityX = -deltaY * sensitivity;
+
+            rotationY += velocityY;
+            rotationX += velocityX;
+
+            // Clamp vertical rotation
+            rotationX = Math.max(minRotationX, Math.min(maxRotationX, rotationX));
+
+            cube.style.transform = `rotateX(${rotationX}deg) rotateY(${rotationY}deg)`;
+
+            startX = e.clientX;
+            startY = e.clientY;
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            // Removed fixed transition to allow inertia to take over smoothly
+        });
+
+        function update() {
+            if (!isDragging) {
+                // Apply friction
+                velocityY *= friction;
+                velocityX *= friction;
+
+                // Add a bit of constant auto-rotation
+                rotationY += velocityY + autoSpinSpeed;
+                rotationX += velocityX;
+
+                // Clamp vertical rotation during inertia
+                rotationX = Math.max(minRotationX, Math.min(maxRotationX, rotationX));
+                if (rotationX === minRotationX || rotationX === maxRotationX) velocityX = 0;
+
+                cube.style.transform = `rotateX(${rotationX}deg) rotateY(${rotationY}deg)`;
+            }
+            requestAnimationFrame(update);
+        }
+
+        requestAnimationFrame(update);
+    }
 });
