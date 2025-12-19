@@ -228,7 +228,7 @@ def check_and_update(window, api):
     
     # Aplicar actualización
     try:
-        apply_update("update_temp.exe")
+        apply_update("update_temp.exe", remote_version)
     except Exception as e:
         print(f"Error aplicando actualización: {e}")
     
@@ -245,7 +245,7 @@ def check_and_update(window, api):
     return True
 
 
-def apply_update(downloaded_file):
+def apply_update(downloaded_file, remote_version):
     """
     Aplica la actualización descargada (solo .exe).
     """
@@ -265,8 +265,21 @@ def apply_update(downloaded_file):
     current_dir = os.path.dirname(current_exe)
     
     # Es un .exe directo
-    new_exe = downloaded_file
+    new_exe = os.path.abspath(downloaded_file)
     extract_dir = None
+    
+    # Determinar nombre del nuevo ejecutable
+    # Si el usuario quiere que tenga la versión en el nombre:
+    # Ejemplo: HelloWorldLauncher_v1.0.0.exe
+    # Usamos el nombre base del exe actual pero con la nueva versión
+    
+    base_name = os.path.splitext(os.path.basename(current_exe))[0]
+    # Si el nombre actual ya tiene versión (ej: Launcher_v1.0), intentamos limpiarlo
+    if "_v" in base_name:
+        base_name = base_name.split("_v")[0]
+        
+    target_name = f"{base_name}_v{remote_version}.exe"
+    target_path = os.path.join(current_dir, target_name)
     
     # Crear script de actualización (batch file para Windows, sh para Linux)
     if sys.platform.startswith('win'):
@@ -275,20 +288,25 @@ def apply_update(downloaded_file):
         with open(update_script, 'w') as f:
             f.write('@echo off\n')
             f.write('echo Aplicando actualizacion...\n')
-            f.write('timeout /t 2 /nobreak >nul\n')  # Esperar 2 segundos
-            f.write(f'move /y "{new_exe}" "{current_exe}"\n')  # Reemplazar ejecutable
+            f.write('timeout /t 3 /nobreak >nul\n')  # Esperar 3 segundos
+            
+            # 1. Mover/Renombrar update_temp.exe al nuevo nombre con versión
+            f.write(f'move /y "{new_exe}" "{target_path}"\n')
+            
+            # 2. Eliminar el ejecutable antiguo (si tiene nombre diferente)
+            if current_exe != target_path:
+                 f.write(f'del "{current_exe}"\n')
             
             # Limpiar archivos temporales
-            if is_zip and extract_dir:
-                f.write(f'rmdir /s /q "{extract_dir}"\n')
-            f.write(f'del "{downloaded_file}"\n')
+            f.write(f'del "{new_exe}"\n') # En caso de que el move fallara o fuera copia
             f.write(f'del "%~f0"\n')  # Eliminar el propio script
             
-            # Reiniciar el launcher
-            f.write(f'start "" "{current_exe}"\n')
+            # Reiniciar el launcher (el nuevo)
+            f.write(f'start "" "{target_path}"\n')
         
         # Ejecutar el script y cerrar el launcher actual
         subprocess.Popen(['cmd', '/c', update_script], 
+                        cwd=current_dir,
                         creationflags=subprocess.CREATE_NO_WINDOW)
                         
     else:
@@ -302,8 +320,7 @@ def apply_update(downloaded_file):
             f.write(f'mv -f "{new_exe}" "{current_exe}"\n')
             f.write(f'chmod +x "{current_exe}"\n')
             
-            if is_zip and extract_dir:
-                f.write(f'rm -rf "{extract_dir}"\n')
+
             f.write(f'rm -f "{downloaded_file}"\n')
             f.write(f'rm -f "{update_script}"\n')
             
