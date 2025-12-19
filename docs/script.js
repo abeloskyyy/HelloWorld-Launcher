@@ -137,10 +137,29 @@ document.addEventListener('DOMContentLoaded', () => {
             cube.style.transition = 'none';
         });
 
+        // Touch Support
+        heroVisual.addEventListener('touchstart', (e) => {
+            // No e.preventDefault() here to allow scrolling if they just tap
+            isDragging = true;
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+            cube.style.transition = 'none';
+        }, { passive: true });
+
         document.addEventListener('mousemove', (e) => {
             if (!isDragging) return;
-            const deltaX = e.clientX - startX;
-            const deltaY = e.clientY - startY;
+            handleMove(e.clientX, e.clientY);
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault(); // Stop scrolling while rotating!
+            handleMove(e.touches[0].clientX, e.touches[0].clientY);
+        }, { passive: false });
+
+        function handleMove(clientX, clientY) {
+            const deltaX = clientX - startX;
+            const deltaY = clientY - startY;
 
             // Update velocities based on movement
             velocityY = deltaX * sensitivity;
@@ -154,13 +173,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             cube.style.transform = `rotateX(${rotationX}deg) rotateY(${rotationY}deg)`;
 
-            startX = e.clientX;
-            startY = e.clientY;
-        });
+            startX = clientX;
+            startY = clientY;
+        }
 
         document.addEventListener('mouseup', () => {
             isDragging = false;
-            // Removed fixed transition to allow inertia to take over smoothly
+        });
+
+        document.addEventListener('touchend', () => {
+            isDragging = false;
         });
 
         function update() {
