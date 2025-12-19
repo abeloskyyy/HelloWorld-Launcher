@@ -359,32 +359,32 @@ h4,
 }
 
 .top {
-    background-image: url('https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/grass_block_top.png');
+    background-image: url('block/grass_block_top.png');
     transform: rotateX(90deg) translateZ(var(--cube-z));
 }
 
 .bottom {
-    background-image: url('https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/grass_block_bottom.png');
+    background-image: url('block/grass_block_bottom.png');
     transform: rotateX(-90deg) translateZ(var(--cube-z));
 }
 
 .front {
-    background-image: url('https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/grass_block_side.png');
+    background-image: url('block/grass_block_side.png');
     transform: rotateY(0deg) translateZ(var(--cube-z));
 }
 
 .back {
-    background-image: url('https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/grass_block_side.png');
+    background-image: url('block/grass_block_side.png');
     transform: rotateY(180deg) translateZ(var(--cube-z));
 }
 
 .left {
-    background-image: url('https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/grass_block_side.png');
+    background-image: url('block/grass_block_side.png');
     transform: rotateY(-90deg) translateZ(var(--cube-z));
 }
 
 .right {
-    background-image: url('https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/grass_block_side.png');
+    background-image: url('block/grass_block_side.png');
     transform: rotateY(90deg) translateZ(var(--cube-z));
 }
 
