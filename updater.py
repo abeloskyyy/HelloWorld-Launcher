@@ -203,12 +203,20 @@ def check_and_update(window, api):
     window.evaluate_js("window.updaterAPI.setState('downloading')")
     window.evaluate_js(f"window.updaterAPI.setVersionUpdate('{local_version}', '{remote_version}')")
     
+    # Use the same directory as the executable for the temporary file
+    if getattr(sys, 'frozen', False):
+        exec_dir = os.path.dirname(sys.executable)
+    else:
+        exec_dir = os.getcwd()
+    
+    update_temp_path = os.path.normpath(os.path.join(exec_dir, "update_temp.exe"))
+
     # Download update
     download_success = download_file_with_progress(
         remote_data["download_url"],
-        "update_temp.exe",
+        update_temp_path,
         window,
-        api  # Pass API correctly
+        api
     )
     
     if not download_success:
@@ -231,7 +239,7 @@ def check_and_update(window, api):
     # Apply update
     try:
         api.update_applied = True
-        apply_update("update_temp.exe", remote_version)
+        apply_update(update_temp_path, remote_version)
     except Exception as e:
         print(f"Error applying update: {e}")
     
@@ -295,20 +303,22 @@ def apply_update(downloaded_file, remote_version):
         with open(update_script, 'w') as f:
             f.write('@echo off\n')
             f.write('echo Applying update...\n')
-            f.write('timeout /t 3 /nobreak >nul\n')  # Wait 3 seconds
+            f.write('timeout /t 3 /nobreak >nul\n')  # Wait 3 seconds to ensure exit starts
             
-            # 1. Move/Rename update_temp.exe to new name with version
+            # 1. Rename the current EXE so we can free up its name immediately
+            # Rename in Windows works even if the file is in use!
+            f.write(f'move /y "{current_exe}" "{current_exe}.old" >nul 2>&1\n')
+            
+            # 2. Move/Rename the new update to the target name
             f.write(f'move /y "{new_exe}" "{target_path}"\n')
             
-            # 2. Delete old executable (if it has a different name)
-            if current_exe_norm != target_path_norm:
-                f.write(f'del /f /q "{current_exe}" >nul 2>&1\n')
-            
-            # Clean up temporary files
-            f.write(f'del "%~f0" >nul 2>&1\n')  # Delete the script itself
-            
-            # Restart launcher (the new one)
+            # 3. Restart launcher (the new one)
             f.write(f'start "" "{target_path}"\n')
+            
+            # 4. Wait a few more seconds to ensure the old process finally died, then clean up
+            f.write('timeout /t 5 /nobreak >nul\n')
+            f.write(f'del /f /q "{current_exe}.old" >nul 2>&1\n')
+            f.write(f'del "%~f0" >nul 2>&1\n')
         
         # Execute script and close current launcher
         subprocess.Popen(['cmd', '/c', update_script], 
