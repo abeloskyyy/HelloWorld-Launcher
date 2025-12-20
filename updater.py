@@ -17,6 +17,7 @@ VERSION_FILE = "version.json"
 class UpdaterAPI:
     def __init__(self):
         self.cancelled = False
+        self.update_applied = False
         
     def cancel_download(self):
         """Cancels the current download"""
@@ -229,6 +230,7 @@ def check_and_update(window, api):
     
     # Apply update
     try:
+        api.update_applied = True
         apply_update("update_temp.exe", remote_version)
     except Exception as e:
         print(f"Error applying update: {e}")
@@ -280,7 +282,11 @@ def apply_update(downloaded_file, remote_version):
         base_name = base_name.split("_v")[0]
         
     target_name = f"{base_name}_v{remote_version}.exe"
-    target_path = os.path.join(current_dir, target_name)
+    target_path = os.path.abspath(os.path.join(current_dir, target_name))
+    
+    # Normalizar para comparación
+    current_exe_norm = os.path.normpath(current_exe).lower()
+    target_path_norm = os.path.normpath(target_path).lower()
     
     # Create update script (batch file for Windows, sh for Linux)
     if sys.platform.startswith('win'):
@@ -295,12 +301,11 @@ def apply_update(downloaded_file, remote_version):
             f.write(f'move /y "{new_exe}" "{target_path}"\n')
             
             # 2. Delete old executable (if it has a different name)
-            if current_exe != target_path:
-                 f.write(f'del "{current_exe}"\n')
+            if current_exe_norm != target_path_norm:
+                f.write(f'del /f /q "{current_exe}" >nul 2>&1\n')
             
             # Clean up temporary files
-            f.write(f'del "{new_exe}"\n') # In case move failed or was a copy
-            f.write(f'del "%~f0"\n')  # Delete the script itself
+            f.write(f'del "%~f0" >nul 2>&1\n')  # Delete the script itself
             
             # Restart launcher (the new one)
             f.write(f'start "" "{target_path}"\n')
@@ -404,7 +409,7 @@ def run_updater_check():
     # Show window (blocking)
     webview.start()
     
-    return False  # Always continue for now
+    return api.update_applied
 
 
 if __name__ == "__main__":
