@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HelloWorld Launcher - Actualizador</title>
+    <title>HelloWorld Launcher - Updater</title>
     <link rel="stylesheet" href="updater_styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -14,7 +14,7 @@
         <div class="updater-card">
             <h1 class="updater-title">HelloWorld Launcher</h1>
 
-            <!-- Estado: Verificando -->
+            <!-- State: Checking -->
             <div id="state-checking" class="updater-state active">
                 <div class="progress-ring">
                     <svg class="progress-ring-svg" width="120" height="120">
@@ -25,11 +25,11 @@
                         <i class="fas fa-sync-alt"></i>
                     </div>
                 </div>
-                <p class="status-text">Verificando actualizaciones...</p>
-                <p class="version-text" id="currentVersion">Cargando...</p>
+                <p class="status-text">Checking for updates...</p>
+                <p class="version-text" id="currentVersion">Loading...</p>
             </div>
 
-            <!-- Estado: Descargando -->
+            <!-- State: Downloading -->
             <div id="state-downloading" class="updater-state">
                 <div class="progress-ring">
                     <svg class="progress-ring-svg" width="120" height="120">
@@ -42,7 +42,7 @@
                         <span id="downloadPercentage">0%</span>
                     </div>
                 </div>
-                <p class="status-text">Descargando actualización...</p>
+                <p class="status-text">Downloading update...</p>
                 <div class="download-info">
                     <span id="downloadSpeed">0 MB/s</span>
                     <span id="downloadSize">0 MB / 0 MB</span>
@@ -51,58 +51,58 @@
                     <div class="progress-bar-fill" id="downloadProgressBar"></div>
                 </div>
                 <button class="btn-cancel" id="cancelBtn">
-                    <i class="fas fa-times"></i> Cancelar
+                    <i class="fas fa-times"></i> Cancel
                 </button>
             </div>
 
-            <!-- Estado: Éxito -->
+            <!-- State: Success -->
             <div id="state-success" class="updater-state">
                 <div class="success-icon">
                     <i class="fas fa-check-circle"></i>
                 </div>
-                <p class="status-text success">¡Actualización completada!</p>
-                <p class="status-subtext">Iniciando launcher...</p>
+                <p class="status-text success">Update completed!</p>
+                <p class="status-subtext">Starting launcher...</p>
                 <p class="version-update" id="versionUpdate">v1.0.0 → v1.1.0</p>
             </div>
 
-            <!-- Estado: Error -->
+            <!-- State: Error -->
             <div id="state-error" class="updater-state">
                 <div class="error-icon">
                     <i class="fas fa-exclamation-triangle"></i>
                 </div>
-                <p class="status-text error">Error al actualizar</p>
-                <p class="error-message" id="errorMessage">No se pudo descargar la actualización</p>
+                <p class="status-text error">Update Error</p>
+                <p class="error-message" id="errorMessage">Could not download update</p>
                 <div class="button-group">
                     <button class="btn-retry" id="retryBtn">
-                        <i class="fas fa-redo"></i> Reintentar
+                        <i class="fas fa-redo"></i> Retry
                     </button>
                     <button class="btn-continue" id="continueBtn">
-                        Continuar de todos modos
+                        Continue anyway
                     </button>
                 </div>
             </div>
 
-            <!-- Estado: Sin Internet -->
+            <!-- State: No Internet -->
             <div id="state-no-internet" class="updater-state">
                 <div class="warning-icon">
                     <i class="fas fa-wifi-slash"></i>
                 </div>
-                <p class="status-text warning">Sin conexión a internet</p>
-                <p class="status-subtext">Continuando sin actualizar...</p>
+                <p class="status-text warning">No internet connection</p>
+                <p class="status-subtext">Continuing without update...</p>
             </div>
         </div>
     </div>
 
     <script>
-        // API para comunicación con Python
+        // API for communication with Python
         class UpdaterAPI {
             setState(state) {
-                // Ocultar todos los estados
+                // Hide all states
                 document.querySelectorAll('.updater-state').forEach(el => {
                     el.classList.remove('active');
                 });
 
-                // Mostrar el estado solicitado
+                // Show requested state
                 const stateElement = document.getElementById(`state-${state}`);
                 if (stateElement) {
                     stateElement.classList.add('active');
@@ -114,20 +114,20 @@
             }
 
             setDownloadProgress(percentage, downloaded, total, speed) {
-                // Actualizar porcentaje
+                // Update percentage
                 document.getElementById('downloadPercentage').textContent = `${percentage}%`;
 
-                // Actualizar círculo de progreso
+                // Update progress ring
                 const circle = document.getElementById('downloadProgressCircle');
                 const radius = circle.r.baseVal.value;
                 const circumference = radius * 2 * Math.PI;
                 const offset = circumference - (percentage / 100) * circumference;
                 circle.style.strokeDashoffset = offset;
 
-                // Actualizar barra de progreso
+                // Update progress bar
                 document.getElementById('downloadProgressBar').style.width = `${percentage}%`;
 
-                // Actualizar velocidad y tamaño
+                // Update speed and size
                 document.getElementById('downloadSpeed').textContent = `${speed} MB/s`;
                 document.getElementById('downloadSize').textContent = `${downloaded} MB / ${total} MB`;
             }
@@ -154,7 +154,7 @@
             }
         }
 
-        // Exponer API globalmente
+        // Expose API globally
         window.updaterAPI = new UpdaterAPI();
     </script>
 </body>

@@ -10,7 +10,7 @@
 </head>
 
 <body>
-    <!-- Loader Inicial -->
+    <!-- Initial Loader -->
     <div id="initialLoader" class="loader-container">
         <div class="cube-spinner">
             <div class="face-back"></div>
@@ -28,7 +28,7 @@
     </div>
 
     <div class="launcher">
-        <!-- Botón de inicio de sesión / User Badge -->
+        <!-- Login Button / User Badge -->
         <div id="userBadge" class="user-badge" style="display: none;">
             <div class="user-avatar">
                 <i class="fas fa-user"></i>
@@ -37,36 +37,36 @@
             <!-- Dropdown menu -->
             <div class="user-dropdown" id="userDropdown">
                 <button class="dropdown-item" id="logoutBtn">
-                    <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+                    <i class="fas fa-sign-out-alt"></i> Logout
                 </button>
             </div>
         </div>
 
         <button class="login-button" id="loginButton">
-            <i class="fas fa-user"></i> Iniciar Sesión
+            <i class="fas fa-user"></i> Login
         </button>
 
-        <!-- Barra lateral -->
+        <!-- Sidebar -->
         <div class="sidebar">
             <button class="sidebar-button active" onclick="showSection('play')">
-                <i class="fas fa-gamepad"></i> Jugar
+                <i class="fas fa-gamepad"></i> Play
             </button>
             <button class="sidebar-button" onclick="showSection('profiles')">
-                <i class="fas fa-user"></i> Perfiles
+                <i class="fas fa-user"></i> Profiles
             </button>
             <button class="sidebar-button" onclick="showSection('mods')">
                 <i class="fas fa-puzzle-piece"></i> Mods
             </button>
             <button class="sidebar-button" onclick="showSection('settings')">
-                <i class="fas fa-cog"></i> Configuración
+                <i class="fas fa-cog"></i> Settings
             </button>
         </div>
 
-        <!-- Contenido principal -->
+        <!-- Main Content -->
         <div class="main-content">
-            <!-- Sección Jugar -->
+            <!-- Play Section -->
             <div id="play" class="section active">
-                <h1>Jugar</h1>
+                <h1>Play</h1>
                 <select id="profileSelect" style="display: none;"></select>
                 <div class="play-section">
                     <div class="custom-select" id="customSelect">
@@ -74,8 +74,8 @@
                             <div class="select-trigger-content">
                                 <img src="" alt="" class="select-trigger-icon" id="selectedIcon">
                                 <div class="select-trigger-text">
-                                    <div class="select-trigger-title" id="selectedTitle">No tienes perfiles</div>
-                                    <div class="select-trigger-subtitle" id="selectedSubtitle">Crea un perfil para jugar
+                                    <div class="select-trigger-title" id="selectedTitle">No profiles found</div>
+                                    <div class="select-trigger-subtitle" id="selectedSubtitle">Create a profile to play
                                     </div>
                                 </div>
                             </div>
@@ -83,103 +83,102 @@
                         </div>
 
                         <div class="select-options" id="selectOptions">
-                            <!-- Las opciones se cargarán dinámicamente aquí -->
+                            <!-- Options will be loaded dynamically here -->
                         </div>
                     </div>
 
                     <div class="button-group">
                         <button id="openDownloadModalBtn" class="btn-secondary" style="flex: 1;"
-                            data-tooltip="Descarga nuevas versiones de Minecraft (Vanilla, Forge, Fabric)">
-                            <i class="fas fa-download"></i> Descargar Versiones
+                            data-tooltip="Download new versions of Minecraft (Vanilla, Forge, Fabric)">
+                            <i class="fas fa-download"></i> Download Versions
                         </button>
                     </div>
 
                     <button class="play-button" onclick="launchGame()">
-                        Jugar
+                        Play
                     </button>
                 </div>
             </div>
 
-            <!-- Sección Perfiles -->
+            <!-- Profiles Section -->
             <div id="profiles" class="section">
-                <h1>Perfiles</h1>
+                <h1>Profiles</h1>
                 <div class="profiles-section">
                     <button id="createProfileBtn" class="btn-primary create-profile-btn">
-                        <i class="fas fa-plus"></i> Crear nuevo perfil
+                        <i class="fas fa-plus"></i> Create new profile
                     </button>
                     <div id="profilesList">
-                        <!-- Los perfiles se cargarán aquí dinámicamente -->
+                        <!-- Profiles will be loaded here dynamically -->
                     </div>
                 </div>
             </div>
 
-            <!-- Sección Mods -->
+            <!-- Mods Section -->
             <div id="mods" class="section">
                 <h1>Mods</h1>
                 <div class="mods-section">
-                    <!-- Selector de Perfil -->
+                    <!-- Profile Selector -->
                     <div class="input-group">
                         <label>
-                            Perfil
+                            Profile
                             <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
-                                data-tooltip="Selecciona un perfil con Forge o Fabric para gestionar mods"></i>
+                                data-tooltip="Select a profile with Forge or Fabric to manage mods"></i>
                         </label>
                         <select id="modsProfileSelect">
-                            <option value="">Cargando perfiles...</option>
+                            <option value="">Loading profiles...</option>
                         </select>
                     </div>
 
-                    <!-- Mensaje si no hay perfiles moddables -->
+                    <!-- Message if no moddable profiles -->
                     <div id="noModdableProfiles" class="no-moddable-profiles" style="display: none;">
                         <i class="fas fa-info-circle"></i>
-                        <p>No tienes perfiles con Forge o Fabric. Crea un perfil con un loader de mods para poder
-                            descargar mods.</p>
+                        <p>No profiles with Forge or Fabric. Create a profile with a mod loader to download mods.</p>
                     </div>
 
-                    <!-- Contenedor de pestañas -->
+                    <!-- Tab Container -->
                     <div id="modsTabsContainer" style="display: none;">
-                        <!-- Pestañas -->
+                        <!-- Tabs -->
                         <div class="mods-tabs">
                             <button class="mod-tab active" data-tab="download">
-                                <i class="fas fa-download"></i> Descargar
+                                <i class="fas fa-download"></i> Download
                             </button>
                             <button class="mod-tab" data-tab="installed">
-                                <i class="fas fa-cube"></i> Instalados
+                                <i class="fas fa-cube"></i> Installed
                             </button>
                         </div>
 
-                        <!-- Contenido de pestaña: Descargar -->
+                        <!-- Tab Content: Download -->
                         <div id="modTabDownload" class="mod-tab-content active">
-                            <!-- Barra de búsqueda -->
+                            <!-- Search Bar -->
                             <div class="mod-search-container">
                                 <input type="text" id="modSearchInput" class="mod-search-bar"
-                                    placeholder="Buscar mods en Modrinth...">
+                                    placeholder="Search mods in Modrinth...">
                             </div>
 
-                            <!-- Estado de carga -->
+                            <!-- Loading State -->
                             <div id="modSearchLoading" class="mod-search-loading" style="display: none;">
                                 <div class="spinner"></div>
-                                <p>Buscando mods...</p>
+                                <p>Searching mods...</p>
                             </div>
 
-                            <!-- Grid de resultados -->
+                            <!-- Results Grid -->
                             <div id="modSearchResults" class="mod-grid">
-                                <!-- Mensaje inicial -->
+                                <!-- Initial Message -->
                                 <div class="mod-search-empty">
                                     <i class="fas fa-search"></i>
-                                    <p>Busca mods para descargar</p>
+                                    <p>Search mods to download</p>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Contenido de pestaña: Instalados -->
+                        <!-- Tab Content: Installed -->
                         <div id="modTabInstalled" class="mod-tab-content">
-                            <!-- Lista de mods instalados -->
+                            <!-- Installed Mods List -->
                             <div id="installedModsList" class="installed-mods-list">
-                                <!-- Los mods se cargarán dinámicamente -->
+                                <!-- Mods will be loaded dynamically -->
                                 <div class="no-mods-message">
                                     <i class="fas fa-cube"></i>
-                                    <p>No hay mods instalados en este perfil</p>
+                                    <p>No mods installed in this profile</p>
                                 </div>
                             </div>
                         </div>
@@ -187,15 +186,15 @@
                 </div>
             </div>
 
-            <!-- Sección Configuración -->
+            <!-- Settings Section -->
             <div id="settings" class="section">
-                <h1>Configuración</h1>
+                <h1>Settings</h1>
                 <div class="play-section">
                     <div class="input-group">
                         <label>
-                            Directorio de .minecraft
+                            .minecraft Directory
                             <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
-                                data-tooltip="Carpeta donde se detectarán las versiones del juego (independientemente de los mods, mundos, que se detectan en el directorio de cada perfil)."></i>
+                                data-tooltip="Folder where game versions will be detected (independent of mods, worlds, which are detected in each profile's directory)."></i>
                         </label>
                         <div style="display: flex; gap: 8px;">
                             <input id="mcdir" type="text" style="flex: 1;">
@@ -209,20 +208,48 @@
                                     <span class="toggle-slider"></span>
                                 </label>
                                 <span class="toggle-label">
-                                    Modo Desarrollador
+                                    Developer Mode
                                     <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
-                                        data-tooltip="Activa herramientas de desarrollo: F5 para recargar, consola de Minecraft visible, y DevTools del navegador. Requiere reiniciar el launcher."></i>
+                                        data-tooltip="Enables development tools: F5 to reload, Minecraft console visible, and browser DevTools. Requires launcher restart."></i>
                                 </span>
                             </div>
                         </div>
-                        <button class="btn-primary" onclick="guardarDatos()">Guardar Configuración</button>
 
-                        <!-- Versión del launcher -->
+                        <div class="input-group">
+                            <div class="toggle-container">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="showSnapshotsCheckbox">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <span class="toggle-label">
+                                    Show Snapshots
+                                    <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
+                                        data-tooltip="Shows development versions (snapshots) in the version selector."></i>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <div class="toggle-container">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="showOldVersionsCheckbox">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <span class="toggle-label">
+                                    Show Old Versions
+                                    <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
+                                        data-tooltip="Shows old Alpha and Beta versions in the version selector."></i>
+                                </span>
+                            </div>
+                        </div>
+                        <button class="btn-primary" onclick="saveSettings()">Save Settings</button>
+
+                        <!-- Launcher Version -->
                         <div
                             style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); text-align: center;">
                             <p style="color: #aaa; font-size: 13px;">
-                                Versión del launcher: <span id="launcherVersion"
-                                    style="color: #5cb85c; font-weight: 600;">Cargando...</span>
+                                Launcher Version: <span id="launcherVersion"
+                                    style="color: #5cb85c; font-weight: 600;">Loading...</span>
                             </p>
                         </div>
                     </div>
@@ -231,39 +258,38 @@
         </div>
     </div>
 
-    <!-- Modal de crear perfil -->
+    <!-- Create Profile Modal -->
     <div class="modal" id="modal">
         <div class="modal-content">
-            <span>Crear Nuevo Perfil</span>
+            <span>Create New Profile</span>
             <div class="profile-icon-display" id="iconDisplay">
-                <img src="" alt="Icono del Perfil" class="profile-icon-img" id="iconPreview" style="display: none;">
+                <img src="" alt="Profile Icon" class="profile-icon-img" id="iconPreview" style="display: none;">
                 <span class="placeholder-icon-small" id="placeholderIcon"><i class="fas fa-user"></i></span>
             </div>
             <button type="button" class="btn-add-icon" id="iconButton"
-                data-tooltip="Selecciona un icono personalizado para identificar visualmente este perfil">Añadir
-                Icono</button>
+                data-tooltip="Select a custom icon to visually identify this profile">Add Icon</button>
             <div class="modal-input-group">
                 <label>
-                    Nombre del Perfil
+                    Profile Name
                     <i class="fa-regular fa-question-circle help-icon"
-                        data-tooltip="Nombre identificativo para este perfil. Ejemplo: 'Survival 1.20', 'Modpack SkyFactory'"></i>
+                        data-tooltip="Name to identify this profile. Example: 'Survival 1.20', 'SkyFactory Modpack'"></i>
                 </label>
                 <input id="profileName" type="text">
             </div>
             <div class="modal-input-group">
                 <label>
-                    Versión
+                    Version
                     <i class="fa-regular fa-question-circle help-icon"
-                        data-tooltip="Versión de Minecraft a usar. Solo versiones ya instaladas."></i>
+                        data-tooltip="Minecraft version to use. Download new Minecraft versions from the Version Downloader."></i>
                 </label>
                 <select name="create-profile-version" id="profileVersionSelect">
                 </select>
             </div>
             <div class="modal-input-group">
                 <label>
-                    Directorio
+                    Directory
                     <i class="fa-regular fa-question-circle help-icon"
-                        data-tooltip="Carpeta donde se guardarán los datos de este perfil (mundos, mods, configuración). Cada perfil puede tener su propia carpeta."></i>
+                        data-tooltip="Folder where this profile's data will be saved (worlds, mods, settings). Each profile can have its own folder."></i>
                 </label>
                 <div style="display: flex; gap: 8px;">
                     <input id="profileDir" type="text" style="flex: 1;">
@@ -273,27 +299,27 @@
             </div>
             <div class="modal-input-group">
                 <label>
-                    Argumentos JVM
+                    JVM Arguments
                     <i class="fa-regular fa-question-circle help-icon"
-                        data-tooltip="Parámetros avanzados para la JVM. Por defecto se incluyen: -Xmx4G (4GB RAM), -Xms1G (1GB inicial), y optimizaciones de rendimiento con G1GC."></i>
+                        data-tooltip="Advanced JVM parameters. Defaults include: -Xmx4G (4GB RAM), -Xms1G (1GB initial), and performance optimizations with G1GC."></i>
                 </label>
                 <input id="profileJVMArgs" type="text">
             </div>
 
             <div class="modal-options">
-                <button id="acceptProfileBtn" class="btn-blue">Crear</button>
-                <button id="cancelModalBtn" class="btn-red">Cancelar</button>
+                <button id="acceptProfileBtn" class="btn-blue">Create</button>
+                <button id="cancelModalBtn" class="btn-red">Cancel</button>
             </div>
         </div>
     </div>
 
-    <!-- Modal de selección de imagen -->
+    <!-- Image Selection Modal -->
     <div class="modal" id="imageModal">
         <div class="modal-content image-selector-modal">
-            <span>Seleccionar Imagen de Perfil</span>
+            <span>Select Profile Image</span>
             <div class="image-grid" id="imageGrid">
-                <!-- Las imágenes se cargarán dinámicamente aquí -->
-                <!-- Botón de upload personalizado al final del grid -->
+                <!-- Images will be loaded dynamically here -->
+                <!-- Custom upload button at the end of the grid -->
                 <label for="customImageInput" class="image-grid-item upload-item">
                     <span class="upload-plus"><i class="fas fa-plus"></i></span>
                 </label>
@@ -301,64 +327,64 @@
                     accept="image/png,image/jpeg,image/jpg,image/gif">
             </div>
             <div class="modal-options">
-                <button id="cancelImageModalBtn" class="btn-red">Cancelar</button>
+                <button id="cancelImageModalBtn" class="btn-red">Cancel</button>
             </div>
         </div>
     </div>
 
-    <!-- Modal de inicio de sesión -->
+    <!-- Login Modal -->
     <div class="modal" id="loginModal">
         <div class="modal-content login-modal">
             <button class="modal-close-btn" id="closeLoginModal">
                 <i class="fas fa-times"></i>
             </button>
 
-            <!-- Pantalla 1: Selección de Método -->
+            <!-- Screen 1: Method Selection -->
             <div id="loginMethodScreen" class="login-screen active">
-                <span class="modal-title">¿Cómo quieres jugar?</span>
+                <span class="modal-title">How do you want to play?</span>
                 <p style="text-align: center; margin-bottom: 30px; color: #666;">
-                    Elige tu método de inicio de sesión
+                    Choose your login method
                 </p>
 
                 <button class="btn-primary btn-large" id="selectMicrosoftBtn">
-                    <i class="fab fa-microsoft"></i> Iniciar Sesión con Microsoft
+                    <i class="fab fa-microsoft"></i> Login with Microsoft
                 </button>
 
                 <button class="btn-secondary btn-link" id="selectOfflineBtn">
-                    Continuar en modo Offline
+                    Continue in Offline mode
                 </button>
             </div>
 
-            <!-- Pantalla 2: Modo Offline -->
+            <!-- Screen 2: Offline Mode -->
             <div id="loginOfflineScreen" class="login-screen">
-                <span class="modal-title">Modo Offline</span>
+                <span class="modal-title">Offline Mode</span>
                 <p style="text-align: center; margin-bottom: 20px; color: #666;">
-                    Ingresa tu nickname para jugar
+                    Enter your nickname to play
                 </p>
 
                 <div class="modal-input-group">
                     <label>
                         Nickname
                         <i class="fa-regular fa-question-circle help-icon"
-                            data-tooltip="Tu nombre de usuario en el juego. Solo letras y números, sin espacios ni caracteres especiales."></i>
+                            data-tooltip="Your in-game username. Only letters and numbers, no spaces or special characters."></i>
                     </label>
-                    <input id="nickname" type="text" placeholder="Escribe tu nickname">
+                    <input id="nickname" type="text" placeholder="Type your nickname">
                 </div>
 
                 <div class="modal-options">
-                    <button class="btn-secondary" id="backToMethodBtn" style="color: #131313;">
-                        <i class="fas fa-arrow-left"></i> Atrás
+                    <button class="btn-secondary" id="backToMethodBtn" style="color: #a3a3a3;">
+                        <i class="fas fa-arrow-left"></i> Back
                     </button>
-                    <button class="btn-primary" id="saveOfflineBtn">Entrar</button>
+                    <button class="btn-primary" id="saveOfflineBtn">Enter</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Modal de descarga de versiones -->
+    <!-- Download Modal -->
     <div class="modal" id="downloadModal">
         <div class="modal-content download-modal">
-            <span>Descargar Versión de Minecraft</span>
+            <span>Download Minecraft Version</span>
 
             <!-- Loader Type Selection -->
             <div class="loader-type-selector">
@@ -376,33 +402,33 @@
             <!-- MC Version Dropdown -->
             <div class="modal-input-group">
                 <label>
-                    Versión de Minecraft
+                    Minecraft Version
                     <i class="fa-regular fa-question-circle help-icon"
-                        data-tooltip="Selecciona la versión de Minecraft que deseas descargar"></i>
+                        data-tooltip="Select the Minecraft version you want to download"></i>
                 </label>
                 <select id="downloadMcVersion">
-                    <option value="">Cargando...</option>
+                    <option value="">Loading...</option>
                 </select>
             </div>
 
             <!-- Loader Version Dropdown (hidden for vanilla) -->
             <div class="modal-input-group" id="loaderVersionGroup" style="display: none;">
                 <label id="loaderVersionLabel">
-                    Versión del Loader
+                    Loader Version
                     <i class="fa-regular fa-question-circle help-icon"
-                        data-tooltip="Selecciona la versión del loader (Forge o Fabric)"></i>
+                        data-tooltip="Select the loader version (Forge or Fabric)"></i>
                 </label>
                 <select id="downloadLoaderVersion">
-                    <option value="">Cargando...</option>
+                    <option value="">Loading...</option>
                 </select>
             </div>
 
             <!-- Download Progress -->
             <div id="downloadProgressContainer" class="install-progress" style="display: none;">
-                <button id="cancelDownloadBtn2" class="cancel-download-icon" title="Cancelar descarga">
+                <button id="cancelDownloadBtn2" class="cancel-download-icon" title="Cancel download">
                     <i class="fas fa-times"></i>
                 </button>
-                <div class="install-progress-text" id="downloadProgressText">Descargando...</div>
+                <div class="install-progress-text" id="downloadProgressText">Downloading...</div>
                 <div class="progress-bar">
                     <div id="downloadProgressBarFill" class="progress-bar-fill" style="width: 0%;"></div>
                 </div>
@@ -411,35 +437,35 @@
 
             <div class="modal-options">
                 <button id="startDownloadBtn" class="btn-blue">
-                    <i class="fas fa-download"></i> Descargar
+                    <i class="fas fa-download"></i> Download
                 </button>
-                <button id="cancelDownloadModalBtn" class="btn-red">Cancelar</button>
+                <button id="cancelDownloadModalBtn" class="btn-red">Cancel</button>
             </div>
         </div>
     </div>
 
-    <!-- Modal de Sin Internet -->
+    <!-- No Internet Modal -->
     <div class="modal" id="noInternetModal" style="display: none;">
         <div class="modal-content no-internet-modal">
             <div class="no-internet-icon">
                 <span class="no-internet-symbol">⚠</span>
             </div>
-            <span class="modal-title">Sin Conexión a Internet</span>
+            <span class="modal-title">No Internet Connection</span>
             <p class="no-internet-message">
-                No se pudo detectar una conexión a internet. Algunas funciones pueden no estar disponibles:
+                Could not detect an internet connection. Some features may not be available:
             </p>
             <ul class="no-internet-features">
-                <li>Búsqueda y descarga de mods</li>
-                <li>Actualizaciones automáticas</li>
-                <li>Descarga de nuevas versiones de Minecraft</li>
+                <li>Mod searching and downloading</li>
+                <li>Automatic updates</li>
+                <li>Downloading new Minecraft versions</li>
             </ul>
 
             <button class="btn-primary btn-large" id="closeAppBtn">
-                ✕ Cerrar Aplicación
+                ✕ Close Application
             </button>
 
             <button class="btn-continue-anyway" id="continueAnywayBtn">
-                Continuar sin conexión
+                Continue anyway
             </button>
         </div>
     </div>
@@ -454,13 +480,13 @@
             <div class="mod-details-header">
                 <img src="" alt="" class="mod-details-icon" id="modDetailIcon">
                 <div class="mod-details-title-section">
-                    <div class="mod-details-title" id="modDetailTitle">Titulo del Mod</div>
-                    <div class="mod-details-author" id="modDetailAuthor">por Autor</div>
+                    <div class="mod-details-title" id="modDetailTitle">Mod Title</div>
+                    <div class="mod-details-author" id="modDetailAuthor">by Author</div>
                     <div class="mod-card-categories" id="modDetailCategories"></div>
                 </div>
                 <div style="width: 200px; margin-right: 40px;">
                     <button id="modDetailInstallBtn" class="btn-primary" style="width: 100%; height: 50px;">
-                        <i class="fas fa-download"></i> Instalar
+                        <i class="fas fa-download"></i> Install
                     </button>
                 </div>
             </div>
@@ -476,23 +502,23 @@
 
                 <div class="mod-details-sidebar">
                     <div class="sidebar-section">
-                        <div class="sidebar-title">Información</div>
+                        <div class="sidebar-title">Information</div>
                         <div class="info-row">
-                            <span class="info-label">Descargas</span>
-                            <span class="info-value" id="modDetailDownloads">Cargando...</span>
+                            <span class="info-label">Downloads</span>
+                            <span class="info-value" id="modDetailDownloads">Loading...</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label">Actualizado</span>
-                            <span class="info-value" id="modDetailUpdated">Cargando...</span>
+                            <span class="info-label">Updated</span>
+                            <span class="info-value" id="modDetailUpdated">Loading...</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label">Licencia</span>
-                            <span class="info-value" id="modDetailLicense">Cargando...</span>
+                            <span class="info-label">License</span>
+                            <span class="info-value" id="modDetailLicense">Loading...</span>
                         </div>
                     </div>
 
                     <div class="sidebar-section">
-                        <div class="sidebar-title">Galería</div>
+                        <div class="sidebar-title">Gallery</div>
                         <div class="mod-gallery" id="modDetailGallery"></div>
                     </div>
                 </div>
@@ -503,29 +529,29 @@
     <!-- Error Modal -->
     <div id="errorModal" class="modal">
         <div class="modal-content" style="width: 600px; background-color: #2b2b2b; color: #fff;">
-            <h2 id="errorModalTitle" style="color: #ff5555; margin-bottom: 15px;">Error de Lanzamiento</h2>
-            <p id="errorModalMessage" style="color: #ddd; margin-bottom: 20px;">Ocurrió un error al iniciar Minecraft.
+            <h2 id="errorModalTitle" style="color: #ff5555; margin-bottom: 15px;">Launch Error</h2>
+            <p id="errorModalMessage" style="color: #ddd; margin-bottom: 20px;">An error occurred while starting
+                Minecraft.
             </p>
 
             <div id="javaDownloadSection"
                 style="display: none; margin-bottom: 20px; background: rgba(255, 170, 0, 0.1); padding: 15px; border-radius: 5px; border-left: 4px solid #ffaa00;">
-                <p style="margin-bottom: 10px; color: #ffaa00;">Parece que necesitas una versión más reciente de Java.
+                <p style="margin-bottom: 10px; color: #ffaa00;">It seems you need a newer version of Java.
                 </p>
                 <a href="https://adoptium.net/" target="_blank" class="btn-primary"
-                    style="display: inline-block; text-decoration: none; text-align: center;">Descargar Java
+                    style="display: inline-block; text-decoration: none; text-align: center;">Download Java
                     (Adoptium)</a>
             </div>
 
             <div style="margin-bottom: 15px;">
-                <label style="display: block; margin-bottom: 5px; font-size: 12px; color: #aaa;">Registro de error
-                    (Log):</label>
+                <label style="display: block; margin-bottom: 5px; font-size: 12px; color: #aaa;">Error log:</label>
                 <textarea id="errorLogContent" readonly
                     style="width: 100%; height: 200px; background: #1a1a1a; color: #ddd; border: 1px solid #444; padding: 10px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
             </div>
 
             <div class="modal-options">
-                <button onclick="copyErrorLog()" class="btn-secondary">Copiar Log</button>
-                <button onclick="closeErrorModal()" class="btn-red">Cerrar</button>
+                <button onclick="copyErrorLog()" class="btn-secondary">Copy Log</button>
+                <button onclick="closeErrorModal()" class="btn-red">Close</button>
             </div>
         </div>
     </div>

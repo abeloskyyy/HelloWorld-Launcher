@@ -32,10 +32,12 @@ def resource_path(relative_path):
 
 
 """
+puedes añadir dos opciones en el menu de config para activar o desactivar que se puedan descargar snapshots y versiones antiguas? (alfas, betas...)
+
 - minecraft news
 - reseñas
 - microsoft login
-- traducciones
+- traducir todo a ingles
 
 
 
@@ -154,14 +156,14 @@ time.sleep(0.1)
 # ============================================
 try:
     from updater import run_updater_check
-    print("Verificando actualizaciones...")
+    print("Checking for updates...")
     should_restart = run_updater_check()
     if should_restart:
-        # Si se aplicó una actualización, el updater reiniciará el launcher
+        # If an update was applied, the updater will restart the launcher
         import sys
         sys.exit(0)
 except Exception as e:
-    print(f"Error en updater (continuando): {e}")
+    print(f"Updater error (continuing): {e}")
 # ============================================
 
 
@@ -379,34 +381,34 @@ def delete_profile(profile_id):
 class Api:
     def __init__(self):
         self.download_cancelled = False
-        self.current_download_thread = None
-        self.current_downloading_version = None
+        self._current_download_thread = None
+        self._current_downloading_version = None
     
     def confirm(self, mensaje: str) -> bool:
-        respuesta = messagebox.askokcancel("Confirmar", mensaje)
+        respuesta = messagebox.askokcancel("Confirm", mensaje)
         return respuesta
 
     def error(self, mensaje: str):
         messagebox.showerror("Error", mensaje)
 
     def info(self, mensaje: str):
-        messagebox.showinfo("Información", mensaje)
+        messagebox.showinfo("Information", mensaje)
 
     def warning(self, mensaje: str):
-        messagebox.showwarning("Advertencia", mensaje)
+        messagebox.showwarning("Warning", mensaje)
     
     def check_internet(self):
-        """Verifica si hay conexión a internet"""
+        """Verifies if there is an internet connection"""
         try:
             import socket
-            # Intentar conectar a DNS de Google
+            # Try connecting to Google DNS
             socket.create_connection(("8.8.8.8", 53), timeout=3)
             return True
         except OSError:
             return False
     
     def close_app(self):
-        """Cierra la aplicación"""
+        """Closes the application"""
         try:
             # Cerrar todas las ventanas de webview
             for window in webview.windows:
@@ -476,32 +478,43 @@ class Api:
 
     def get_available_versions(self):
         """
-        Retorna solo las versiones INSTALADAS para el modal de crear perfil.
+        Returns only INSTALLED versions for the profile creation modal.
         """
         result = {
             "installed": [],
         }
         
         try:
-            # Versiones Instaladas
+            # Installed Versions
             installed_versions = mll.utils.get_installed_versions(mc_dir)
             result["installed"] = [v["id"] for v in installed_versions]
                             
         except Exception as e:
-            print(f"Error obteniendo versiones instaladas: {e}")
-            self.error(f"Error obteniendo versiones instaladas: {e}")
+            print(f"Error getting installed versions: {e}")
+            self.error(f"Error getting installed versions: {e}")
         
         return result
 
     def get_vanilla_versions(self):
         """Retorna lista de versiones vanilla (releases, snapshots, betas, alphas)"""
         try:
+            data = load_user_data()
+            show_snapshots = data.get("show_snapshots", False)
+            show_old = data.get("show_old", False)
+
             all_versions = mll.utils.get_version_list()
             vanilla_versions = []
             for v in all_versions:
-                # Incluir releases, snapshots, old_beta y old_alpha
-                if v["type"] in ["release", "snapshot", "old_beta", "old_alpha"]:
+                v_type = v["type"]
+                
+                # Filtering logic
+                if v_type == "release":
                     vanilla_versions.append(v["id"])
+                elif v_type == "snapshot" and show_snapshots:
+                    vanilla_versions.append(v["id"])
+                elif v_type in ["old_beta", "old_alpha"] and show_old:
+                    vanilla_versions.append(v["id"])
+                    
             return vanilla_versions
         except Exception as e:
             print(f"Error getting vanilla versions: {e}")
@@ -569,9 +582,8 @@ class Api:
         """
         Instala una versión de Minecraft (Vanilla, Fabric o Forge) en un thread separado.
         """
-        # Reset cancellation flag
         self.download_cancelled = False
-        self.current_downloading_version = version_id
+        self._current_downloading_version = version_id
         
         result = {"success": False, "message": "Download not started", "cancelled": False}
         
@@ -619,33 +631,33 @@ class Api:
                     "setMax": set_max
                 }
                 
-                print(f"Instalando: {version_id}")
-                set_status("Iniciando instalación...")
+                print(f"Installing: {version_id}")
+                set_status("Starting installation...")
                 
-                # Determinar tipo de instalación
+                # Determine installation type
                 if version_id.startswith("fabric-"):
-                    # Instalación de Fabric
+                    # Fabric Installation
                     mc_version = version_id.replace("fabric-", "")
-                    set_status(f"Instalando Fabric para {mc_version}...")
+                    set_status(f"Installing Fabric for {mc_version}...")
                     mll.fabric.install_fabric(mc_version, mc_dir, callback=callback)
                     
                 elif version_id.startswith("forge-"):
-                    # Instalación de Forge
+                    # Forge Installation
                     forge_version = version_id.replace("forge-", "")
-                    set_status(f"Instalando Forge {forge_version}...")
+                    set_status(f"Installing Forge {forge_version}...")
                     mll.forge.install_forge_version(forge_version, mc_dir, callback=callback)
                     
                 else:
-                    # Instalación Vanilla
-                    set_status(f"Descargando Vanilla {version_id}...")
+                    # Vanilla Installation
+                    set_status(f"Downloading Vanilla {version_id}...")
                     mll.install.install_minecraft_version(version_id, mc_dir, callback=callback)
                 
                 if self.download_cancelled:
                     result = {"success": False, "message": "Download cancelled", "cancelled": True}
                     self.cleanup_partial_download(version_id)
                 else:
-                    print(f"Instalación completada: {version_id}")
-                    result = {"success": True, "message": f"Versión {version_id} instalada correctamente", "cancelled": False}
+                    print(f"Installation completed: {version_id}")
+                    result = {"success": True, "message": f"Version {version_id} installed successfully", "cancelled": False}
                     # Notify frontend of completion
                     try:
                         webview.windows[0].evaluate_js(
@@ -656,7 +668,7 @@ class Api:
                 
             except Exception as e:
                 error_msg = str(e)
-                print(f"Error instalando {version_id}: {error_msg}")
+                print(f"Error installing {version_id}: {error_msg}")
                 # self.error(f"Error instalando {version_id}: {error_msg}")  <-- REMOVED UNCONDITIONAL CALL
                 
                 if "cancelled" in error_msg.lower() or self.download_cancelled:
@@ -668,7 +680,7 @@ class Api:
                     except Exception:
                         pass
                 else:
-                    self.error(f"Error instalando {version_id}: {error_msg}") # <-- MOVED HERE
+                    self.error(f"Error installing {version_id}: {error_msg}") # <-- MOVED HERE
                     result = {"success": False, "message": error_msg, "cancelled": False}
                     self.cleanup_partial_download(version_id)
                     # Notify frontend of error
@@ -677,27 +689,27 @@ class Api:
                     except Exception:
                         pass
             finally:
-                self.current_downloading_version = None
-                self.current_download_thread = None
+                self._current_downloading_version = None
+                self._current_download_thread = None
         
         # Start download in separate thread
-        self.current_download_thread = threading.Thread(target=download_thread, daemon=True)
-        self.current_download_thread.start()
+        self._current_download_thread = threading.Thread(target=download_thread, daemon=True)
+        self._current_download_thread.start()
         
         # Return immediately (non-blocking)
         return {"success": True, "message": "Download started", "downloading": True}
     
     def cancel_download(self):
         """
-        Cancela la descarga actual.
+        Cancels the current download.
         """
-        if self.current_downloading_version:
-            print(f"Cancelando descarga de {self.current_downloading_version}")
+        if self._current_downloading_version:
+            print(f"Cancelando descarga de {self._current_downloading_version}")
             self.download_cancelled = True
             
             # Wait for thread to finish (with timeout)
-            if self.current_download_thread and self.current_download_thread.is_alive():
-                self.current_download_thread.join(timeout=5.0)
+            if self._current_download_thread and self._current_download_thread.is_alive():
+                self._current_download_thread.join(timeout=5.0)
             
             return {"success": True, "message": "Download cancelled"}
         else:
@@ -705,14 +717,14 @@ class Api:
     
     def cleanup_partial_download(self, version_id):
         """
-        Elimina archivos de descarga parcial.
+        Deletes partial download files.
         """
         try:
             version_path = os.path.join(mc_dir, "versions", version_id)
             if os.path.exists(version_path):
-                print(f"Eliminando descarga parcial: {version_path}")
+                print(f"Deleting partial download: {version_path}")
                 shutil.rmtree(version_path)
-                print(f"Descarga parcial eliminada: {version_id}")
+                print(f"Partial download deleted: {version_id}")
         except Exception as e:
             print(f"Error eliminando descarga parcial de {version_id}: {e}")
     
@@ -725,6 +737,14 @@ class Api:
 
         save_user_data(data)
         return data
+
+    def save_version_settings(self, show_snapshots, show_old):
+        """Guarda preferencias de visibilidad de versiones"""
+        data = load_user_data()
+        data["show_snapshots"] = show_snapshots
+        data["show_old"] = show_old
+        save_user_data(data)
+        return True
     
     
     def get_user_json(self):
@@ -769,11 +789,11 @@ class Api:
         installed_version_ids = [v["id"] for v in installed_versions]
         
         if version not in installed_version_ids:
-            print(f"Versión {version} no instalada. Instalando...")
-            # Instalar la versión
+            print(f"Version {version} not installed. Installing...")
+            # Install the version
             result = self.install_version(version, callback_id=profile_id)
             if not result["success"]:
-                messagebox.showerror("Error", f"No se pudo instalar la versión {version}: {result['message']}")
+                messagebox.showerror("Error", f"Could not install version {version}: {result['message']}")
                 return {"success": False, "message": result["message"]}
         
         # Guardar imagen si viene en base64
@@ -915,8 +935,8 @@ class Api:
         profile = profiles_data.get("profiles", {}).get(profile_id)
         
         if not profile:
-            self.error("Perfil no encontrado")
-            return {"status": "error", "message": "Perfil no encontrado"}
+            self.error("Profile not found")
+            return {"status": "error", "message": "Profile not found"}
         
         # Get Minecraft directory and profile settings
         profile_dir = profile.get("directory", mc_dir)
@@ -992,7 +1012,7 @@ class Api:
             print(f"Error launching Minecraft: {e}")
             import traceback
             traceback.print_exc()
-            self.error(f"Error al iniciar Minecraft: {e}")
+            self.error(f"Error starting Minecraft: {e}")
             return {"status": "error", "message": str(e)}
     
     def _monitor_minecraft_process(self, process):
@@ -1014,9 +1034,6 @@ class Api:
                     
                     # Read log file to find error
                     log_file_path = os.path.join(launcher_dir, "game_output.log")
-                    error_message = "Minecraft se cerró inesperadamente."
-                    error_type = "crash"
-                    
                     try:
                         if os.path.exists(log_file_path):
                             with open(log_file_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -1025,10 +1042,10 @@ class Api:
                                 # Analyze log for known errors
                                 if "UnsupportedClassVersionError" in log_content:
                                     error_type = "java"
-                                    error_message = "Tu versión de Java es incompatible (se requiere una más reciente)."
+                                    error_message = "Your Java version is incompatible (a newer one is required)."
                                 elif "Could not reserve enough space" in log_content:
                                     error_type = "memory"
-                                    error_message = "No se pudo reservar suficiente memoria RAM."
+                                    error_message = "Not enough RAM could be reserved."
                                     
                                 # Escape for JS
                                 log_content_js = log_content.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
@@ -1037,7 +1054,7 @@ class Api:
                                 self._send_launch_error(error_type, error_message, log_content_js)
                     except Exception as e:
                         print(f"Error reading log file: {e}")
-                        self._send_launch_error("crash", f"Error desconocido: {e}", "")
+                        self._send_launch_error("crash", f"Unknown error: {e}", "")
                         
                     break
                 
@@ -1416,7 +1433,7 @@ class Api:
                 # Verificar si ya existe
                 file_path = os.path.join(mods_dir, filename)
                 if os.path.exists(file_path):
-                    self._send_mod_error(project_id, 'Este mod ya está instalado')
+                    self._send_mod_error(project_id, 'This mod is already installed')
                     return
                 
                 # Descargar con streaming
@@ -1439,10 +1456,10 @@ class Api:
                                 percent = int((downloaded / total_size) * 100)
                                 # Cap at 99 until finished
                                 percent = min(99, percent)
-                                self._send_mod_progress(project_id, percent, "Descargando...")
+                                self._send_mod_progress(project_id, percent, "Downloading...")
                 
-                print(f"Mod descargado: {file_path}")
-                self._send_mod_progress(project_id, 100, "Completado")
+                print(f"Mod downloaded: {file_path}")
+                self._send_mod_progress(project_id, 100, "Completed")
                 
                 # Notify success
                 try:
@@ -1490,7 +1507,7 @@ class Api:
             profile = profiles_data.get('profiles', {}).get(profile_id)
             
             if not profile:
-                return {'success': False, 'error': 'Perfil no encontrado', 'mods': []}
+                return {'success': False, 'error': 'Profile not found', 'mods': []}
             
             # Obtener directorio de mods
             profile_dir = profile.get('directory', mc_dir)
@@ -1692,9 +1709,9 @@ if __name__ == '__main__':
                 # or use copy2 to overwrite. Here we overwrite to ensure defaults exist.
                 shutil.copy2(src, dst)
 
-        print("Iconos de perfiles copiados a profiles-img")
+        print("Profile icons copied to profiles-img")
     else:
-        print("WARNING: No existe ./ui/img/profiles, no se copiaron iconos.")
+        print("WARNING: ./ui/img/profiles does not exist, icons were not copied.")
 
     # ============================================
     # MAIN WINDOW - Create hidden, show when ready

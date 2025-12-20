@@ -49,7 +49,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,  # Comprimir con UPX
+    upx=False,  # Desactivado para evitar falsos positivos
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,  # Sin ventana de consola
@@ -59,7 +59,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon='ui/img/icon.ico',  # Icono de la aplicación
-    # Para crear version_file, usa: pyi-grab_version <cualquier_exe.exe>
-    # Luego edita el archivo generado y especifica aquí
-    version_file=None,
+    version_file='file_version_info.txt',
 )

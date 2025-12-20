@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (heroBtn) {
                 heroBtn.href = downloadUrl;
-                heroBtn.innerHTML = `<i class="bi bi-windows"></i> Descargar ${tagName}<div class="btn-shine"></div>`;
+                heroBtn.innerHTML = `<i class="bi bi-windows"></i> Download ${tagName}<div class="btn-shine"></div>`;
             }
 
             if (navBtn) {
@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Update the badge text as well if it exists
             const badge = document.querySelector('.badge');
-            if (badge) badge.textContent = `${tagName} Ya Disponible`;
+            if (badge) badge.textContent = `${tagName} Now Available`;
 
         } catch (error) {
             console.error('Error fetching release:', error);

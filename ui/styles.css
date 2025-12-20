@@ -1139,11 +1139,17 @@ select:disabled {
 
 
 .upload-plus {
-    font-size: 48px;
-    color: #4a90e2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-size: 52px;
     font-weight: 300;
-    line-height: 1;
+    line-height: 4.5;
+    color: #4a90e2;
 }
+
 
 .upload-custom-section {
     margin: 20px 0;
@@ -1192,194 +1198,18 @@ select:disabled {
     background: rgba(255, 255, 255, 0.05);
 }
 
-.option-content {
+.create-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 5px;
     display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1;
-}
-
-.option-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: #fff;
-}
-
-.option-subtitle {
-    font-size: 12px;
-    color: #aaa;
-}
-
-.option-tags {
-    display: flex;
-    gap: 6px;
-    margin-top: 4px;
-    flex-wrap: wrap;
-}
-
-.option-tag {
-    padding: 2px 8px;
-    background: rgba(79, 172, 254, 0.2);
-    border: 1px solid rgba(79, 172, 254, 0.3);
-    border-radius: 3px;
-    font-size: 10px;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
     color: #4facfe;
-    font-weight: 500;
-}
-
-
-.option-tag.forge {
-    background: rgba(184, 92, 92, 0.2);
-    border-color: rgba(184, 92, 92, 0.3);
-    color: #d9534f;
-}
-
-.option-tag.fabric {
-    background: rgba(92, 147, 184, 0.2);
-    border-color: rgba(92, 147, 184, 0.3);
-    color: #5c93b8;
-}
-
-.install-progress {
-    margin: 20px 0;
-    padding: 15px;
-    background: rgba(0, 0, 0, 0.05);
-    border-radius: 8px;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.install-progress-text {
-    font-size: 14px;
-    color: #333;
-    margin-bottom: 10px;
-    text-align: center;
-    font-weight: 500;
-}
-
-.progress-bar {
-    width: 100%;
-    height: 10px;
-    background: rgba(0, 0, 0, 0.1);
-    border-radius: 5px;
-    overflow: hidden;
-    margin-bottom: 8px;
-}
-
-.progress-bar-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #4CAF50, #8BC34A);
-    border-radius: 5px;
-    transition: width 0.3s ease;
-    box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
-}
-
-.progress-percentage {
-    font-size: 13px;
-    color: #4CAF50;
-    text-align: center;
-    font-weight: 700;
-}
-
-.image-selector-modal {
-    max-width: 600px;
-    max-height: 80vh;
-    overflow-y: auto;
-}
-
-.image-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-    gap: 15px;
-    margin: 25px 0;
-    padding: 10px;
-}
-
-.image-grid-item {
-    width: 80px;
-    height: 80px;
-    border-radius: 8px;
-    overflow: hidden;
-    cursor: pointer;
-    border: 3px solid transparent;
-    transition: all 0.3s ease;
-    background: #f0f0f0;
-}
-
-.image-grid-item img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-}
-
-.image-grid-item:hover {
-    border-color: #4a90e2;
-    transform: scale(1.05);
-}
-
-.image-grid-item.selected {
-    border-color: #2c6fbd;
-    box-shadow: 0 0 10px rgba(74, 144, 226, 0.5);
-}
-
-/* Botón de upload dentro del grid */
-.upload-item {
-    background: #f8f9fa;
-    border: 3px dashed #4a90e2 !important;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.upload-item:hover {
-    border-color: #2c6fbd !important;
-    background-color: #e8f4f8;
-}
-
-.upload-plus {
-    font-size: 48px;
-    color: #4a90e2;
-    font-weight: 300;
-    line-height: 1;
-}
-
-.upload-custom-section {
-    margin: 20px 0;
-    padding: 15px;
-    display: flex;
-    justify-content: center;
-}
-
-.upload-custom-box {
-    width: 200px;
-    height: 120px;
-    border: 3px dashed #4a90e2;
-    border-radius: 12px;
-    background-color: #f8f9fa;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-}
-
-.upload-custom-box:hover {
-    border-color: #2c6fbd;
-    background-color: #e8f4f8;
-    transform: scale(1.05);
-}
-
-.upload-icon {
-    font-size: 32px;
-}
-
-.upload-text {
-    color: #4a90e2;
-    font-weight: 600;
-    font-size: 14px;
-    text-align: center;
+    background: rgba(79, 172, 254, 0.1);
+    border: 1px dashed rgba(79, 172, 254, 0.5);
+    flex-shrink: 0;
 }
 
 /* Create Profile Option */
@@ -2517,21 +2347,10 @@ label {
     transform: translateY(-1px);
 }
 
-/* Version Selector Modal */
-.mod-version-modal {
-    max-width: 600px;
-}
-
-.mod-version-list {
-    max-height: 400px;
-    overflow-y: auto;
-    margin: 20px 0;
-}
-
 .mod-version-item {
     padding: 12px 16px;
-    background: rgba(0, 0, 0, 0.05);
-    border: 1px solid rgba(0, 0, 0, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 6px;
     margin-bottom: 10px;
     cursor: pointer;
@@ -2545,23 +2364,15 @@ label {
 
 .mod-version-name {
     font-weight: 600;
-    color: #333;
+    color: #fff;
     margin-bottom: 4px;
 }
 
 .mod-version-info {
     font-size: 13px;
-    color: #666;
+    color: #aaa;
     display: flex;
     gap: 12px;
-}
-
-.mod-version-badge {
-    padding: 2px 8px;
-    background: rgba(79, 172, 254, 0.2);
-    border-radius: 10px;
-    font-size: 11px;
-    color: #4facfe;
 }
 
 /* Initial Loader Styles */

@@ -59,7 +59,7 @@ window.updateInstallProgress = function (version, percentage, status) {
 
     if (progressContainer && progressBar && progressText && progressPercentage) {
         progressContainer.style.display = 'block';
-        progressText.textContent = status || `Instalando ${version}...`;
+        progressText.textContent = status || `Installing ${version}...`;
         progressBar.style.width = `${percentage}%`;
         progressPercentage.textContent = `${percentage}%`;
 
@@ -67,7 +67,7 @@ window.updateInstallProgress = function (version, percentage, status) {
     }
 };
 
-// Función global llamada cuando la descarga se completa
+// Global function called when download completes
 window.onDownloadComplete = async function (version) {
     console.log(`Download completed: ${version}`);
     isDownloading = false;
@@ -106,7 +106,7 @@ async function cancelDownload() {
             closeDownloadProgress();
 
             // Don't create profile, just show message
-            window.pywebview.api.info('Descarga cancelada. La versión no se ha instalado.');
+            window.pywebview.api.info('Download cancelled. The version has not been installed.');
         }
     } catch (error) {
         console.error('Error cancelling download:', error);
@@ -114,25 +114,49 @@ async function cancelDownload() {
 }
 
 
-function guardarDatos() {
+function saveSettings() {
     const username = document.getElementById("nickname").value;
     const mcdir = document.getElementById("mcdir").value;
     const devModeCheckbox = document.getElementById("devModeCheckbox");
     const devMode = devModeCheckbox ? devModeCheckbox.checked : false;
 
-    // Get current dev mode to check if it changed
+    const showSnapshots = document.getElementById("showSnapshotsCheckbox")?.checked || false;
+    const showOld = document.getElementById("showOldVersionsCheckbox")?.checked || false;
+
+    // Get current data to check if dev mode changed
     window.pywebview.api.get_user_json().then(currentData => {
         const devModeChanged = currentData.dev_mode !== devMode;
 
-        window.pywebview.api.save_user_json(username, mcdir).then(() => {
-            // Save dev_mode separately
-            window.pywebview.api.save_dev_mode(devMode).then(() => {
+        window.pywebview.api.save_user_json(username, mcdir).then(async data => {
+            // Save dev_mode and other settings separately or extend save_user_json
+            // For simplicity and matching current structure, we'll extend saving logic
+            try {
+                // Update local cache and state
+                versionCache.vanilla = null; // Force refresh vanilla versions
+
+                // Custom API calls for extra settings if needed, or update data directly
+                // Save version settings
+                await window.pywebview.api.save_version_settings(showSnapshots, showOld);
+
+                await window.pywebview.api.save_dev_mode(devMode);
+
+                // Let's modify the user data in backend with new fields
+                // Since save_user_json might not handle showSnapshots/showOld yet in its signature,
+                // we'll rely on a generic way or update main.py. 
+                // Wait, I didn't update save_user_json signature in main.py yet. I should do that first.
+                // Actually, I can just send them as part of the data if I update the backend.
+
+                // For now, let's assume we update the backend to handle these in save_user_json or separate calls.
+                // I'll update main.py next to handle these.
+
                 if (devModeChanged) {
-                    window.pywebview.api.info('Configuración guardada. Por favor, reinicia el launcher para que los cambios del modo desarrollador tomen efecto.');
+                    window.pywebview.api.info('Settings saved. Please restart the launcher for developer mode changes to take effect.');
                 } else {
-                    window.pywebview.api.info('Configuración guardada correctamente.');
+                    window.pywebview.api.info('Settings saved successfully.');
                 }
-            });
+            } catch (err) {
+                console.error("Error saving settings:", err);
+            }
         });
     });
 }
@@ -191,6 +215,17 @@ window.addEventListener('pywebviewready', async () => {
             devModeCheckbox.checked = data.dev_mode || false;
         }
 
+        // Load version settings
+        const showSnapshotsCheckbox = document.getElementById("showSnapshotsCheckbox");
+        if (showSnapshotsCheckbox) {
+            showSnapshotsCheckbox.checked = data.show_snapshots || false;
+        }
+
+        const showOldVersionsCheckbox = document.getElementById("showOldVersionsCheckbox");
+        if (showOldVersionsCheckbox) {
+            showOldVersionsCheckbox.checked = data.show_old || false;
+        }
+
         // Load launcher version
         try {
             const version = await window.pywebview.api.get_launcher_version();
@@ -202,7 +237,7 @@ window.addEventListener('pywebviewready', async () => {
             console.error("Error loading version:", err);
         }
 
-        await cargarPerfiles();
+        await loadProfiles();
         await loadVersions();
     } catch (error) {
         console.error("Error loading initial data:", error);
@@ -222,7 +257,7 @@ async function launchGame() {
     const profileSelectElement = document.getElementById("profileSelect");
 
     if (!profileSelectElement || !profileSelectElement.value) {
-        window.pywebview.api.error("Debes seleccionar un perfil antes de jugar");
+        window.pywebview.api.error("You must select a profile before playing");
         return;
     }
 
@@ -233,7 +268,7 @@ async function launchGame() {
     const nickname = userData.username || "";
 
     if (!nickname) {
-        window.pywebview.api.error("Debes iniciar sesión antes de jugar");
+        window.pywebview.api.error("You must log in before playing");
         return;
     }
 
@@ -243,7 +278,7 @@ async function launchGame() {
     // Handle duplicate instance
     if (result.status === "already_running") {
         const confirm = await window.pywebview.api.confirm(
-            "Minecraft ya está abierto. ¿Quieres abrir otra instancia?"
+            "Minecraft is already open. Do you want to open another instance?"
         );
         if (confirm) {
             // Force launch
@@ -265,7 +300,7 @@ async function launchGame() {
         playButton.disabled = true;
         playButton.style.cursor = 'not-allowed';
         playButton.style.opacity = '0.6';
-        playButton.innerHTML = '<span class="spinner"></span> Cargando...';
+        playButton.innerHTML = '<span class="spinner"></span> Loading...';
     }
 }
 
@@ -273,7 +308,7 @@ async function launchGame() {
 function onMinecraftReady() {
     const playButton = document.querySelector('.play-button');
     if (playButton) {
-        playButton.innerHTML = 'Jugando';
+        playButton.innerHTML = 'Playing';
         playButton.disabled = false;
         playButton.style.cursor = 'pointer';
         playButton.style.opacity = '1';
@@ -284,15 +319,15 @@ function onMinecraftReady() {
 function onMinecraftClosed() {
     const playButton = document.querySelector('.play-button');
     if (playButton) {
-        playButton.innerHTML = 'Jugar';
+        playButton.innerHTML = 'Play';
         playButton.disabled = false;
         playButton.style.cursor = 'pointer';
         playButton.style.opacity = '1';
     }
 
     // Reload profiles and options
+    loadProfiles();
     loadOptions();
-    cargarPerfiles();
 }
 
 // Helper Functions
@@ -302,16 +337,16 @@ function timeAgo(dateString) {
     const seconds = Math.floor((now - date) / 1000);
 
     let interval = seconds / 31536000;
-    if (interval > 1) return "Hace " + Math.floor(interval) + " años";
+    if (interval > 1) return Math.floor(interval) + " years ago";
     interval = seconds / 2592000;
-    if (interval > 1) return "Hace " + Math.floor(interval) + " meses";
+    if (interval > 1) return Math.floor(interval) + " months ago";
     interval = seconds / 86400;
-    if (interval > 1) return "Hace " + Math.floor(interval) + " días";
+    if (interval > 1) return Math.floor(interval) + " days ago";
     interval = seconds / 3600;
-    if (interval > 1) return "Hace " + Math.floor(interval) + " horas";
+    if (interval > 1) return Math.floor(interval) + " hours ago";
     interval = seconds / 60;
-    if (interval > 1) return "Hace " + Math.floor(interval) + " minutos";
-    return "Hace unos segundos";
+    if (interval > 1) return Math.floor(interval) + " minutes ago";
+    return "A few seconds ago";
 }
 
 async function loadVersions() {
@@ -320,7 +355,7 @@ async function loadVersions() {
     versionSelect.innerHTML = '';
 
     try {
-        // Ahora solo obtenemos versiones INSTALADAS para este dropdown
+        // Now we only get INSTALLED versions for this dropdown
         const versionsData = await window.pywebview.api.get_available_versions();
 
         // Helper function to create optgroups
@@ -340,17 +375,17 @@ async function loadVersions() {
 
         // 1. Instaladas
         if (versionsData.installed && versionsData.installed.length > 0) {
-            createGroup('Instaladas', versionsData.installed);
+            createGroup('Installed', versionsData.installed);
         } else {
             const option = document.createElement('option');
-            option.textContent = "No hay versiones instaladas";
+            option.textContent = "No installed versions found";
             option.disabled = true;
             versionSelect.appendChild(option);
         }
 
     } catch (error) {
-        console.error('Error cargando versiones:', error);
-        window.pywebview.api.error('Error cargando lista de versiones');
+        console.error('Error loading versions:', error);
+        window.pywebview.api.error('Error loading version list');
     }
 }
 
@@ -392,8 +427,8 @@ async function loadOptions() {
         if (document.getElementById('selectedIcon')) {
             document.getElementById('selectedIcon').style.display = 'none';
         }
-        if (document.getElementById('selectedTitle')) document.getElementById('selectedTitle').textContent = "No tienes perfiles";
-        if (document.getElementById('selectedSubtitle')) document.getElementById('selectedSubtitle').textContent = "Crea un perfil para jugar";
+        if (document.getElementById('selectedTitle')) document.getElementById('selectedTitle').textContent = "No profiles found";
+        if (document.getElementById('selectedSubtitle')) document.getElementById('selectedSubtitle').textContent = "Create a profile to play";
 
         if (selectOptions) {
             const createOption = document.createElement('div');
@@ -401,8 +436,8 @@ async function loadOptions() {
             createOption.innerHTML = `
                 <div class="option-icon" style="display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff; background: rgba(255, 255, 255, 0.1);"><i class="fas fa-plus"></i></div>
                 <div class="option-content">
-                    <div class="option-title">Crear Nuevo Perfil</div>
-                    <div class="option-subtitle">Haz clic para empezar</div>
+                    <div class="option-title">Create New Profile</div>
+                    <div class="option-subtitle">Click to get started</div>
                 </div>
             `;
             createOption.addEventListener('click', async () => {
@@ -425,13 +460,13 @@ async function loadOptions() {
                 emptyMsg.style.padding = '20px';
                 emptyMsg.style.textAlign = 'center';
                 emptyMsg.style.color = '#aaa';
-                emptyMsg.innerHTML = `<i class="fas fa-filter"></i> No hay perfiles ${activeProfileFilter}`;
+                emptyMsg.innerHTML = `<i class="fas fa-filter"></i> No ${activeProfileFilter} profiles found`;
 
                 // Add clear filter button
                 const clearBtn = document.createElement('button');
                 clearBtn.className = 'btn-secondary btn-small';
                 clearBtn.style.marginTop = '10px';
-                clearBtn.textContent = 'Limpiar filtro';
+                clearBtn.textContent = 'Clear filter';
                 clearBtn.onclick = (e) => {
                     e.stopPropagation();
                     filterProfiles(activeProfileFilter, e); // Toggle off
@@ -478,13 +513,13 @@ async function loadOptions() {
                 const iconUrl = await window.pywebview.api.get_profile_icon(profile.icon);
                 profile.iconUrl = iconUrl;
 
-                const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Nunca';
+                const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Never';
 
                 option.innerHTML = `
                     <img src="${iconUrl}" alt="" class="option-icon">
                     <div class="option-content">
                         <div class="option-title">${profile.name}</div>
-                        <div class="option-subtitle">Versión ${profile.version} • ${lastPlayedText}</div>
+                        <div class="option-subtitle">Version ${profile.version} • ${lastPlayedText}</div>
                         <div class="option-tags">${tags}</div>
                     </div>
                 `;
@@ -547,10 +582,10 @@ window.showLaunchError = function (type, message, log) {
     javaSection.style.display = 'none';
 
     if (type === 'java') {
-        title.textContent = 'Error de Java';
+        title.textContent = 'Java Error';
         javaSection.style.display = 'block';
     } else {
-        title.textContent = 'Error de Lanzamiento';
+        title.textContent = 'Launch Error';
     }
 
     modal.classList.add('show');
@@ -566,21 +601,21 @@ window.copyErrorLog = function () {
     if (logArea) {
         logArea.select();
         document.execCommand('copy');
-        alert('Log copiado al portapapeles');
+        alert('Log copied to clipboard');
     }
 };
 
 function selectOption(id, profile) {
     if (originalSelect) originalSelect.value = id;
 
-    const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Nunca';
+    const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Never';
 
     if (document.getElementById('selectedIcon')) {
         document.getElementById('selectedIcon').src = profile.iconUrl || profile.icon;
         document.getElementById('selectedIcon').style.display = 'block';
     }
     if (document.getElementById('selectedTitle')) document.getElementById('selectedTitle').textContent = profile.name;
-    if (document.getElementById('selectedSubtitle')) document.getElementById('selectedSubtitle').textContent = `Versión ${profile.version} • ${lastPlayedText}`;
+    if (document.getElementById('selectedSubtitle')) document.getElementById('selectedSubtitle').textContent = `Version ${profile.version} • ${lastPlayedText}`;
 
     document.querySelectorAll('.select-option').forEach(opt => {
         opt.classList.remove('selected');
@@ -615,7 +650,7 @@ document.addEventListener('click', (e) => {
     }
 });
 
-async function cargarPerfiles() {
+async function loadProfiles() {
     const profilesData = await window.pywebview.api.get_profiles();
     const profiles = profilesData.profiles;
 
@@ -637,7 +672,7 @@ async function cargarPerfiles() {
     for (const profile of profilesArray) {
         const id = profile.id;
         const iconUrl = await window.pywebview.api.get_profile_icon(profile.icon);
-        const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Nunca';
+        const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Never';
 
         const item = document.createElement("div");
         item.className = "profile-card";
@@ -645,11 +680,11 @@ async function cargarPerfiles() {
             <img src="${iconUrl}" id="profile-img">
             <div class="profile-info">
                 <h3>${profile.name}</h3>
-                <p>Versión: ${profile.version} | Última vez: ${lastPlayedText}</p>
+                <p>Version: ${profile.version} | Last played: ${lastPlayedText}</p>
             </div>
             <div class="profile-actions">
-                <button class="btn-secondary btn-small edit-btn"><i class="fas fa-edit"></i> Editar</button>
-                <button class="btn-danger btn-small delete-btn"><i class="fas fa-trash"></i> Eliminar</button>
+                <button class="btn-secondary btn-small edit-btn"><i class="fas fa-edit"></i> Edit</button>
+                <button class="btn-danger btn-small delete-btn"><i class="fas fa-trash"></i> Delete</button>
             </div>
         `;
 
@@ -664,17 +699,17 @@ async function cargarPerfiles() {
         deleteBtn.onclick = async (e) => {
             e.stopPropagation();
 
-            const confirmado = await window.pywebview.api.confirm(`¿Estás seguro de que quieres eliminar el perfil "${profile.name}"?`);
-            if (confirmado) {
+            const confirmed = await window.pywebview.api.confirm(`Are you sure you want to delete the profile "${profile.name}"?`);
+            if (confirmed) {
                 await window.pywebview.api.delete_profile(id);
-                await cargarPerfiles();
+                await loadProfiles();
                 await loadOptions();
                 await loadModdableProfiles();
             }
         };
 
         item.onclick = () => {
-            console.log("Perfil seleccionado:", id);
+            console.log("Profile selected:", id);
         };
 
         list.appendChild(item);
@@ -718,17 +753,20 @@ async function resetProfileModal() {
     selectedImageData = null;
 
     // Cargar imagen por defecto
-    window.pywebview.api.get_profile_icon('default.png').then(url => {
+    try {
+        const url = await window.pywebview.api.get_profile_icon('default.png');
         if (iconPreview) {
             iconPreview.src = url;
             iconPreview.style.display = 'block';
         }
         if (placeholderIcon) placeholderIcon.style.display = 'none';
-    });
+    } catch (e) {
+        console.error("Error loading default icon:", e);
+    }
 
     editingProfileId = null;
-    if (acceptProfileBtn) acceptProfileBtn.textContent = "Crear Perfil";
-    if (document.querySelector('#modal h2')) document.querySelector('#modal h2').textContent = "Crear Nuevo Perfil";
+    if (acceptProfileBtn) acceptProfileBtn.textContent = "Create Profile";
+    if (document.querySelector('#modal h2')) document.querySelector('#modal h2').textContent = "Create New Profile";
 }
 
 async function openEditProfileModal(id, profile) {
@@ -744,17 +782,20 @@ async function openEditProfileModal(id, profile) {
     selectedImageData = profile.icon;
 
     if (profile.icon && profile.icon !== 'default.png') {
-        window.pywebview.api.get_profile_icon(profile.icon).then(url => {
+        try {
+            const url = await window.pywebview.api.get_profile_icon(profile.icon);
             if (iconPreview) {
                 iconPreview.src = url;
                 iconPreview.style.display = 'block';
             }
             if (placeholderIcon) placeholderIcon.style.display = 'none';
-        });
+        } catch (e) {
+            console.error("Error loading profile icon:", e);
+        }
     }
 
-    if (acceptProfileBtn) acceptProfileBtn.textContent = "Guardar Cambios";
-    if (document.querySelector('#modal h2')) document.querySelector('#modal h2').textContent = "Editar Perfil";
+    if (acceptProfileBtn) acceptProfileBtn.textContent = "Save Changes";
+    if (document.querySelector('#modal h2')) document.querySelector('#modal h2').textContent = "Edit Profile";
     if (profileModal) profileModal.classList.add('show');
 }
 
@@ -784,16 +825,16 @@ if (acceptProfileBtn) {
         const missingFields = [];
         const trimmedName = profileName.trim();
         if (!trimmedName) {
-            missingFields.push("Nombre del Perfil");
+            missingFields.push("Profile Name");
         } else if (trimmedName.length < 2) {
-            window.pywebview.api.error('El nombre del perfil debe tener al menos 2 caracteres');
+            window.pywebview.api.error('Profile name must be at least 2 characters');
             return;
         }
-        if (!profileVersion) missingFields.push("Versión");
-        if (!profileDir.trim()) missingFields.push("Directorio");
+        if (!profileVersion) missingFields.push("Version");
+        if (!profileDir.trim()) missingFields.push("Directory");
 
         if (missingFields.length > 0) {
-            window.pywebview.api.error(`No puedes dejar estos campos vacíos:\n- ${missingFields.join('\n- ')}`);
+            window.pywebview.api.error(`You cannot leave these fields empty:\n- ${missingFields.join('\n- ')}`);
             return;
         }
 
@@ -810,7 +851,7 @@ if (acceptProfileBtn) {
             }
 
             await window.pywebview.api.edit_profile(editingProfileId, updatedData);
-            await cargarPerfiles();
+            await loadProfiles();
             await loadOptions();
             await loadModdableProfiles();
             if (profileModal) profileModal.classList.remove('show');
@@ -823,7 +864,7 @@ if (acceptProfileBtn) {
                 const result = await window.pywebview.api.add_profile(profileName, profileVersion, profileIcon, profileDir, profileJVMArgs);
 
                 if (result.success) {
-                    await cargarPerfiles();
+                    await loadProfiles();
                     await loadOptions();
                     await loadModdableProfiles();
                     if (profileModal) profileModal.classList.remove('show');
@@ -833,7 +874,7 @@ if (acceptProfileBtn) {
                 }
             } catch (error) {
                 console.error('Error creating profile:', error);
-                window.pywebview.api.error('Error al crear el perfil');
+                window.pywebview.api.error('Error creating profile');
             }
         }
     });
@@ -842,12 +883,12 @@ if (acceptProfileBtn) {
 // Cancel download button handler
 if (cancelDownloadBtn) {
     cancelDownloadBtn.addEventListener('click', async () => {
-        // Guardar contenido original y añadir spinner
+        // Save original content and add spinner
         const originalContent = cancelDownloadBtn.innerHTML;
         const width = cancelDownloadBtn.offsetWidth;
         const height = cancelDownloadBtn.offsetHeight;
 
-        // Establecer tamaño fijo para evitar redimensionamiento
+        // Set fixed size to prevent resizing
         cancelDownloadBtn.style.width = width + 'px';
         cancelDownloadBtn.style.height = height + 'px';
 
@@ -859,7 +900,7 @@ if (cancelDownloadBtn) {
         try {
             await cancelDownload();
         } finally {
-            // Si el botón sigue existiendo, restaurar estado (aunque probablemente desaparecerá)
+            // If the button still exists, restore state (although it will probably disappear)
             if (cancelDownloadBtn) {
                 cancelDownloadBtn.innerHTML = originalContent;
                 cancelDownloadBtn.disabled = false;
@@ -872,7 +913,7 @@ if (cancelDownloadBtn) {
     });
 }
 
-// Botón de selección de carpeta
+// Folder selection button
 if (selectFolderBtn) {
     selectFolderBtn.addEventListener('click', async () => {
         const currentDir = document.getElementById('profileDir').value;
@@ -884,7 +925,7 @@ if (selectFolderBtn) {
     });
 }
 
-// Botón de selección de carpeta
+// Folder selection button
 if (selectMcdirBtn) {
     selectMcdirBtn.addEventListener('click', async () => {
         const currentDir = document.getElementById('mcdir').value;
@@ -896,7 +937,7 @@ if (selectMcdirBtn) {
     });
 }
 
-// Abrir modal de imágenes cuando se hace clic en el botón de icono
+// Open images modal when clicking the icon button
 if (iconButton) {
     iconButton.addEventListener('click', async () => {
         await loadImageModal();
@@ -904,22 +945,22 @@ if (iconButton) {
     });
 }
 
-// Cerrar modal de imágenes
+// Close images modal
 if (cancelImageModalBtn) {
     cancelImageModalBtn.addEventListener('click', () => {
         if (imageModal) imageModal.classList.remove('show');
     });
 }
 
-// Cargar imágenes en el modal
+// Load images in the modal
 async function loadImageModal() {
     if (!imageGrid) return;
 
-    // Guardar el botón de upload antes de limpiar
+    // Save the upload button before clearing
     const uploadButton = imageGrid.querySelector('.upload-item');
     const uploadInput = imageGrid.querySelector('#customImageInput');
 
-    // Limpiar solo los items de imagen
+    // Clear only image items
     imageGrid.innerHTML = '';
 
     try {
@@ -945,7 +986,7 @@ async function loadImageModal() {
             imageGrid.appendChild(gridItem);
         }
 
-        // Volver a añadir el botón de upload al final
+        // Add the upload button back at the end
         if (uploadButton) {
             imageGrid.appendChild(uploadButton);
         }
@@ -953,13 +994,13 @@ async function loadImageModal() {
             imageGrid.appendChild(uploadInput);
         }
     } catch (error) {
-        console.error('Error cargando imágenes:', error);
+        console.error('Error loading images:', error);
     }
 }
 
-// Seleccionar imagen del grid
+// Select image from the grid
 function selectImageFromGrid(imageName, imageUrl) {
-    // Marcar la imagen seleccionada en el grid
+    // Mark the selected image in the grid
     document.querySelectorAll('.image-grid-item:not(.upload-item)').forEach(item => {
         item.classList.remove('selected');
     });
@@ -967,14 +1008,14 @@ function selectImageFromGrid(imageName, imageUrl) {
     const selectedItem = document.querySelector(`[data-image-name="${imageName}"]`);
     if (selectedItem) selectedItem.classList.add('selected');
 
-    // Actualizar la vista previa en el modal principal
+    // Update the preview in the main modal
     if (iconPreview) {
         iconPreview.src = imageUrl;
         iconPreview.style.display = 'block';
     }
     if (placeholderIcon) placeholderIcon.style.display = 'none';
 
-    // IMPORTANTE: Guardar el nombre de archivo, no un objeto base64
+    // IMPORTANT: Save the filename, not a base64 object
     selectedImageData = imageName;
 
     // Cerrar el modal de imagenes
@@ -1199,7 +1240,7 @@ async function switchLoaderType(type) {
         loaderVersionGroup.style.display = 'none';
     } else {
         loaderVersionGroup.style.display = 'flex';
-        downloadLoaderVersionSelect.innerHTML = '<option value="">Cargando...</option>';
+        downloadLoaderVersionSelect.innerHTML = '<option value="">Loading...</option>';
     }
 
     // Load MC Versions
@@ -1207,7 +1248,7 @@ async function switchLoaderType(type) {
 }
 
 async function loadMcVersions(type) {
-    downloadMcVersionSelect.innerHTML = '<option value="">Cargando...</option>';
+    downloadMcVersionSelect.innerHTML = '<option value="">Loading...</option>';
     downloadMcVersionSelect.disabled = true;
 
     try {
@@ -1232,7 +1273,7 @@ async function loadMcVersions(type) {
 
         if (versions.length === 0) {
             const option = document.createElement('option');
-            option.textContent = "No se encontraron versiones";
+            option.textContent = "No versions found";
             downloadMcVersionSelect.appendChild(option);
         } else {
             versions.forEach(v => {
@@ -1251,7 +1292,7 @@ async function loadMcVersions(type) {
 
     } catch (error) {
         console.error(`Error loading ${type} versions:`, error);
-        downloadMcVersionSelect.innerHTML = '<option value="">Error al cargar</option>';
+        downloadMcVersionSelect.innerHTML = '<option value="">Error loading</option>';
     } finally {
         downloadMcVersionSelect.disabled = false;
     }
@@ -1260,7 +1301,7 @@ async function loadMcVersions(type) {
 async function loadLoaderVersions(type, mcVersion) {
     if (!mcVersion) return;
 
-    downloadLoaderVersionSelect.innerHTML = '<option value="">Cargando...</option>';
+    downloadLoaderVersionSelect.innerHTML = '<option value="">Loading...</option>';
     downloadLoaderVersionSelect.disabled = true;
 
     try {
@@ -1270,7 +1311,7 @@ async function loadLoaderVersions(type, mcVersion) {
 
         if (loaders.length === 0) {
             const option = document.createElement('option');
-            option.textContent = "No hay loaders disponibles";
+            option.textContent = "No loaders available";
             downloadLoaderVersionSelect.appendChild(option);
         } else {
             loaders.forEach(l => {
@@ -1283,7 +1324,7 @@ async function loadLoaderVersions(type, mcVersion) {
 
     } catch (error) {
         console.error(`Error loading ${type} loaders:`, error);
-        downloadLoaderVersionSelect.innerHTML = '<option value="">Error al cargar</option>';
+        downloadLoaderVersionSelect.innerHTML = '<option value="">Error loading</option>';
     } finally {
         downloadLoaderVersionSelect.disabled = false;
     }
@@ -1304,7 +1345,7 @@ async function startVersionDownload() {
     console.log(`[StartDownload] Type: ${currentLoaderType}, MC Version: ${mcVersion}`);
 
     if (!mcVersion) {
-        window.pywebview.api.error("Selecciona una versión de Minecraft");
+        window.pywebview.api.error("Select a Minecraft version");
         return;
     }
 
@@ -1313,7 +1354,7 @@ async function startVersionDownload() {
     if (currentLoaderType !== 'vanilla') {
         const loaderVersion = downloadLoaderVersionSelect.value;
         if (!loaderVersion) {
-            window.pywebview.api.error("Selecciona una versión del Loader");
+            window.pywebview.api.error("Select a Loader version");
             return;
         }
 
@@ -1426,7 +1467,7 @@ window.updateInstallProgress = function (version, percentage, status) {
             dlProgressBar.style.width = `${percentage}%`;
         }
         if (dlProgressText) {
-            dlProgressText.textContent = status || `Descargando ${version}...`;
+            dlProgressText.textContent = status || `Downloading ${version}...`;
         }
         if (dlProgressPercentage) {
             dlProgressPercentage.textContent = `${percentage}%`;
@@ -1448,7 +1489,7 @@ window.onDownloadComplete = async function (version) {
     setTimeout(() => {
         if (downloadModal) downloadModal.classList.remove('show');
         closeDownloadProgress();
-        window.pywebview.api.info(`Versión ${version} instalada correctamente.`);
+        window.pywebview.api.info(`Version ${version} installed successfully.`);
     }, 1000);
 };
 
@@ -1525,7 +1566,7 @@ if (saveOfflineBtn) {
             if (loginModal) loginModal.classList.remove('show');
             showLoginMethodScreen();
         } else {
-            window.pywebview.api.error('Por favor escribe un nickname válido (sin espacios ni acentos)');
+            window.pywebview.api.error('Please enter a valid nickname (no spaces or accents)');
         }
     });
 }
@@ -1533,7 +1574,7 @@ if (saveOfflineBtn) {
 // Microsoft login (placeholder)
 if (selectMicrosoftBtn) {
     selectMicrosoftBtn.addEventListener('click', () => {
-        window.pywebview.api.error('Funcionalidad de Microsoft aún no implementada');
+        window.pywebview.api.error('Microsoft functionality not yet implemented');
     });
 }
 
@@ -1562,7 +1603,7 @@ if (logoutBtn) {
             if (userBadge) userBadge.classList.remove('active');
         } catch (error) {
             console.error('Error logging out:', error);
-            window.pywebview.api.error('Error al cerrar sesión');
+            window.pywebview.api.error('Error logging out');
         }
     });
 }
@@ -1743,7 +1784,7 @@ async function loadModdableProfiles() {
 
         if (Object.keys(profiles).length === 0) {
             // No moddable profiles
-            modsProfileSelect.innerHTML = '<option value="">No hay perfiles con mods</option>';
+            modsProfileSelect.innerHTML = '<option value="">No moddable profiles found</option>';
             modsProfileSelect.disabled = true;
             if (noModdableProfiles) noModdableProfiles.style.display = 'block';
             if (modsTabsContainer) modsTabsContainer.style.display = 'none';
@@ -1791,7 +1832,7 @@ if (modsProfileSelect) {
             modSearchResults.innerHTML = `
                 <div class="mod-search-empty">
                     <i class="fas fa-search"></i>
-                    <p>Busca mods para descargar</p>
+                    <p>Search for mods to download</p>
                 </div>
             `;
         }
@@ -1852,7 +1893,7 @@ if (modSearchInput) {
             modSearchResults.innerHTML = `
                 <div class="mod-search-empty">
                     <i class="fas fa-search"></i>
-                    <p>Busca mods para descargar</p>
+                    <p>Search for mods to download</p>
                 </div>
             `;
             return;
@@ -1871,12 +1912,13 @@ async function searchMods() {
     const query = modSearchInput.value.trim();
 
     if (!query) {
-        window.pywebview.api.error('Escribe algo para buscar');
+        window.pywebview.api.error('Type something to search');
         return;
     }
 
     // Show loading
     modSearchLoading.style.display = 'block';
+    document.getElementById('modDetailTitle').textContent = 'Loading...';
     modSearchResults.innerHTML = '';
 
     try {
@@ -1891,7 +1933,7 @@ async function searchMods() {
             modSearchResults.innerHTML = `
                 <div class="mod-search-empty">
                     <i class="fas fa-exclamation-triangle"></i>
-                    <p>Error al buscar mods: ${result.error}</p>
+                    <p>Error searching mods: ${result.error}</p>
                 </div>
             `;
             return;
@@ -1904,7 +1946,7 @@ async function searchMods() {
             modSearchResults.innerHTML = `
                 <div class="mod-search-empty">
                     <i class="fas fa-search"></i>
-                    <p>No se encontraron mods para "${query}"</p>
+                    <p>No mods found for "${query}"</p>
                 </div>
             `;
             return;
@@ -1925,7 +1967,7 @@ async function searchMods() {
         modSearchResults.innerHTML = `
             <div class="mod-search-empty">
                 <i class="fas fa-exclamation-triangle"></i>
-                <p>Error al buscar mods</p>
+                <p>Error searching mods</p>
             </div>
         `;
     }
@@ -1956,10 +1998,10 @@ function createModCard(mod) {
             ${iconHtml}
             <div class="mod-card-info">
                 <div class="mod-card-title">${mod.title}</div>
-                <div class="mod-card-author">por ${mod.author}</div>
+                <div class="mod-card-author">by ${mod.author}</div>
             </div>
         </div>
-        <div class="mod-card-description">${mod.description || 'Sin descripción'}</div>
+        <div class="mod-card-description">${mod.description || 'No description'}</div>
         <div class="mod-card-stats">
             <div class="mod-card-stat">
                 <i class="fas fa-download"></i>
@@ -1971,7 +2013,7 @@ function createModCard(mod) {
         </div>
         <div class="mod-card-actions">
             <button id="btn-mod-${mod.id}" class="btn-primary" onclick="event.stopPropagation(); downloadModFromCard('${mod.id}', '${mod.slug}')">
-                <i class="fas fa-download"></i> Descargar
+                <i class="fas fa-download"></i> Download
             </button>
         </div>
     `;
@@ -1985,7 +2027,7 @@ window.openModDetails = async function (projectId) {
     if (!modal) return;
 
     // Reset content
-    document.getElementById('modDetailTitle').textContent = 'Cargando...';
+    document.getElementById('modDetailTitle').textContent = 'Loading...';
     document.getElementById('modDetailAuthor').textContent = '';
     document.getElementById('modDetailDescription').innerHTML = '<div style="text-align: center; padding: 50px;"><span class="spinner"></span></div>';
     document.getElementById('modDetailIcon').src = '';
@@ -2022,7 +2064,7 @@ window.openModDetails = async function (projectId) {
         if (details.body && window.marked) {
             document.getElementById('modDetailDescription').innerHTML = marked.parse(details.body);
         } else {
-            document.getElementById('modDetailDescription').textContent = details.description || 'Sin descripción';
+            document.getElementById('modDetailDescription').textContent = details.description || 'No description';
         }
 
         // Stats
@@ -2051,7 +2093,7 @@ window.openModDetails = async function (projectId) {
                 galleryContainer.appendChild(imgEl);
             });
         } else {
-            galleryContainer.innerHTML = '<span style="color: #666; font-size: 13px;">Sin imágenes</span>';
+            galleryContainer.innerHTML = '<span style="color: #666; font-size: 13px;">No images</span>';
         }
 
         // Update install button
@@ -2063,7 +2105,7 @@ window.openModDetails = async function (projectId) {
 
     } catch (error) {
         console.error("Error opening mod details:", error);
-        document.getElementById('modDetailDescription').innerHTML = `<p style="color: red;">Error inesperado</p>`;
+        document.getElementById('modDetailDescription').innerHTML = `<p style="color: red;">Unexpected error</p>`;
     }
 };
 
@@ -2079,7 +2121,7 @@ window.onModDownloadProgress = function (projectId, percentage, status) {
     const btn = document.getElementById(`btn-mod-${projectId}`);
     if (btn) {
         // Change text
-        const originalText = btn.getAttribute('data-original-text') || 'Descargar';
+        const originalText = btn.getAttribute('data-original-text') || 'Download';
         if (!btn.getAttribute('data-original-text')) {
             btn.setAttribute('data-original-text', originalText);
         }
@@ -2098,14 +2140,14 @@ window.onModDownloadProgress = function (projectId, percentage, status) {
 window.onModDownloadComplete = function (projectId, filename) {
     const btn = document.getElementById(`btn-mod-${projectId}`);
     if (btn) {
-        btn.innerHTML = `<i class="fas fa-check"></i> Instalado`;
+        btn.innerHTML = `<i class="fas fa-check"></i> Installed`;
         btn.style.background = '#2ecc71'; // Solid green
         btn.disabled = true;
         btn.style.cursor = 'default';
 
         // Reset after 3 seconds
         setTimeout(() => {
-            const originalText = '<i class="fas fa-download"></i> Descargar';
+            const originalText = '<i class="fas fa-download"></i> Download';
             btn.innerHTML = originalText;
             btn.style.background = ''; // Reset to CSS default
             btn.disabled = false;
@@ -2114,7 +2156,7 @@ window.onModDownloadComplete = function (projectId, filename) {
     }
 
     // Notification
-    window.pywebview.api.info(`Mod descargado: ${filename}`);
+    window.pywebview.api.info(`Mod downloaded: ${filename}`);
 
     // Refresh installed mods if on that tab
     if (currentModTab === 'installed') {
@@ -2130,7 +2172,7 @@ window.onModDownloadError = function (projectId, errorMsg) {
 
         // Reset after 3 seconds
         setTimeout(() => {
-            const originalText = '<i class="fas fa-download"></i> Descargar';
+            const originalText = '<i class="fas fa-download"></i> Download';
             btn.innerHTML = originalText;
             btn.style.background = ''; // Reset
             btn.disabled = false;
@@ -2142,7 +2184,7 @@ window.onModDownloadError = function (projectId, errorMsg) {
 
 window.downloadModFromCard = async function (projectId, slug) {
     if (!currentModsProfile) {
-        window.pywebview.api.error('Selecciona un perfil primero');
+        window.pywebview.api.error('Select a profile first');
         return;
     }
 
@@ -2153,7 +2195,7 @@ window.downloadModFromCard = async function (projectId, slug) {
     try {
         // Set initial loading state
         if (btn) {
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Iniciando...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting...';
             btn.disabled = true;
         }
 
@@ -2162,7 +2204,7 @@ window.downloadModFromCard = async function (projectId, slug) {
         const profile = profilesData.profiles[currentModsProfile];
 
         if (!profile) {
-            window.pywebview.api.error('Perfil no encontrado');
+            window.pywebview.api.error('Profile not found');
             if (btn) btn.disabled = false;
             return;
         }
@@ -2199,9 +2241,9 @@ window.downloadModFromCard = async function (projectId, slug) {
         const versionsResult = await window.pywebview.api.get_mod_versions(projectId, gameVersion, loader);
 
         if (!versionsResult.success || versionsResult.versions.length === 0) {
-            window.pywebview.api.error(`No hay versiones compatibles con ${loader} ${gameVersion}`);
+            window.pywebview.api.error(`No compatible versions for ${loader} ${gameVersion}`);
             if (btn) {
-                btn.innerHTML = '<i class="fas fa-download"></i> Descargar';
+                btn.innerHTML = '<i class="fas fa-download"></i> Download';
                 btn.disabled = false;
             }
             return;
@@ -2223,7 +2265,7 @@ window.downloadModFromCard = async function (projectId, slug) {
 
     } catch (error) {
         console.error('Error downloading mod:', error);
-        window.onModDownloadError(projectId, "Error de conexión");
+        window.onModDownloadError(projectId, "Connection error");
     }
 };
 
@@ -2238,7 +2280,7 @@ async function loadInstalledMods() {
             installedModsList.innerHTML = `
                 <div class="no-mods-message">
                     <i class="fas fa-exclamation-triangle"></i>
-                    <p>Error al cargar mods: ${result.error}</p>
+                    <p>Error loading mods: ${result.error}</p>
                 </div>
             `;
             return;
@@ -2248,7 +2290,7 @@ async function loadInstalledMods() {
             installedModsList.innerHTML = `
                 <div class="no-mods-message">
                     <i class="fas fa-cube"></i>
-                    <p>No hay mods instalados en este perfil</p>
+                    <p>No mods installed in this profile</p>
                 </div>
             `;
             return;
@@ -2265,7 +2307,7 @@ async function loadInstalledMods() {
         installedModsList.innerHTML = `
             <div class="no-mods-message">
                 <i class="fas fa-exclamation-triangle"></i>
-                <p>Error al cargar mods</p>
+                <p>Error loading mods</p>
             </div>
         `;
     }
@@ -2281,14 +2323,14 @@ function createModListItem(mod) {
         </div>
         <div class="mod-list-info">
             <div class="mod-list-name">${mod.display_name}</div>
-            <div class="mod-list-details">${mod.size_mb} MB ${mod.enabled ? '• Habilitado' : '• Deshabilitado'}</div>
+            <div class="mod-list-details">${mod.size_mb} MB ${mod.enabled ? '• Enabled' : '• Disabled'}</div>
         </div>
         <div class="mod-list-actions">
             <div class="mod-toggle ${mod.enabled ? 'active' : ''}" onclick="toggleModEnabled('${mod.filename}', ${!mod.enabled})">
                 <div class="mod-toggle-slider"></div>
             </div>
             <button class="mod-delete-btn" onclick="deleteModFile('${mod.filename}')">
-                <i class="fas fa-trash"></i> Eliminar
+                <i class="fas fa-trash"></i> Delete
             </button>
         </div>
     `;
@@ -2309,7 +2351,7 @@ window.toggleModEnabled = async function (filename, enabled) {
         }
     } catch (error) {
         console.error('Error toggling mod:', error);
-        window.pywebview.api.error('Error al cambiar estado del mod');
+        window.pywebview.api.error('Error changing mod state');
     }
 };
 
@@ -2396,7 +2438,7 @@ document.addEventListener('contextmenu', function (e) {
 window.deleteModFile = async function (filename) {
     if (!currentModsProfile) return;
 
-    const confirmed = await window.pywebview.api.confirm(`¿Eliminar el mod "${filename.replace('.jar.disabled', '').replace('.jar', '')}"?`);
+    const confirmed = await window.pywebview.api.confirm(`Delete the mod "${filename.replace('.jar.disabled', '').replace('.jar', '')}"?`);
 
     if (!confirmed) return;
 
@@ -2404,14 +2446,14 @@ window.deleteModFile = async function (filename) {
         const result = await window.pywebview.api.delete_mod(currentModsProfile, filename);
 
         if (result.success) {
-            window.pywebview.api.info('Mod eliminado');
+            window.pywebview.api.info('Mod deleted');
             await loadInstalledMods();
         } else {
             window.pywebview.api.error(`Error: ${result.error}`);
         }
     } catch (error) {
         console.error('Error deleting mod:', error);
-        window.pywebview.api.error('Error al eliminar el mod');
+        window.pywebview.api.error('Error deleting mod');
     }
 };
 

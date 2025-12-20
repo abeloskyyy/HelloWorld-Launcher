@@ -15,36 +15,37 @@ VERSION_FILE = "version.json"
 
 
 class UpdaterAPI:
-    def __init__(self, window):
-        self.window = window
+    def __init__(self):
         self.cancelled = False
         
     def cancel_download(self):
-        """Cancela la descarga actual"""
+        """Cancels the current download"""
         self.cancelled = True
-        print("Descarga cancelada por el usuario")
+        print("Download cancelled by user")
         return True
     
     def retry_update(self):
-        """Reinicia el proceso de actualización"""
+        """Restarts the update process"""
         self.cancelled = False
-        threading.Thread(target=check_and_update, args=(self.window, self), daemon=True).start()
+        if webview.windows:
+            threading.Thread(target=check_and_update, args=(webview.windows[0], self), daemon=True).start()
         return True
     
     def continue_anyway(self):
-        """Continúa sin actualizar"""
-        self.window.destroy()
+        """Continues without updating"""
+        if webview.windows:
+            webview.windows[0].destroy()
         return True
 
 
 def load_version_config():
-    """Carga la configuración de versión desde version.json"""
+    """Loads version configuration from version.json"""
     try:
         if os.path.exists(VERSION_FILE):
             with open(VERSION_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
         else:
-            # Crear archivo por defecto
+            # Create default file
             default_config = {
                 "version": "0.1.0",
                 "last_check": None,
@@ -54,7 +55,7 @@ def load_version_config():
             save_version_config(default_config)
             return default_config
     except Exception as e:
-        print(f"Error cargando version.json: {e}")
+        print(f"Error loading version.json: {e}")
         return {
             "version": "0.1.0",
             "last_check": None,
@@ -64,16 +65,16 @@ def load_version_config():
 
 
 def save_version_config(config):
-    """Guarda la configuración de versión"""
+    """Saves the version configuration"""
     try:
         with open(VERSION_FILE, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=4)
     except Exception as e:
-        print(f"Error guardando version.json: {e}")
+        print(f"Error saving version.json: {e}")
 
 
 def check_internet(timeout=TIMEOUT_INTERNET):
-    """Verifica si hay conexión a internet"""
+    """Verifies if there is an internet connection"""
     try:
         response = requests.get("https://api.github.com", timeout=timeout)
         return response.status_code == 200
@@ -83,7 +84,7 @@ def check_internet(timeout=TIMEOUT_INTERNET):
 
 
 def get_remote_version(repo_url, timeout=TIMEOUT_API):
-    """Obtiene la versión más reciente desde GitHub"""
+    """Retrieves the most recent version from GitHub"""
     try:
         response = requests.get(
             f"{repo_url}/releases/latest",
@@ -94,7 +95,7 @@ def get_remote_version(repo_url, timeout=TIMEOUT_API):
             remote_version = data["tag_name"].lstrip("v")
             download_url = None
             
-            # Buscar el asset .exe
+            # Find the .exe asset
             for asset in data.get("assets", []):
                 if asset["name"].endswith(".exe"):
                     download_url = asset["browser_download_url"]
@@ -107,12 +108,12 @@ def get_remote_version(repo_url, timeout=TIMEOUT_API):
             }
         return None
     except Exception as e:
-        print(f"Error obteniendo versión remota: {e}")
+        print(f"Error getting remote version: {e}")
         return None
 
 
 def is_newer_version(remote_ver, local_ver):
-    """Compara versiones usando semantic versioning"""
+    """Compares versions using semantic versioning"""
     try:
         return version.parse(remote_ver) > version.parse(local_ver)
     except Exception as e:
@@ -121,7 +122,7 @@ def is_newer_version(remote_ver, local_ver):
 
 
 def download_file_with_progress(url, filename, window, api):
-    """Descarga un archivo mostrando progreso"""
+    """Downloads a file showing progress"""
     try:
         response = requests.get(url, stream=True, timeout=30)
         total_size = int(response.headers.get('content-length', 0))
@@ -139,14 +140,14 @@ def download_file_with_progress(url, filename, window, api):
                     f.write(chunk)
                     downloaded += len(chunk)
                     
-                    # Calcular progreso
+                    # Calculate progress
                     percentage = int((downloaded / total_size) * 100) if total_size > 0 else 0
                     elapsed = time.time() - start_time
                     speed = (downloaded / (1024 * 1024)) / elapsed if elapsed > 0 else 0
                     downloaded_mb = downloaded / (1024 * 1024)
                     total_mb = total_size / (1024 * 1024)
                     
-                    # Actualizar UI
+                    # Update UI
                     window.evaluate_js(
                         f"window.updaterAPI.setDownloadProgress({percentage}, "
                         f"{downloaded_mb:.1f}, {total_mb:.1f}, {speed:.1f})"
@@ -154,85 +155,85 @@ def download_file_with_progress(url, filename, window, api):
         
         return True
     except Exception as e:
-        print(f"Error descargando archivo: {e}")
+        print(f"Error downloading file: {e}")
         return False
 
 
 def check_and_update(window, api):
-    """Proceso principal de verificación y actualización"""
+    """Main verification and update process"""
     config = load_version_config()
     local_version = config["version"]
     repo_url = config["repo_url"]
     
-    # Mostrar versión actual
+    # Show current version
     window.evaluate_js(f"window.updaterAPI.setVersion('{local_version}')")
     
-    # Estado: Verificando
+    # State: Checking
     window.evaluate_js("window.updaterAPI.setState('checking')")
-    time.sleep(1)  # Dar tiempo para que se vea la animación
+    time.sleep(1)  # Give time for animation to be seen
     
-    # Verificar internet
+    # Check internet
     if not check_internet():
-        print("Sin conexión a internet")
+        print("No internet connection")
         window.evaluate_js("window.updaterAPI.setState('no-internet')")
         time.sleep(2)
         window.destroy()
         return False
     
-    # Obtener versión remota
+    # Get remote version
     remote_data = get_remote_version(repo_url)
     
     if not remote_data or not remote_data["download_url"]:
-        print("No se pudo obtener información de actualización")
+        print("Could not retrieve update information")
         window.destroy()
         return False
     
     remote_version = remote_data["version"]
     
-    # Comparar versiones
+    # Compare versions
     if not is_newer_version(remote_version, local_version):
-        print(f"Ya estás en la última versión ({local_version})")
+        print(f"You are already on the latest version ({local_version})")
         window.destroy()
         return False
     
-    print(f"Nueva versión disponible: {remote_version} (actual: {local_version})")
+    print(f"New version available: {remote_version} (current: {local_version})")
     
-    # Estado: Descargando
+    # State: Downloading
     window.evaluate_js("window.updaterAPI.setState('downloading')")
     window.evaluate_js(f"window.updaterAPI.setVersionUpdate('{local_version}', '{remote_version}')")
     
-    # Descargar actualización
+    # Download update
     download_success = download_file_with_progress(
         remote_data["download_url"],
         "update_temp.exe",
         window,
-        api  # Pasar la API correctamente
+        api  # Pass API correctly
     )
     
     if not download_success:
-        print("Error en la descarga")
+        print("Download error")
         window.evaluate_js("window.updaterAPI.setState('error')")
-        window.evaluate_js("window.updaterAPI.setError('No se pudo descargar la actualización')")
+        window.evaluate_js("window.updaterAPI.setError('Could not download update')")
         return False
     
-    # Estado: Éxito
+    # State: Success
     window.evaluate_js("window.updaterAPI.setState('success')")
     window.evaluate_js(f"window.updaterAPI.setVersionUpdate('{local_version}', '{remote_version}')")
     
-    # Actualizar version.json
+    # Update version.json
     config["version"] = remote_version
     config["last_check"] = datetime.now().isoformat()
     save_version_config(config)
     
     time.sleep(2)
     
-    # Aplicar actualización
+    # Apply update
     try:
         apply_update("update_temp.exe", remote_version)
     except Exception as e:
-        print(f"Error aplicando actualización: {e}")
+        print(f"Error applying update: {e}")
     
-    # Programar cierre de ventana en un thread separado
+    # Schedule window close in separate thread
     def close_window():
         time.sleep(1)
         try:
@@ -247,7 +248,7 @@ def check_and_update(window, api):
 
 def apply_update(downloaded_file, remote_version):
     """
-    Aplica la actualización descargada (solo .exe).
+    Applies the downloaded update (.exe only).
     """
     import shutil
     import sys
@@ -255,56 +256,56 @@ def apply_update(downloaded_file, remote_version):
     
     # Obtener ruta del ejecutable actual
     if getattr(sys, 'frozen', False):
-        # Ejecutando como .exe empaquetado
+        # Running as packaged .exe
         current_exe = sys.executable
     else:
-        # Ejecutando como script Python (modo desarrollo)
-        print("Modo desarrollo detectado, no se aplicará actualización")
+        # Running as Python script (development mode)
+        print("Development mode detected, update will not be applied")
         return
     
     current_dir = os.path.dirname(current_exe)
     
-    # Es un .exe directo
+    # Direct .exe
     new_exe = os.path.abspath(downloaded_file)
     extract_dir = None
     
-    # Determinar nombre del nuevo ejecutable
-    # Si el usuario quiere que tenga la versión en el nombre:
-    # Ejemplo: HelloWorldLauncher_v1.0.0.exe
-    # Usamos el nombre base del exe actual pero con la nueva versión
+    # Determine name of new executable
+    # If the user wants to have the version in the name:
+    # Example: HelloWorldLauncher_v1.0.0.exe
+    # Use the base name of current exe but with new version
     
     base_name = os.path.splitext(os.path.basename(current_exe))[0]
-    # Si el nombre actual ya tiene versión (ej: Launcher_v1.0), intentamos limpiarlo
+    # If current name already has version (ex: Launcher_v1.0), attempt to clean it
     if "_v" in base_name:
         base_name = base_name.split("_v")[0]
         
     target_name = f"{base_name}_v{remote_version}.exe"
     target_path = os.path.join(current_dir, target_name)
     
-    # Crear script de actualización (batch file para Windows, sh para Linux)
+    # Create update script (batch file for Windows, sh for Linux)
     if sys.platform.startswith('win'):
         update_script = os.path.join(current_dir, "update.bat")
         
         with open(update_script, 'w') as f:
             f.write('@echo off\n')
-            f.write('echo Aplicando actualizacion...\n')
-            f.write('timeout /t 3 /nobreak >nul\n')  # Esperar 3 segundos
+            f.write('echo Applying update...\n')
+            f.write('timeout /t 3 /nobreak >nul\n')  # Wait 3 seconds
             
-            # 1. Mover/Renombrar update_temp.exe al nuevo nombre con versión
+            # 1. Move/Rename update_temp.exe to new name with version
             f.write(f'move /y "{new_exe}" "{target_path}"\n')
             
-            # 2. Eliminar el ejecutable antiguo (si tiene nombre diferente)
+            # 2. Delete old executable (if it has a different name)
             if current_exe != target_path:
                  f.write(f'del "{current_exe}"\n')
             
-            # Limpiar archivos temporales
-            f.write(f'del "{new_exe}"\n') # En caso de que el move fallara o fuera copia
-            f.write(f'del "%~f0"\n')  # Eliminar el propio script
+            # Clean up temporary files
+            f.write(f'del "{new_exe}"\n') # In case move failed or was a copy
+            f.write(f'del "%~f0"\n')  # Delete the script itself
             
-            # Reiniciar el launcher (el nuevo)
+            # Restart launcher (the new one)
             f.write(f'start "" "{target_path}"\n')
         
-        # Ejecutar el script y cerrar el launcher actual
+        # Execute script and close current launcher
         subprocess.Popen(['cmd', '/c', update_script], 
                         cwd=current_dir,
                         creationflags=subprocess.CREATE_NO_WINDOW)
@@ -315,7 +316,7 @@ def apply_update(downloaded_file, remote_version):
         
         with open(update_script, 'w') as f:
             f.write('#!/bin/sh\n')
-            f.write('echo "Aplicando actualizacion..."\n')
+            f.write('echo "Applying update..."\n')
             f.write('sleep 2\n')
             f.write(f'mv -f "{new_exe}" "{current_exe}"\n')
             f.write(f'chmod +x "{current_exe}"\n')
@@ -324,60 +325,60 @@ def apply_update(downloaded_file, remote_version):
             f.write(f'rm -f "{downloaded_file}"\n')
             f.write(f'rm -f "{update_script}"\n')
             
-            # Reiniciar el launcher
+            # Restart launcher
             f.write(f'./"{os.path.basename(current_exe)}" &\n')
-            
-        # Dar permisos de ejecución al script
+        
+        # Give execution permissions to the script
         os.chmod(update_script, 0o755)
         
-        # Ejecutar
+        # Execute
         subprocess.Popen(['/bin/sh', update_script])
 
-    # NO hacer sys.exit aquí, dejar que el updater se cierre normalmente
-    print("Actualización programada")
+    # DO NOT use sys.exit here, let the updater close normally
+    print("Update scheduled")
 
 
 def run_updater_check():
     """
-    Función principal que ejecuta el updater.
-    Retorna True si se debe reiniciar el launcher, False si continuar normalmente.
+    Main function that runs the updater.
+    Returns True if the launcher should restart, False otherwise.
     """
-    # Cargar configuración
+    # Load configuration
     config = load_version_config()
     
-    # Verificar internet rápidamente
+    # Quickly check internet
     if not check_internet(timeout=2):
-        print("Sin internet, saltando actualización")
+        print("No internet, skipping update")
         return False
     
-    # Crear ventana del updater
+    # Create updater window
     html_path = os.path.join(os.path.dirname(__file__), "ui", "updater.html")
     
     if not os.path.exists(html_path):
-        print(f"No se encontró updater.html en {html_path}")
+        print(f"updater.html not found in {html_path}")
         return False
     
-    # Crear API
-    api = UpdaterAPI(None)  # Window will be set after creation
+    # Create API
+    api = UpdaterAPI()
     
-    # Obtener dimensiones de pantalla usando tkinter
+    # Get screen dimensions using tkinter
     import tkinter as tk
     root = tk.Tk()
     screen_width = root.winfo_screenwidth()
     screen_height = root.winfo_screenheight()
-    root.destroy()  # Cerrar la ventana temporal de tkinter
+    root.destroy()  # Close temporary tkinter window
     
-    # Dimensiones de la ventana del updater
+    # Dimensions of the updater window
     window_width = 920
     window_height = 550
     
-    # Calcular posición centrada
+    # Calculate centered position
     x = (screen_width - window_width) // 2
     y = (screen_height - window_height) // 2
     
-    # Crear ventana con API expuesta
+    # Create window with exposed API
     window = webview.create_window(
-        'HelloWorld Launcher - Actualizador',
+        'HelloWorld Launcher - Updater',
         html_path,
         width=window_width,
         height=window_height,
@@ -386,27 +387,26 @@ def run_updater_check():
         easy_drag=True,
         x=x,
         y=y,
-        on_top=True,  # Aparecer por encima del splash
-        js_api=api  # Exponer API usando js_api parameter
+        on_top=True,  # Appear above the splash
+        js_api=api  # Expose API using js_api parameter
     )
     
-    # Actualizar referencia a window en API
-    api.window = window
+    # API is already set in js_api parameter
     
-    # Iniciar proceso de actualización cuando la ventana esté lista
+    # Start update process when window is ready
     def start_update():
-        # Iniciar verificación
+        # Start verification
         check_and_update(window, api)
     
-    # Usar evento shown en lugar de polling window.loaded
+    # Use shown event instead of polling window.loaded
     window.events.shown += start_update
     
-    # Mostrar ventana (bloqueante)
+    # Show window (blocking)
     webview.start()
     
-    return False  # Por ahora siempre continuar
+    return False  # Always continue for now
 
 
 if __name__ == "__main__":
-    # Prueba standalone
+    # Standalone test
     run_updater_check()
