@@ -556,6 +556,41 @@
         </div>
     </div>
 
+    <!-- Review Floating Button -->
+    <button id="reviewFloatingBtn" class="review-fab" title="Leave a Review">
+        <i class="fas fa-heart"></i>
+    </button>
+
+    <!-- Review Reminder Modal (Full Screen Overlay) -->
+    <div id="reviewReminderModal" class="full-screen-overlay">
+        <div class="review-overlay-content">
+            <div class="heart-icon-container">
+                <i class="fas fa-heart"></i>
+            </div>
+            <h1 class="overlay-title">Enjoying HelloWorld Launcher?</h1>
+            <p class="overlay-subtitle">
+                Your feedback helps us improve. Please confirm if you'd like to leave a review!
+            </p>
+
+            <div class="overlay-actions">
+                <button id="doReviewBtn" class="btn-primary btn-overlay-action">
+                    <i class="fas fa-star"></i> Leave a Review
+                </button>
+                <button id="remindLaterBtn" class="btn-secondary btn-overlay-action">
+                    Not now, maybe later
+                </button>
+            </div>
+
+            <div class="overlay-footer">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="neverShowAgainCheckbox">
+                    <span class="checkmark"></span>
+                    <span class="checkbox-label">Don't show this again</span>
+                </label>
+            </div>
+        </div>
+    </div>
+
     <script src="scripts.js"></script>
 </body>
 

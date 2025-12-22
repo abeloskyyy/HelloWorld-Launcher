@@ -796,13 +796,228 @@ select:disabled {
     display: none;
 }
 
+
 .modal-options {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
     margin: 20px;
-    margin-top: 40px;
 }
+
+
+/* Review Floating Button */
+.review-fab {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%);
+    color: white;
+    border: none;
+    box-shadow: 0 10px 20px rgba(255, 117, 140, 0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    cursor: pointer;
+    z-index: 1000;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    animation: float 3s ease-in-out infinite;
+}
+
+.review-fab:hover {
+    transform: scale(1.1) rotate(10deg);
+    box-shadow: 0 15px 30px rgba(255, 117, 140, 0.6);
+}
+
+.review-fab i {
+    animation: heartbeat 1.5s ease-in-out infinite;
+}
+
+@keyframes float {
+    0% {
+        transform: translateY(0px);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+
+    100% {
+        transform: translateY(0px);
+    }
+}
+
+@keyframes heartbeat {
+    0% {
+        transform: scale(1);
+    }
+
+    14% {
+        transform: scale(1.3);
+    }
+
+    28% {
+        transform: scale(1);
+    }
+
+    42% {
+        transform: scale(1.3);
+    }
+
+    70% {
+        transform: scale(1);
+    }
+}
+
+/* Review Full Screen Overlay */
+.full-screen-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(15, 32, 39, 0.95);
+    backdrop-filter: blur(15px);
+    z-index: 9999;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.full-screen-overlay.show {
+    display: flex;
+}
+
+.review-overlay-content {
+    text-align: center;
+    max-width: 500px;
+    padding: 40px;
+    animation: slideUp 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.heart-icon-container {
+    font-size: 80px;
+    color: #ff758c;
+    margin-bottom: 20px;
+    animation: heartbeat 2s infinite;
+    filter: drop-shadow(0 0 30px rgba(255, 117, 140, 0.6));
+}
+
+.overlay-title {
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 15px;
+    background: linear-gradient(135deg, #fff 0%, #b0b8c6 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.overlay-subtitle {
+    font-size: 16px;
+    color: #aaa;
+    margin-bottom: 40px;
+    line-height: 1.6;
+}
+
+.overlay-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.btn-overlay-action {
+    padding: 18px;
+    font-size: 16px;
+    border-radius: 50px;
+    /* Pill shape */
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.btn-overlay-action:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+}
+
+.overlay-footer {
+    display: flex;
+    justify-content: center;
+}
+
+/* Checkbox Styling */
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+    color: #888;
+    font-size: 14px;
+    transition: color 0.3s;
+}
+
+.checkbox-container:hover {
+    color: #ccc;
+}
+
+.checkbox-container input {
+    display: none;
+}
+
+.checkmark {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #555;
+    border-radius: 4px;
+    position: relative;
+    transition: all 0.3s;
+}
+
+.checkbox-container:hover .checkmark {
+    border-color: #888;
+}
+
+.checkbox-container input:checked~.checkmark {
+    background-color: #ff758c;
+    border-color: #ff758c;
+}
+
+.checkmark:after {
+    content: "";
+    position: absolute;
+    display: none;
+    left: 6px;
+    top: 2px;
+    width: 4px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.checkbox-container input:checked~.checkmark:after {
+    display: block;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(40px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
 
 #profileSelect {
     display: none;
@@ -2017,6 +2232,7 @@ label {
 
 .markdown-body img {
     max-width: 100%;
+    height: auto;
     border-radius: 8px;
     margin: 10px 0;
 }
@@ -2068,10 +2284,12 @@ label {
 
 .gallery-image {
     width: 100%;
+    height: auto;
     border-radius: 8px;
     cursor: pointer;
     transition: transform 0.2s;
     border: 2px solid transparent;
+    object-fit: cover;
 }
 
 .gallery-image:hover {
@@ -2601,7 +2819,7 @@ label {
 
 .toggle-switch input:checked+.toggle-slider {
     background: rgba(79, 172, 254, 0.2);
-    border: 1px solid rgba(79, 172, 254, 0.3);
+    border: 2px solid rgba(79, 172, 254, 0.3);
 }
 
 .toggle-switch input:checked+.toggle-slider:before {

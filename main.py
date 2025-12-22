@@ -32,12 +32,10 @@ def resource_path(relative_path):
 
 
 """
-puedes añadir dos opciones en el menu de config para activar o desactivar que se puedan descargar snapshots y versiones antiguas? (alfas, betas...)
-
 - minecraft news
 - reseñas
 - microsoft login
-- traducir todo a ingles
+- traducciones
 
 
 
@@ -797,9 +795,9 @@ class Api:
                 return {"success": False, "message": result["message"]}
         
         # Guardar imagen si viene en base64
+
         if isinstance(icon, dict) and "base64" in icon and icon["base64"]:
             try:
-                # Decodificar base64
                 header, encoded = icon["base64"].split(",", 1)
                 data = base64.b64decode(encoded)
                 
@@ -843,6 +841,59 @@ class Api:
 
         add_profile(profile_id, name, version, icon, directory, jvm_args)
         return {"success": True, "profile_id": profile_id}
+
+
+    # --- Review System ---
+    def check_review_reminder(self):
+        """
+        Checks if the review reminder should be shown.
+        Logic: Show every 5 launches if status is 'pending'.
+        """
+        try:
+            data = load_user_data()
+            status = data.get("review_status", "pending")
+            
+            if status in ["reviewed", "never"]:
+                return False
+            
+            # Increment launch count
+            count = data.get("review_launch_count", 0) + 1
+            data["review_launch_count"] = count
+            
+            should_show = False
+            # Show on 5th launch, 10th, 15th... OR just first time at 5 and then every 10?
+            if count > 0 and count % 5 == 0:
+                should_show = True
+            
+            save_user_data(data)
+            return should_show
+        except Exception as e:
+            print(f"Error checking review reminder: {e}")
+            return False
+
+    def mark_review_action(self, action):
+        """
+        Updates the review status based on user action.
+        Actions: 'reviewed', 'never', 'later'
+        """
+        try:
+            data = load_user_data()
+            if action == "reviewed":
+                data["review_status"] = "reviewed"
+            elif action == "never":
+                data["review_status"] = "never"
+            elif action == "later":
+                pass 
+            
+            save_user_data(data)
+            return True
+        except Exception as e:
+            print(f"Error saving review action: {e}")
+            return False
+
+    def open_url(self, url):
+        import webbrowser
+        webbrowser.open(url)
 
     def edit_profile(self, profile_id, updated_data):
         # Procesar el icono si está en updated_data

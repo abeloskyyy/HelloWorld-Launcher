@@ -17,15 +17,16 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="styles.css">
 
-    <meta name="keywords" content="minecraft launcher, minecraft java launcher, open source minecraft launcher, forge launcher, fabric launcher, minecraft mods launcher, abelosky, abelosky launcher, abelosky github">
+    <meta name="keywords"
+        content="minecraft launcher, minecraft java launcher, open source minecraft launcher, forge launcher, fabric launcher, minecraft mods launcher, abelosky, abelosky launcher, abelosky github">
     <meta name="author" content="Abelosky">
 
     <link rel="icon" href="favicon.png">
 
 
-    <!-- Google Adsense -->
+    <!-- Google Ads -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7061019150664785"
-     crossorigin="anonymous"></script>
+        crossorigin="anonymous"></script>
 </head>
 
 <body>
@@ -69,6 +70,18 @@
                     </a>
                 </div>
                 <div class="hero-stats">
+                    <div class="stat">
+                        <span class="stat-value" id="downloadCount">0+</span>
+                        <span class="stat-label">Downloads</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value"><i class="bi bi-star-fill"
+                                style="color: #ffd700; font-size: 1.2rem; margin-right: 5px;"></i><span
+                                id="starCount">5.0</span> <span
+                                style="font-size: 0.8rem; opacity: 0.7; font-weight: 400;"
+                                id="reviewCount">(0)</span></span>
+                        <span class="stat-label">Rating</span>
+                    </div>
                     <div class="stat">
                         <span class="stat-value">100%</span>
                         <span class="stat-label">Open Source</span>
@@ -251,6 +264,54 @@
         </div>
     </footer>
 
+    <!-- Review System -->
+    <button id="reviewBtn" class="review-float-btn" title="Leave a Review">
+        <i class="bi bi-chat-heart-fill"></i>
+    </button>
+
+    <div id="reviewModal" class="review-modal">
+        <div class="review-modal-content">
+            <button class="close-modal">&times;</button>
+            <h3>Leave a Review</h3>
+            <p>Tell us what you think about HelloWorld Launcher!</p>
+
+            <form id="reviewForm">
+                <div class="form-group">
+                    <label>Rating</label>
+                    <div class="star-rating">
+                        <i class="bi bi-star-fill" data-rating="1"></i>
+                        <i class="bi bi-star-fill" data-rating="2"></i>
+                        <i class="bi bi-star-fill" data-rating="3"></i>
+                        <i class="bi bi-star-fill" data-rating="4"></i>
+                        <i class="bi bi-star-fill" data-rating="5"></i>
+                    </div>
+                    <input type="hidden" id="ratingValue" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="reviewerName">Name</label>
+                    <input type="text" id="reviewerName" placeholder="Your name (optional)" class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label for="reviewComment">Comment</label>
+                    <textarea id="reviewComment" rows="4" placeholder="Share your experience..." class="form-control"
+                        required></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Submit Review</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, push, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // Export to global scope so script.js can use them (Simple approach for non-bundled apps)
+        window.firebaseModules = { initializeApp, getDatabase, ref, push, onValue, serverTimestamp };
+    </script>
     <script src="script.js"></script>
 </body>
 

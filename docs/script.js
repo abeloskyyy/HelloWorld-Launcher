@@ -1,4 +1,31 @@
+// === Main Script ===
+
+// === Firebase Configuration ===
+const firebaseConfig = {
+    apiKey: "AIzaSyACXEDO5R48HrlxVCyz8fBGimEIVkY2QSM",
+    authDomain: "helloworld-launcher.firebaseapp.com",
+    databaseURL: "https://helloworld-launcher-default-rtdb.firebaseio.com",
+    projectId: "helloworld-launcher",
+    storageBucket: "helloworld-launcher.firebasestorage.app",
+    messagingSenderId: "1088760222656",
+    appId: "1:1088760222656:web:13aefa81bdecdfdf832e25"
+};
+
+// Global Firebase DB Reference
+let db;
+
 document.addEventListener('DOMContentLoaded', () => {
+    // === Initialize Firebase ===
+    if (window.firebaseModules) {
+        try {
+            const app = window.firebaseModules.initializeApp(firebaseConfig);
+            db = window.firebaseModules.getDatabase(app);
+            console.log('Firebase Initialized');
+        } catch (e) {
+            console.error('Firebase Init Error (Did you fill in the config?):', e);
+        }
+    }
+
     // === GitHub API Integration ===
     const repoOwner = 'abeloskyyy';
     const repoName = 'HelloWorld-Launcher';
@@ -41,6 +68,75 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     getLatestRelease();
+
+
+    // === Fetch Statistics (Downloads & Stars) ===
+    async function getRepoStats() {
+        try {
+            // 1. Get Stars & Reviews from Firebase (Realtime)
+            if (db && window.firebaseModules) {
+                const { ref, onValue } = window.firebaseModules;
+                const reviewsRef = ref(db, 'reviews');
+
+                onValue(reviewsRef, (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        const reviews = Object.values(data);
+                        const count = reviews.length;
+                        const totalStars = reviews.reduce((acc, curr) => acc + parseInt(curr.rating), 0);
+                        const average = (totalStars / count).toFixed(1);
+
+                        // Update UI
+                        const starCountEl = document.getElementById('starCount');
+                        const reviewCountEl = document.getElementById('reviewCount');
+
+                        if (starCountEl) starCountEl.textContent = average;
+                        if (reviewCountEl) reviewCountEl.textContent = `(${count})`;
+                    }
+                });
+            } else {
+                // Fallback to GitHub Stars if Firebase not configured
+                const repoResponse = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}`);
+                if (repoResponse.ok) {
+                    const repoData = await repoResponse.json();
+                    const starCount = repoData.stargazers_count;
+                    if (starCount > 0) {
+                        const reviewCountEl = document.getElementById('reviewCount');
+                        if (reviewCountEl) reviewCountEl.textContent = `(${starCount})`;
+                    }
+                }
+            }
+
+            // 2. Get Total Downloads (GitHub Releases)
+            const releasesResponse = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/releases`);
+            if (releasesResponse.ok) {
+                const releases = await releasesResponse.json();
+                let totalDownloads = 0;
+                releases.forEach(release => {
+                    if (release.assets) {
+                        release.assets.forEach(asset => {
+                            totalDownloads += asset.download_count;
+                        });
+                    }
+                });
+
+                const downloadCountEl = document.getElementById('downloadCount');
+                // Format number (e.g. 1.2k)
+                if (downloadCountEl) {
+                    if (totalDownloads > 1000) {
+                        downloadCountEl.textContent = (totalDownloads / 1000).toFixed(1) + 'k+';
+                    } else {
+                        downloadCountEl.textContent = totalDownloads;
+                    }
+                }
+            }
+
+        } catch (error) {
+            console.error('Error fetching stats:', error);
+        }
+    }
+
+    getRepoStats();
 
 
     // === Carousel Logic ===
@@ -206,4 +302,144 @@ document.addEventListener('DOMContentLoaded', () => {
 
         requestAnimationFrame(update);
     }
+
+    // === Review System Logic ===
+    const reviewBtn = document.getElementById('reviewBtn');
+    const reviewModal = document.getElementById('reviewModal');
+    const closeModal = document.querySelector('.close-modal');
+    const reviewForm = document.getElementById('reviewForm');
+    const stars = document.querySelectorAll('.star-rating i');
+    const ratingInput = document.getElementById('ratingValue');
+
+    if (!reviewBtn || !reviewModal) return;
+
+    // Open Modal
+    function openModal() {
+        reviewModal.classList.add('active');
+        // Stop the floating animation when open
+        reviewBtn.style.animation = 'none';
+
+        // Check if there's a URL parameter indicating we should open the review
+        // (Just to clean the URL if we want, but keeping it simple)
+    }
+
+    // Close Modal
+    function closeModalFunc() {
+        reviewModal.classList.remove('active');
+        reviewBtn.style.animation = 'float 3s ease-in-out infinite';
+    }
+
+    reviewBtn.addEventListener('click', openModal);
+
+    closeModal.addEventListener('click', closeModalFunc);
+
+    // Close on outside click
+    reviewModal.addEventListener('click', (e) => {
+        if (e.target === reviewModal) {
+            closeModalFunc();
+        }
+    });
+
+    // Check URL Parameters for ?review=true
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('review') === 'true') {
+        openModal();
+    }
+
+    // Star Rating Interaction
+    let currentRating = 0;
+
+    stars.forEach(star => {
+        // Hover
+        star.addEventListener('mouseover', function () {
+            const rating = this.getAttribute('data-rating');
+            highlightStars(rating);
+        });
+
+        // Mouse out
+        star.addEventListener('mouseout', function () {
+            highlightStars(currentRating);
+        });
+
+        // Click
+        star.addEventListener('click', function () {
+            currentRating = this.getAttribute('data-rating');
+            ratingInput.value = currentRating;
+            highlightStars(currentRating);
+        });
+    });
+
+    function highlightStars(rating) {
+        stars.forEach(star => {
+            const starRating = star.getAttribute('data-rating');
+            if (starRating <= rating) {
+                star.classList.add('active');
+                star.classList.remove('bi-star');
+                star.classList.add('bi-star-fill');
+            } else {
+                star.classList.remove('active');
+                star.classList.remove('bi-star-fill');
+                star.classList.add('bi-star'); // Optional: outline star for empty
+            }
+        });
+    }
+
+    // Handle Form Submission
+    reviewForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+
+        const rating = ratingInput.value;
+        const name = document.getElementById('reviewerName').value || 'Anonymous';
+        const comment = document.getElementById('reviewComment').value;
+
+        if (!rating) {
+            alert('Please select a star rating!');
+            return;
+        }
+
+        const reviewData = {
+            rating,
+            name,
+            comment,
+            timestamp: new Date().toISOString()
+        };
+
+        console.log('Review Submitted:', reviewData);
+
+        // --- SAVE TO FIREBASE ---
+        if (db && window.firebaseModules) {
+            const { ref, push, serverTimestamp } = window.firebaseModules;
+            const reviewsRef = ref(db, 'reviews');
+
+            // Push new review
+            push(reviewsRef, {
+                ...reviewData,
+                timestamp: serverTimestamp() // Use server timestamp
+            }).then(() => {
+                alert('Review saved to Database successfully!');
+            }).catch(error => {
+                console.error('Firebase Error:', error);
+                alert('Error saving review to database. Check console.');
+            });
+        }
+
+        // --- SEND TO DISCORD (Keep as backup/notification) ---
+        const discordWebhookUrl = 'https://discord.com/api/webhooks/1452650172608807065/56mwK1bVuBAih9CykvYCqy4tMu7KXO0C189HnT5h6bdAT4JU8ld8TmXPtXPkVbL9clgU';
+
+        if (discordWebhookUrl) {
+            fetch(discordWebhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    content: `**New Review!**\n**Rating:** ${rating}/5 stars\n**Name:** ${name}\n**Comment:** ${comment}`
+                })
+            }).catch(err => console.error('Error sending webhook:', err));
+        }
+
+        // Reset and close
+        reviewForm.reset();
+        currentRating = 0;
+        highlightStars(0);
+        closeModalFunc();
+    });
 });

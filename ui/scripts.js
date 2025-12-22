@@ -2532,3 +2532,65 @@ if (canvas) {
     initStars();
     animate();
 }
+
+// === Review System Logic ===
+const REVIEW_URL = "https://abeloskyyy.github.io/HelloWorld-Launcher/?review=true";
+
+// Elements
+const reviewFloatingBtn = document.getElementById('reviewFloatingBtn');
+const reviewReminderModal = document.getElementById('reviewReminderModal');
+const doReviewBtn = document.getElementById('doReviewBtn');
+const remindLaterBtn = document.getElementById('remindLaterBtn');
+const neverShowAgainCheckbox = document.getElementById('neverShowAgainCheckbox');
+
+// Open URL Handler
+function openReviewUrl() {
+    window.pywebview.api.open_url(REVIEW_URL);
+}
+
+// Check if we need to show the reminder
+async function checkReviewReminder() {
+    try {
+        const shouldShow = await window.pywebview.api.check_review_reminder();
+        if (shouldShow && reviewReminderModal) {
+            // Show modal immediately
+            reviewReminderModal.classList.add('show');
+        }
+    } catch (e) {
+        console.error("Error checking review reminder:", e);
+    }
+}
+
+// Event Listeners
+if (reviewFloatingBtn) {
+    reviewFloatingBtn.addEventListener('click', () => {
+        openReviewUrl();
+    });
+}
+
+if (doReviewBtn) {
+    doReviewBtn.addEventListener('click', async () => {
+        openReviewUrl();
+        await window.pywebview.api.mark_review_action('reviewed');
+        if (reviewReminderModal) reviewReminderModal.classList.remove('show');
+    });
+}
+
+if (remindLaterBtn) {
+    remindLaterBtn.addEventListener('click', async () => {
+        // Check if "Don't show again" is checked
+        if (neverShowAgainCheckbox && neverShowAgainCheckbox.checked) {
+            await window.pywebview.api.mark_review_action('never');
+        } else {
+            await window.pywebview.api.mark_review_action('later');
+        }
+        if (reviewReminderModal) reviewReminderModal.classList.remove('show');
+    });
+}
+
+// Add check to the startup sequence
+window.addEventListener('pywebviewready', () => {
+    // Check immediately on startup
+    checkReviewReminder();
+});
+
