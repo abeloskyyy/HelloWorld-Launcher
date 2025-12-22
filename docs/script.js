@@ -12,9 +12,10 @@ const firebaseConfig = {
 };
 
 // Global Firebase DB Reference
+// Global Firebase DB Reference
 let db;
 
-document.addEventListener('DOMContentLoaded', () => {
+async function init() {
     // === Initialize Firebase ===
     if (window.firebaseModules) {
         try {
@@ -22,12 +23,20 @@ document.addEventListener('DOMContentLoaded', () => {
             db = window.firebaseModules.getDatabase(app);
             console.log('Firebase Initialized');
         } catch (e) {
-            console.error('Firebase Init Error (Did you fill in the config?):', e);
+            console.error('Firebase Init Error:', e);
         }
+    } else {
+        console.warn("Firebase modules not loaded yet.");
     }
+
+    // ... (Use the rest of the existing logic from lines 30-444)
+    // I will use replace_file_content to wrap the existing logic
+    // Actually, I can just replace the listener start and end.
 
     // === GitHub API Integration ===
     const repoOwner = 'abeloskyyy';
+    // ...
+
     const repoName = 'HelloWorld-Launcher';
     const heroBtn = document.getElementById('heroDownloadBtn');
     const navBtn = document.getElementById('navDownloadBtn');
@@ -416,7 +425,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ...reviewData,
                 timestamp: serverTimestamp() // Use server timestamp
             }).then(() => {
-                alert('Review saved to Database successfully!');
+                alert('Thanks for your review!');
             }).catch(error => {
                 console.error('Firebase Error:', error);
                 alert('Error saving review to database. Check console.');
@@ -442,4 +451,11 @@ document.addEventListener('DOMContentLoaded', () => {
         highlightStars(0);
         closeModalFunc();
     });
-});
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
