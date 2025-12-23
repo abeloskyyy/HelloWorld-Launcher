@@ -801,6 +801,7 @@ async function openEditProfileModal(id, profile) {
 
 if (createProfileBtn) {
     createProfileBtn.addEventListener('click', async () => {
+        await loadVersions(); // Refresh versions list
         await resetProfileModal();
         if (profileModal) profileModal.classList.add('show');
     });
@@ -1360,33 +1361,12 @@ async function startVersionDownload() {
 
         // Construct ID based on type
         if (currentLoaderType === 'fabric') {
-            // Fabric install expects just the MC version, logic is in main.py
-            // But wait, main.py install_version expects "fabric-<mc_version>" or "forge-<forge_version>"
-            // For Fabric, we usually install latest loader for that MC version.
-            // If we want specific loader, we might need to adjust main.py.
-            // For now, let's stick to the existing pattern in main.py: "fabric-<mc_version>"
-            // If we want to support specific loader version, we need to pass it.
-            // Let's assume for now we pass "fabric-<mc_version>" and main.py installs recommended.
-            // OR we update main.py to handle specific loader versions.
-            // Given the prompt asked for "version del loader", let's try to pass it.
-            // But main.py implementation of install_version for fabric uses:
-            // mc_version = version_id.replace("fabric-", "")
-            // mll.fabric.install_fabric(mc_version, ...)
-            // It doesn't take loader version.
-
-            // For Forge:
-            // forge_version = version_id.replace("forge-", "")
-            // mll.forge.install_forge_version(forge_version, ...)
-            // So for Forge we pass the forge version directly.
-
-            if (currentLoaderType === 'fabric') {
-                // For now, let's just use the MC version as the ID suffix, 
-                // as mll.fabric.install_fabric installs the latest stable loader by default
-                versionIdToInstall = `fabric-${mcVersion}`;
-            } else if (currentLoaderType === 'forge') {
-                // For Forge, the ID is the forge version string (e.g. "1.20.1-47.1.0")
-                versionIdToInstall = `forge-${loaderVersion}`;
-            }
+            // For now, let's just use the MC version as the ID suffix, 
+            // as mll.fabric.install_fabric installs the latest stable loader by default
+            versionIdToInstall = `fabric-${mcVersion}`;
+        } else if (currentLoaderType === 'forge') {
+            // For Forge, the ID is the forge version string (e.g. "1.20.1-47.1.0")
+            versionIdToInstall = `forge-${loaderVersion}`;
         }
     }
 
@@ -1465,6 +1445,13 @@ window.updateInstallProgress = function (version, percentage, status) {
 
         if (dlProgressBar) {
             dlProgressBar.style.width = `${percentage}%`;
+
+            // Check for indeterminate state (e.g. running installer)
+            if (status && (status.includes("Installer") || status.includes("Patching"))) {
+                dlProgressBar.classList.add('indeterminate');
+            } else {
+                dlProgressBar.classList.remove('indeterminate');
+            }
         }
         if (dlProgressText) {
             dlProgressText.textContent = status || `Downloading ${version}...`;

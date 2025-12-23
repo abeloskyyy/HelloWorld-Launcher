@@ -32,8 +32,9 @@ def resource_path(relative_path):
 
 
 """
+hazme el plan para implementar el logueo con microsoft. que os datos como los tokens se guarden en el encrypted data.
+
 - minecraft news
-- reseñas
 - microsoft login
 - traducciones
 
@@ -193,6 +194,44 @@ import ctypes
 # Global encryption key (will be loaded after launcher_dir is initialized)
 encryption_key = None
 
+# ------------- DPAPI (Windows Only) -------------
+if IS_WINDOWS:
+    import ctypes.wintypes
+
+    class DATA_BLOB(ctypes.Structure):
+        _fields_ = [("cbData", ctypes.wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+    def win_protect(data: bytes) -> bytes:
+        """Encrypt data using Windows DPAPI"""
+        try:
+            if not isinstance(data, bytes):
+                data = data.encode()
+            
+            blob_in = DATA_BLOB(len(data), ctypes.create_string_buffer(data))
+            blob_out = DATA_BLOB()
+            
+            if ctypes.windll.crypt32.CryptProtectData(ctypes.byref(blob_in), None, None, None, None, 0, ctypes.byref(blob_out)):
+                result = ctypes.string_at(blob_out.pbData, blob_out.cbData)
+                ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+                return result
+        except Exception as e:
+            print(f"DPAPI Protect Error: {e}")
+        return data
+
+    def win_unprotect(data: bytes) -> bytes:
+        """Decrypt data using Windows DPAPI"""
+        try:
+            blob_in = DATA_BLOB(len(data), ctypes.create_string_buffer(data))
+            blob_out = DATA_BLOB()
+            
+            if ctypes.windll.crypt32.CryptUnprotectData(ctypes.byref(blob_in), None, None, None, None, 0, ctypes.byref(blob_out)):
+                result = ctypes.string_at(blob_out.pbData, blob_out.cbData)
+                ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+                return result
+        except Exception as e:
+            print(f"DPAPI Unprotect Error: {e}")
+        return data
+
 def get_or_create_encryption_key():
     """Get existing encryption key or create a new one"""
     global encryption_key
@@ -205,20 +244,43 @@ def get_or_create_encryption_key():
     if os.path.exists(key_file):
         # Load existing key
         with open(key_file, "rb") as f:
-            encryption_key = f.read()
+            raw_key = f.read()
+        
+        if IS_WINDOWS:
+            # Try to decrypt with DPAPI
+            decrypted = win_unprotect(raw_key)
+            
+            # If win_unprotect failed or returned the same data (meaning it wasn't encrypted/protected)
+            # we need to check if it's a valid raw key to migrate it.
+            if decrypted == raw_key:
+                # Migration: It was likely not encrypted yet
+                print("Migrating .hwl_key to DPAPI protection...")
+                encryption_key = raw_key
+                protected = win_protect(encryption_key)
+                if protected != encryption_key:
+                    with open(key_file, "wb") as f:
+                        f.write(protected)
+            else:
+                encryption_key = decrypted
+        else:
+            encryption_key = raw_key
     else:
         # Generate new key
         encryption_key = Fernet.generate_key()
-        with open(key_file, "wb") as f:
-            f.write(encryption_key)
         
-        # Hide file on Windows
         if IS_WINDOWS:
+            protected = win_protect(encryption_key)
+            with open(key_file, "wb") as f:
+                f.write(protected)
+            
+            # Hide file on Windows
             try:
                 ctypes.windll.kernel32.SetFileAttributesW(key_file, 2)  # FILE_ATTRIBUTE_HIDDEN
             except:
-                pass  # Ignore if/when fails
-
+                pass
+        else:
+            with open(key_file, "wb") as f:
+                f.write(encryption_key)
     
     return encryption_key
 
@@ -253,12 +315,13 @@ def save_user_data(data: dict):
     # Separate sensitive and non-sensitive data
     sensitive_fields = {
         "account_type": data.get("account_type", "offline"),  # Default to offline
+        "username": data.get("username", ""),
     }
     
     # Non-sensitive fields - preserve all other fields
     non_sensitive_fields = {}
     for key, value in data.items():
-        if key not in ["account_type", "encrypted_data"]:  # Skip sensitive fields
+        if key not in ["account_type", "username", "encrypted_data"]:  # Skip sensitive fields
             non_sensitive_fields[key] = value
     
     # Encrypt sensitive data
@@ -588,6 +651,10 @@ class Api:
         def download_thread():
             nonlocal result
             try:
+                # Local copy of version_id to allow modification if needed (e.g. strict forge ID)
+                # and avoid UnboundLocalError in exception handler if assignment fails
+                current_version_id = version_id 
+                
                 # Variables para calcular progreso
                 max_value = 1
                 current_status = ""
@@ -613,7 +680,7 @@ class Api:
                     
                     try:
                         webview.windows[0].evaluate_js(
-                            f"if(window.updateInstallProgress) window.updateInstallProgress('{version_id}', {percentage}, '{current_status}')"
+                            f"if(window.updateInstallProgress) window.updateInstallProgress('{current_version_id}', {percentage}, '{current_status}')"
                         )
                     except Exception:
                         pass
@@ -629,58 +696,106 @@ class Api:
                     "setMax": set_max
                 }
                 
-                print(f"Installing: {version_id}")
+                print(f"Installing: {current_version_id}")
                 set_status("Starting installation...")
                 
                 # Determine installation type
-                if version_id.startswith("fabric-"):
+                version_id_lower = current_version_id.lower()
+                
+                if "fabric" in version_id_lower:
                     # Fabric Installation
-                    mc_version = version_id.replace("fabric-", "")
+                    # Common format: fabric-MCVersion or MCVersion-fabric
+                    mc_version = current_version_id.replace("fabric-", "").replace("-fabric", "")
                     set_status(f"Installing Fabric for {mc_version}...")
                     mll.fabric.install_fabric(mc_version, mc_dir, callback=callback)
                     
-                elif version_id.startswith("forge-"):
+                elif "forge" in version_id_lower:
                     # Forge Installation
-                    forge_version = version_id.replace("forge-", "")
+                    import shutil
+                    # Clean up ID to get raw Forge version
+                    forge_version = current_version_id.replace("forge-", "").replace("-forge", "")
+                    
                     set_status(f"Installing Forge {forge_version}...")
-                    mll.forge.install_forge_version(forge_version, mc_dir, callback=callback)
+                    
+                    java_path = shutil.which("java")
+                    if not java_path:
+                        print("Warning: Java not found in PATH for Forge installer")
+                    else:
+                         print(f"Using Java at {java_path} for Forge installer")
+                    
+                    # Capture existing versions to detect new one
+                    try:
+                        versions_dir = os.path.join(mc_dir, "versions")
+                        if not os.path.exists(versions_dir):
+                            os.makedirs(versions_dir)
+                        existing_versions = set(os.listdir(versions_dir))
+                    except:
+                        existing_versions = set()
+
+                    # Install Forge
+                    set_status(f"Running Forge Installer for {forge_version}... (This may take several minutes)")
+                    mll.forge.install_forge_version(forge_version, mc_dir, callback=callback, java=java_path)
+                    
+                    # Detect what was installed
+                    try:
+                        current_versions = set(os.listdir(versions_dir))
+                        new_versions = current_versions - existing_versions
+                        
+                        if new_versions:
+                            installed_id = new_versions.pop()
+                            print(f"Forge installed successfully as: {installed_id}")
+                            # Update version_id to match actual installed folder for completion message
+                            current_version_id = installed_id 
+                        else:
+                            # If no new folder, check if it already existed
+                            expected_dir = os.path.join(versions_dir, forge_version)
+                            if os.path.exists(expected_dir):
+                                print(f"Version {forge_version} presumably updated/reinstalled.")
+                            else:
+                                # Start searching for close matches or just fail
+                                raise Exception(f"Forge installation finished but no new version directory detected for {forge_version}.")
+                    except Exception as e:
+                        raise Exception(f"Verification failed: {e}")
                     
                 else:
                     # Vanilla Installation
-                    set_status(f"Downloading Vanilla {version_id}...")
-                    mll.install.install_minecraft_version(version_id, mc_dir, callback=callback)
+                    set_status(f"Downloading Vanilla {current_version_id}...")
+                    mll.install.install_minecraft_version(current_version_id, mc_dir, callback=callback)
                 
                 if self.download_cancelled:
                     result = {"success": False, "message": "Download cancelled", "cancelled": True}
-                    self.cleanup_partial_download(version_id)
+                    self.cleanup_partial_download(current_version_id)
                 else:
-                    print(f"Installation completed: {version_id}")
-                    result = {"success": True, "message": f"Version {version_id} installed successfully", "cancelled": False}
+                    print(f"Installation completed: {current_version_id}")
+                    result = {"success": True, "message": f"Version {current_version_id} installed successfully", "cancelled": False}
                     # Notify frontend of completion
                     try:
                         webview.windows[0].evaluate_js(
-                            f"if(window.onDownloadComplete) window.onDownloadComplete('{version_id}')"
+                            f"if(window.onDownloadComplete) window.onDownloadComplete('{current_version_id}')"
                         )
                     except Exception:
                         pass
                 
             except Exception as e:
                 error_msg = str(e)
-                print(f"Error installing {version_id}: {error_msg}")
+                # Use current_version_id if available, fallback to initial argument if needed (safeguard)
+                err_vid = locals().get('current_version_id', version_id) 
+                
+                print(f"Error installing {err_vid}: {error_msg}")
                 # self.error(f"Error instalando {version_id}: {error_msg}")  <-- REMOVED UNCONDITIONAL CALL
                 
                 if "cancelled" in error_msg.lower() or self.download_cancelled:
                     result = {"success": False, "message": "Download cancelled", "cancelled": True}
-                    self.cleanup_partial_download(version_id)
+                    self.cleanup_partial_download(err_vid)
                     # Notify frontend of cancellation (if not already handled)
                     try:
                         webview.windows[0].evaluate_js("if(window.onDownloadError) window.onDownloadError('Cancelled')")
                     except Exception:
                         pass
                 else:
-                    self.error(f"Error installing {version_id}: {error_msg}") # <-- MOVED HERE
+                    self.error(f"Error installing {err_vid}: {error_msg}") # <-- MOVED HERE
                     result = {"success": False, "message": error_msg, "cancelled": False}
-                    self.cleanup_partial_download(version_id)
+                    self.cleanup_partial_download(err_vid)
                     # Notify frontend of error
                     try:
                         webview.windows[0].evaluate_js(f"if(window.onDownloadError) window.onDownloadError('{error_msg.replace(chr(39), chr(34))}')")
@@ -1728,8 +1843,8 @@ if __name__ == '__main__':
     # 5. Guardar user_data en la nueva ubicación (Merge con datos existentes)
     if os.path.exists(USER_FILE):
         try:
-            with open(USER_FILE, "r", encoding="utf-8") as f:
-                persistent_data = json.load(f)
+            # Usar load_user_data para obtener los datos ya desencriptados
+            persistent_data = load_user_data()
             
             # Actualizar persistent_data con user_data (bootstrap) solo si hay valores nuevos/diferentes que no sean vacíos
             # Esto previene que un bootstrap vacío sobrescriba el nickname guardado

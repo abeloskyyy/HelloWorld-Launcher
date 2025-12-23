@@ -3048,3 +3048,30 @@ label {
     padding: 40px;
     color: #aaa;
 }
+@keyframes indeterminate {
+    0% {
+        left: -100%;
+        width: 100%;
+    }
+    50% {
+        left: 0%;
+        width: 100%;
+    }
+    100% {
+        left: 100%;
+        width: 10%;
+    }
+}
+
+.progress-bar-fill.indeterminate {
+    width: 30% !important; /* Fixed width for moving bar */
+    position: relative;
+    animation: indeterminate 2s infinite linear;
+    background: linear-gradient(90deg, #4facfe, #00f2fe, #4facfe);
+    box-shadow: 0 0 15px rgba(79, 172, 254, 0.6);
+}
+
+.progress-bar {
+    overflow: hidden; /* Ensure animated bar doesn't spill out */
+    position: relative;
+}
