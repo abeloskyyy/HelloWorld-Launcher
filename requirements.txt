@@ -1,0 +1,10 @@
+pywebview
+minecraft-launcher-lib
+pypresence
+psutil
+pygetwindow
+Pillow
+requests
+cryptography
+packaging
+pywin32; sys_platform == 'win32'

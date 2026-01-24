@@ -14,6 +14,18 @@ TIMEOUT_API = 5
 VERSION_FILE = "version.json"
 
 
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+
+    return os.path.join(base_path, relative_path)
+
+
+
 class UpdaterAPI:
     def __init__(self):
         self.cancelled = False
@@ -46,7 +58,19 @@ def load_version_config():
             with open(VERSION_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
         else:
-            # Create default file
+            # Try to load from bundled resources (PyInstaller)
+            bundled_path = resource_path(VERSION_FILE)
+            if os.path.exists(bundled_path) and os.path.abspath(bundled_path) != os.path.abspath(VERSION_FILE):
+                try:
+                    with open(bundled_path, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                    # Save it to the local directory so it can be updated later
+                    save_version_config(config)
+                    return config
+                except Exception as e:
+                    print(f"Error reading bundled version.json: {e}")
+
+            # Create default file with a more realistic version or at least use the bundled one if possible
             default_config = {
                 "version": "0.1.0",
                 "last_check": None,
@@ -63,6 +87,7 @@ def load_version_config():
             "update_channel": "stable",
             "repo_url": "https://api.github.com/repos/Abeloskyyy/HelloWorld-Launcher"
         }
+
 
 
 def save_version_config(config):
@@ -313,7 +338,8 @@ def apply_update(downloaded_file, remote_version):
             f.write(f'move /y "{new_exe}" "{target_path}"\n')
             
             # 3. Restart launcher (the new one)
-            f.write(f'start "" "{target_path}"\n')
+            # Use /I to invalidate environment variables (prevents Python DLL error from _MEIPASS inheritance)
+            f.write(f'start "" /I "{target_path}"\n')
             
             # 4. Wait a few more seconds to ensure the old process finally died, then clean up
             f.write('timeout /t 5 /nobreak >nul\n')

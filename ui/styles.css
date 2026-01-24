@@ -123,7 +123,83 @@ body {
     z-index: 100;
 }
 
+/* Sidebar Submenu Styles */
+.sidebar-group {
+    width: 100%;
+}
+
+.sidebar-submenu {
+    position: relative;
+    background: rgba(0, 0, 0, 0.2);
+    margin-top: -5px;
+    /* Pull up slightly to connect */
+    margin-bottom: 5px;
+    padding: 5px 0;
+}
+
+.sidebar-submenu .sidebar-button.submenu-item {
+    font-size: 14px;
+    padding: 12px 20px 12px 50px !important;
+    /* Indent text */
+    border-left: 4px solid transparent;
+    /* Maintain border space */
+    position: relative;
+    /* For pseudo-elements */
+    color: #999;
+}
+
+.sidebar-submenu .sidebar-button.submenu-item:hover {
+    padding-left: 55px !important;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.sidebar-submenu .sidebar-button.submenu-item.active {
+    background: rgba(79, 172, 254, 0.1);
+    color: #4facfe;
+    border-left-color: transparent;
+    /* Don't use the main active border */
+}
+
+/* Tree-like "flechitas" / connectors */
+.sidebar-submenu .sidebar-button.submenu-item::before {
+    content: '';
+    position: absolute;
+    left: 28px;
+    /* Position line */
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-submenu .sidebar-button.submenu-item::after {
+    content: '';
+    position: absolute;
+    left: 28px;
+    top: 50%;
+    width: 15px;
+    /* Horizontal line length */
+    height: 2px;
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-50%);
+}
+
+.sidebar-submenu .sidebar-button.submenu-item:last-child::before {
+    bottom: 50%;
+    /* Stop line halfway for last item */
+}
+
+.sidebar-submenu .sidebar-button.submenu-item:hover::before,
+.sidebar-submenu .sidebar-button.submenu-item:hover::after,
+.sidebar-submenu .sidebar-button.submenu-item.active::before,
+.sidebar-submenu .sidebar-button.submenu-item.active::after {
+    background: #4facfe;
+    box-shadow: 0 0 5px rgba(79, 172, 254, 0.5);
+}
+
 .sidebar-button {
+    width: 100%;
     padding: 18px 30px;
     background: transparent;
     border: none;
@@ -562,10 +638,10 @@ select:disabled {
     border: 4px solid rgba(255, 255, 255, 0.3);
     border-top: 4px solid #fff;
     border-radius: 50%;
-    animation: spin 1s linear infinite;
+    animation: spinner-spin 1s linear infinite;
 }
 
-@keyframes spin {
+@keyframes spinner-spin {
     0% {
         transform: rotate(0deg);
     }
@@ -575,13 +651,24 @@ select:disabled {
     }
 }
 
+/* Rotación automática para modelos 3D de skins */
+@keyframes rotateSkin {
+    0% {
+        transform: rotateY(0deg);
+    }
+
+    100% {
+        transform: rotateY(360deg);
+    }
+}
+
 .spinner-small {
     width: 16px;
     height: 16px;
     border: 2px solid rgba(255, 59, 48, 0.3);
     border-top: 2px solid #ff3b30;
     border-radius: 50%;
-    animation: spin 1s linear infinite;
+    animation: spinner-spin 1s linear infinite;
 }
 
 .play-button:hover {
@@ -1614,6 +1701,106 @@ select:disabled {
     justify-content: center;
     font-size: 16px;
     color: #fff;
+    overflow: visible;
+    position: relative;
+}
+
+/* 3D Head Viewer for User Badge */
+.user-head-3d {
+    width: 32px;
+    height: 32px;
+    transform-style: preserve-3d;
+    transform: rotateX(-20deg) rotateY(30deg) scale(0.8);
+    filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.5));
+    position: relative;
+}
+
+.user-head-3d .head {
+    width: 32px;
+    height: 32px;
+    position: relative;
+    transform-style: preserve-3d;
+}
+
+.user-head-3d .head>div {
+    position: absolute;
+    width: 32px;
+    height: 32px;
+    background-size: 256px 256px;
+    image-rendering: pixelated;
+}
+
+.user-head-3d .head .front {
+    transform: translateZ(16px);
+}
+
+.user-head-3d .head .back {
+    transform: translateZ(-16px) rotateY(180deg);
+}
+
+.user-head-3d .head .right {
+    transform: rotateY(-270deg) translateX(16px);
+    transform-origin: top right;
+}
+
+.user-head-3d .head .left {
+    transform: rotateY(270deg) translateX(-16px);
+    transform-origin: center left;
+}
+
+.user-head-3d .head .top {
+    transform: rotateX(-270deg) translateY(-16px);
+    transform-origin: top center;
+}
+
+.user-head-3d .head .bottom {
+    transform: rotateX(270deg) translateY(16px);
+    transform-origin: bottom center;
+}
+
+.user-head-3d .head .accessory {
+    position: absolute;
+    width: 36px;
+    height: 36px;
+    transform-style: preserve-3d;
+    left: -2px;
+    top: -2px;
+}
+
+.user-head-3d .head .accessory>div {
+    position: absolute;
+    width: 36px;
+    height: 36px;
+    background-size: 256px 256px;
+    image-rendering: pixelated;
+}
+
+.user-head-3d .head .accessory .front {
+    transform: translateZ(18px);
+}
+
+.user-head-3d .head .accessory .back {
+    transform: translateZ(-18px) rotateY(180deg);
+}
+
+.user-head-3d .head .accessory .right {
+    transform: rotateY(-270deg) translateX(18px);
+    transform-origin: top right;
+}
+
+.user-head-3d .head .accessory .left {
+    transform: rotateY(270deg) translateX(-18px);
+    transform-origin: center left;
+}
+
+.user-head-3d .head .accessory .top {
+    transform: rotateX(-270deg) translateY(-18px);
+    transform-origin: top center;
+}
+
+.user-head-3d .head .accessory .bottom {
+    transform: rotateX(270deg) translateY(18px);
+    transform-origin: bottom center;
 }
 
 .user-menu-btn {
@@ -3001,6 +3188,7 @@ label {
     line-height: 1.4;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
@@ -3018,6 +3206,7 @@ label {
     line-height: 1.5;
     display: -webkit-box;
     -webkit-line-clamp: 3;
+    line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
     margin-bottom: 15px;
@@ -3048,15 +3237,18 @@ label {
     padding: 40px;
     color: #aaa;
 }
+
 @keyframes indeterminate {
     0% {
         left: -100%;
         width: 100%;
     }
+
     50% {
         left: 0%;
         width: 100%;
     }
+
     100% {
         left: 100%;
         width: 10%;
@@ -3064,7 +3256,8 @@ label {
 }
 
 .progress-bar-fill.indeterminate {
-    width: 30% !important; /* Fixed width for moving bar */
+    width: 30% !important;
+    /* Fixed width for moving bar */
     position: relative;
     animation: indeterminate 2s infinite linear;
     background: linear-gradient(90deg, #4facfe, #00f2fe, #4facfe);
@@ -3072,6 +3265,646 @@ label {
 }
 
 .progress-bar {
-    overflow: hidden; /* Ensure animated bar doesn't spill out */
+    overflow: hidden;
+    /* Ensure animated bar doesn't spill out */
     position: relative;
+}
+
+/* SKIN SECTION STYLES */
+.skins-grid {
+    margin-top: 30px;
+}
+
+.skin-card-display {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 25px;
+    width: 300px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    backdrop-filter: blur(10px);
+    transition: transform 0.3s ease;
+}
+
+.skin-card-display:hover {
+    transform: translateY(-5px);
+    border-color: #4facfe;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.card-header h2 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.badge {
+    background: rgba(79, 172, 254, 0.2);
+    color: #4facfe;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid rgba(79, 172, 254, 0.3);
+}
+
+.preview-container {
+    height: 300px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.pixel-art-preview {
+    height: 80%;
+    /* Zoom in */
+    image-rendering: pixelated;
+    /* Essential for Minecraft textures */
+    filter: drop-shadow(0 5px 15px rgba(0, 0, 0, 0.5));
+}
+
+.card-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: auto;
+}
+
+/* Specific fix for Microsoft Login Button alignment */
+#selectMicrosoftBtn {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+}
+
+/* ============================================
+   SKIN PACK SYSTEM STYLES
+   ============================================ */
+
+.skins-section {
+    margin-top: 30px;
+}
+
+.create-pack-btn {
+    margin-bottom: 30px;
+    width: 100%;
+    max-width: 400px;
+    padding: 15px 30px;
+    font-size: 16px;
+}
+
+.skin-packs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 25px;
+    margin-top: 20px;
+}
+
+.no-packs-message {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 80px 20px;
+    color: #666;
+}
+
+.no-packs-message i {
+    font-size: 64px;
+    margin-bottom: 20px;
+    opacity: 0.5;
+}
+
+.no-packs-message p {
+    font-size: 18px;
+    margin: 10px 0;
+}
+
+/* Skin Pack Card */
+.skin-pack-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 20px;
+    transition: all 0.3s ease;
+    cursor: default;
+    /* Card itself is not clickable anymore */
+    position: relative;
+    overflow: hidden;
+}
+
+.skin-pack-card:hover {
+    transform: translateY(-5px);
+    border-color: rgba(79, 172, 254, 0.5);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.skin-pack-card.active {
+    border: 2px solid #4facfe;
+    background: rgba(79, 172, 254, 0.1);
+    box-shadow: 0 0 20px rgba(79, 172, 254, 0.3);
+}
+
+.disabled-cooldown {
+    opacity: 0.5;
+    cursor: not-allowed !important;
+    pointer-events: none;
+}
+
+.skin-pack-card.active::before {
+    content: "ACTIVE";
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background-color: #4facfe;
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    z-index: 2;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.pack-preview-container {
+    width: 100%;
+    height: 200px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 15px;
+    /* Added margin for separation */
+    margin-bottom: 15px;
+    overflow: hidden;
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.pack-preview-container img {
+    height: 80%;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 5px 15px rgba(0, 0, 0, 0.5));
+}
+
+.pack-preview-container .mini-3d-viewer {
+    transform: scale(0.55) translateY(-20px);
+    transform-origin: center center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pack-preview-container .mc-skin-viewer-9x {
+    margin: 0 !important;
+}
+
+.pack-info {
+    margin-top: 15px;
+    margin-bottom: 15px;
+}
+
+.pack-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pack-details {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: #aaa;
+}
+
+.pack-detail-badge {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 4px 10px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.pack-detail-badge i {
+    color: #4facfe;
+}
+
+.pack-actions {
+    display: flex;
+    gap: 8px;
+    position: relative;
+    z-index: 10;
+    /* Ensure buttons are clickable */
+}
+
+.pack-actions button {
+    flex: 1;
+    padding: 10px;
+    font-size: 13px;
+}
+
+.btn-activate {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    border: none;
+    color: #fff;
+}
+
+.btn-activate:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(79, 172, 254, 0.4);
+}
+
+.btn-delete-pack {
+    background: rgba(217, 83, 79, 0.2);
+    border: 1px solid rgba(217, 83, 79, 0.3);
+    color: #d9534f;
+}
+
+.btn-delete-pack:hover {
+    background: rgba(217, 83, 79, 0.3);
+    border-color: rgba(217, 83, 79, 0.5);
+}
+
+/* Skin Upload Area */
+/* Skin Upload Area */
+.skin-pack-modal-content {
+    width: 900px !important;
+    max-width: 95vw;
+}
+
+/* Modal Help Icon */
+.modal-content .help-icon {
+    color: #bbb;
+    margin-left: 5px;
+    cursor: help;
+    transition: color 0.3s;
+}
+
+.modal-content .help-icon:hover {
+    color: #fff;
+}
+
+.skin-upload-area {
+    width: 100%;
+    min-height: 550px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 2px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    /* Remove overflow hidden to fix clipping issues with the model */
+    overflow: visible;
+}
+
+.skin-upload-area.active {
+    background: transparent;
+    border: 2px solid transparent;
+    cursor: default;
+}
+
+.skin-upload-area:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: #4facfe;
+    box-shadow: 0 0 20px rgba(79, 172, 254, 0.1);
+}
+
+.skin-upload-area.active:hover {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.skin-upload-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    text-align: center;
+    pointer-events: none;
+    padding: 40px;
+}
+
+.upload-icon-circle {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: rgba(79, 172, 254, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #4facfe;
+    transition: all 0.3s ease;
+}
+
+.skin-upload-area:hover:not(.active) .upload-icon-circle {
+    transform: scale(1.1);
+    background: rgba(79, 172, 254, 0.2);
+    box-shadow: 0 0 15px rgba(79, 172, 254, 0.3);
+}
+
+.skin-upload-placeholder h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #fff;
+    font-weight: 600;
+}
+
+.skin-upload-placeholder p {
+    margin: 0;
+    font-size: 14px;
+    color: #aaa;
+}
+
+/* 3D Viewer Container inside Upload Area */
+.skin-3d-viewer-container {
+    width: 100%;
+    height: 100%;
+    min-height: 550px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Ensure the viewer spin class centers properly */
+.mc-skin-viewer-11x {
+    transform-style: preserve-3d;
+    margin-top: 20px;
+}
+
+.change-skin-btn {
+    position: absolute;
+    bottom: -10px;
+    right: -10px;
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    background: rgba(79, 172, 254, 0.9);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    z-index: 100;
+    font-size: 18px;
+}
+
+.change-skin-btn:hover {
+    transform: translateY(-2px);
+    background: #4facfe;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+#skinPreviewCanvas {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+}
+
+/* Cape Selection Grid */
+.cape-selection-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 15px;
+    margin-top: 10px;
+}
+
+.cape-option {
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 15px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.cape-option:hover {
+    border-color: rgba(79, 172, 254, 0.5);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.cape-option.selected {
+    border-color: #4facfe;
+    background: rgba(79, 172, 254, 0.15);
+    box-shadow: 0 0 15px rgba(79, 172, 254, 0.3);
+}
+
+.cape-preview-box {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.cape-preview-box img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    image-rendering: pixelated;
+}
+
+.cape-preview-box.no-cape {
+    font-size: 32px;
+    color: #666;
+}
+
+.cape-option span {
+    font-size: 12px;
+    color: #aaa;
+    font-weight: 500;
+}
+
+.cape-option.selected span {
+    color: #4facfe;
+}
+
+/* ========== 3D Skin Viewer Styles ========== */
+.skin-3d-viewer-container {
+    margin-top: 30px;
+    padding: 30px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 16px;
+    border: 2px solid rgba(79, 172, 254, 0.2);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 400px;
+}
+
+.skin-3d-viewer-container .mc-skin-viewer-11x {
+    /* Remove spin animation - we want static view */
+    animation: none !important;
+}
+
+.skin-3d-viewer-container .mc-skin-viewer-11x>.player {
+    /* Position from a higher angle (looking down at character) */
+    transform: rotateX(-15deg) rotateY(25deg);
+    animation: none !important;
+}
+
+
+
+/* ========== Mini 3D Viewer for Grid ========== */
+.skin-pack-card .pack-preview-container {
+    height: 200px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px 8px 0 0;
+    overflow: hidden;
+    position: relative;
+}
+
+.mini-3d-viewer {
+    transform: scale(0.6);
+    /* Position nicely */
+    margin-top: 20px;
+}
+
+.mini-3d-viewer .mc-skin-viewer-9x .player {
+    animation: none;
+    /* No spin in grid to save performance */
+    transform: rotateX(-10deg) rotateY(25deg);
+}
+
+/* ========== SKIN PACKS LAYOUT (2 COLUMNS) ========== */
+.skin-packs-container {
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+    /* Important for sticky behavior */
+    margin-top: 20px;
+    position: relative;
+    /* Ensure it takes full height available if needed, though scroll is on body/main-content */
+}
+
+.skin-packs-left-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.skin-packs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 25px;
+}
+
+/* Right Side - Large Preview */
+.skin-packs-preview {
+    width: 450px;
+    /* Fixed width for the preview column */
+    flex-shrink: 0;
+    /* Determine scale limit */
+    position: relative;
+    /* Optional: background/border to separate it */
+}
+
+.large-skin-preview-sticky {
+    position: sticky;
+    top: 20vh;
+    /* Distance from top of scroll container */
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 20px;
+    backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 60vh;
+    /* Ensure it's tall enough */
+}
+
+.large-skin-viewer {
+    width: 100%;
+    height: 55vh;
+    /* as requested for large preview */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    position: relative;
+    background: radial-gradient(circle at center, rgba(79, 172, 254, 0.1) 0%, rgba(0, 0, 0, 0.2) 70%);
+    border-radius: 12px;
+}
+
+/* Scaling the viewer to fit 55vh container */
+.large-skin-viewer .mc-skin-viewer-11x,
+.large-skin-viewer .mc-skin-viewer-9x {
+    transform: scale(1.5);
+    /* Scale up significantly */
+    transform-origin: center center;
+    margin: 0 !important;
+}
+
+.placeholder-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: #666;
+    gap: 15px;
+}
+
+.placeholder-preview i {
+    font-size: 64px;
+    opacity: 0.5;
+}
+
+/* Small correction to existing styles if needed */
+.skin-pack-card.active {
+    border: 2px solid #4facfe;
+}
+
+/* Optimize Skin Menu - Only spin on hover */
+.skin-pack-card:hover .mc-skin-viewer-9x .player {
+    animation: none !important;
+    transform: rotateX(-15deg) rotateY(35deg) scale(1.1) !important;
+    transition: transform 0.3s ease;
+}
+
+/* Static Isometric Pose for Mini Viewers */
+.mini-3d-viewer .mc-skin-viewer-9x .player {
+    transform: rotateX(-15deg) rotateY(35deg) !important;
+    animation: none !important;
+    transition: transform 0.3s ease;
+}
+
+/* Large preview keeps animation */
+#largeSkinViewerContainer .mc-skin-viewer-9x.spin .player {
+    animation: spin 12s infinite linear !important;
+    transform: none;
 }

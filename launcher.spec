@@ -13,6 +13,7 @@ a = Analysis(
     ],
     hiddenimports=[
         'webview',
+        'pypresence',
         'webview.platforms.winforms',
         'requests',
         'packaging',

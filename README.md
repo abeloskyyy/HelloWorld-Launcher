@@ -6,7 +6,7 @@ HelloWorld Launcher is a launcher for Minecraft: Java Edition. It is open source
 | | HelloWorld | Official Launcher | TLauncher |
 |---|---|---|---|
 | Mod Installation | ✅ | ❌ | ✅ |
-| Execution Speed | ~7 s | ~35 s | ~55 s |
+| Execution Speed | ~10 s | ~35 s | ~55 s |
 | RAM Usage | Low | Medium | High |
 | Security | High | Very High | ... |
 | Offline Mode | Yes | Yes | No |
@@ -107,7 +107,7 @@ Because the app is not signed, as code signing certificates cost money.
 The launcher is legal. Using Minecraft utilizes a copy of the game in accordance with Mojang/Microsoft terms.
 
 **Does it work with large mods?**
-Yes, including heavy modpacks if your system allows it.
+Yes, including heavy mods or shaders if your system allows it.
 
 **Does it support Fabric and Forge?**
 Yes, with independent profiles.
@@ -130,14 +130,6 @@ Yes, via offline mode.
 3. Submit a Pull Request.
 
 Ideas and suggestions are welcome.
-
----
-
-## Roadmap
-
-* Automatic update system
-* Mod downloading
-* Interface improvements
 
 ---
 

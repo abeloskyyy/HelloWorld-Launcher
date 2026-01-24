@@ -151,8 +151,6 @@ function saveSettings() {
 
                 if (devModeChanged) {
                     window.pywebview.api.info('Settings saved. Please restart the launcher for developer mode changes to take effect.');
-                } else {
-                    window.pywebview.api.info('Settings saved successfully.');
                 }
             } catch (err) {
                 console.error("Error saving settings:", err);
@@ -169,6 +167,7 @@ if (document.getElementById("mcdir")) {
     });
 }
 
+// PyWebView Ready
 // PyWebView Ready
 window.addEventListener('pywebviewready', async () => {
     // Check internet connection first
@@ -208,6 +207,26 @@ window.addEventListener('pywebviewready', async () => {
         const data = await window.pywebview.api.get_user_json();
         if (document.getElementById("nickname")) document.getElementById("nickname").value = data.username || "";
         if (document.getElementById("mcdir")) document.getElementById("mcdir").value = data.mcdir || "";
+
+        // Update UI based on initial data
+        await updateUserInterface(data);
+
+        // Microsoft Session Refresh
+        if (data.account_type === 'microsoft') {
+            console.log("Checking Microsoft session...");
+            try {
+                const res = await window.pywebview.api.refresh_session();
+                if (res.success) {
+                    console.log("Session refreshed");
+                    await loadSkinData();
+                } else if (res.expired) {
+                    console.warn("Session expired");
+                    window.pywebview.api.info("Your Microsoft session has expired. Please log in again.");
+                }
+            } catch (err) {
+                console.error("Session refresh error:", err);
+            }
+        }
 
         // Load developer mode checkbox
         const devModeCheckbox = document.getElementById("devModeCheckbox");
@@ -252,6 +271,125 @@ window.addEventListener('pywebviewready', async () => {
         }
     }
 });
+
+// --- NEW AUTH FUNCTIONS ---
+
+async function updateUserInterface(userData) {
+    const badge = document.getElementById('userBadge');
+    const name = document.getElementById('userDisplayName');
+    const loginBtn = document.getElementById('loginButton');
+    const skinsBtn = document.getElementById('skinsSidebarBtn');
+
+    // Check if logged in (either offline or microsoft)
+    if (userData.username && userData.username !== "") {
+        if (badge) badge.style.display = 'flex';
+        if (name) name.textContent = userData.username;
+        if (loginBtn) loginBtn.style.display = 'none';
+
+        if (userData.account_type === 'microsoft') {
+            if (skinsBtn) skinsBtn.style.display = 'flex';
+        } else {
+            if (skinsBtn) skinsBtn.style.display = 'none';
+            // For offline users, show default Steve head
+            if (window.renderUserHead) {
+                const username = userData.username || 'Steve';
+                const skinUrl = `https://mc-heads.net/avatar/${username}`;
+                await window.renderUserHead(skinUrl);
+            }
+        }
+    } else {
+        if (badge) badge.style.display = 'none';
+        if (loginBtn) loginBtn.style.display = 'flex';
+        if (skinsBtn) skinsBtn.style.display = 'none';
+    }
+}
+
+async function loadSkinData() {
+    try {
+        const data = await window.pywebview.api.get_skin_data();
+        const userData = await window.pywebview.api.get_user_json();
+
+        const skinImg = document.getElementById('skinPreviewImg');
+        const capeImg = document.getElementById('capePreviewImg');
+        const badge = document.getElementById('skinVariantBadge');
+        const capeBadge = document.getElementById('capeBadge');
+        const noCape = document.getElementById('noCapeText');
+
+        // Use crafatar.com for reliable skin rendering
+        const username = userData.username || 'Steve';
+        const skinUrl = `https://mc-heads.net/avatar/${username}`;
+
+        if (data.skin && skinImg) {
+            skinImg.src = data.skin;
+            if (badge) badge.textContent = data.variant === 'slim' ? 'Slim (Alex)' : 'Classic (Steve)';
+        } else if (skinImg) {
+            // Default Steve if no skin
+            skinImg.src = skinUrl;
+            if (badge) badge.textContent = 'Classic (Steve)';
+        }
+
+        if (data.cape && capeImg) {
+            capeImg.src = data.cape;
+            capeImg.style.display = 'block';
+            if (noCape) noCape.style.display = 'none';
+            if (capeBadge) capeBadge.style.display = 'inline-block';
+        } else {
+            if (capeImg) capeImg.style.display = 'none';
+            if (noCape) noCape.style.display = 'block';
+            if (capeBadge) capeBadge.style.display = 'none';
+        }
+
+        // Render 3D head in user badge
+        if (window.renderUserHead) {
+            await window.renderUserHead(skinUrl);
+        }
+    } catch (e) {
+        console.error("Error loading skin data", e);
+    }
+}
+
+// Global Login Callbacks
+window.onLoginSuccess = async function () {
+    const data = await window.pywebview.api.get_user_json();
+    await updateUserInterface(data);
+
+    const loginMicrosoftBtn = document.getElementById('loginMicrosoftBtn');
+    if (loginMicrosoftBtn) {
+        loginMicrosoftBtn.innerHTML = '<i class="fab fa-microsoft"></i> Login with Microsoft';
+        loginMicrosoftBtn.disabled = false;
+    }
+
+    const modal = document.getElementById('loginModal');
+    if (modal) modal.classList.remove('show');
+
+    loadSkinData();
+};
+
+window.onLoginError = function (err) {
+    window.pywebview.api.error("Login failed: " + err);
+    // Reset button state
+    const selectMicrosoftBtn = document.getElementById('selectMicrosoftBtn');
+    if (selectMicrosoftBtn) {
+        selectMicrosoftBtn.innerHTML = '<i class="fab fa-microsoft"></i> Login with Microsoft';
+        selectMicrosoftBtn.disabled = false;
+    }
+
+    // Also reset the other button if it exists/was used
+    const loginMicrosoftBtn = document.getElementById('loginMicrosoftBtn');
+    if (loginMicrosoftBtn) {
+        loginMicrosoftBtn.innerHTML = '<i class="fab fa-microsoft"></i> Login with Microsoft';
+        loginMicrosoftBtn.disabled = false;
+    }
+};
+
+// Bind Button
+if (selectMicrosoftBtn) {
+    selectMicrosoftBtn.onclick = () => {
+        selectMicrosoftBtn.innerHTML = '<span class="spinner-small"></span> Waiting...';
+        selectMicrosoftBtn.disabled = true;
+        window.pywebview.api.login_microsoft();
+    };
+}
 
 async function launchGame() {
     const profileSelectElement = document.getElementById("profileSelect");
@@ -1553,17 +1691,13 @@ if (saveOfflineBtn) {
             if (loginModal) loginModal.classList.remove('show');
             showLoginMethodScreen();
         } else {
-            window.pywebview.api.error('Please enter a valid nickname (no spaces or accents)');
+            window.pywebview.api.error('Please enter a valid nickname (no spaces, accents or special characters)');
         }
     });
 }
 
-// Microsoft login (placeholder)
-if (selectMicrosoftBtn) {
-    selectMicrosoftBtn.addEventListener('click', () => {
-        window.pywebview.api.error('Microsoft functionality not yet implemented');
-    });
-}
+// Microsoft login (placeholder) - Removed, handled by global bind
+// if (selectMicrosoftBtn) { ... }
 
 // User badge toggle (click anywhere on badge)
 if (userBadge) {
@@ -1665,6 +1799,9 @@ function initializeTooltips() {
     const tooltipElements = document.querySelectorAll('[data-tooltip]');
 
     tooltipElements.forEach(element => {
+        if (element.dataset.tooltipInitialized) return;
+        element.dataset.tooltipInitialized = 'true';
+
         // Mouse enter - start timer
         element.addEventListener('mouseenter', (e) => {
             const tooltipText = element.getAttribute('data-tooltip');
@@ -1694,24 +1831,35 @@ function initializeTooltips() {
             }
         });
 
-        // Click - show immediately
+        // Click - show immediately (toggle for help icons)
         element.addEventListener('click', (e) => {
             const tooltipText = element.getAttribute('data-tooltip');
             if (!tooltipText) return;
 
             // Only for help icons
             if (element.classList.contains('help-icon')) {
-                e.stopPropagation();
+                e.stopPropagation(); // Stop event bubbling
+                e.preventDefault();  // Prevent default action (like label checkbox toggling)
+
+                // If already showing THIS tooltip, hide it
+                if (currentTooltipElement === element && tooltipTimeout === 'manual') {
+                    hideTooltip();
+                    return;
+                }
+
+                // Hide potential existing tooltip
+                hideTooltip();
+
                 const rect = element.getBoundingClientRect();
                 const x = rect.left + (rect.width / 2);
                 const y = rect.top;
 
-                if (currentTooltipElement === element && tooltip.classList.contains('show')) {
-                    hideTooltip();
-                } else {
-                    showTooltip(element, tooltipText, x, y);
-                    currentTooltipElement = element;
-                }
+                showTooltip(element, tooltipText, x, y);
+                currentTooltipElement = element;
+
+                // Mark as manually opened so mouseleave doesn't auto-hide immediately if unintended
+                if (tooltipTimeout) clearTimeout(tooltipTimeout);
+                tooltipTimeout = 'manual';
             }
         });
     });
@@ -1743,12 +1891,16 @@ observer.observe(document.body, {
 // MODS SECTION FUNCTIONALITY
 // ==============================================
 
-// Global variables for mods
+// Global variables for mods/content
 let currentModsProfile = null;
 let currentModTab = 'download';
 let searchTimeout = null;
+let currentContentType = 'mod'; // 'mod', 'resourcepack', 'datapack', 'shader'
 
 // Elements
+const modsSectionTitle = document.querySelector('#mods h1');
+const worldSelectorContainer = document.getElementById('worldSelectorContainer');
+const worldSelect = document.getElementById('worldSelect');
 const modsProfileSelect = document.getElementById('modsProfileSelect');
 const noModdableProfiles = document.getElementById('noModdableProfiles');
 const modsTabsContainer = document.getElementById('modsTabsContainer');
@@ -1759,72 +1911,316 @@ const modSearchResults = document.getElementById('modSearchResults');
 const modSearchLoading = document.getElementById('modSearchLoading');
 const installedModsList = document.getElementById('installedModsList');
 
-// Load moddable profiles
+// Toggle Sidebar Menu
+function toggleModsMenu() {
+    const submenu = document.getElementById('modsSubmenu');
+    const arrow = document.getElementById('modsMenuArrow');
+    const isVisible = submenu.style.display !== 'none';
+
+    submenu.style.display = isVisible ? 'none' : 'block';
+    arrow.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(180deg)';
+}
+
+// Show Section Override for Content Types
+const originalShowSection = window.showSection || function () { };
+window.showSection = function (sectionId, contentType = null) {
+    // Hide all sections logic (assumed exists in global scope or we reimplement basic toggle)
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.sidebar-button').forEach(b => b.classList.remove('active'));
+
+    // Activate section
+    const target = document.getElementById(sectionId);
+    if (target) target.classList.add('active');
+
+    // Sidebar active state
+    if (sectionId === 'mods') {
+        const submenuItem = document.querySelector(`.submenu-item[onclick*="'${contentType}'"]`);
+        if (submenuItem) submenuItem.classList.add('active');
+        document.getElementById('modsMenuBtn').classList.add('active');
+        document.getElementById('modsSubmenu').style.display = 'block'; // Ensure open
+    } else {
+        // Activate standard buttons
+        const btn = document.querySelector(`.sidebar-button[onclick="showSection('${sectionId}')"]`);
+        if (btn) btn.classList.add('active');
+    }
+
+    // Specific logic
+    if (sectionId === 'mods' && contentType) {
+        currentContentType = contentType;
+        updateModsSectionUI();
+        loadModdableProfiles(); // Reload/Refilter profiles
+    }
+}
+
+function updateModsSectionUI() {
+    const titles = {
+        'mod': 'Mods',
+        'resourcepack': 'Resource Packs',
+        'datapack': 'Data Packs',
+        'shader': 'Shaders'
+    };
+    if (modsSectionTitle) modsSectionTitle.textContent = titles[currentContentType];
+
+    // Reset specific UI elements
+    if (worldSelectorContainer) worldSelectorContainer.style.display = 'none';
+    if (noModdableProfiles) noModdableProfiles.style.display = 'none';
+
+    // Reset search
+    if (modSearchInput) {
+        modSearchInput.value = '';
+        modSearchInput.placeholder = `Search ${titles[currentContentType]} in Modrinth...`;
+    }
+    document.getElementById('modSearchResults').innerHTML = `
+        <div class="mod-search-empty">
+            <i class="fas fa-search"></i>
+            <p>Search ${titles[currentContentType]} to download</p>
+        </div>
+    `;
+    // Ensure display is correct to avoid flicker/misalignment
+    document.getElementById('modSearchResults').style.display = 'flex';
+    document.getElementById('modSearchResults').style.justifyContent = 'center';
+
+    // Logic specific to type
+    if (currentContentType === 'datapack') {
+        if (worldSelectorContainer) worldSelectorContainer.style.display = 'block';
+    }
+}
+
+// Load profiles logic updated
 async function loadModdableProfiles() {
     if (!modsProfileSelect) return;
 
     try {
-        const data = await window.pywebview.api.get_moddable_profiles();
-        const profiles = data.profiles || {};
+        // Use new backend method with strict filtering
+        const data = await window.pywebview.api.get_profiles_for_addon(currentContentType);
+        const targetProfiles = data.profiles || {};
 
         modsProfileSelect.innerHTML = '';
 
-        if (Object.keys(profiles).length === 0) {
-            // No moddable profiles
-            modsProfileSelect.innerHTML = '<option value="">No moddable profiles found</option>';
+        // Reset world select
+        if (worldSelect) {
+            worldSelect.innerHTML = '<option value="">Select a world...</option>';
+            worldSelect.disabled = true;
+        }
+
+        if (Object.keys(targetProfiles).length === 0) {
+            modsProfileSelect.innerHTML = '<option value="">No compatible profiles found</option>';
             modsProfileSelect.disabled = true;
-            if (noModdableProfiles) noModdableProfiles.style.display = 'block';
+            if (noModdableProfiles) {
+                noModdableProfiles.style.display = 'block';
+
+                let msg = "";
+                if (currentContentType === 'mod') msg = "No profiles with Forge or Fabric found.";
+                else if (currentContentType === 'shader') msg = "No profiles with Shaders support found. (Requires Forge with Optifine OR Fabric with Iris+Sodium installed).";
+                else msg = "No profiles found.";
+
+                document.getElementById('noModdableMessage').textContent = msg;
+            }
             if (modsTabsContainer) modsTabsContainer.style.display = 'none';
             return;
         }
 
-        // Has moddable profiles
         modsProfileSelect.disabled = false;
         if (noModdableProfiles) noModdableProfiles.style.display = 'none';
         if (modsTabsContainer) modsTabsContainer.style.display = 'block';
 
-        // Add profiles to select
-        for (const [id, profile] of Object.entries(profiles)) {
+        for (const [id, profile] of Object.entries(targetProfiles)) {
             const option = document.createElement('option');
             option.value = id;
 
-            const typeLabel = profile.type === 'forge' ? 'FORGE' : profile.type === 'fabric' ? 'FABRIC' : 'MODDED';
-            option.textContent = `${profile.name} (${typeLabel} - ${profile.version})`;
+            let label = profile.name;
+            const typeLabel = (profile.type === 'forge' || (profile.version && profile.version.includes('forge'))) ? 'FORGE' :
+                (profile.type === 'fabric' || (profile.version && profile.version.includes('fabric'))) ? 'FABRIC' : 'VANILLA';
+            option.textContent = `${label} (${typeLabel} - ${profile.version})`;
+
+            // Tooltip via title (native)
+            if (currentContentType === 'shader') {
+                if (typeLabel === 'FORGE' || typeLabel === 'FABRIC') {
+                    option.title = "Profile ready for shaders";
+                }
+            }
 
             modsProfileSelect.appendChild(option);
         }
 
-        // Select first profile
+        // Select first and trigger load
         if (modsProfileSelect.options.length > 0) {
+            modsProfileSelect.selectedIndex = 0;
             currentModsProfile = modsProfileSelect.value;
-            await loadInstalledMods();
+            await onProfileSelected();
         }
     } catch (error) {
-        console.error('Error loading moddable profiles:', error);
+        console.error('Error loading profiles:', error);
     }
 }
+
+async function onProfileSelected() {
+    currentModsProfile = modsProfileSelect.value;
+
+    // Clean search
+    if (modSearchInput) modSearchInput.value = '';
+    // Reset Results
+    if (modSearchResults) modSearchResults.innerHTML = '';
+
+    // If Datapack, load worlds
+    if (currentContentType === 'datapack') {
+        await loadWorlds(currentModsProfile);
+    }
+
+    await loadInstalledAddons();
+}
+
+// Renamed from loadInstalledMods
+async function loadInstalledAddons() {
+    if (!installedModsList) return;
+
+    // Show loading
+    installedModsList.innerHTML = '<div style="text-align:center; padding: 20px;"><div class="spinner"></div></div>';
+
+    let worldName = null;
+    if (currentContentType === 'datapack') {
+        if (!worldSelect || !worldSelect.value) {
+            installedModsList.innerHTML = `
+                <div class="no-mods-message">
+                    <i class="fas fa-globe"></i>
+                    <p>Select a world to view Data Packs</p>
+                </div>`;
+            return;
+        }
+        worldName = worldSelect.value;
+    }
+
+    try {
+        // Backend call (updated to get_installed_addons)
+        const result = await window.pywebview.api.get_installed_addons(currentModsProfile, currentContentType, worldName);
+
+        installedModsList.innerHTML = '';
+
+        if (!result.success || result.mods.length === 0) {
+            installedModsList.innerHTML = `
+                <div class="no-mods-message">
+                    <i class="fas fa-box-open"></i>
+                    <p>No ${currentContentType}s installed</p>
+                </div>`;
+            return;
+        }
+
+        result.mods.forEach(mod => {
+            const item = createInstalledItem(mod);
+            installedModsList.appendChild(item);
+        });
+
+    } catch (error) {
+        console.error('Error loading installed addons:', error);
+        installedModsList.innerHTML = '<p style="color:red; text-align:center;">Error loading items</p>';
+    }
+}
+
+// Create Item Element
+function createInstalledItem(itemData) {
+    const div = document.createElement('div');
+    // Use classes defined in CSS (.mod-list-item, etc)
+    div.className = 'mod-list-item';
+    if (!itemData.enabled) div.classList.add('disabled');
+
+    // Icon (generic or specific)
+    let iconClass = 'fas fa-cube';
+    if (currentContentType === 'resourcepack') iconClass = 'fas fa-palette';
+    else if (currentContentType === 'shader') iconClass = 'fas fa-sun';
+    else if (currentContentType === 'datapack') iconClass = 'fas fa-code';
+
+    // Type label
+    const typeLabel = itemData.type === 'folder' ? 'Folder' : 'File';
+
+    div.innerHTML = `
+        <div class="mod-list-icon">
+            <i class="${iconClass}"></i>
+        </div>
+        <div class="mod-list-info">
+            <div class="mod-list-name">${itemData.display_name}</div>
+            <div class="mod-list-details">${itemData.size_mb} MB • ${itemData.enabled ? 'Enabled' : 'Disabled'} • ${typeLabel}</div>
+        </div>
+        <div class="mod-list-actions">
+            <!-- Delete -->
+            <button class="mod-delete-btn" onclick="deleteAddon('${itemData.filename}')"><i class="fas fa-trash"></i> Delete</button>
+            <!-- Toggle -->
+            <div class="mod-toggle ${itemData.enabled ? 'active' : ''}" onclick="toggleAddon('${itemData.filename}', ${!itemData.enabled})">
+                <div class="mod-toggle-slider"></div>
+            </div>
+        </div>
+    `;
+    return div;
+}
+
+window.deleteAddon = async function (filename) {
+    if (!currentModsProfile) return;
+    // Use Python API confirm dialog
+    const confirmed = await window.pywebview.api.confirm(`Are you sure you want to delete ${filename}?`);
+    if (!confirmed) return;
+
+    let worldName = null;
+    if (currentContentType === 'datapack') worldName = worldSelect.value;
+
+    try {
+        const res = await window.pywebview.api.delete_addon(currentModsProfile, filename, currentContentType, worldName);
+        if (res.success) {
+            await loadInstalledAddons();
+        } else {
+            console.error("Delete failed:", res.error);
+            window.pywebview.api.alert("Failed to delete: " + res.error);
+        }
+    } catch (e) {
+        console.error("Error deleting addon:", e);
+    }
+};
+
+window.toggleAddon = async function (filename, enabled) {
+    // If clicked from div onclick, enabled param is the NEW state
+    if (!currentModsProfile) return;
+
+    let worldName = null;
+    if (currentContentType === 'datapack') worldName = worldSelect.value;
+
+    try {
+        await window.pywebview.api.toggle_mod(currentModsProfile, filename, enabled, currentContentType, worldName);
+        await loadInstalledAddons();
+    } catch (error) {
+        console.error('Error toggling addon:', error);
+    }
+};
+
+async function loadWorlds(profileId) {
+    if (!worldSelect) return;
+    worldSelect.innerHTML = '<option value="">Loading...</option>';
+    worldSelect.disabled = true;
+
+    try {
+        const result = await window.pywebview.api.get_worlds(profileId);
+        worldSelect.innerHTML = '<option value="">Select a world...</option>';
+
+        if (result.success && result.worlds.length > 0) {
+            worldSelect.disabled = false;
+            result.worlds.forEach(w => {
+                const opt = document.createElement('option');
+                opt.value = w.name; // Folder name
+                opt.textContent = w.name;
+                worldSelect.appendChild(opt);
+            });
+        } else {
+            const opt = document.createElement('option');
+            opt.textContent = "No worlds found";
+            worldSelect.appendChild(opt);
+        }
+    } catch (e) {
+        console.error("Error loading worlds", e);
+        worldSelect.innerHTML = '<option value="">Error loading worlds</option>';
+    }
+}
+
 // Profile change handler
 if (modsProfileSelect) {
     modsProfileSelect.addEventListener('change', async () => {
-        currentModsProfile = modsProfileSelect.value;
-
-        // Clear search input and results
-        if (modSearchInput) {
-            modSearchInput.value = '';
-        }
-        if (modSearchResults) {
-            modSearchResults.style.display = 'flex';
-            modSearchResults.style.justifyContent = 'center';
-            modSearchResults.style.alignItems = 'center';
-            modSearchResults.innerHTML = `
-                <div class="mod-search-empty">
-                    <i class="fas fa-search"></i>
-                    <p>Search for mods to download</p>
-                </div>
-            `;
-        }
-
-        await loadInstalledMods();
+        await onProfileSelected();
     });
 }
 
@@ -1860,12 +2256,28 @@ function switchModTab(tabName) {
 
     // Load content if needed
     if (tabName === 'installed') {
-        loadInstalledMods();
+        loadInstalledAddons(); // Changed from loadInstalledMods
     }
 }
 
 // Search mods - automatic on input
 if (modSearchInput) {
+    // Profile change handler (Installed Mods)
+    // Note: Handled by modsProfileSelect change event calling onProfileSelected -> loadInstalledAddons
+
+    // Load Installed Mods (Old function, alias to new one if called elsewhere)
+    // But we replaced call sites.
+    async function loadInstalledMods() {
+        await loadInstalledAddons();
+    }
+
+    // World select change
+    if (worldSelect) {
+        worldSelect.addEventListener('change', () => {
+            loadInstalledAddons(); // Reload list for new world
+        });
+    }
+
     // Debounced search on input
     modSearchInput.addEventListener('input', () => {
         clearTimeout(searchTimeout);
@@ -1909,7 +2321,8 @@ async function searchMods() {
     modSearchResults.innerHTML = '';
 
     try {
-        const result = await window.pywebview.api.search_modrinth_mods(query);
+        // Pass currentContentType as project_type
+        const result = await window.pywebview.api.search_modrinth_mods(query, null, currentContentType);
 
         modSearchLoading.style.display = 'none';
 
@@ -2142,12 +2555,9 @@ window.onModDownloadComplete = function (projectId, filename) {
         }, 3000);
     }
 
-    // Notification
-    window.pywebview.api.info(`Mod downloaded: ${filename}`);
-
     // Refresh installed mods if on that tab
     if (currentModTab === 'installed') {
-        loadInstalledMods();
+        loadInstalledAddons(); // Changed from loadInstalledMods
     }
 };
 
@@ -2186,8 +2596,10 @@ window.downloadModFromCard = async function (projectId, slug) {
             btn.disabled = true;
         }
 
-        // Get profile info to determine loader and game version
-        const profilesData = await window.pywebview.api.get_moddable_profiles();
+        // Get profile info to determine loader and game version (use generic profile getter)
+        // Previous bug: get_moddable_profiles ONLY returned forge/fabric, so vanilla profiles (DPs/RPs) were missing -> "Profile not found"
+        // We can reuse get_profiles_for_addon which is already filtered correctly for currentContentType
+        const profilesData = await window.pywebview.api.get_profiles_for_addon(currentContentType);
         const profile = profilesData.profiles[currentModsProfile];
 
         if (!profile) {
@@ -2224,11 +2636,42 @@ window.downloadModFromCard = async function (projectId, slug) {
             }
         }
 
+        // For Shaders and RPs, loader might not matter, or we treat "canvas/iris/optifine" as loaders?
+        // Modrinth API often returns versions compatible with "minecraft", but for shaders it might list "iris" as loader.
+        // We should pass 'iris' or 'optifine' if we are on fabric/forge respectively for shaders? 
+        // Or just pass null to get all and let user decide?
+        // Let's pass the loader derived from profile for Mods/Shaders. For RPs/DPs, loader is irrelevant (null).
+
+        // Loader logic
+        let searchLoader = loader;
+        if (currentContentType === 'resourcepack' || currentContentType === 'datapack') {
+            searchLoader = null;
+        } else if (currentContentType === 'shader') {
+            // For shaders, Modrinth usually expects 'iris' or 'optifine'
+            if (loader === 'fabric') searchLoader = 'iris';
+            else if (loader === 'forge') searchLoader = 'optifine';
+            else searchLoader = null; // Fallback
+        }
+
         // Get compatible versions
-        const versionsResult = await window.pywebview.api.get_mod_versions(projectId, gameVersion, loader);
+        const versionsResult = await window.pywebview.api.get_mod_versions(projectId, gameVersion, searchLoader);
 
         if (!versionsResult.success || versionsResult.versions.length === 0) {
-            window.pywebview.api.error(`No compatible versions for ${loader} ${gameVersion}`);
+            // Error Message Logic
+            let msg = "";
+            if (currentContentType === 'resourcepack' || currentContentType === 'datapack') {
+                // No loader mentioned
+                msg = `No compatible versions for Minecraft ${gameVersion}`;
+            } else if (currentContentType === 'shader') {
+                // Mention mapped loader
+                const shaderLoader = loader === 'fabric' ? 'Iris' : 'Optifine';
+                msg = `No compatible versions for ${shaderLoader} on Minecraft ${gameVersion}`;
+            } else {
+                // Mods
+                msg = `No compatible versions for ${loader} ${gameVersion}`;
+            }
+
+            window.pywebview.api.error(msg);
             if (btn) {
                 btn.innerHTML = '<i class="fas fa-download"></i> Download';
                 btn.disabled = false;
@@ -2239,8 +2682,22 @@ window.downloadModFromCard = async function (projectId, slug) {
         // Use the first (latest) compatible version
         const version = versionsResult.versions[0];
 
-        // Start Download (Now Async)
-        const downloadResult = await window.pywebview.api.download_mod(projectId, version.id, currentModsProfile);
+        // For Datapack, get world
+        let worldName = null;
+        if (currentContentType === 'datapack') {
+            worldName = worldSelect ? worldSelect.value : null;
+            if (!worldName) {
+                window.pywebview.api.error('Please select a world first');
+                if (btn) {
+                    btn.innerHTML = '<i class="fas fa-download"></i> Download';
+                    btn.disabled = false;
+                }
+                return;
+            }
+        }
+
+        // Start Download (Now Async) - New "install_project" method
+        const downloadResult = await window.pywebview.api.install_project(projectId, version.id, currentModsProfile, currentContentType, worldName);
 
         // If immediate error
         if (!downloadResult.success) {
@@ -2433,7 +2890,6 @@ window.deleteModFile = async function (filename) {
         const result = await window.pywebview.api.delete_mod(currentModsProfile, filename);
 
         if (result.success) {
-            window.pywebview.api.info('Mod deleted');
             await loadInstalledMods();
         } else {
             window.pywebview.api.error(`Error: ${result.error}`);
@@ -2521,7 +2977,7 @@ if (canvas) {
 }
 
 // === Review System Logic ===
-const REVIEW_URL = "https://abeloskyyy.github.io/HelloWorld-Launcher/?review=true";
+const REVIEW_URL = "https://helloworldlauncher.com/?review=true";
 
 // Elements
 const reviewFloatingBtn = document.getElementById('reviewFloatingBtn');
@@ -2581,3 +3037,56 @@ window.addEventListener('pywebviewready', () => {
     checkReviewReminder();
 });
 
+
+
+// Function to render head image in user badge
+function renderUserHead(skinUrl) {
+    return new Promise((resolve) => {
+        console.log('renderUserHead called with:', skinUrl);
+        const container = document.getElementById('userAvatarHead');
+
+        if (!container) {
+            resolve();
+            return;
+        }
+
+        // If no skin URL, show default icon
+        if (!skinUrl) {
+            console.log('No skin URL, showing default icon');
+            container.innerHTML = '<i class="fas fa-user"></i>';
+            resolve();
+            return;
+        }
+
+        // Preload image to wait for it
+        const img = new Image();
+        img.onload = () => {
+            console.log('Head image loaded');
+            container.innerHTML = '';
+            container.appendChild(img);
+            resolve();
+        };
+        img.onerror = () => {
+            console.log('Head image failed to load');
+            // Show default on error
+            container.innerHTML = '<i class="fas fa-user"></i>';
+            resolve();
+        };
+
+        // Set styles
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'cover';
+        img.style.borderRadius = '5px';
+        img.style.imageRendering = 'pixelated';
+        img.alt = 'Player Head';
+
+        img.src = skinUrl;
+    });
+}
+
+// Export for use
+window.renderUserHead = renderUserHead;
+
+// Export for use
+window.renderUserHead = renderUserHead;

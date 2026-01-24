@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="minecraft-skinviewer.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
@@ -30,7 +31,7 @@
     <div class="launcher">
         <!-- Login Button / User Badge -->
         <div id="userBadge" class="user-badge" style="display: none;">
-            <div class="user-avatar">
+            <div class="user-avatar" id="userAvatarHead">
                 <i class="fas fa-user"></i>
             </div>
             <span id="userDisplayName"></span>
@@ -54,11 +55,31 @@
             <button class="sidebar-button" onclick="showSection('profiles')">
                 <i class="fas fa-user"></i> Profiles
             </button>
-            <button class="sidebar-button" onclick="showSection('mods')">
-                <i class="fas fa-puzzle-piece"></i> Mods
-            </button>
+            <div class="sidebar-group">
+                <button class="sidebar-button" onclick="toggleModsMenu()" id="modsMenuBtn">
+                    <i class="fas fa-puzzle-piece"></i> Add-ons <i class="fas fa-chevron-down" id="modsMenuArrow"
+                        style="font-size: 0.8em; margin-left: auto;"></i>
+                </button>
+                <div class="sidebar-submenu" id="modsSubmenu" style="display: none;">
+                    <button class="sidebar-button submenu-item" onclick="showSection('mods', 'mod')">
+                        <i class="fas fa-cube"></i> Mods
+                    </button>
+                    <button class="sidebar-button submenu-item" onclick="showSection('mods', 'resourcepack')">
+                        <i class="fas fa-palette"></i> Resource Packs
+                    </button>
+                    <button class="sidebar-button submenu-item" onclick="showSection('mods', 'datapack')">
+                        <i class="fas fa-code"></i> Data Packs
+                    </button>
+                    <button class="sidebar-button submenu-item" onclick="showSection('mods', 'shader')">
+                        <i class="fas fa-sun"></i> Shaders
+                    </button>
+                </div>
+            </div>
             <button class="sidebar-button" onclick="showSection('settings')">
                 <i class="fas fa-cog"></i> Settings
+            </button>
+            <button class="sidebar-button" onclick="showSection('skins')" id="skinsSidebarBtn" style="display: none;">
+                <i class="fas fa-tshirt"></i> Skins & Capes
             </button>
         </div>
 
@@ -129,10 +150,23 @@
                         </select>
                     </div>
 
-                    <!-- Message if no moddable profiles -->
+                    <!-- World Selector (Only for Data Packs) -->
+                    <div id="worldSelectorContainer" class="input-group" style="display: none;">
+                        <label>
+                            World
+                            <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
+                                data-tooltip="Select a world to install Data Packs into"></i>
+                        </label>
+                        <select id="worldSelect">
+                            <option value="">Select a world...</option>
+                        </select>
+                    </div>
+
+                    <!-- Message if no moddable profiles (Only for Mods/Shaders) -->
                     <div id="noModdableProfiles" class="no-moddable-profiles" style="display: none;">
                         <i class="fas fa-info-circle"></i>
-                        <p>No profiles with Forge or Fabric. Create a profile with a mod loader to download mods.</p>
+                        <p id="noModdableMessage">No profiles with Forge or Fabric. Create a profile with a mod loader
+                            to download mods.</p>
                     </div>
 
                     <!-- Tab Container -->
@@ -179,6 +213,48 @@
                                 <div class="no-mods-message">
                                     <i class="fas fa-cube"></i>
                                     <p>No mods installed in this profile</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Skins Section -->
+            <div id="skins" class="section">
+                <h1>Skin Packs</h1>
+
+                <div class="skins-section">
+                    <!-- Packs Grid & Preview Container -->
+                    <div class="skin-packs-container">
+                        <!-- Left Column (Button + Grid) -->
+                        <div class="skin-packs-left-col">
+                            <!-- Create Pack Button -->
+                            <button id="createSkinPackBtn" class="btn-primary create-pack-btn">
+                                <i class="fas fa-plus"></i> Create New Skin Pack
+                            </button>
+
+                            <!-- Packs Grid -->
+                            <div id="skinPacksGrid" class="skin-packs-grid">
+                                <!-- Packs will be loaded dynamically here -->
+                                <div class="no-packs-message">
+                                    <i class="fas fa-tshirt"></i>
+                                    <p>No skin packs yet</p>
+                                    <p style="font-size: 14px; color: #666;">Create your first pack to get started</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Large Preview (Right) -->
+                        <div class="skin-packs-preview">
+                            <div class="large-skin-preview-sticky">
+                                <!-- Removed Title as per 'quita todo eso de preview' request interpretation (simplifying) -->
+                                <div id="largeSkinViewerContainer" class="large-skin-viewer">
+                                    <!-- 3D Viewer will be injected here -->
+                                    <div class="placeholder-preview">
+                                        <i class="fas fa-user-circle"></i>
+                                        <p>No active skin</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -243,6 +319,12 @@
                             </div>
                         </div>
                         <button class="btn-primary" onclick="saveSettings()">Save Settings</button>
+
+                        <div style="margin-top: 20px; display: flex; gap: 10px;">
+                            <button class="btn-secondary" onclick="window.pywebview.api.open_logs()" style="flex: 1;">
+                                <i class="fas fa-file-alt"></i> Open Game Logs
+                            </button>
+                        </div>
 
                         <!-- Launcher Version -->
                         <div
@@ -591,7 +673,223 @@
         </div>
     </div>
 
+    <!-- Skin Pack Creation Modal -->
+    <div id="skinPackModal" class="modal">
+        <div class="modal-content skin-pack-modal-content">
+            <button class="modal-close-btn" id="closeSkinPackModal">
+                <i class="fas fa-times"></i>
+            </button>
+
+            <h2>Create Skin Pack</h2>
+
+            <div style="display: flex; gap: 30px; margin-top: 20px;">
+                <!-- Left Side: Inputs -->
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 15px;">
+                    <!-- Pack Name -->
+                    <div class="modal-input-group" style="margin: 0;">
+                        <label>
+                            Pack Name
+                            <i class="fa-regular fa-question-circle help-icon"
+                                data-tooltip="Give your skin pack a memorable name"></i>
+                        </label>
+                        <input id="packName" type="text" placeholder="e.g., My Cool Look">
+                    </div>
+
+                    <!-- Skin Model -->
+                    <div class="modal-input-group" style="margin: 0;">
+                        <label>
+                            Skin Model
+                            <i class="fa-regular fa-question-circle help-icon"
+                                data-tooltip="Classic (Steve) has normal arms, Slim (Alex) has thinner arms"></i>
+                        </label>
+                        <select id="skinModelSelect">
+                            <option value="classic">Classic (Steve)</option>
+                            <option value="slim">Slim (Alex)</option>
+                        </select>
+                    </div>
+
+                    <!-- Cape Selection -->
+                    <div class="modal-input-group" style="margin: 0; flex: 1; display: flex; flex-direction: column;">
+                        <label>
+                            Cape
+                            <i class="fa-regular fa-question-circle help-icon"
+                                data-tooltip="Select a cape from your available capes"></i>
+                        </label>
+                        <div id="capeSelectionGrid" class="cape-selection-grid"
+                            style="overflow-y: auto; max-height: 450px; padding-right: 5px;">
+                            <div class="cape-option" data-cape-id="none">
+                                <div class="cape-preview-box no-cape">
+                                    <i class="fas fa-ban"></i>
+                                </div>
+                                <span>No Cape</span>
+                            </div>
+                            <!-- Capes will be loaded dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Side: Upload & Preview -->
+                <div style="flex: 1;">
+                    <label style="color: #aaa; font-weight: 500; font-size: 14px; margin-bottom: 8px; display: block;">
+                        Skin File
+                        <i class="fa-regular fa-question-circle help-icon"
+                            data-tooltip="Click to upload a Minecraft skin PNG file (64x64 or 64x32)"></i>
+                    </label>
+
+                    <div id="skinUploadContainer" class="skin-upload-area">
+                        <input type="file" id="skinFileInput" accept=".png" style="display: none;">
+
+                        <!-- Placeholder State -->
+                        <div id="skinUploadPlaceholder" class="skin-upload-placeholder">
+                            <div class="upload-icon-circle">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </div>
+                            <h3>Click to Upload Skin</h3>
+                            <p>Supports 64x64 and 64x32 .png files</p>
+                        </div>
+
+                        <!-- Viewer State -->
+                        <div id="skin3DViewer" class="skin-3d-viewer-container" style="display: none;">
+                            <div class="mc-skin-viewer-11x" id="skinViewer3D">
+                                <div class="player">
+                                    <!-- Head -->
+                                    <div class="head">
+                                        <div class="top"></div>
+                                        <div class="left"></div>
+                                        <div class="front"></div>
+                                        <div class="right"></div>
+                                        <div class="back"></div>
+                                        <div class="bottom"></div>
+                                        <div class="accessory">
+                                            <div class="top"></div>
+                                            <div class="left"></div>
+                                            <div class="front"></div>
+                                            <div class="right"></div>
+                                            <div class="back"></div>
+                                            <div class="bottom"></div>
+                                        </div>
+                                    </div>
+                                    <!-- Body -->
+                                    <div class="body">
+                                        <div class="top"></div>
+                                        <div class="left"></div>
+                                        <div class="front"></div>
+                                        <div class="right"></div>
+                                        <div class="back"></div>
+                                        <div class="bottom"></div>
+                                        <div class="accessory">
+                                            <div class="top"></div>
+                                            <div class="left"></div>
+                                            <div class="front"></div>
+                                            <div class="right"></div>
+                                            <div class="back"></div>
+                                            <div class="bottom"></div>
+                                        </div>
+                                    </div>
+                                    <!-- Left Arm -->
+                                    <div class="left-arm">
+                                        <div class="top"></div>
+                                        <div class="left"></div>
+                                        <div class="front"></div>
+                                        <div class="right"></div>
+                                        <div class="back"></div>
+                                        <div class="bottom"></div>
+                                        <div class="accessory">
+                                            <div class="top"></div>
+                                            <div class="left"></div>
+                                            <div class="front"></div>
+                                            <div class="right"></div>
+                                            <div class="back"></div>
+                                            <div class="bottom"></div>
+                                        </div>
+                                    </div>
+                                    <!-- Right Arm -->
+                                    <div class="right-arm">
+                                        <div class="top"></div>
+                                        <div class="left"></div>
+                                        <div class="front"></div>
+                                        <div class="right"></div>
+                                        <div class="back"></div>
+                                        <div class="bottom"></div>
+                                        <div class="accessory">
+                                            <div class="top"></div>
+                                            <div class="left"></div>
+                                            <div class="front"></div>
+                                            <div class="right"></div>
+                                            <div class="back"></div>
+                                            <div class="bottom"></div>
+                                        </div>
+                                    </div>
+                                    <!-- Left Leg -->
+                                    <div class="left-leg">
+                                        <div class="top"></div>
+                                        <div class="left"></div>
+                                        <div class="front"></div>
+                                        <div class="right"></div>
+                                        <div class="back"></div>
+                                        <div class="bottom"></div>
+                                        <div class="accessory">
+                                            <div class="top"></div>
+                                            <div class="left"></div>
+                                            <div class="front"></div>
+                                            <div class="right"></div>
+                                            <div class="back"></div>
+                                            <div class="bottom"></div>
+                                        </div>
+                                    </div>
+                                    <!-- Right Leg -->
+                                    <div class="right-leg">
+                                        <div class="top"></div>
+                                        <div class="left"></div>
+                                        <div class="front"></div>
+                                        <div class="right"></div>
+                                        <div class="back"></div>
+                                        <div class="bottom"></div>
+                                        <div class="accessory">
+                                            <div class="top"></div>
+                                            <div class="left"></div>
+                                            <div class="front"></div>
+                                            <div class="right"></div>
+                                            <div class="back"></div>
+                                            <div class="bottom"></div>
+                                        </div>
+                                    </div>
+                                    <!-- Cape -->
+                                    <div class="cape">
+                                        <div class="top"></div>
+                                        <div class="left"></div>
+                                        <div class="front"></div>
+                                        <div class="right"></div>
+                                        <div class="back"></div>
+                                        <div class="bottom"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button id="changeSkinBtn" class="change-skin-btn" type="button">
+                                <i class="fas fa-pencil-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Hidden elements kept for logic compatibility if needed, or we just remove them -->
+                    <span id="skinFileName" style="display: none;">No file selected</span>
+                    <canvas id="skinPreviewCanvas" width="128" height="128" style="display: none;"></canvas>
+                </div>
+            </div>
+
+            <div class="modal-options" style="margin-top: 30px;">
+                <button id="createPackBtn" class="btn-blue">
+                    <i class="fas fa-plus"></i> Create Pack
+                </button>
+                <button id="cancelSkinPackBtn" class="btn-red">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script src="scripts.js"></script>
+    <script src="scripts-skinviewer3d.js"></script>
+    <script src="scripts-skinpacks.js"></script>
 </body>
 
 </html>
