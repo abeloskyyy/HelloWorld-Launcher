@@ -14,7 +14,7 @@ HelloWorld Launcher is a launcher for Minecraft: Java Edition. It is open source
 | Program Size | Lightweight | Heavy | Heavy |
 | JVM Customization | High | Low | Medium |
 | Performance on Low-end PCs | Very Good | Decent | Normal |
-| Microsoft Account Mandatory | No | Yes | No |
+| Microsoft Account Mandatory | Yes | Yes | No |
 | Advanced Profile Management | Yes | Limited | Low |
 
 ---
