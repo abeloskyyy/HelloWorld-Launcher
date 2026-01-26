@@ -2977,7 +2977,7 @@ if (canvas) {
 }
 
 // === Review System Logic ===
-const REVIEW_URL = "https://helloworldlauncher.com/?review=true";
+const REVIEW_URL = "https://hwlauncher.abelosky.com/?review=true";
 
 // Elements
 const reviewFloatingBtn = document.getElementById('reviewFloatingBtn');

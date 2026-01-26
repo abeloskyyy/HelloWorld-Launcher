@@ -3114,13 +3114,11 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"Error merging user data: {e}")
     else:
-        # No existe USER_FILE, crear datos por defecto para testing
-        # NOTA: Esto es temporal para testing. Cuando Azure apruebe la app, el login real sobrescribirá estos datos
-        if "username" not in user_data or not user_data.get("username"):
-            user_data["username"] = "TestUser"
+        # No existe USER_FILE, inicializar usuario vacío
+        if "username" not in user_data:
+            user_data["username"] = ""
         if "account_type" not in user_data:
-            user_data["account_type"] = "microsoft"  # Default to microsoft for testing skins UI
-        print("Created default test user data (Microsoft account type for testing)")
+            user_data["account_type"] = ""
 
     save_user_data(user_data)
 
