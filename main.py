@@ -400,7 +400,7 @@ def save_user_data(data: dict):
     """Save user data with encryption for sensitive fields"""
     # Separate sensitive and non-sensitive data
     sensitive_fields = {
-        "account_type": data.get("account_type", "microsoft"),  # Default to offline
+        "account_type": data.get("account_type", "offline"),  # Default to offline
         "username": data.get("username", ""),
         # Microsoft Auth Data
         "uuid": data.get("uuid", ""),
@@ -1797,6 +1797,17 @@ class Api:
         data["mcdir"] = mcdir
         data["account_type"] = account_type
 
+        # If offline, clear Microsoft data and skins
+        if account_type == "offline":
+            data["uuid"] = ""
+            data["mc_token"] = ""
+            data["ms_access_token"] = ""
+            data["ms_refresh_token"] = ""
+            data["ms_expires"] = 0
+            data["skin_path"] = None
+            data["cape_path"] = None
+            data["capes"] = []
+
         save_user_data(data)
         return data
 
@@ -1834,7 +1845,17 @@ class Api:
         """Clear username and account_type to logout"""
         data = load_user_data()
         data["username"] = ""
-        data["account_type"] = ""
+        data["account_type"] = "offline"
+        # Clear all sensitive and skin data
+        data["uuid"] = ""
+        data["mc_token"] = ""
+        data["ms_access_token"] = ""
+        data["ms_refresh_token"] = ""
+        data["ms_expires"] = 0
+        data["skin_path"] = None
+        data["cape_path"] = None
+        data["capes"] = []
+        
         save_user_data(data)
         return data
     

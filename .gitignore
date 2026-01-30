@@ -8,3 +8,5 @@ CHANGELOG.md
 build/
 dist/
 __pycache__
+
+v2-electron

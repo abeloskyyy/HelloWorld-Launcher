@@ -290,11 +290,9 @@ async function updateUserInterface(userData) {
             if (skinsBtn) skinsBtn.style.display = 'flex';
         } else {
             if (skinsBtn) skinsBtn.style.display = 'none';
-            // For offline users, show default Steve head
+            // For offline users, show default icon
             if (window.renderUserHead) {
-                const username = userData.username || 'Steve';
-                const skinUrl = `https://mc-heads.net/avatar/${username}`;
-                await window.renderUserHead(skinUrl);
+                await window.renderUserHead(null);
             }
         }
     } else {
@@ -339,9 +337,13 @@ async function loadSkinData() {
             if (capeBadge) capeBadge.style.display = 'none';
         }
 
-        // Render 3D head in user badge
+        // Render head in user badge only if premium
         if (window.renderUserHead) {
-            await window.renderUserHead(skinUrl);
+            if (userData.account_type === 'microsoft') {
+                await window.renderUserHead(skinUrl);
+            } else {
+                await window.renderUserHead(null);
+            }
         }
     } catch (e) {
         console.error("Error loading skin data", e);
@@ -1685,8 +1687,10 @@ if (saveOfflineBtn) {
         if (nickname.trim() && !invalido) {
             const mcdir = document.getElementById('mcdir') ? document.getElementById('mcdir').value : '';
 
-            await window.pywebview.api.save_user_json(nickname, mcdir, 'offline');
-            showUserBadge(nickname);
+            const data = await window.pywebview.api.save_user_json(nickname, mcdir, 'offline');
+
+            await updateUserInterface(data);
+            await loadSkinData();
 
             if (loginModal) loginModal.classList.remove('show');
             showLoginMethodScreen();
