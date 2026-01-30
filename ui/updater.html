@@ -73,11 +73,8 @@
                 <p class="status-text error">Update Error</p>
                 <p class="error-message" id="errorMessage">Could not download update</p>
                 <div class="button-group">
-                    <button class="btn-retry" id="retryBtn">
+                    <button class="btn-retry" id="retryBtn" style="flex: 1;">
                         <i class="fas fa-redo"></i> Retry
-                    </button>
-                    <button class="btn-continue" id="continueBtn">
-                        Continue anyway
                     </button>
                 </div>
             </div>
@@ -89,6 +86,23 @@
                 </div>
                 <p class="status-text warning">No internet connection</p>
                 <p class="status-subtext">Continuing without update...</p>
+            </div>
+
+            <!-- State: Update Available -->
+            <div id="state-available" class="updater-state">
+                <div class="success-icon" style="background: rgba(92, 184, 92, 0.1); border-color: #5cb85c;">
+                    <i class="fas fa-rocket" style="color: #5cb85c;"></i>
+                </div>
+                <p class="status-text success">New Version Available!</p>
+                <p class="status-subtext">An important update has been found. Click below to download the new version.
+                </p>
+                <p class="version-update" id="availableVersion">v1.0.0 → v1.1.0</p>
+
+                <div class="button-group" style="margin-top: 30px; display: flex; justify-content: center;">
+                    <button class="btn-retry" id="downloadBtn" style="min-width: 250px;">
+                        <i class="fas fa-external-link-alt"></i> Download Update
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -149,8 +163,13 @@
                 document.getElementById('retryBtn').addEventListener('click', callback);
             }
 
-            onContinue(callback) {
-                document.getElementById('continueBtn').addEventListener('click', callback);
+
+            setAvailableVersion(oldVersion, newVersion) {
+                document.getElementById('availableVersion').textContent = `v${oldVersion} → v${newVersion}`;
+            }
+
+            onDownloadUpdate(callback) {
+                document.getElementById('downloadBtn').addEventListener('click', callback);
             }
         }
 

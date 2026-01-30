@@ -25,11 +25,11 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 
-
 class UpdaterAPI:
     def __init__(self):
         self.cancelled = False
         self.update_applied = False
+        self.exit_after = False
         
     def cancel_download(self):
         """Cancels the current download"""
@@ -43,9 +43,16 @@ class UpdaterAPI:
         if webview.windows:
             threading.Thread(target=check_and_update, args=(webview.windows[0], self), daemon=True).start()
         return True
-    
-    def continue_anyway(self):
-        """Continues without updating"""
+
+    def open_download_page(self):
+        """Opens the GitHub releases page in the browser"""
+        import webbrowser
+        config = load_version_config()
+        # Open the general releases page as it identifies the latest version best
+        url = config["repo_url"].replace("api.github.com/repos", "github.com") + "/releases/latest"
+        webbrowser.open(url)
+        # Usually when updating, you want to close the old app
+        self.exit_after = True
         if webview.windows:
             webview.windows[0].destroy()
         return True
@@ -70,7 +77,7 @@ def load_version_config():
                 except Exception as e:
                     print(f"Error reading bundled version.json: {e}")
 
-            # Create default file with a more realistic version or at least use the bundled one if possible
+            # Create default file
             default_config = {
                 "version": "0.1.0",
                 "last_check": None,
@@ -87,7 +94,6 @@ def load_version_config():
             "update_channel": "stable",
             "repo_url": "https://api.github.com/repos/Abeloskyyy/HelloWorld-Launcher"
         }
-
 
 
 def save_version_config(config):
@@ -147,44 +153,6 @@ def is_newer_version(remote_ver, local_ver):
         return False
 
 
-def download_file_with_progress(url, filename, window, api):
-    """Downloads a file showing progress"""
-    try:
-        response = requests.get(url, stream=True, timeout=30)
-        total_size = int(response.headers.get('content-length', 0))
-        downloaded = 0
-        start_time = time.time()
-        
-        with open(filename, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if api.cancelled:
-                    f.close()
-                    os.remove(filename)
-                    return False
-                
-                if chunk:
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    
-                    # Calculate progress
-                    percentage = int((downloaded / total_size) * 100) if total_size > 0 else 0
-                    elapsed = time.time() - start_time
-                    speed = (downloaded / (1024 * 1024)) / elapsed if elapsed > 0 else 0
-                    downloaded_mb = downloaded / (1024 * 1024)
-                    total_mb = total_size / (1024 * 1024)
-                    
-                    # Update UI
-                    window.evaluate_js(
-                        f"window.updaterAPI.setDownloadProgress({percentage}, "
-                        f"{downloaded_mb:.1f}, {total_mb:.1f}, {speed:.1f})"
-                    )
-        
-        return True
-    except Exception as e:
-        print(f"Error downloading file: {e}")
-        return False
-
-
 def check_and_update(window, api):
     """Main verification and update process"""
     config = load_version_config()
@@ -224,159 +192,11 @@ def check_and_update(window, api):
     
     print(f"New version available: {remote_version} (current: {local_version})")
     
-    # State: Downloading
-    window.evaluate_js("window.updaterAPI.setState('downloading')")
-    window.evaluate_js(f"window.updaterAPI.setVersionUpdate('{local_version}', '{remote_version}')")
-    
-    # Use the same directory as the executable for the temporary file
-    if getattr(sys, 'frozen', False):
-        exec_dir = os.path.dirname(sys.executable)
-    else:
-        exec_dir = os.getcwd()
-    
-    update_temp_path = os.path.normpath(os.path.join(exec_dir, "update_temp.exe"))
-
-    # Download update
-    download_success = download_file_with_progress(
-        remote_data["download_url"],
-        update_temp_path,
-        window,
-        api
-    )
-    
-    if not download_success:
-        print("Download error")
-        window.evaluate_js("window.updaterAPI.setState('error')")
-        window.evaluate_js("window.updaterAPI.setError('Could not download update')")
-        return False
-    
-    # State: Success
-    window.evaluate_js("window.updaterAPI.setState('success')")
-    window.evaluate_js(f"window.updaterAPI.setVersionUpdate('{local_version}', '{remote_version}')")
-    
-    # Update version.json
-    config["version"] = remote_version
-    config["last_check"] = datetime.now().isoformat()
-    save_version_config(config)
-    
-    time.sleep(2)
-    
-    # Apply update
-    try:
-        api.update_applied = True
-        apply_update(update_temp_path, remote_version)
-    except Exception as e:
-        print(f"Error applying update: {e}")
-    
-    # Schedule window close in separate thread
-    def close_window():
-        time.sleep(1)
-        try:
-            window.destroy()
-        except:
-            pass
-    
-    threading.Thread(target=close_window, daemon=True).start()
+    # State: Update Available
+    window.evaluate_js("window.updaterAPI.setState('available')")
+    window.evaluate_js(f"window.updaterAPI.setAvailableVersion('{local_version}', '{remote_version}')")
     
     return True
-
-
-def apply_update(downloaded_file, remote_version):
-    """
-    Applies the downloaded update (.exe only).
-    """
-    import shutil
-    import sys
-    import subprocess
-    
-    # Obtener ruta del ejecutable actual
-    if getattr(sys, 'frozen', False):
-        # Running as packaged .exe
-        current_exe = sys.executable
-    else:
-        # Running as Python script (development mode)
-        print("Development mode detected, update will not be applied")
-        return
-    
-    current_dir = os.path.dirname(current_exe)
-    
-    # Direct .exe
-    new_exe = os.path.abspath(downloaded_file)
-    extract_dir = None
-    
-    # Determine name of new executable
-    # If the user wants to have the version in the name:
-    # Example: HelloWorldLauncher_v1.0.0.exe
-    # Use the base name of current exe but with new version
-    
-    base_name = os.path.splitext(os.path.basename(current_exe))[0]
-    # If current name already has version (ex: Launcher_v1.0), attempt to clean it
-    if "_v" in base_name:
-        base_name = base_name.split("_v")[0]
-        
-    target_name = f"{base_name}_v{remote_version}.exe"
-    target_path = os.path.abspath(os.path.join(current_dir, target_name))
-    
-    # Normalizar para comparación
-    current_exe_norm = os.path.normpath(current_exe).lower()
-    target_path_norm = os.path.normpath(target_path).lower()
-    
-    # Create update script (batch file for Windows, sh for Linux)
-    if sys.platform.startswith('win'):
-        update_script = os.path.join(current_dir, "update.bat")
-        
-        with open(update_script, 'w') as f:
-            f.write('@echo off\n')
-            f.write('echo Applying update...\n')
-            f.write('timeout /t 3 /nobreak >nul\n')  # Wait 3 seconds to ensure exit starts
-            
-            # 1. Rename the current EXE so we can free up its name immediately
-            # Rename in Windows works even if the file is in use!
-            f.write(f'move /y "{current_exe}" "{current_exe}.old" >nul 2>&1\n')
-            
-            # 2. Move/Rename the new update to the target name
-            f.write(f'move /y "{new_exe}" "{target_path}"\n')
-            
-            # 3. Restart launcher (the new one)
-            # Use /I to invalidate environment variables (prevents Python DLL error from _MEIPASS inheritance)
-            f.write(f'start "" /I "{target_path}"\n')
-            
-            # 4. Wait a few more seconds to ensure the old process finally died, then clean up
-            f.write('timeout /t 5 /nobreak >nul\n')
-            f.write(f'del /f /q "{current_exe}.old" >nul 2>&1\n')
-            f.write(f'del "%~f0" >nul 2>&1\n')
-        
-        # Execute script and close current launcher
-        subprocess.Popen(['cmd', '/c', update_script], 
-                        cwd=current_dir,
-                        creationflags=subprocess.CREATE_NO_WINDOW)
-                        
-    else:
-        # Linux / MacOS
-        update_script = os.path.join(current_dir, "update.sh")
-        
-        with open(update_script, 'w') as f:
-            f.write('#!/bin/sh\n')
-            f.write('echo "Applying update..."\n')
-            f.write('sleep 2\n')
-            f.write(f'mv -f "{new_exe}" "{current_exe}"\n')
-            f.write(f'chmod +x "{current_exe}"\n')
-            
-
-            f.write(f'rm -f "{downloaded_file}"\n')
-            f.write(f'rm -f "{update_script}"\n')
-            
-            # Restart launcher
-            f.write(f'./"{os.path.basename(current_exe)}" &\n')
-        
-        # Give execution permissions to the script
-        os.chmod(update_script, 0o755)
-        
-        # Execute
-        subprocess.Popen(['/bin/sh', update_script])
-
-    # DO NOT use sys.exit here, let the updater close normally
-    print("Update scheduled")
 
 
 def run_updater_check():
@@ -432,10 +252,11 @@ def run_updater_check():
         js_api=api  # Expose API using js_api parameter
     )
     
-    # API is already set in js_api parameter
-    
     # Start update process when window is ready
     def start_update():
+        # Bind buttons for the Available state
+        window.evaluate_js("window.updaterAPI.onDownloadUpdate(() => window.pywebview.api.open_download_page())")
+        
         # Start verification
         check_and_update(window, api)
     
@@ -445,7 +266,7 @@ def run_updater_check():
     # Show window (blocking)
     webview.start()
     
-    return api.update_applied
+    return api.exit_after
 
 
 if __name__ == "__main__":
