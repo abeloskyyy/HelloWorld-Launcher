@@ -1,12 +1,8 @@
-# Archivos de configuración
-version.json
-package.ps1
-Publicar Versión.md
+old-beta
+node_modules
 CHANGELOG.md
-
-
-build/
-dist/
-__pycache__
-
-v2-electron
+version-build.md
+build
+dist
+build-linux.sh
+offline_skins_implementation.md

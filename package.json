@@ -1,0 +1,82 @@
+{
+  "name": "helloworld-launcher",
+  "version": "1.0.0",
+  "description": "HelloWorld Launcher",
+  "main": "main.js",
+  "scripts": {
+    "test": "electron .",
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win -p never",
+    "build:linux": "electron-builder --linux -p never"
+  },
+  "build": {
+    "appId": "com.abelosky.helloworldlauncher",
+    "productName": "HelloWorld Launcher",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "icon": "build/icon.ico",
+      "verifyUpdateCodeSignature": false,
+      "sign": null,
+      "artifactName": "HelloWorld-Launcher-${version}-win.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "HelloWorld-Launcher-Setup-${version}.${ext}",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "deleteAppDataOnUninstall": true
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "Game",
+      "artifactName": "HelloWorld-Launcher-${version}.${ext}",
+      "publish": [
+        "github"
+      ]
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Abeloskyyy",
+        "repo": "HelloWorld-Launcher"
+      }
+    ],
+    "npmRebuild": false
+  },
+  "author": {
+    "name": "Abelosky",
+    "email": "abelosky.dev@gmail.com"
+  },
+  "homepage": "https://github.com/Abeloskyyy/HelloWorld-Launcher",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^40.1.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "axios": "^1.13.4",
+    "discord-rich-presence": "^0.0.8",
+    "electron-log": "^5.4.3",
+    "electron-updater": "^6.7.3",
+    "form-data": "^4.0.5",
+    "fs-extra": "^11.3.3",
+    "minecraft-launcher-core": "^3.18.2",
+    "msmc": "^5.0.5",
+    "uuid": "^13.0.0"
+  }
+}

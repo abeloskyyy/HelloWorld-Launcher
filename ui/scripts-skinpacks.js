@@ -36,7 +36,7 @@ function triggerPreviewUpdate() {
             // Get cape texture from loaded capes
             let capeDataUrl = null;
             if (currentCapeId && currentCapeId !== 'none') {
-                const capeData = loadedCapes.find(c => c.id === currentCapeId);
+                const capeData = window.loadedCapes ? window.loadedCapes.find(c => c.id === currentCapeId) : null;
                 if (capeData) {
                     capeDataUrl = capeData.base64;
                 }
@@ -92,22 +92,36 @@ document.addEventListener('DOMContentLoaded', function () {
             // Validate file type
             if (!file.type.match('image/png')) {
                 alert('Please select a PNG file');
+                skinFileInput.value = '';
                 return;
             }
 
-            currentSkinFile = file;
-            if (skinFileName) skinFileName.textContent = file.name;
+            // Validate Dimensions (Must be 64x64 or 64x32)
+            const img = new Image();
+            const objectUrl = URL.createObjectURL(file);
+            img.onload = function () {
+                URL.revokeObjectURL(objectUrl);
+                if ((img.width === 64 && img.height === 64) || (img.width === 64 && img.height === 32)) {
+                    // Valid dimensions
+                    currentSkinFile = file;
+                    if (skinFileName) skinFileName.textContent = file.name;
 
-            // Hide placeholder, show viewer
-            const placeholder = document.getElementById('skinUploadPlaceholder');
-            const viewerContainer = document.getElementById('skin3DViewer');
-            const uploadContainerDiv = document.getElementById('skinUploadContainer');
+                    // Hide placeholder, show viewer
+                    const placeholder = document.getElementById('skinUploadPlaceholder');
+                    const viewerContainer = document.getElementById('skin3DViewer');
+                    const uploadContainerDiv = document.getElementById('skinUploadContainer');
 
-            if (placeholder) placeholder.style.display = 'none';
-            if (viewerContainer) viewerContainer.style.display = 'flex';
-            if (uploadContainerDiv) uploadContainerDiv.classList.add('active');
+                    if (placeholder) placeholder.style.display = 'none';
+                    if (viewerContainer) viewerContainer.style.display = 'flex';
+                    if (uploadContainerDiv) uploadContainerDiv.classList.add('active');
 
-            triggerPreviewUpdate();
+                    triggerPreviewUpdate();
+                } else {
+                    alert('Invalid skin dimensions! Skin must be exactly 64x64 or 64x32 pixels.');
+                    skinFileInput.value = '';
+                }
+            };
+            img.src = objectUrl;
         });
     }
 
@@ -201,16 +215,34 @@ function handlePackSubmit() {
     const modelType = skinModelSelect ? skinModelSelect.value : 'classic';
     const capeId = currentCapeId;
 
+    // Find cape base64
+    let capeBase64 = null;
+    if (capeId && capeId !== 'none' && window.loadedCapes) {
+        const capeObj = window.loadedCapes.find(c => c.id === capeId);
+        if (capeObj) {
+            capeBase64 = capeObj.base64;
+        }
+    }
+
     createPackConfirmBtn.disabled = true;
     createPackConfirmBtn.textContent = editingPackId ? 'Saving...' : 'Creating...';
 
     const processSubmission = (skinBase64) => {
         if (editingPackId) {
-            window.pywebview.api.edit_skin_pack(editingPackId, name, skinBase64, modelType, capeId)
-                .then(response => handleResponse(response))
-                .catch(handleError);
+            // When editing, only pass capeBase64 if we have it
+            // Otherwise pass undefined to preserve existing cape_data
+            if (capeBase64) {
+                window.pywebview.api.edit_skin_pack(editingPackId, name, skinBase64, modelType, capeId, capeBase64)
+                    .then(response => handleResponse(response))
+                    .catch(handleError);
+            } else {
+                // Don't pass capeBase64 at all to preserve existing data
+                window.pywebview.api.edit_skin_pack(editingPackId, name, skinBase64, modelType, capeId)
+                    .then(response => handleResponse(response))
+                    .catch(handleError);
+            }
         } else {
-            window.pywebview.api.create_skin_pack(name, skinBase64, modelType, capeId)
+            window.pywebview.api.create_skin_pack(name, skinBase64, modelType, capeId, capeBase64)
                 .then(response => handleResponse(response))
                 .catch(handleError);
         }
@@ -273,6 +305,21 @@ window.editPack = function (packId) {
 
     currentCapeId = pack.cape_id || 'none';
 
+    // If pack has saved cape data, add it to loadedCapes so preview can find it
+    if (pack.cape_preview && pack.cape_id && pack.cape_id !== 'none') {
+        // Check if cape is already in loadedCapes
+        const existingCape = window.loadedCapes?.find(c => c.id === pack.cape_id);
+        if (!existingCape) {
+            // Add the saved cape to loadedCapes
+            if (!window.loadedCapes) window.loadedCapes = [];
+            window.loadedCapes.push({
+                id: pack.cape_id,
+                base64: pack.cape_preview,
+                alias: 'Saved Cape'
+            });
+        }
+    }
+
     // Show Preview immediately
     const viewer = document.getElementById('skin3DViewer');
     const placeholder = document.getElementById('skinUploadPlaceholder');
@@ -282,19 +329,10 @@ window.editPack = function (packId) {
     if (placeholder) placeholder.style.display = 'none';
     if (container) container.classList.add('active');
 
-    // Use triggerPreviewUpdate to handle loading logic correctly
-    // But we need to ensure currentCapeId is set first (it is above)
-    // And loadedCapes might not be ready if we just called loadUserCapes...
-    // triggerPreviewUpdate calls getCurrentSkinUrl which uses editingPackId.
-    // So it should work.
-
-    // We loadUserCapes then trigger update to ensure cape texture is available if needed
+    // Load user capes from API
     loadUserCapes();
 
-    // Trigger update immediately or after small delay to let capes load?
-    // Capes load async. But triggerPreviewUpdate will run now. If capes not loaded, cape might be missing initially.
-    // But loadUserCapes calls handleCapeSelection? No, it just builds the grid.
-    // Let's call triggerPreviewUpdate immediately to show skin.
+    // Trigger preview update to show skin and cape
     triggerPreviewUpdate();
 
     // Also select in UI after delay
@@ -343,12 +381,11 @@ window.loadSkinPacks = function () {
         // Initial Render: Find active pack to show in large preview
         let activePackData = null;
         if (activePackId && packs[activePackId]) {
-            activePackData = packs[activePackId];
-            activePackData.id = activePackId;
+            activePackData = { ...packs[activePackId], id: activePackId };
         } else if (packIds.length > 0) {
             // Fallback to first if no active
-            activePackData = packs[packIds[0]];
-            activePackData.id = packIds[0];
+            const firstId = packIds[0];
+            activePackData = { ...packs[firstId], id: firstId };
         }
 
         if (activePackData) {
@@ -537,7 +574,8 @@ window.activatePack = function (packId) {
     // Optimistic UI Update
     // 1. Update Large Preview
     if (window.currentPacks && window.currentPacks[packId]) {
-        updateLargeSkinPreview(window.currentPacks[packId]);
+        const packData = { ...window.currentPacks[packId], id: packId };
+        updateLargeSkinPreview(packData);
     }
 
     // 2. Update UI Buttons and Cards
@@ -611,13 +649,32 @@ window.deletePack = function (packId) {
 window.loadUserCapes = function () {
     if (!window.pywebview || !window.pywebview.api) return;
 
-    window.pywebview.api.get_user_capes().then(response => {
-        const grid = document.getElementById('capeSelectionGrid');
-        if (!grid) return;
+    const grid = document.getElementById('capeSelectionGrid');
+    if (!grid) return;
 
-        // Clear existing
+    // Show Loader
+    grid.style.position = 'relative';
+    grid.style.minHeight = '100px'; // Ensure height for loader
+    grid.innerHTML = `
+        <div id="capeLoader" style="
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            z-index: 10; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center;
+        ">
+            <div class="spinner"></div>
+            <div style="margin-top: 10px; font-size: 12px; color: #aaa;">Loading Capes...</div>
+        </div>
+    `;
+
+    window.pywebview.api.get_user_capes().then(response => {
+        // Clear Loader
         grid.innerHTML = '';
-        loadedCapes = []; // Reset loaded capes
+        window.loadedCapes = []; // CRITICAL: Use window.loadedCapes not loadedCapes
 
         // Add "None" option
         const noneOption = document.createElement('div');
@@ -636,7 +693,7 @@ window.loadUserCapes = function () {
         if (response.success && response.capes) {
             response.capes.forEach(cape => {
                 // Store cape data globally
-                loadedCapes.push({
+                window.loadedCapes.push({
                     id: cape.id,
                     alias: cape.alias,
                     base64: cape.base64
@@ -674,7 +731,10 @@ window.loadUserCapes = function () {
                 grid.appendChild(opt);
             });
         }
-    }).catch(e => console.error("Error loading capes", e));
+    }).catch(e => {
+        console.error("Error loading capes", e);
+        grid.innerHTML = '<div style="color: #d9534f; padding: 20px;">Error loading capes</div>';
+    });
 }
 
 function handleCapeSelection(element) {

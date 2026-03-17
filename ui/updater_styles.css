@@ -70,8 +70,8 @@ body {
 /* Progress Ring */
 .progress-ring {
     position: relative;
-    width: 120px;
-    height: 120px;
+    width: 140px;
+    height: 140px;
     margin: 0 auto 30px;
 }
 
@@ -122,16 +122,25 @@ body {
     transform: translate(-50%, -50%);
     font-size: 36px;
     color: #5cb85c;
+    /* Removed animation from container */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+}
+
+.progress-ring-icon i {
     animation: rotate 2s linear infinite;
 }
 
 @keyframes rotate {
     from {
-        transform: translate(-50%, -50%) rotate(0deg);
+        transform: rotate(0deg);
     }
 
     to {
-        transform: translate(-50%, -50%) rotate(360deg);
+        transform: rotate(360deg);
     }
 }
 
@@ -362,4 +371,35 @@ button:active {
 
 button i {
     margin-right: 5px;
+}
+
+/* Loading Button State */
+.btn-loading {
+    background: #3d8b3d !important;
+    /* Darker green */
+    color: rgba(255, 255, 255, 0.8) !important;
+    pointer-events: none;
+    position: relative;
+    padding-left: 40px;
+    /* Space for spinner */
+}
+
+.btn-loading::before {
+    content: "";
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: btn-spin 1s linear infinite;
+}
+
+@keyframes btn-spin {
+    to {
+        transform: translateY(-50%) rotate(360deg);
+    }
 }

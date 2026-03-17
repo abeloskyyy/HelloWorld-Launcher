@@ -1,0 +1,502 @@
+/* Onboarding Modal Overlay */
+.onboarding-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    /* Darker backdrop */
+    backdrop-filter: blur(15px);
+    z-index: 30000;
+    /* Elevated above tutorial spotlight system (20000) */
+    display: none;
+    /* Hidden by default */
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+}
+
+.onboarding-overlay.active {
+    display: flex;
+    opacity: 1;
+}
+
+/* Modal Content */
+.onboarding-modal {
+    width: 100%;
+    max-width: 900px;
+    /* Wide format for video */
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    padding: 0;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 850px;
+}
+
+/* Header / Progress */
+.mute-btn {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    font-size: 18px;
+    transition: all 0.3s ease;
+    padding: 10px;
+    position: absolute;
+    /* Take out of flex flow to push to corner */
+    right: 15px;
+    top: 10px;
+    z-index: 10;
+}
+
+.mute-btn:hover {
+    color: #fff;
+    transform: scale(1.1);
+}
+
+.mute-btn i {
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Update Header to accommodate absolute button */
+.onboarding-header {
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Center the dots */
+    padding: 0 30px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    position: relative;
+}
+
+/* Steps Container */
+.onboarding-body {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+}
+
+.onboarding-step {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    opacity: 0;
+    /* transform: translateX(50px);  <-- Removed default */
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+}
+
+.onboarding-step.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: all;
+}
+
+.onboarding-step.exit-left {
+    transform: translateX(-50px);
+    opacity: 0;
+}
+
+.onboarding-step.exit-right {
+    transform: translateX(50px);
+    opacity: 0;
+}
+
+.onboarding-step.prepare-left {
+    transform: translateX(-50px);
+}
+
+.onboarding-step.prepare-right {
+    transform: translateX(50px);
+}
+
+.no-transition {
+    transition: none !important;
+}
+
+/* Content Styles */
+.onboarding-title {
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 15px;
+    background: linear-gradient(135deg, #fff 0%, #bbb 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.onboarding-description {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.7);
+    max-width: 600px;
+    margin-bottom: 30px;
+    line-height: 1.6;
+}
+
+/* Video Container */
+.video-frame {
+    width: 100%;
+    max-width: 720px;
+    aspect-ratio: 16 / 9;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.video-frame video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.video-placeholder {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 14px;
+}
+
+/* Form Styles for Step 1 */
+.config-grid {
+    width: 100%;
+    max-width: 700px;
+    display: grid;
+    gap: 25px;
+    text-align: left;
+    max-height: 550px;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+/* Custom Scrollbar for form */
+.config-grid::-webkit-scrollbar {
+    width: 6px;
+}
+
+.config-grid::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.config-grid::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.config-item {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: border-color 0.3s;
+}
+
+.config-item:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.config-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.config-label {
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.config-label i {
+    color: #5cb85c;
+}
+
+.config-info {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-left: 28px;
+    /* Tabulated right (icon width + gap) */
+    line-height: 1.4;
+}
+
+/* Toggle Switch Styles */
+.toggle-switch-large {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 26px;
+}
+
+.toggle-switch-large input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider-large {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.1);
+    transition: .4s;
+    border-radius: 34px;
+}
+
+.toggle-slider-large:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked+.toggle-slider-large {
+    background-color: #5cb85c;
+}
+
+input:checked+.toggle-slider-large:before {
+    transform: translateX(24px);
+}
+
+/* Folder Input */
+.folder-input-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.folder-input {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    padding: 10px;
+    border-radius: 6px;
+    font-family: inherit;
+}
+
+.btn-folder {
+    padding: 0 15px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-folder:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Footer / Actions */
+/* Footer / Actions */
+.onboarding-footer {
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    /* Keep content to the right */
+    padding: 0 40px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.btn-next {
+    background: #5cb85c;
+    color: #fff;
+    padding: 12px 32px;
+    border-radius: 30px;
+    font-weight: 600;
+    font-size: 16px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 15px rgba(92, 184, 92, 0.3);
+}
+
+.btn-next:hover {
+    background: #4cae4c;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(92, 184, 92, 0.4);
+}
+
+.btn-back {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    padding: 12px 32px;
+    border-radius: 30px;
+    font-weight: 600;
+    font-size: 16px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: none;
+    /* JS toggles this */
+    align-items: center;
+    gap: 10px;
+    margin-right: auto;
+    /* Push everything else to the right */
+}
+
+.btn-back:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-finish {
+    background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+    color: #000;
+    box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+}
+
+.btn-finish:hover {
+    background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+    /* Keep background consistent or maybe slightly brighter? Let's keep it same but effect comes from shadow/transform */
+    box-shadow: 0 6px 20px rgba(255, 215, 0, 0.4);
+    transform: translateY(-2px);
+}
+
+/* Sidebar Replay Button - Magic Floating Style */
+.settings-action-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    /* Magic Purple Gradient */
+    background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
+    color: white;
+    border: none;
+    box-shadow: 0 10px 20px rgba(168, 85, 247, 0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 22px;
+    /* Smaller icon for better centering */
+    cursor: pointer;
+    padding: 0;
+    /* Remove any padding that might distort the circle */
+    /* Use the same animations as the review button but locally defined if needed, 
+       or assume they are global. float is global in styles.css? Yes. */
+    animation: float 4s ease-in-out infinite;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.settings-action-btn:hover {
+    transform: scale(1.1) rotate(-10deg);
+    box-shadow: 0 15px 30px rgba(168, 85, 247, 0.6);
+    background: linear-gradient(135deg, #d946ef 0%, #8b5cf6 100%);
+    /* Brighter on hover */
+}
+
+.settings-action-btn:active {
+    transform: scale(0.95);
+}
+
+.settings-action-btn i {
+    /* Subtle pulse instead of heartbeat */
+    animation: pulse-icon 2s infinite ease-in-out;
+}
+
+@keyframes pulse-icon {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.1);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* FAB Positioning - Next to Review Heart */
+.settings-action-btn {
+    position: fixed;
+    bottom: 30px;
+    right: 120px;
+    /* 30px + 60px (heart width) + 20px gap */
+    z-index: 1000;
+}
+
+/* Interactive Tutorial Hints */
+.interactive-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 40px;
+    padding: 25px 40px;
+    background: rgba(92, 184, 92, 0.1);
+    border: 2px solid rgba(92, 184, 92, 0.3);
+    border-radius: 16px;
+    font-size: 18px;
+    color: #fff;
+    animation: hintPulse 2s ease-in-out infinite;
+}
+
+.interactive-hint i {
+    font-size: 28px;
+    color: #5cb85c;
+    animation: pointBounce 1s ease-in-out infinite;
+}
+
+.interactive-hint strong {
+    color: #5cb85c;
+}
+
+@keyframes hintPulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(92, 184, 92, 0.4);
+    }
+
+    50% {
+        box-shadow: 0 0 20px 5px rgba(92, 184, 92, 0.2);
+    }
+}
+
+@keyframes pointBounce {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    50% {
+        transform: translateX(5px);
+    }
+}

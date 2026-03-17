@@ -1,0 +1,551 @@
+/* ============================================
+   INTERACTIVE SPOTLIGHT TUTORIAL SYSTEM
+   ============================================ */
+
+/* Dark Overlay - blocks clicks on non-target elements */
+/* The spotlight's box-shadow provides the actual darkening effect */
+.tutorial-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    /* Changed from rgba - spotlight handles this */
+    z-index: 20000;
+    pointer-events: all;
+    /* Block clicks on non-target elements; target has higher z-index */
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.4s ease, visibility 0.4s ease;
+}
+
+.tutorial-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.tutorial-overlay.closing {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+/* Spotlight "hole" - makes element visible through overlay */
+.tutorial-spotlight {
+    position: fixed;
+    z-index: 20002;
+    /* Above modal */
+    pointer-events: none;
+    border-radius: 12px;
+    box-shadow:
+        0 0 0 9999px rgba(0, 0, 0, 0.6),
+        0 0 30px 10px rgba(79, 172, 254, 0.5),
+        inset 0 0 0 3px rgba(79, 172, 254, 0.8);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+    visibility: hidden;
+}
+
+/* Target element highlighting */
+.tutorial-target {
+    position: relative !important;
+    z-index: 20003 !important;
+    pointer-events: all !important;
+    cursor: default !important;
+    /* Only specific elements should override this */
+}
+
+/* Fix: login button is position:absolute in styles.css - preserve that */
+#loginButton.tutorial-target {
+    position: absolute !important;
+    top: 20px !important;
+    right: 20px !important;
+    transform: none !important;
+}
+
+/* Preserve sticky positioning for large skin preview */
+.large-skin-preview-sticky.tutorial-target {
+    position: sticky !important;
+}
+
+/* Fix: user badge is also position:absolute */
+#userBadge.tutorial-target {
+    position: absolute !important;
+    top: 20px !important;
+    right: 20px !important;
+    transform: none !important;
+}
+
+/* Elevate modals when highlighting elements inside them */
+.tutorial-elevated-modal {
+    z-index: 20001 !important;
+    /* Above overlay, below spotlight */
+    pointer-events: all !important;
+}
+
+.tutorial-elevated-modal .modal-content {
+    z-index: 20001 !important;
+    position: relative;
+    cursor: default !important;
+    pointer-events: all !important;
+}
+
+/* Force default cursor on all modal elements except interactive ones */
+.tutorial-elevated-modal .modal-content *,
+.tutorial-target *,
+.tutorial-target {
+    cursor: default !important;
+}
+
+/* Elevate sidebar if needed */
+.tutorial-elevated-sidebar {
+    z-index: 20001 !important;
+    pointer-events: all !important;
+}
+
+.tutorial-spotlight.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.tutorial-spotlight.closing {
+    opacity: 0;
+    transform: scale(0.9);
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Pulsing ring animation around spotlight */
+.tutorial-spotlight::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    right: -8px;
+    bottom: -8px;
+    border: 2px solid rgba(79, 172, 254, 0.6);
+    border-radius: 16px;
+    animation: spotlightPulse 2s ease-in-out infinite;
+}
+
+@keyframes spotlightPulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.05);
+        opacity: 0.5;
+    }
+}
+
+/* Instruction Tooltip */
+.tutorial-tooltip {
+    position: fixed;
+    z-index: 20004;
+    /* Above target */
+    max-width: 350px;
+    padding: 20px 25px;
+    background: linear-gradient(135deg, rgba(30, 35, 50, 0.98), rgba(20, 25, 35, 0.98));
+    border: 1px solid rgba(79, 172, 254, 0.4);
+    border-radius: 16px;
+    box-shadow:
+        0 10px 40px rgba(0, 0, 0, 0.5),
+        0 0 20px rgba(79, 172, 254, 0.2);
+    backdrop-filter: blur(10px);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tutorial-tooltip.active {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.tutorial-tooltip.closing {
+    opacity: 0;
+    transform: translateY(10px) scale(0.95);
+    transition: all 0.3s ease;
+}
+
+/* Tooltip Arrow */
+.tutorial-tooltip::before {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: rgba(30, 35, 50, 0.98);
+    border: 1px solid rgba(79, 172, 254, 0.4);
+    transform: rotate(45deg);
+}
+
+.tutorial-tooltip.arrow-top::before {
+    top: -7px;
+    left: 50%;
+    margin-left: -6px;
+    border-right: none;
+    border-bottom: none;
+}
+
+.tutorial-tooltip.arrow-bottom::before {
+    bottom: -7px;
+    left: 50%;
+    margin-left: -6px;
+    border-left: none;
+    border-top: none;
+}
+
+.tutorial-tooltip.arrow-left::before {
+    left: -7px;
+    top: 50%;
+    margin-top: -6px;
+    border-right: none;
+    border-top: none;
+}
+
+.tutorial-tooltip.arrow-right::before {
+    right: -7px;
+    top: 50%;
+    margin-top: -6px;
+    border-left: none;
+    border-bottom: none;
+}
+
+/* Tooltip Content */
+.tutorial-tooltip-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.tutorial-tooltip-step .step-number {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #4facfe, #00f2fe);
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 12px;
+    color: #fff;
+}
+
+.tutorial-tooltip-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 8px;
+}
+
+.tutorial-tooltip-text {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.5;
+    margin-bottom: 15px;
+}
+
+.tutorial-tooltip-hint {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 15px;
+    background: rgba(92, 184, 92, 0.15);
+    border: 1px solid rgba(92, 184, 92, 0.3);
+    border-radius: 10px;
+    font-size: 14px;
+    color: #5cb85c;
+}
+
+.tutorial-tooltip-hint i {
+    font-size: 20px;
+    animation: handPoint 1s ease-in-out infinite;
+}
+
+@keyframes handPoint {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    50% {
+        transform: translateX(5px);
+    }
+}
+
+/* Skip Tutorial Button */
+.tutorial-skip-btn {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20005;
+    padding: 12px 30px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 30px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    opacity: 0;
+    visibility: hidden;
+}
+
+.tutorial-skip-btn.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.tutorial-skip-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* Make spotlighted element AND its children clickable */
+.tutorial-target {
+    position: relative;
+    z-index: 20003 !important;
+    pointer-events: all !important;
+    cursor: pointer !important;
+}
+
+.tutorial-target * {
+    pointer-events: all !important;
+    cursor: pointer !important;
+}
+
+/* Elevate modals when highlighting elements inside them */
+.tutorial-elevated-modal {
+    z-index: 20001 !important;
+}
+
+.tutorial-elevated-modal .modal-content,
+.tutorial-elevated-modal .modal-content>*:not(.tutorial-target) {
+    z-index: 20001 !important;
+    /* Block interactions on the container */
+    pointer-events: none !important;
+}
+
+/* Block everything deep inside modal content by default */
+.tutorial-elevated-modal .modal-content * {
+    pointer-events: none !important;
+}
+
+/* Only the target element should be clickable */
+.tutorial-elevated-modal .tutorial-target {
+    pointer-events: all !important;
+}
+
+.tutorial-elevated-modal .tutorial-target * {
+    pointer-events: all !important;
+}
+
+/* When image modal opens during tutorial, elevate it above the elevated modal */
+#imageModal.tutorial-elevated-modal {
+    z-index: 20001 !important;
+}
+
+#imageModal.tutorial-elevated-modal .modal-content {
+    z-index: 20001 !important;
+}
+
+/* Elevate sidebar when highlighting nav elements */
+.tutorial-elevated-sidebar {
+    z-index: 20001 !important;
+}
+
+/* Highlight effect on target */
+.tutorial-target::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    right: -4px;
+    bottom: -4px;
+    border: 2px solid rgba(79, 172, 254, 0.6);
+    border-radius: inherit;
+    pointer-events: none;
+    animation: targetGlow 1.5s ease-in-out infinite;
+}
+
+@keyframes targetGlow {
+
+    0%,
+    100% {
+        box-shadow: 0 0 10px rgba(79, 172, 254, 0.3);
+    }
+
+    50% {
+        box-shadow: 0 0 25px rgba(79, 172, 254, 0.6);
+    }
+}
+
+/* Progress dots for tutorial */
+.tutorial-progress {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20005;
+    display: flex;
+    gap: 10px;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.tutorial-progress.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.tutorial-progress-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transition: all 0.3s ease;
+}
+
+.tutorial-progress-dot.completed {
+    background: #5cb85c;
+}
+
+.tutorial-progress-dot.current {
+    background: #4facfe;
+    transform: scale(1.3);
+    box-shadow: 0 0 10px rgba(79, 172, 254, 0.5);
+}
+
+/* Strict blocking of Cancel/Close buttons during tutorial */
+.tutorial-elevated-modal .modal-close-btn,
+.tutorial-elevated-modal .btn-red,
+.tutorial-elevated-modal .cancel-download-icon,
+.tutorial-elevated-modal #cancelDownloadBtn2,
+.tutorial-elevated-modal #cancelModalBtn,
+.tutorial-elevated-modal #cancelDownloadModalBtn,
+.tutorial-elevated-modal #cancelImageModalBtn {
+    display: none !important;
+}
+
+/* Allow click on tutorial target and ALL its children */
+/* Higher specificity than .tutorial-elevated-modal .modal-content rule */
+.tutorial-elevated-modal .tutorial-target,
+.tutorial-elevated-modal .tutorial-target * {
+    pointer-events: all !important;
+}
+
+/* General case for non-modal targets */
+.tutorial-target {
+    pointer-events: all !important;
+}
+
+/* Ensure interactive elements inside tutorial-target have highest priority for clicks */
+/* These elements should receive the click event, not the parent container */
+.tutorial-target button,
+.tutorial-target select,
+.tutorial-target .btn-add-icon,
+.tutorial-target #iconButton,
+.tutorial-target [onclick],
+.tutorial-elevated-modal .tutorial-target button,
+.tutorial-elevated-modal .tutorial-target select,
+.tutorial-elevated-modal .tutorial-target .btn-add-icon,
+.tutorial-elevated-modal .tutorial-target #iconButton {
+    position: relative !important;
+    z-index: 20005 !important;
+    pointer-events: all !important;
+    cursor: pointer !important;
+}
+
+/* Inputs and textareas need text cursor, not pointer */
+.tutorial-target input,
+.tutorial-target textarea,
+.tutorial-elevated-modal .tutorial-target input,
+.tutorial-elevated-modal .tutorial-target textarea {
+    position: relative !important;
+    z-index: 20005 !important;
+    pointer-events: all !important;
+    cursor: text !important;
+}
+
+/* Labels inherit default cursor */
+.tutorial-target label,
+.tutorial-elevated-modal .tutorial-target label {
+    position: relative !important;
+    z-index: 20005 !important;
+    pointer-events: all !important;
+}
+
+/* Elevate the Icon Selection Modal when opened during tutorial */
+/* This ensures it appears ABOVE the Create Profile modal */
+.tutorial-elevated-modal~#imageModal,
+#imageModal.show {
+    z-index: 20010 !important;
+}
+
+#imageModal.show .modal-content {
+    z-index: 20011 !important;
+    cursor: default !important;
+}
+
+/* Hide spotlight when icon modal is open to prevent vibration */
+/* The icon modal takes full focus */
+body:has(#imageModal.show) .tutorial-spotlight,
+body:has(#imageModal.show) .tutorial-overlay {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    transition: none !important;
+}
+
+/* Search Step Specifics */
+.tutorial-step-search .mod-grid {
+    z-index: 20005 !important;
+    pointer-events: all !important;
+}
+
+.tutorial-step-search .mod-card {
+    pointer-events: all !important;
+    cursor: pointer !important;
+}
+
+/* Ensure the download button stays on top of the card's elevation */
+.tutorial-step-search .mod-card-actions button {
+    z-index: 10 !important;
+}
+
+/* Installed Step Specifics */
+.tutorial-step-installed .installed-mods-list {
+    min-height: 200px;
+}
+
+.tutorial-step-installed .mod-list-item {
+    pointer-events: all !important;
+    z-index: 20002 !important;
+}
+
+/* Allow children of an elevated element to receive events even if they aren't the target */
+.tutorial-allow-children-events * {
+    pointer-events: all !important;
+}
+
+/* Specific fix for mod grid stretch in tutorial */
+.mod-grid.tutorial-target {
+    min-height: 200px;
+}
+
+.installed-mods-list.tutorial-target {
+    min-height: 100px;
+}

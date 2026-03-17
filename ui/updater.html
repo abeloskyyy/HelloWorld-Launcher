@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HelloWorld Launcher - Updater</title>
+    <title>HelloWorld Launcher</title>
     <link rel="stylesheet" href="updater_styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -17,9 +17,9 @@
             <!-- State: Checking -->
             <div id="state-checking" class="updater-state active">
                 <div class="progress-ring">
-                    <svg class="progress-ring-svg" width="120" height="120">
-                        <circle class="progress-ring-circle-bg" cx="60" cy="60" r="52"></circle>
-                        <circle class="progress-ring-circle spinning" cx="60" cy="60" r="52"></circle>
+                    <svg class="progress-ring-svg" width="140" height="140">
+                        <circle class="progress-ring-circle-bg" cx="70" cy="70" r="52"></circle>
+                        <circle class="progress-ring-circle spinning" cx="70" cy="70" r="52"></circle>
                     </svg>
                     <div class="progress-ring-icon">
                         <i class="fas fa-sync-alt"></i>
@@ -32,9 +32,9 @@
             <!-- State: Downloading -->
             <div id="state-downloading" class="updater-state">
                 <div class="progress-ring">
-                    <svg class="progress-ring-svg" width="120" height="120">
-                        <circle class="progress-ring-circle-bg" cx="60" cy="60" r="52"></circle>
-                        <circle class="progress-ring-circle" id="downloadProgressCircle" cx="60" cy="60" r="52">
+                    <svg class="progress-ring-svg" width="140" height="140">
+                        <circle class="progress-ring-circle-bg" cx="70" cy="70" r="52"></circle>
+                        <circle class="progress-ring-circle" id="downloadProgressCircle" cx="70" cy="70" r="52">
                         </circle>
                     </svg>
                     <div class="progress-ring-content">
@@ -51,7 +51,7 @@
                     <div class="progress-bar-fill" id="downloadProgressBar"></div>
                 </div>
                 <button class="btn-cancel" id="cancelBtn">
-                    <i class="fas fa-times"></i> Cancel
+                    <i class="fas fa-forward"></i> Skip Update
                 </button>
             </div>
 
@@ -61,7 +61,7 @@
                     <i class="fas fa-check-circle"></i>
                 </div>
                 <p class="status-text success">Update completed!</p>
-                <p class="status-subtext">Starting launcher...</p>
+                <p class="status-subtext">Starting setup...</p>
                 <p class="version-update" id="versionUpdate">v1.0.0 → v1.1.0</p>
             </div>
 
@@ -108,73 +108,119 @@
     </div>
 
     <script>
-        // API for communication with Python
-        class UpdaterAPI {
-            setState(state) {
-                // Hide all states
-                document.querySelectorAll('.updater-state').forEach(el => {
-                    el.classList.remove('active');
-                });
+        document.addEventListener('DOMContentLoaded', () => {
+            const api = window.hwlAPI;
 
-                // Show requested state
-                const stateElement = document.getElementById(`state-${state}`);
-                if (stateElement) {
-                    stateElement.classList.add('active');
+            // Helper to set state
+            const setState = (state) => {
+                document.querySelectorAll('.updater-state').forEach(el => el.classList.remove('active'));
+                const stateEl = document.getElementById(`state-${state}`);
+                if (stateEl) stateEl.classList.add('active');
+            };
+
+            // UI Updaters
+            const elements = {
+                currentVersion: document.getElementById('currentVersion'),
+                availableVersion: document.getElementById('availableVersion'),
+                versionUpdate: document.getElementById('versionUpdate'),
+                downloadPercentage: document.getElementById('downloadPercentage'),
+                downloadSpeed: document.getElementById('downloadSpeed'),
+                downloadSize: document.getElementById('downloadSize'),
+                downloadProgressCircle: document.getElementById('downloadProgressCircle'),
+                downloadProgressBar: document.getElementById('downloadProgressBar'),
+                errorMessage: document.getElementById('errorMessage'),
+                downloadBtn: document.getElementById('downloadBtn'),
+                retryBtn: document.getElementById('retryBtn'),
+                cancelBtn: document.getElementById('cancelBtn')
+            };
+
+            // Initial Check
+            setState('checking');
+            api.checkForUpdates();
+
+            // Listen for status updates
+            api.onUpdaterStatus((data) => {
+                console.log("[UI] Updater Status:", data);
+
+                switch (data.status) {
+                    case 'checking':
+                        setState('checking');
+                        break;
+
+                    case 'available':
+                        setState('available');
+                        const info = data.info; // { version, releaseNotes, ... }
+                        // Current version is not sent in info, we'd need to fetch it or just show new version
+                        // For now let's just show the new version
+                        if (elements.availableVersion) elements.availableVersion.textContent = `New Version: v${info.version}`;
+
+                        // Setup download button
+                        elements.downloadBtn.onclick = () => {
+                            elements.downloadBtn.classList.add('btn-loading');
+                            elements.downloadBtn.innerHTML = 'Starting Download...';
+                            api.startDownloadUpdate();
+                        };
+                        break;
+
+                    case 'not-available':
+                        // No update available, proceed to main app
+                        console.log("No update available. Proceeding to main app...");
+                        // We can reuse the success state briefly or just redirect
+                        // Let's just redirect immediately for speed, or show a quick "Up to date" checkmark
+
+                        // Option A: Immediate redirect
+                        window.location.href = "index.html";
+                        break;
+
+                    case 'downloading':
+                        setState('downloading');
+                        const p = data.progress;
+
+                        elements.downloadPercentage.textContent = `${Math.round(p.percent)}%`;
+
+                        // Circle Logic
+                        const radius = elements.downloadProgressCircle.r.baseVal.value;
+                        const circumference = radius * 2 * Math.PI;
+                        const offset = circumference - (p.percent / 100) * circumference;
+                        elements.downloadProgressCircle.style.strokeDashoffset = offset;
+
+                        // Bar Logic
+                        elements.downloadProgressBar.style.width = `${p.percent}%`;
+
+                        // Stats
+                        const speedMB = (p.bytesPerSecond / 1048576).toFixed(2);
+                        const transMB = (p.transferred / 1048576).toFixed(2);
+                        const totalMB = (p.total / 1048576).toFixed(2);
+
+                        elements.downloadSpeed.textContent = `${speedMB} MB/s`;
+                        elements.downloadSize.textContent = `${transMB} MB / ${totalMB} MB`;
+                        break;
+
+                    case 'downloaded':
+                        setState('success');
+                        elements.versionUpdate.textContent = `Ready to install v${data.info.version}`;
+                        setTimeout(() => {
+                            api.quitAndInstall();
+                        }, 2000);
+                        break;
+
+                    case 'error':
+                        setState('error');
+                        elements.errorMessage.textContent = data.error;
+                        elements.retryBtn.onclick = () => {
+                            setState('checking');
+                            api.checkForUpdates();
+                        };
+                        break;
                 }
-            }
+            });
 
-            setVersion(version) {
-                document.getElementById('currentVersion').textContent = `v${version}`;
-            }
-
-            setDownloadProgress(percentage, downloaded, total, speed) {
-                // Update percentage
-                document.getElementById('downloadPercentage').textContent = `${percentage}%`;
-
-                // Update progress ring
-                const circle = document.getElementById('downloadProgressCircle');
-                const radius = circle.r.baseVal.value;
-                const circumference = radius * 2 * Math.PI;
-                const offset = circumference - (percentage / 100) * circumference;
-                circle.style.strokeDashoffset = offset;
-
-                // Update progress bar
-                document.getElementById('downloadProgressBar').style.width = `${percentage}%`;
-
-                // Update speed and size
-                document.getElementById('downloadSpeed').textContent = `${speed} MB/s`;
-                document.getElementById('downloadSize').textContent = `${downloaded} MB / ${total} MB`;
-            }
-
-            setVersionUpdate(oldVersion, newVersion) {
-                document.getElementById('versionUpdate').textContent = `v${oldVersion} → v${newVersion}`;
-            }
-
-            setError(message) {
-                document.getElementById('errorMessage').textContent = message;
-            }
-
-            // Event handlers
-            onCancel(callback) {
-                document.getElementById('cancelBtn').addEventListener('click', callback);
-            }
-
-            onRetry(callback) {
-                document.getElementById('retryBtn').addEventListener('click', callback);
-            }
-
-
-            setAvailableVersion(oldVersion, newVersion) {
-                document.getElementById('availableVersion').textContent = `v${oldVersion} → v${newVersion}`;
-            }
-
-            onDownloadUpdate(callback) {
-                document.getElementById('downloadBtn').addEventListener('click', callback);
-            }
-        }
-
-        // Expose API globally
-        window.updaterAPI = new UpdaterAPI();
+            elements.cancelBtn.onclick = () => {
+                // Determine how to cancel? quitAndInstall isn't appropriate.
+                // Maybe just close window?
+                window.close();
+            };
+        });
     </script>
 </body>
 

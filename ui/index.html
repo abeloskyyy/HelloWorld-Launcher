@@ -3,14 +3,22 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://mc-heads.net https://piston-meta.mojang.com https://cdn.modrinth.com; img-src 'self' data: blob: https: file: launcher:; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="onboarding_styles.css">
+    <link rel="stylesheet" href="tutorial-spotlight.css">
     <link rel="stylesheet" href="minecraft-skinviewer.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 
 <body>
+    <script>
+        // pywebviewready event is now dispatched by preload.js
+        // No need to dispatch it here
+    </script>
     <!-- Initial Loader -->
     <div id="initialLoader" class="loader-container">
         <div class="cube-spinner">
@@ -49,10 +57,14 @@
 
         <!-- Sidebar -->
         <div class="sidebar">
-            <button class="sidebar-button active" onclick="showSection('play')">
+            <div class="sidebar-header">
+                <img src="img/icon/title.png" alt="HelloWorld Launcher" class="sidebar-logo">
+            </div>
+
+            <button class="sidebar-button active" id="playNavBtn" onclick="showSection('play')">
                 <i class="fas fa-gamepad"></i> Play
             </button>
-            <button class="sidebar-button" onclick="showSection('profiles')">
+            <button class="sidebar-button" id="profilesNavBtn" onclick="showSection('profiles')">
                 <i class="fas fa-user"></i> Profiles
             </button>
             <div class="sidebar-group">
@@ -75,11 +87,11 @@
                     </button>
                 </div>
             </div>
-            <button class="sidebar-button" onclick="showSection('settings')">
-                <i class="fas fa-cog"></i> Settings
-            </button>
             <button class="sidebar-button" onclick="showSection('skins')" id="skinsSidebarBtn" style="display: none;">
                 <i class="fas fa-tshirt"></i> Skins & Capes
+            </button>
+            <button class="sidebar-button" onclick="showSection('settings')">
+                <i class="fas fa-cog"></i> Settings
             </button>
         </div>
 
@@ -113,6 +125,10 @@
                             data-tooltip="Download new versions of Minecraft (Vanilla, Forge, Fabric)">
                             <i class="fas fa-download"></i> Download Versions
                         </button>
+                        <button id="openManageVersionsBtn" class="btn-square btn-manage-versions"
+                            data-tooltip="View & delete installed versions">
+                            <i class="fas fa-pen-to-square"></i>
+                        </button>
                     </div>
 
                     <button class="play-button" onclick="launchGame()">
@@ -138,83 +154,137 @@
             <div id="mods" class="section">
                 <h1>Mods</h1>
                 <div class="mods-section">
-                    <!-- Profile Selector -->
-                    <div class="input-group">
-                        <label>
-                            Profile
-                            <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
-                                data-tooltip="Select a profile with Forge or Fabric to manage mods"></i>
-                        </label>
-                        <select id="modsProfileSelect">
-                            <option value="">Loading profiles...</option>
-                        </select>
-                    </div>
-
-                    <!-- World Selector (Only for Data Packs) -->
-                    <div id="worldSelectorContainer" class="input-group" style="display: none;">
-                        <label>
-                            World
-                            <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
-                                data-tooltip="Select a world to install Data Packs into"></i>
-                        </label>
-                        <select id="worldSelect">
-                            <option value="">Select a world...</option>
-                        </select>
-                    </div>
-
-                    <!-- Message if no moddable profiles (Only for Mods/Shaders) -->
-                    <div id="noModdableProfiles" class="no-moddable-profiles" style="display: none;">
-                        <i class="fas fa-info-circle"></i>
-                        <p id="noModdableMessage">No profiles with Forge or Fabric. Create a profile with a mod loader
-                            to download mods.</p>
-                    </div>
-
-                    <!-- Tab Container -->
-                    <div id="modsTabsContainer" style="display: none;">
-                        <!-- Tabs -->
-                        <div class="mods-tabs">
-                            <button class="mod-tab active" data-tab="download">
-                                <i class="fas fa-download"></i> Download
-                            </button>
-                            <button class="mod-tab" data-tab="installed">
-                                <i class="fas fa-cube"></i> Installed
-                            </button>
-                        </div>
-
-                        <!-- Tab Content: Download -->
-                        <div id="modTabDownload" class="mod-tab-content active">
-                            <!-- Search Bar -->
-                            <div class="mod-search-container">
-                                <input type="text" id="modSearchInput" class="mod-search-bar"
-                                    placeholder="Search mods in Modrinth...">
+                    <div class="mods-outer-flex">
+                        <!-- LEFT: All mods content -->
+                        <div class="mods-content-area">
+                            <!-- Profile Selector -->
+                            <div class="input-group">
+                                <label>
+                                    Profile
+                                    <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
+                                        data-tooltip="Select a profile with Forge or Fabric to manage mods"></i>
+                                </label>
+                                <select id="modsProfileSelect">
+                                    <option value="">Loading profiles...</option>
+                                </select>
                             </div>
 
-                            <!-- Loading State -->
-                            <div id="modSearchLoading" class="mod-search-loading" style="display: none;">
-                                <div class="spinner"></div>
-                                <p>Searching mods...</p>
+                            <!-- World Selector (Only for Data Packs) -->
+                            <div id="worldSelectorContainer" class="input-group" style="display: none;">
+                                <label>
+                                    World
+                                    <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
+                                        data-tooltip="Select a world to install Data Packs into"></i>
+                                </label>
+                                <select id="worldSelect">
+                                    <option value="">Select a world...</option>
+                                </select>
                             </div>
 
-                            <!-- Results Grid -->
-                            <div id="modSearchResults" class="mod-grid">
-                                <!-- Initial Message -->
-                                <div class="mod-search-empty">
-                                    <i class="fas fa-search"></i>
-                                    <p>Search mods to download</p>
+                            <!-- Message if no moddable profiles -->
+                            <div id="noModdableProfiles" class="no-moddable-profiles" style="display: none;">
+                                <i class="fas fa-info-circle"></i>
+                                <p id="noModdableMessage">No profiles with Forge or Fabric. Create a profile with a mod
+                                    loader
+                                    to download mods.</p>
+                            </div>
+
+                            <!-- Tab Container -->
+                            <div id="modsTabsContainer" style="display: none;">
+                                <!-- Tabs -->
+                                <div class="mods-tabs">
+                                    <button class="mod-tab active" data-tab="download">
+                                        <i class="fas fa-download"></i> Download
+                                    </button>
+                                    <button class="mod-tab" data-tab="installed">
+                                        <i class="fas fa-cube"></i> Installed
+                                    </button>
+                                </div>
+
+                                <!-- Tab Content: Download -->
+                                <div id="modTabDownload" class="mod-tab-content active">
+                                    <!-- Search Bar -->
+                                    <div class="mod-search-container">
+                                        <input type="text" id="modSearchInput" class="mod-search-bar"
+                                            placeholder="Search mods in Modrinth...">
+                                    </div>
+
+                                    <!-- Loading State -->
+                                    <div id="modSearchLoading" class="mod-search-loading" style="display: none;">
+                                        <div class="spinner"></div>
+                                        <p>Searching mods...</p>
+                                    </div>
+
+                                    <!-- Results Grid -->
+                                    <div id="modSearchResults" class="mod-grid">
+                                    </div>
+
+                                    <!-- Pagination Controls -->
+                                    <div id="modSearchPagination" class="pagination-controls"
+                                        style="display: none; justify-content: center; gap: 10px; margin-top: 15px; align-items: center;">
+                                        <button id="btnPrevPage" class="btn-square" disabled><i
+                                                class="fas fa-chevron-left"></i></button>
+                                        <button id="pageIndicator" class="btn-secondary"
+                                            style="pointer-events: none; padding: 10px 15px; font-weight: bold;">1</button>
+                                        <button id="btnNextPage" class="btn-square"><i
+                                                class="fas fa-chevron-right"></i></button>
+                                    </div>
+                                </div>
+
+                                <!-- Tab Content: Installed -->
+                                <div id="modTabInstalled" class="mod-tab-content">
+                                    <!-- Action Bar for Local Files -->
+                                    <div class="installed-mods-actions">
+                                        <button class="btn-secondary btn-small" id="btnOpenAddonsFolder"
+                                            title="Open local folder">
+                                            <i class="fas fa-folder-open"></i> Open Folder
+                                        </button>
+                                        <button class="btn-upload-addon" id="btnImportLocalAddon" disabled
+                                            data-tooltip="Upload a custom addon file">
+                                            <i class="fas fa-file-upload"></i>
+                                        </button>
+                                    </div>
+
+                                    <!-- Installed Mods List -->
+                                    <div id="installedModsList" class="installed-mods-list">
+                                        <!-- Mods will be loaded dynamically -->
+                                        <div class="no-mods-message">
+                                            <i class="fas fa-cube"></i>
+                                            <p>No mods installed in this profile</p>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Tab Content: Installed -->
-                        <div id="modTabInstalled" class="mod-tab-content">
-                            <!-- Installed Mods List -->
-                            <div id="installedModsList" class="installed-mods-list">
-                                <!-- Mods will be loaded dynamically -->
-                                <div class="no-mods-message">
-                                    <i class="fas fa-cube"></i>
-                                    <p>No mods installed in this profile</p>
+                        <!-- RIGHT: Filter Panel (completely outside all content) -->
+                        <div class="mod-sidebar-filters" id="modFiltersContainer">
+                            <div class="mod-filters-header">
+                                <h3><i class="fas fa-sliders-h"></i> Filters & Sort</h3>
+                            </div>
+
+                            <div class="mod-filters-body">
+                                <div class="filter-group">
+                                    <label><i class="fas fa-sort-amount-down"></i> Sort By</label>
+                                    <select id="modSortSelect" class="filter-select">
+                                        <option value="relevance">Relevance</option>
+                                        <option value="downloads">Most Downloaded</option>
+                                        <option value="newest">Recently Uploaded</option>
+                                        <option value="updated">Recently Updated</option>
+                                    </select>
+                                </div>
+
+                                <div class="filter-group">
+                                    <label><i class="fas fa-tags"></i> Categories</label>
+                                    <div id="modCategoriesContainer" class="mod-categories-container">
+                                        <span class="filter-loading">Loading...</span>
+                                    </div>
                                 </div>
                             </div>
+
+                            <button id="applyFiltersBtn" class="btn-apply-filters">
+                                <i class="fas fa-check"></i> Apply Changes
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -277,6 +347,17 @@
                             <button type="button" id="selectMcdirBtn" class="btn-square"><i
                                     class="fas fa-folder-open"></i></button>
                         </div>
+
+                        <div class="input-group" style="margin-top: 15px;">
+                            <label>
+                                Addons per Page
+                                <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
+                                    data-tooltip="Number of addons to load per page in the search results (Modrinth)"></i>
+                            </label>
+                            <input id="addonsPerPage" type="number" min="5" max="100" value="20"
+                                style="width: 100px; padding: 10px; background: rgba(0, 0, 0, 0.4); border: 2px solid rgba(79, 172, 254, 0.3); border-radius: 5px; color: #fff; font-size: 15px;">
+                        </div>
+
                         <div class="input-group">
                             <div class="toggle-container">
                                 <label class="toggle-switch">
@@ -291,7 +372,37 @@
                             </div>
                         </div>
 
+                        <div class="input-group"
+                            style="padding-top: 15px; border-top: 1px solid rgba(255, 255, 255, 0.1); margin-top: 15px;">
+                            <div class="toggle-container">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="enableTransitionsCheckbox" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <span class="toggle-label">
+                                    Enable Transitions & Animations
+                                    <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
+                                        data-tooltip="Controls UI animations, starfield background, and smooth transitions. Disabling this resolves latency on slower systems."></i>
+                                </span>
+                            </div>
+                        </div>
+
                         <div class="input-group">
+                            <div class="toggle-container">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="hwAccelCheckbox" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <span class="toggle-label">
+                                    Hardware Acceleration
+                                    <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
+                                        data-tooltip="Uses GPU to render the Launcher smoothly. Disabling may fix black screens or heavy lag on older PCs. Requires Launcher restart."></i>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="input-group"
+                            style="padding-top: 15px; border-top: 1px solid rgba(255, 255, 255, 0.1); margin-top: 15px;">
                             <div class="toggle-container">
                                 <label class="toggle-switch">
                                     <input type="checkbox" id="showSnapshotsCheckbox">
@@ -318,13 +429,7 @@
                                 </span>
                             </div>
                         </div>
-                        <button class="btn-primary" onclick="saveSettings()">Save Settings</button>
-
-                        <div style="margin-top: 20px; display: flex; gap: 10px;">
-                            <button class="btn-secondary" onclick="window.pywebview.api.open_logs()" style="flex: 1;">
-                                <i class="fas fa-file-alt"></i> Open Game Logs
-                            </button>
-                        </div>
+                        <button id="saveSettingsBtn" class="btn-primary" onclick="saveSettings()">Save Settings</button>
 
                         <!-- Launcher Version -->
                         <div
@@ -386,6 +491,18 @@
                         data-tooltip="Advanced JVM parameters. Defaults include: -Xmx4G (4GB RAM), -Xms1G (1GB initial), and performance optimizations with G1GC."></i>
                 </label>
                 <input id="profileJVMArgs" type="text">
+            </div>
+            <div class="modal-input-group">
+                <label>
+                    Java Executable Path
+                    <i class="fa-regular fa-question-circle help-icon"
+                        data-tooltip="Custom Java version (javaw.exe). Leave empty to use default."></i>
+                </label>
+                <div style="display: flex; gap: 8px;">
+                    <input id="profileJavaPath" type="text" style="flex: 1;" placeholder="Default (Auto-detected)">
+                    <button type="button" id="selectJavaBtn" class="btn-square"><i
+                            class="fas fa-folder-open"></i></button>
+                </div>
             </div>
 
             <div class="modal-options">
@@ -526,6 +643,22 @@
         </div>
     </div>
 
+    <!-- Manage Installed Versions Modal -->
+    <div class="modal" id="manageVersionsModal">
+        <div class="modal-content manage-versions-modal">
+            <button class="modal-close-btn" id="closeManageVersionsModal">
+                <i class="fas fa-times"></i>
+            </button>
+            <span>Installed Versions</span>
+            <div id="manageVersionsList" class="manage-versions-list">
+                <div class="spinner" style="margin: 30px auto;"></div>
+            </div>
+            <div class="modal-options">
+                <button id="closeManageVersionsBtn" class="btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- No Internet Modal -->
     <div class="modal" id="noInternetModal" style="display: none;">
         <div class="modal-content no-internet-modal">
@@ -637,6 +770,11 @@
             </div>
         </div>
     </div>
+
+    <!-- Replay Onboarding FAB -->
+    <button id="replayTutorialBtn" class="settings-action-btn" title="Replay Tutorial">
+        <i class="fas fa-graduation-cap"></i>
+    </button>
 
     <!-- Review Floating Button -->
     <button id="reviewFloatingBtn" class="review-fab" title="Leave a Review">
@@ -887,9 +1025,222 @@
         </div>
     </div>
 
+    <!-- Onboarding Wizard Modal -->
+    <div id="onboardingOverlay" class="onboarding-overlay">
+        <!-- Audio removed -->
+
+        <div class="onboarding-modal">
+            <div class="onboarding-header">
+                <div class="onboarding-progress">
+                    <div class="progress-dot active" data-step="1"></div>
+                    <div class="progress-dot" data-step="2"></div>
+                    <div class="progress-dot" data-step="3"></div>
+                    <div class="progress-dot" data-step="4"></div>
+                    <div class="progress-dot" data-step="5"></div>
+                    <div class="progress-dot" data-step="6"></div>
+                </div>
+                <div class="onboarding-controls">
+                    <button class="mute-btn" id="onboardingMuteBtn" title="Mute Music">
+                        <i class="fas fa-volume-up"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="onboarding-body">
+                <!-- Step 1: Config -->
+                <div class="onboarding-step active" id="step1">
+                    <h2 class="onboarding-title">Welcome to HelloWorld Launcher</h2>
+                    <p class="onboarding-description">Let's set up the basics to get you started correctly.</p>
+
+                    <div class="config-grid">
+                        <!-- Minecraft Directory -->
+                        <div class="config-item">
+                            <div class="config-label-row">
+                                <span class="config-label"><i class="fas fa-folder"></i> Minecraft Folder</span>
+                            </div>
+                            <div class="config-info">
+                                The location where all your game files, worlds, and screenshots will be stored. We've
+                                detected a default for you. Versions will install here, but you can change the directory
+                                for each profile.
+                            </div>
+                            <div class="folder-input-group">
+                                <input type="text" class="folder-input" id="wizMcDir" readonly>
+                                <button class="btn-folder" id="wizBtnSelectFolder"><i
+                                        class="fas fa-folder-open"></i></button>
+                            </div>
+                        </div>
+
+                        <!-- Developer Mode -->
+                        <div class="config-item">
+                            <div class="config-label-row">
+                                <span class="config-label"><i class="fas fa-code"></i> Developer Mode</span>
+                                <label class="toggle-switch-large">
+                                    <input type="checkbox" id="wizDevMode">
+                                    <span class="toggle-slider-large"></span>
+                                </label>
+                            </div>
+                            <div class="config-info">
+                                Enables advanced debugging tools and allows you to load local development
+                                configurations. Useful for creators.
+                            </div>
+                        </div>
+
+                        <!-- Show Snapshots -->
+                        <div class="config-item">
+                            <div class="config-label-row">
+                                <span class="config-label"><i class="fas fa-flask"></i> Show Snapshots</span>
+                                <label class="toggle-switch-large">
+                                    <input type="checkbox" id="wizShowSnapshots">
+                                    <span class="toggle-slider-large"></span>
+                                </label>
+                            </div>
+                            <div class="config-info">
+                                Access experimental versions of Minecraft that are still in development. Expect bugs and
+                                instability.
+                            </div>
+                        </div>
+
+                        <!-- Show Old -->
+                        <div class="config-item">
+                            <div class="config-label-row">
+                                <span class="config-label"><i class="fas fa-history"></i> Show Old Versions</span>
+                                <label class="toggle-switch-large">
+                                    <input type="checkbox" id="wizShowOld">
+                                    <span class="toggle-slider-large"></span>
+                                </label>
+                            </div>
+                            <div class="config-info">
+                                Enable to see Beta and Alpha versions of the game in the version installer.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Tutorial Intro -->
+                <div class="onboarding-step" id="step2">
+                    <h2 class="onboarding-title">Interactive Tutorial</h2>
+                    <p class="onboarding-description">
+                        We will now guide you through the process of downloading Minecraft versions and creating
+                        profiles.
+                        This interactive tour will show you exactly where to click and what each option does.
+                    </p>
+                    <div class="tutorial-actions"
+                        style="margin-top: 40px; display: flex; gap: 20px; justify-content: center;">
+                        <button id="startTutorialBtn" class="btn-blue" style="padding: 15px 30px; font-size: 16px;">
+                            <i class="fas fa-play"></i> Start
+                        </button>
+                        <button id="skipTutorialBtn" class="btn-secondary"
+                            style="padding: 15px 30px; font-size: 16px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white;">
+                            Skip
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Tutorial Completed -->
+                <div class="onboarding-step" id="step3">
+                    <h2 class="onboarding-title">Tutorial Completed!</h2>
+                    <p class="onboarding-description">
+                        Great job! You have successfully learned how to manage versions and profiles.
+                        You can always replay this tutorial later from the settings.
+                    </p>
+                    <div class="tutorial-actions"
+                        style="margin-top: 40px; display: flex; gap: 20px; justify-content: center;">
+                        <button id="repeatTutorialBtn" class="btn-secondary"
+                            style="padding: 15px 30px; font-size: 16px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white;">
+                            <i class="fas fa-redo"></i> Repeat
+                        </button>
+                        <button id="nextStepBtn" class="btn-blue" style="padding: 15px 30px; font-size: 16px;">
+                            Next Step <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 4: Accounts (Interactive) -->
+                <div class="onboarding-step" id="step4">
+                    <h2 class="onboarding-title">Identity & Access</h2>
+                    <p class="onboarding-description">
+                        Log in easily. <strong>Note:</strong> Custom Skins and Capes features are exclusively available
+                        for Microsoft Accounts.
+                    </p>
+                    <div class="tutorial-actions"
+                        style="margin-top: 40px; display: flex; gap: 20px; justify-content: center;">
+                        <button id="startTutorialStep2Btn" class="btn-blue"
+                            style="padding: 15px 30px; font-size: 16px;">
+                            <i class="fas fa-play"></i> Start
+                        </button>
+                        <button id="skipTutorialStep2Btn" class="btn-secondary"
+                            style="padding: 15px 30px; font-size: 16px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white;">
+                            Skip
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 5: Addons (Interactive) -->
+                <div class="onboarding-step" id="step5">
+                    <h2 class="onboarding-title">Powerful Add-ons</h2>
+                    <p class="onboarding-description">
+                        Install Mods, Resource Packs, Data Packs, and Shaders directly from the launcher with one click.
+                    </p>
+                    <div class="tutorial-actions"
+                        style="margin-top: 40px; display: flex; gap: 20px; justify-content: center;">
+                        <button id="startTutorialStep3Btn" class="btn-blue"
+                            style="padding: 15px 30px; font-size: 16px;">
+                            <i class="fas fa-play"></i> Start
+                        </button>
+                        <button id="skipTutorialStep3Btn" class="btn-secondary"
+                            style="padding: 15px 30px; font-size: 16px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white;">
+                            Skip
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 6: Finish -->
+                <div class="onboarding-step" id="step6">
+                    <h2 class="onboarding-title">You're Ready!</h2>
+                    <p class="onboarding-description">
+                        Jump in and start your adventure. You can replay this tutorial from the button <i
+                            class="fas fa-graduation-cap"></i>.
+                    </p>
+                    <div class="video-frame">
+                        <video id="tutorialFinalVideo" src="videos/tutorial_final.mp4" loop muted></video>
+                    </div>
+                </div>
+            </div>
+
+            <div class="onboarding-footer">
+                <button class="btn-back" id="wizBackBtn">
+                    <i class="fas fa-arrow-left"></i> Back
+                </button>
+                <button class="btn-next" id="wizNextBtn">
+                    Next <i class="fas fa-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Download Tracker Popup -->
+    <div id="globalDownloadPopup" class="global-download-popup">
+        <div class="gdp-header">
+            <i class="fas fa-cloud-download-alt"></i> <span id="gdpTitle">Downloading...</span>
+        </div>
+        <div class="gdp-progress-container">
+            <div id="gdpProgressBar" class="gdp-progress-bar"></div>
+        </div>
+        <div class="gdp-footer">
+            <span id="gdpTask">Preparing...</span>
+            <span id="gdpPercent">0%</span>
+        </div>
+    </div>
+
     <script src="scripts.js"></script>
+    <script src="download-listeners.js"></script>
     <script src="scripts-skinviewer3d.js"></script>
     <script src="scripts-skinpacks.js"></script>
+    <!-- Onboarding Logic Embedded for now to ensure access to all scopes -->
+    <script src="tutorial-spotlight.js"></script>
+    <script src="tutorial-steps.js"></script>
+    <script src="scripts-onboarding.js"></script>
+
 </body>
 
 </html>

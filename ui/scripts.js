@@ -1,4 +1,4 @@
-﻿// UI Elements
+// UI Elements
 const selectTrigger = document.getElementById('selectTrigger');
 const selectOptions = document.getElementById('selectOptions');
 const customSelect = document.getElementById('customSelect');
@@ -48,6 +48,12 @@ let editingProfileId = null;
 let selectedImageData = null;
 let isDownloading = false;
 let activeProfileFilter = null;
+let currentLoaderType = 'vanilla';
+const versionCache = {
+    vanilla: null,
+    fabric: null,
+    forge: null
+};
 
 // Función global para actualizar el progreso de instalación
 // Función global para actualizar el progreso de instalación
@@ -59,12 +65,29 @@ window.updateInstallProgress = function (version, percentage, status) {
 
     if (progressContainer && progressBar && progressText && progressPercentage) {
         progressContainer.style.display = 'block';
-        progressText.textContent = status || `Installing ${version}...`;
-        progressBar.style.width = `${percentage}%`;
-        progressPercentage.textContent = `${percentage}%`;
-
-        // Don't auto-hide on completion, let onDownloadComplete handle it
+        progressBar.style.width = percentage + '%';
+        progressText.textContent = status;
+        progressPercentage.textContent = Math.round(percentage) + '%';
     }
+};
+
+// Helper to resolve secure image sources
+window.resolveImageSource = function (src) {
+    if (!src) return '';
+    if (src.startsWith('http') || src.startsWith('data:') || src.startsWith('blob:')) {
+        return src;
+    }
+    // Assume local path if not web/data
+    // Convert backslashes to slashes
+    let normalized = src.replace(/\\/g, '/');
+    // Ensure it doesn't already have protocol
+    if (!normalized.startsWith('launcher://')) {
+        // If it starts with a drive letter (e.g. C:/) prepend launcher://
+        if (/^[a-zA-Z]:/.test(normalized) || normalized.startsWith('/')) {
+            return 'launcher://' + normalized;
+        }
+    }
+    return normalized;
 };
 
 // Global function called when download completes
@@ -114,49 +137,74 @@ async function cancelDownload() {
 }
 
 
-function saveSettings() {
-    const username = document.getElementById("nickname").value;
-    const mcdir = document.getElementById("mcdir").value;
-    const devModeCheckbox = document.getElementById("devModeCheckbox");
-    const devMode = devModeCheckbox ? devModeCheckbox.checked : false;
+async function saveSettings() {
+    const btn = document.getElementById("saveSettingsBtn");
+    const originalContent = btn ? btn.innerHTML : "Save Settings";
 
-    const showSnapshots = document.getElementById("showSnapshotsCheckbox")?.checked || false;
-    const showOld = document.getElementById("showOldVersionsCheckbox")?.checked || false;
+    try {
+        const username = document.getElementById("nickname").value;
+        const mcdir = document.getElementById("mcdir").value;
+        const addonsPerPage = document.getElementById("addonsPerPage")?.value || 20;
 
-    // Get current data to check if dev mode changed
-    window.pywebview.api.get_user_json().then(currentData => {
-        const devModeChanged = currentData.dev_mode !== devMode;
+        const devMode = document.getElementById("devModeCheckbox")?.checked || false;
+        window.isDevMode = devMode;
+        const showSnapshots = document.getElementById("showSnapshotsCheckbox")?.checked || false;
+        const showOld = document.getElementById("showOldVersionsCheckbox")?.checked || false;
+        const enableTransitions = document.getElementById("enableTransitionsCheckbox")?.checked !== false;
+        const hwAccel = document.getElementById("hwAccelCheckbox")?.checked !== false;
 
-        window.pywebview.api.save_user_json(username, mcdir).then(async data => {
-            // Save dev_mode and other settings separately or extend save_user_json
-            // For simplicity and matching current structure, we'll extend saving logic
-            try {
-                // Update local cache and state
-                versionCache.vanilla = null; // Force refresh vanilla versions
+        // Get current data to check for restart requirements
+        const currentData = await window.pywebview.api.get_user_json();
 
-                // Custom API calls for extra settings if needed, or update data directly
-                // Save version settings
-                await window.pywebview.api.save_version_settings(showSnapshots, showOld);
+        const restartRequired =
+            currentData.dev_mode !== devMode ||
+            currentData.hw_accel !== hwAccel ||
+            currentData.enable_transitions !== enableTransitions;
 
-                await window.pywebview.api.save_dev_mode(devMode);
+        // 1. Save core user info
+        await window.pywebview.api.save_user_json(username, mcdir);
 
-                // Let's modify the user data in backend with new fields
-                // Since save_user_json might not handle showSnapshots/showOld yet in its signature,
-                // we'll rely on a generic way or update main.py. 
-                // Wait, I didn't update save_user_json signature in main.py yet. I should do that first.
-                // Actually, I can just send them as part of the data if I update the backend.
+        // 2. Save version listing filters
+        await window.pywebview.api.save_version_settings(showSnapshots, showOld);
 
-                // For now, let's assume we update the backend to handle these in save_user_json or separate calls.
-                // I'll update main.py next to handle these.
+        // 3. Save developer mode
+        await window.pywebview.api.save_dev_mode(devMode);
 
-                if (devModeChanged) {
-                    window.pywebview.api.info('Settings saved. Please restart the launcher for developer mode changes to take effect.');
-                }
-            } catch (err) {
-                console.error("Error saving settings:", err);
-            }
-        });
-    });
+        // 4. Save app performance settings
+        await window.pywebview.api.save_app_settings(enableTransitions, hwAccel);
+
+        // 5. Save addons per page
+        await window.pywebview.api.save_addons_per_page(addonsPerPage);
+
+        // UI Feedback: Success mark
+        if (btn) {
+            btn.classList.add('btn-success');
+            btn.innerHTML = '<i class="fas fa-check"></i> Saved!';
+            setTimeout(() => {
+                btn.classList.remove('btn-success');
+                btn.innerHTML = originalContent;
+            }, 2000);
+        }
+
+        // Alert if restart is needed
+        if (restartRequired) {
+            window.pywebview.api.info('Settings saved. One or more changes (Dev Mode, Transitions, or Hardware Acceleration) require a launcher restart to be applied.');
+        }
+
+        // Clear version cache as snapshots/old might have changed
+        versionCache.vanilla = null;
+
+    } catch (err) {
+        console.error("Error saving settings:", err);
+        if (btn) {
+            btn.classList.add('btn-red');
+            btn.innerHTML = '<i class="fas fa-times"></i> Error';
+            setTimeout(() => {
+                btn.classList.remove('btn-red');
+                btn.innerHTML = originalContent;
+            }, 2000);
+        }
+    }
 }
 
 if (document.getElementById("mcdir")) {
@@ -167,9 +215,10 @@ if (document.getElementById("mcdir")) {
     });
 }
 
-// PyWebView Ready
-// PyWebView Ready
+// PyWebView Ready - SINGLE CENTRALIZED INITIALIZATION
 window.addEventListener('pywebviewready', async () => {
+    console.log('[Init] pywebviewready event fired');
+
     // Check internet connection first
     try {
         const hasInternet = await window.pywebview.api.check_internet();
@@ -180,96 +229,122 @@ window.addEventListener('pywebviewready', async () => {
             if (noInternetModal) {
                 noInternetModal.style.display = 'flex';
 
-                // Close app button
                 const closeAppBtn = document.getElementById('closeAppBtn');
+                const continueAnywayBtn = document.getElementById('continueAnywayBtn');
+
                 if (closeAppBtn) {
                     closeAppBtn.addEventListener('click', async () => {
                         await window.pywebview.api.close_app();
                     });
                 }
 
-                // Continue anyway button
-                const continueAnywayBtn = document.getElementById('continueAnywayBtn');
                 if (continueAnywayBtn) {
                     continueAnywayBtn.addEventListener('click', () => {
                         noInternetModal.style.display = 'none';
                     });
                 }
+                return; // Stop here if no internet
             }
         }
     } catch (error) {
-        console.error("Error checking internet:", error);
+        console.error('Error checking internet:', error);
     }
 
+    // --- Core Initialization ---
     try {
-        await loadOptions();
-
+        // Load initial user data
         const data = await window.pywebview.api.get_user_json();
+        console.log('[Init] User data loaded:', data.account_type, data.username);
+
+        // Populate settings inputs
         if (document.getElementById("nickname")) document.getElementById("nickname").value = data.username || "";
         if (document.getElementById("mcdir")) document.getElementById("mcdir").value = data.mcdir || "";
+        if (document.getElementById("addonsPerPage")) document.getElementById("addonsPerPage").value = data.addons_per_page || 20;
 
-        // Update UI based on initial data
-        await updateUserInterface(data);
-
-        // Microsoft Session Refresh
-        if (data.account_type === 'microsoft') {
-            console.log("Checking Microsoft session...");
-            try {
-                const res = await window.pywebview.api.refresh_session();
-                if (res.success) {
-                    console.log("Session refreshed");
-                    await loadSkinData();
-                } else if (res.expired) {
-                    console.warn("Session expired");
-                    window.pywebview.api.info("Your Microsoft session has expired. Please log in again.");
-                }
-            } catch (err) {
-                console.error("Session refresh error:", err);
-            }
-        }
-
-        // Load developer mode checkbox
         const devModeCheckbox = document.getElementById("devModeCheckbox");
         if (devModeCheckbox) {
             devModeCheckbox.checked = data.dev_mode || false;
         }
+        window.isDevMode = data.dev_mode || false;
 
-        // Load version settings
         const showSnapshotsCheckbox = document.getElementById("showSnapshotsCheckbox");
-        if (showSnapshotsCheckbox) {
-            showSnapshotsCheckbox.checked = data.show_snapshots || false;
-        }
+        if (showSnapshotsCheckbox) showSnapshotsCheckbox.checked = data.show_snapshots || false;
 
         const showOldVersionsCheckbox = document.getElementById("showOldVersionsCheckbox");
-        if (showOldVersionsCheckbox) {
-            showOldVersionsCheckbox.checked = data.show_old || false;
+        if (showOldVersionsCheckbox) showOldVersionsCheckbox.checked = data.show_old || false;
+
+        const transitionsCheckbox = document.getElementById("enableTransitionsCheckbox");
+        if (transitionsCheckbox) transitionsCheckbox.checked = (data.enable_transitions !== false);
+
+        const hwAccelCheckbox = document.getElementById("hwAccelCheckbox");
+        if (hwAccelCheckbox) hwAccelCheckbox.checked = (data.hw_accel !== false);
+
+        // Apply visual settings that don't need restart (on load)
+        if (data.enable_transitions === false) {
+            document.body.classList.add('disable-transitions');
+        } else {
+            document.body.classList.remove('disable-transitions');
         }
+
+        // Update UI immediately with local state (shows name and "Steve" head as fallback)
+        await updateUserInterface(data);
+        if (data.username) {
+            await loadSkinData(); // Try to load last known/cached skin
+        }
+
+        // Register mod download progress listener
+        if (window.pywebview.api.on_mod_download_progress) {
+            window.pywebview.api.on_mod_download_progress((prog) => {
+                if (window.onModDownloadProgress) {
+                    window.onModDownloadProgress(prog.projectId, prog.percentage, 'downloading');
+                }
+            });
+        }
+
+        // Session Refresh Check
+        if (data.account_type === 'microsoft') {
+            console.log("[Init] Refreshing Microsoft session...");
+            try {
+                const res = await window.pywebview.api.refresh_session();
+                if (res.success) {
+                    console.log("[Init] Session refreshed successfully");
+                    const refreshedData = await window.pywebview.api.get_user_json();
+                    await updateUserInterface(refreshedData);
+                    await loadSkinData();
+                } else if (res.expired) {
+                    console.warn("[Init] Session expired");
+                    window.pywebview.api.info("Your Microsoft session has expired. Please log in again.");
+                    // Fallback: stay as-is or show login button if critical
+                }
+            } catch (err) {
+                console.error("[Init] Session refresh error:", err);
+            }
+        }
+
+        // Load rest of the app data
+        await loadOptions();
+        await loadProfiles();
+        await loadVersions();
+        await checkReviewReminder();
 
         // Load launcher version
         try {
             const version = await window.pywebview.api.get_launcher_version();
-            const versionElement = document.getElementById("launcherVersion");
-            if (versionElement) {
-                versionElement.textContent = version;
-            }
-        } catch (err) {
-            console.error("Error loading version:", err);
-        }
+            const vEl = document.getElementById("launcherVersion");
+            if (vEl) vEl.textContent = version;
+        } catch (err) { }
 
-        await loadProfiles();
-        await loadVersions();
     } catch (error) {
-        console.error("Error loading initial data:", error);
+        console.error("[Init] Error during initialization:", error);
     } finally {
-        // Ocultar loader
+        // Hide loader/splash
         const loader = document.getElementById('initialLoader');
         if (loader) {
             loader.classList.add('hidden');
-            setTimeout(() => {
-                loader.style.display = 'none';
-            }, 500);
+            setTimeout(() => { loader.style.display = 'none'; }, 500);
         }
     }
+    console.log('[Init] Initialization complete');
 });
 
 // --- NEW AUTH FUNCTIONS ---
@@ -288,6 +363,11 @@ async function updateUserInterface(userData) {
 
         if (userData.account_type === 'microsoft') {
             if (skinsBtn) skinsBtn.style.display = 'flex';
+            // Also render head immediately from username
+            if (window.renderUserHead) {
+                const skinUrl = `https://mc-heads.net/avatar/${userData.username}`;
+                await window.renderUserHead(skinUrl);
+            }
         } else {
             if (skinsBtn) skinsBtn.style.display = 'none';
             // For offline users, show default icon
@@ -367,6 +447,19 @@ window.onLoginSuccess = async function () {
     loadSkinData();
 };
 
+// IPC Event Listeners (Added for Electron)
+window.addEventListener('login-success', (event) => {
+    if (window.onLoginSuccess) {
+        window.onLoginSuccess(); // Use the existing logic
+    }
+});
+
+window.addEventListener('login-error', (event) => {
+    if (window.onLoginError) {
+        window.onLoginError(event.detail);
+    }
+});
+
 window.onLoginError = function (err) {
     window.pywebview.api.error("Login failed: " + err);
     // Reset button state
@@ -412,6 +505,17 @@ async function launchGame() {
         return;
     }
 
+    // Show loading state BEFORE async call so it's immediate
+    const playButton = document.querySelector('.play-button');
+    if (playButton) {
+        // Save original in case of error
+        playButton.dataset.originalHtml = playButton.innerHTML;
+        playButton.disabled = true;
+        playButton.style.cursor = 'not-allowed';
+        playButton.style.opacity = '0.6';
+        playButton.innerHTML = '<span class="spinner"></span> Starting...';
+    }
+
     // Try to launch the game
     const result = await pywebview.api.start_game(selectedProfile, nickname);
 
@@ -424,25 +528,42 @@ async function launchGame() {
             // Force launch
             const forceResult = await pywebview.api.start_game(selectedProfile, nickname, true);
             if (forceResult.status === "error") {
+                if (playButton) {
+                    playButton.disabled = false;
+                    playButton.style.cursor = 'pointer';
+                    playButton.style.opacity = '1';
+                    playButton.innerHTML = playButton.dataset.originalHtml || 'Play';
+                }
                 return;
             }
         } else {
+            // Revert state
+            if (playButton) {
+                playButton.disabled = false;
+                playButton.style.cursor = 'pointer';
+                playButton.style.opacity = '1';
+                playButton.innerHTML = playButton.dataset.originalHtml || 'Play';
+            }
             return;
         }
     } else if (result.status === "error") {
+        // Revert state
+        if (playButton) {
+            playButton.disabled = false;
+            playButton.style.cursor = 'pointer';
+            playButton.style.opacity = '1';
+            playButton.innerHTML = playButton.dataset.originalHtml || 'Play';
+        }
         return;
     }
-
-
-    // Show loading state - will be cleared by onMinecraftReady or onMinecraftClosed
-    const playButton = document.querySelector('.play-button');
-    if (playButton) {
-        playButton.disabled = true;
-        playButton.style.cursor = 'not-allowed';
-        playButton.style.opacity = '0.6';
-        playButton.innerHTML = '<span class="spinner"></span> Loading...';
-    }
 }
+
+// Global listener for info messages from main.js (launcher events)
+window.addEventListener('info-message', (e) => {
+    if (e.detail === "Game Closed" || String(e.detail).includes("Game Crashed") || String(e.detail).includes("has exited")) {
+        onMinecraftClosed();
+    }
+});
 
 // Callback when Minecraft window is ready
 function onMinecraftReady() {
@@ -490,42 +611,42 @@ function timeAgo(dateString) {
 }
 
 async function loadVersions() {
+    // This function loads the list of installed versions for profile creation/editing
     const versionSelect = document.getElementById('profileVersionSelect');
-    if (!versionSelect) return;
-    versionSelect.innerHTML = '';
+    if (!versionSelect) {
+        console.warn('profileVersionSelect not found');
+        return;
+    }
 
     try {
-        // Now we only get INSTALLED versions for this dropdown
         const versionsData = await window.pywebview.api.get_available_versions();
+        console.log('[loadVersions] Received data:', versionsData);
 
-        // Helper function to create optgroups
-        const createGroup = (label, items) => {
-            if (items && items.length > 0) {
-                const group = document.createElement('optgroup');
-                group.label = label;
-                items.forEach(item => {
-                    const option = document.createElement('option');
-                    option.value = item;
-                    option.textContent = item;
-                    group.appendChild(option);
-                });
-                versionSelect.appendChild(group);
-            }
-        };
+        // Clear existing options
+        versionSelect.innerHTML = '';
 
-        // 1. Instaladas
-        if (versionsData.installed && versionsData.installed.length > 0) {
-            createGroup('Installed', versionsData.installed);
-        } else {
+        // versionsData = { installed: [...], web: [...] }
+        const installedVersions = versionsData.installed || [];
+
+        if (installedVersions.length === 0) {
             const option = document.createElement('option');
-            option.textContent = "No installed versions found";
+            option.value = '';
+            option.textContent = 'No installed versions found';
             option.disabled = true;
             versionSelect.appendChild(option);
+        } else {
+            installedVersions.forEach(version => {
+                const option = document.createElement('option');
+                option.value = version;
+                option.textContent = version;
+                versionSelect.appendChild(option);
+            });
         }
 
+        console.log(`[loadVersions] Loaded ${installedVersions.length} versions into dropdown`);
     } catch (error) {
         console.error('Error loading versions:', error);
-        window.pywebview.api.error('Error loading version list');
+        versionSelect.innerHTML = '<option disabled>Error loading versions</option>';
     }
 }
 
@@ -635,7 +756,7 @@ async function loadOptions() {
                 option.dataset.value = id;
 
                 let tags = '';
-                const versionLower = profile.version.toLowerCase();
+                const versionLower = (profile.version || '').toLowerCase();
                 let type = 'vanilla';
                 if (versionLower.includes('forge')) type = 'forge';
                 else if (versionLower.includes('fabric')) type = 'fabric';
@@ -778,6 +899,13 @@ function closeSelect() {
 }
 
 if (selectTrigger) {
+
+    // Local file actions
+    const btnOpenFolder = document.getElementById('btnOpenAddonsFolder');
+    const btnImport = document.getElementById('btnImportLocalAddon');
+
+    if (btnOpenFolder) btnOpenFolder.addEventListener('click', openAddonsFolder);
+    if (btnImport) btnImport.addEventListener('click', importLocalAddonFile);
     selectTrigger.addEventListener('click', (e) => {
         e.stopPropagation();
         toggleSelect();
@@ -789,6 +917,12 @@ document.addEventListener('click', (e) => {
         closeSelect();
     }
 });
+
+function isReservedProfileName(name) {
+    if (!name) return false;
+    const lowerName = name.trim().toLowerCase();
+    return lowerName === 'latest release' || lowerName === 'latest snapshot';
+}
 
 async function loadProfiles() {
     const profilesData = await window.pywebview.api.get_profiles();
@@ -811,8 +945,11 @@ async function loadProfiles() {
 
     for (const profile of profilesArray) {
         const id = profile.id;
-        const iconUrl = await window.pywebview.api.get_profile_icon(profile.icon);
+        const iconUrlRaw = await window.pywebview.api.get_profile_icon(profile.icon);
+        const iconUrl = window.resolveImageSource(iconUrlRaw);
         const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Never';
+
+        const isReserved = isReservedProfileName(profile.name);
 
         const item = document.createElement("div");
         item.className = "profile-card";
@@ -823,8 +960,8 @@ async function loadProfiles() {
                 <p>Version: ${profile.version} | Last played: ${lastPlayedText}</p>
             </div>
             <div class="profile-actions">
-                <button class="btn-secondary btn-small edit-btn"><i class="fas fa-edit"></i> Edit</button>
-                <button class="btn-danger btn-small delete-btn"><i class="fas fa-trash"></i> Delete</button>
+                <button class="btn-secondary btn-small edit-btn" ${isReserved ? 'disabled title="Managed automatically"' : ''}><i class="fas fa-edit"></i> Edit</button>
+                <button class="btn-danger btn-small delete-btn" ${isReserved ? 'disabled title="Managed automatically"' : ''}><i class="fas fa-trash"></i> Delete</button>
             </div>
         `;
 
@@ -841,10 +978,14 @@ async function loadProfiles() {
 
             const confirmed = await window.pywebview.api.confirm(`Are you sure you want to delete the profile "${profile.name}"?`);
             if (confirmed) {
-                await window.pywebview.api.delete_profile(id);
-                await loadProfiles();
-                await loadOptions();
-                await loadModdableProfiles();
+                const result = await window.pywebview.api.delete_profile(id);
+                if (result.success) {
+                    await loadProfiles();
+                    await loadOptions();
+                    await loadModdableProfiles();
+                } else {
+                    window.pywebview.api.error(result.error || "Failed to delete profile");
+                }
             }
         };
 
@@ -882,6 +1023,7 @@ async function resetProfileModal() {
     if (document.getElementById('profileJVMArgs')) document.getElementById('profileJVMArgs').value = defaultJVMArgs;
 
     if (document.getElementById('profileDir')) document.getElementById('profileDir').value = '';
+    if (document.getElementById('profileJavaPath')) document.getElementById('profileJavaPath').value = '';
 
     try {
         const userData = await window.pywebview.api.get_user_json();
@@ -917,6 +1059,7 @@ async function openEditProfileModal(id, profile) {
     if (document.getElementById('profileVersionSelect')) document.getElementById('profileVersionSelect').value = profile.version;
     if (document.getElementById('profileJVMArgs')) document.getElementById('profileJVMArgs').value = profile.jvm_args || '';
     if (document.getElementById('profileDir')) document.getElementById('profileDir').value = profile.directory || '';
+    if (document.getElementById('profileJavaPath')) document.getElementById('profileJavaPath').value = profile.java_path || '';
 
     // Guardar el icono actual del perfil para edición
     selectedImageData = profile.icon;
@@ -956,15 +1099,29 @@ if (cancelModalBtn) {
 
 if (acceptProfileBtn) {
     acceptProfileBtn.addEventListener('click', async () => {
-        const profileName = document.getElementById('profileName').value;
+        const profileNameInput = document.getElementById('profileName');
+        const profileName = profileNameInput ? profileNameInput.value.trim() : "";
+
+        if (!profileName) {
+            window.pywebview.api.error("Profile name is required");
+            return;
+        }
+
+        if (isReservedProfileName(profileName)) {
+            window.pywebview.api.error("This name is reserved for automatic profiles.");
+            return;
+        }
+
         const profileVersion = document.getElementById('profileVersionSelect').value;
         const profileJVMArgs = document.getElementById('profileJVMArgs').value;
         const profileDir = document.getElementById('profileDir').value;
+        const profileJavaPath = document.getElementById('profileJavaPath').value;
         const profileIcon = getSelectedIcon();
 
         // Validación
         const missingFields = [];
         const trimmedName = profileName.trim();
+
         if (!trimmedName) {
             missingFields.push("Profile Name");
         } else if (trimmedName.length < 2) {
@@ -980,18 +1137,20 @@ if (acceptProfileBtn) {
         }
 
         if (editingProfileId) {
-            const updatedData = {
-                name: profileName,
-                version: profileVersion,
-                jvm_args: profileJVMArgs,
-                directory: profileDir
-            };
-
-            if (profileIcon) {
-                updatedData.icon = profileIcon;
-            }
-
-            await window.pywebview.api.edit_profile(editingProfileId, updatedData);
+            // Edit existing profile - API expects individual arguments
+            await window.pywebview.api.edit_profile(
+                editingProfileId,    // profile_id
+                profileName,         // name
+                profileVersion,      // version
+                null,                // loader (not used)
+                profileIcon,         // icon
+                null,                // ram_min (not used)
+                null,                // ram_max (not used)
+                profileJVMArgs,      // jvm_args
+                null,                // width (not used)
+                null,                // height (not used)
+                profileJavaPath      // java_path
+            );
             await loadProfiles();
             await loadOptions();
             await loadModdableProfiles();
@@ -1002,7 +1161,7 @@ if (acceptProfileBtn) {
             try {
                 // Note: add_profile in backend might still try to install if missing, 
                 // but UI now restricts to installed versions.
-                const result = await window.pywebview.api.add_profile(profileName, profileVersion, profileIcon, profileDir, profileJVMArgs);
+                const result = await window.pywebview.api.add_profile(profileName, profileVersion, profileIcon, profileDir, profileJVMArgs, profileJavaPath);
 
                 if (result.success) {
                     await loadProfiles();
@@ -1092,6 +1251,28 @@ if (cancelImageModalBtn) {
         if (imageModal) imageModal.classList.remove('show');
     });
 }
+
+// Java Path selection button
+const selectJavaBtn = document.getElementById('selectJavaBtn');
+if (selectJavaBtn) {
+    selectJavaBtn.addEventListener('click', async () => {
+        const currentPath = document.getElementById('profileJavaPath').value;
+        const selectedPath = await window.pywebview.api.select_file(currentPath);
+
+        if (selectedPath) {
+            document.getElementById('profileJavaPath').value = selectedPath;
+        }
+    });
+}
+
+// ... existing code ...
+
+// In openProfileModal function (need to find it, assuming it's structured similarly)
+// I will rewrite the relevant parts of openProfileModal and save logic if I can find them.
+// Since I can't see the whole file, I will append the listener logic securely.
+
+// Wait, I need to see openProfileModal to edit it.
+// I'll assume I need to look for it first.
 
 // Load images in the modal
 async function loadImageModal() {
@@ -1270,8 +1451,8 @@ function showLoginButton() {
     if (userBadge) userBadge.style.display = 'none';
 }
 
-// Initial check
-window.addEventListener('pywebviewready', checkLoginState);
+// checkLoginState is now called in the main pywebviewready listener
+
 
 
 // ==============================================
@@ -1288,12 +1469,6 @@ const loaderVersionGroup = document.getElementById('loaderVersionGroup');
 const loaderTypeBtns = document.querySelectorAll('.loader-type-btn');
 const cancelDownloadBtn2 = document.getElementById('cancelDownloadBtn2');
 
-let currentLoaderType = 'vanilla';
-const versionCache = {
-    vanilla: null,
-    fabric: null,
-    forge: null
-};
 
 if (openDownloadModalBtn) {
     openDownloadModalBtn.addEventListener('click', () => {
@@ -1501,9 +1676,7 @@ async function startVersionDownload() {
 
         // Construct ID based on type
         if (currentLoaderType === 'fabric') {
-            // For now, let's just use the MC version as the ID suffix, 
-            // as mll.fabric.install_fabric installs the latest stable loader by default
-            versionIdToInstall = `fabric-${mcVersion}`;
+            versionIdToInstall = `fabric-${mcVersion}-${loaderVersion}`;
         } else if (currentLoaderType === 'forge') {
             // For Forge, the ID is the forge version string (e.g. "1.20.1-47.1.0")
             versionIdToInstall = `forge-${loaderVersion}`;
@@ -1559,8 +1732,10 @@ function closeDownloadProgress() {
     });
 }
 
-// Override global updateInstallProgress to target the new modal
-window.updateInstallProgress = function (version, percentage, status) {
+// Override global updateInstallProgress to target the new modal and the global popup
+window.updateInstallProgress = function (version, MathPercentage, status, data) {
+    const percentage = MathPercentage || 0;
+
     // Update Profile Modal Progress (if open - unlikely now)
     const progressContainer = document.getElementById('installProgress');
     if (progressContainer && progressContainer.style.display !== 'none') {
@@ -1573,11 +1748,12 @@ window.updateInstallProgress = function (version, percentage, status) {
         if (progressPercentage) progressPercentage.textContent = `${percentage}%`;
     }
 
-    // Update Download Modal Progress
+    // Update Download Modal Progress (only if it's not a background update or if modal is open)
     const dlProgressContainer = document.getElementById('downloadProgressContainer');
     if (dlProgressContainer) {
-        // Always show the progress container when updating
-        dlProgressContainer.style.display = 'block';
+        if (!data || !data.isBackgroundUpdate) {
+            dlProgressContainer.style.display = 'block';
+        }
 
         const dlProgressBar = document.getElementById('downloadProgressBarFill');
         const dlProgressText = document.getElementById('downloadProgressText');
@@ -1586,7 +1762,6 @@ window.updateInstallProgress = function (version, percentage, status) {
         if (dlProgressBar) {
             dlProgressBar.style.width = `${percentage}%`;
 
-            // Check for indeterminate state (e.g. running installer)
             if (status && (status.includes("Installer") || status.includes("Patching"))) {
                 dlProgressBar.classList.add('indeterminate');
             } else {
@@ -1599,7 +1774,28 @@ window.updateInstallProgress = function (version, percentage, status) {
         if (dlProgressPercentage) {
             dlProgressPercentage.textContent = `${percentage}%`;
         }
+    }
 
+    // Update Global Download Tracker Popup (always update, show if background update or explicitly needed)
+    const globalPopup = document.getElementById('globalDownloadPopup');
+    if (globalPopup) {
+        // Show the global popup if it's a background update or no modal is active
+        if ((data && data.isBackgroundUpdate) || (downloadModal && !downloadModal.classList.contains('show'))) {
+            globalPopup.classList.add('visible');
+        }
+
+        const gdpTitle = document.getElementById('gdpTitle');
+        const gdpProgressBar = document.getElementById('gdpProgressBar');
+        const gdpTask = document.getElementById('gdpTask');
+        const gdpPercent = document.getElementById('gdpPercent');
+
+        if (gdpTitle) gdpTitle.textContent = `Downloading ${version}...`;
+        if (gdpProgressBar) gdpProgressBar.style.width = `${percentage}%`;
+        if (gdpTask) gdpTask.textContent = status || 'Downloading...';
+        if (gdpPercent) gdpPercent.textContent = `${percentage}%`;
+    }
+
+    if (!data || !data.isBackgroundUpdate) {
         console.log(`Progress updated: ${percentage}% - ${status}`);
     }
 };
@@ -1627,6 +1823,143 @@ window.onDownloadError = function (errorMsg) {
     // Error is already shown by backend popup, but we ensure UI is reset
 };
 
+// ==============================================
+// MANAGE INSTALLED VERSIONS MODAL
+// ==============================================
+
+const manageVersionsModal = document.getElementById('manageVersionsModal');
+const openManageVersionsBtn = document.getElementById('openManageVersionsBtn');
+const closeManageVersionsModal = document.getElementById('closeManageVersionsModal');
+const closeManageVersionsBtn = document.getElementById('closeManageVersionsBtn');
+const manageVersionsList = document.getElementById('manageVersionsList');
+
+function closeManageVersions() {
+    if (manageVersionsModal) manageVersionsModal.classList.remove('show');
+}
+
+if (openManageVersionsBtn) {
+    openManageVersionsBtn.addEventListener('click', async () => {
+        if (manageVersionsModal) manageVersionsModal.classList.add('show');
+        await loadInstalledVersionsList();
+    });
+}
+
+if (closeManageVersionsModal) closeManageVersionsModal.addEventListener('click', closeManageVersions);
+if (closeManageVersionsBtn) closeManageVersionsBtn.addEventListener('click', closeManageVersions);
+if (manageVersionsModal) {
+    manageVersionsModal.addEventListener('click', (e) => {
+        if (e.target === manageVersionsModal) closeManageVersions();
+    });
+}
+
+function getVersionType(name) {
+    const lower = name.toLowerCase();
+    if (lower.startsWith('forge-') || lower.includes('-forge-')) return 'forge';
+    if (lower.startsWith('fabric-') || lower.includes('fabric-loader')) return 'fabric';
+    return 'vanilla';
+}
+
+function getVersionIcon(type) {
+    if (type === 'forge') return 'fa-hammer';
+    if (type === 'fabric') return 'fa-scroll';
+    return 'fa-cube';
+}
+
+async function loadInstalledVersionsList() {
+    if (!manageVersionsList) return;
+    manageVersionsList.innerHTML = '<div class="spinner" style="margin: 30px auto;"></div>';
+
+    try {
+        const data = await window.pywebview.api.get_available_versions();
+        const installed = data.installed || [];
+
+        if (installed.length === 0) {
+            manageVersionsList.innerHTML = `
+                <div class="no-versions-msg">
+                    <i class="fas fa-box-open"></i>
+                    <p>No versions installed yet</p>
+                </div>`;
+            return;
+        }
+
+        // Sort: forge first, then fabric, then vanilla, alphabetically within
+        installed.sort((a, b) => {
+            const ta = getVersionType(a), tb = getVersionType(b);
+            if (ta !== tb) {
+                const order = { forge: 0, fabric: 1, vanilla: 2 };
+                return order[ta] - order[tb];
+            }
+            return a.localeCompare(b, undefined, { numeric: true });
+        });
+
+        manageVersionsList.innerHTML = '';
+        for (const ver of installed) {
+            const type = getVersionType(ver);
+            const iconClass = getVersionIcon(type);
+
+            const item = document.createElement('div');
+            item.className = 'version-item';
+            item.innerHTML = `
+                <div class="version-item-icon ${type}">
+                    <i class="fas ${iconClass}"></i>
+                </div>
+                <div class="version-item-info">
+                    <div class="version-item-name">${ver}</div>
+                    <div class="version-item-type">${type}</div>
+                </div>
+                <button class="version-delete-btn" data-version="${ver}" title="Delete ${ver}">
+                    <i class="fas fa-trash-alt"></i>
+                </button>`;
+            manageVersionsList.appendChild(item);
+        }
+
+        // Attach delete handlers
+        manageVersionsList.querySelectorAll('.version-delete-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const verId = btn.dataset.version;
+                const confirmed = await window.pywebview.api.confirm(`Delete version "${verId}"?\nThis will remove all files for this version.\nThis action cannot be undone.`);
+                if (!confirmed) return;
+
+                btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
+                btn.disabled = true;
+
+                const result = await window.pywebview.api.delete_version(verId);
+                if (result.success) {
+                    // Animate removal
+                    const row = btn.closest('.version-item');
+                    row.style.transition = 'all 0.3s ease';
+                    row.style.opacity = '0';
+                    row.style.transform = 'translateX(20px)';
+                    setTimeout(() => {
+                        row.remove();
+                        // Check if list is now empty
+                        if (manageVersionsList.querySelectorAll('.version-item').length === 0) {
+                            manageVersionsList.innerHTML = `
+                                <div class="no-versions-msg">
+                                    <i class="fas fa-box-open"></i>
+                                    <p>No versions installed</p>
+                                </div>`;
+                        }
+                    }, 300);
+                    // Refresh profile version selectors
+                    await loadVersions();
+                } else {
+                    window.pywebview.api.error(result.error || 'Failed to delete version');
+                    btn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                    btn.disabled = false;
+                }
+            });
+        });
+
+    } catch (err) {
+        console.error('Error loading installed versions:', err);
+        manageVersionsList.innerHTML = `
+            <div class="no-versions-msg">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>Error loading versions</p>
+            </div>`;
+    }
+}
 
 // Open login modal
 if (loginButton) {
@@ -1733,12 +2066,8 @@ if (logoutBtn) {
     });
 }
 
-// Initialize login state when pywebview is ready
-window.addEventListener('pywebviewready', async () => {
-    // Start initializing things in parallel
-    preloadVersions(); // Don't await, let it run in background
-    await checkLoginState();
-});
+// Initialization is now handled in the main pywebviewready listener above (line ~172)
+
 
 // ==============================================
 // TOOLTIP SYSTEM
@@ -1968,25 +2297,39 @@ function updateModsSectionUI() {
     // Reset specific UI elements
     if (worldSelectorContainer) worldSelectorContainer.style.display = 'none';
     if (noModdableProfiles) noModdableProfiles.style.display = 'none';
+    updateUploadButtonState();
 
-    // Reset search
+    // Update profile tooltip per addon type
+    const profileHelpIcon = document.querySelector('#mods .input-group .help-icon');
+    if (profileHelpIcon) {
+        const tooltips = {
+            'mod': 'Select a profile with Forge or Fabric to manage mods',
+            'resourcepack': 'Select a profile to manage resource packs',
+            'datapack': 'Select a profile and a world to manage data packs',
+            'shader': 'Select a profile with shader support. Forge: requires Optifine. Fabric: requires Sodium + Iris'
+        };
+        profileHelpIcon.setAttribute('data-tooltip', tooltips[currentContentType] || tooltips['mod']);
+    }
+
+    // Initial empty search instead of 'Search mods to download'
     if (modSearchInput) {
         modSearchInput.value = '';
         modSearchInput.placeholder = `Search ${titles[currentContentType]} in Modrinth...`;
     }
+    document.getElementById('modSearchResults').style.display = 'grid';
     document.getElementById('modSearchResults').innerHTML = `
         <div class="mod-search-empty">
-            <i class="fas fa-search"></i>
-            <p>Search ${titles[currentContentType]} to download</p>
+            <span class="filter-loading">Loading top ${titles[currentContentType]}...</span>
         </div>
     `;
-    // Ensure display is correct to avoid flicker/misalignment
-    document.getElementById('modSearchResults').style.display = 'flex';
-    document.getElementById('modSearchResults').style.justifyContent = 'center';
 
     // Logic specific to type
+    const modsContainer = document.getElementById('mods');
     if (currentContentType === 'datapack') {
         if (worldSelectorContainer) worldSelectorContainer.style.display = 'block';
+        if (modsContainer) modsContainer.classList.add('is-datapack');
+    } else {
+        if (modsContainer) modsContainer.classList.remove('is-datapack');
     }
 }
 
@@ -2007,6 +2350,10 @@ async function loadModdableProfiles() {
             worldSelect.disabled = true;
         }
 
+        // Load Categories when Moddable Profiles are loaded (Section activation)
+        loadModCategories();
+
+
         if (Object.keys(targetProfiles).length === 0) {
             modsProfileSelect.innerHTML = '<option value="">No compatible profiles found</option>';
             modsProfileSelect.disabled = true;
@@ -2021,6 +2368,7 @@ async function loadModdableProfiles() {
                 document.getElementById('noModdableMessage').textContent = msg;
             }
             if (modsTabsContainer) modsTabsContainer.style.display = 'none';
+            updateUploadButtonState();
             return;
         }
 
@@ -2052,6 +2400,7 @@ async function loadModdableProfiles() {
             modsProfileSelect.selectedIndex = 0;
             currentModsProfile = modsProfileSelect.value;
             await onProfileSelected();
+            updateUploadButtonState();
         }
     } catch (error) {
         console.error('Error loading profiles:', error);
@@ -2061,10 +2410,8 @@ async function loadModdableProfiles() {
 async function onProfileSelected() {
     currentModsProfile = modsProfileSelect.value;
 
-    // Clean search
-    if (modSearchInput) modSearchInput.value = '';
-    // Reset Results
-    if (modSearchResults) modSearchResults.innerHTML = '';
+    // Trigger fresh search for new profile context (keeps results visible)
+    searchMods(1);
 
     // If Datapack, load worlds
     if (currentContentType === 'datapack') {
@@ -2072,6 +2419,7 @@ async function onProfileSelected() {
     }
 
     await loadInstalledAddons();
+    updateUploadButtonState();
 }
 
 // Renamed from loadInstalledMods
@@ -2117,6 +2465,53 @@ async function loadInstalledAddons() {
     } catch (error) {
         console.error('Error loading installed addons:', error);
         installedModsList.innerHTML = '<p style="color:red; text-align:center;">Error loading items</p>';
+    }
+}
+
+// --- Local Addon Management ---
+async function openAddonsFolder() {
+    if (!currentModsProfile) return;
+    try {
+        await window.pywebview.api.open_addons_folder(currentModsProfile, currentContentType, worldSelect?.value);
+    } catch (error) {
+        console.error('Error opening addons folder:', error);
+    }
+}
+
+// Enable/disable action buttons based on profile + world selection
+function updateUploadButtonState() {
+    const btnUpload = document.getElementById('btnImportLocalAddon');
+    const btnFolder = document.getElementById('btnOpenAddonsFolder');
+
+    let enabled = !!currentModsProfile;
+    if (enabled && currentContentType === 'datapack') {
+        enabled = !!(worldSelect && worldSelect.value);
+    }
+    if (btnUpload) btnUpload.disabled = !enabled;
+    if (btnFolder) btnFolder.disabled = !enabled;
+}
+
+async function importLocalAddonFile() {
+    if (!currentModsProfile) {
+        window.pywebview.api.error("Please select a profile first.");
+        return;
+    }
+
+    if (currentContentType === 'datapack' && (!worldSelect || !worldSelect.value)) {
+        window.pywebview.api.error("Please select a world first.");
+        return;
+    }
+
+    try {
+        const result = await window.pywebview.api.import_addon_file(currentModsProfile, currentContentType, worldSelect?.value);
+        if (result.success) {
+            window.pywebview.api.info("Addon imported successfully!");
+            await loadInstalledAddons(); // Refresh list
+        } else if (result.error) {
+            window.pywebview.api.error("Import failed: " + result.error);
+        }
+    } catch (error) {
+        console.error('Error importing addon:', error);
     }
 }
 
@@ -2166,12 +2561,12 @@ window.deleteAddon = async function (filename) {
     if (currentContentType === 'datapack') worldName = worldSelect.value;
 
     try {
-        const res = await window.pywebview.api.delete_addon(currentModsProfile, filename, currentContentType, worldName);
+        const res = await window.pywebview.api.delete_addon(filename, currentModsProfile, currentContentType, worldName);
         if (res.success) {
             await loadInstalledAddons();
         } else {
             console.error("Delete failed:", res.error);
-            window.pywebview.api.alert("Failed to delete: " + res.error);
+            window.pywebview.api.error("Failed to delete: " + (res.error || 'Unknown error'));
         }
     } catch (e) {
         console.error("Error deleting addon:", e);
@@ -2186,8 +2581,12 @@ window.toggleAddon = async function (filename, enabled) {
     if (currentContentType === 'datapack') worldName = worldSelect.value;
 
     try {
-        await window.pywebview.api.toggle_mod(currentModsProfile, filename, enabled, currentContentType, worldName);
-        await loadInstalledAddons();
+        const res = await window.pywebview.api.toggle_mod(filename, currentModsProfile, currentContentType, worldName);
+        if (res.success) {
+            await loadInstalledAddons();
+        } else {
+            window.pywebview.api.error('Error toggling addon: ' + (res.error || 'Unknown error'));
+        }
     } catch (error) {
         console.error('Error toggling addon:', error);
     }
@@ -2264,6 +2663,164 @@ function switchModTab(tabName) {
     }
 }
 
+// --- Filter state ---
+let activeCategoryFilters = {}; // 'category_name': 'include' | 'exclude'
+
+async function loadModCategories() {
+    const container = document.getElementById('modCategoriesContainer');
+    if (!container) return;
+
+    // Only load if not loaded or if we need a fresh state
+    container.innerHTML = '<span class="filter-loading">Loading categories...</span>';
+    activeCategoryFilters = {}; // Reset filters on reload
+
+    try {
+        const result = await window.pywebview.api.get_mod_categories();
+        container.innerHTML = ''; // Clear loading
+
+        if (!result || !result.success) {
+            container.innerHTML = '<span class="filter-loading">Failed to load categories</span>';
+            return;
+        }
+
+        // Filter and sort categories
+        // Typical project types to match currentContentType
+        let categoryTypeFilter = currentContentType;
+        if (currentContentType === 'mod' || currentContentType === 'datapack') categoryTypeFilter = 'mod';
+        else if (currentContentType === 'resourcepack') categoryTypeFilter = 'resourcepack';
+        else if (currentContentType === 'shader') categoryTypeFilter = 'shader';
+
+        let relevantCategories = result.categories.filter(c => c.project_type === categoryTypeFilter);
+
+        // Sort alphabetically
+        relevantCategories.sort((a, b) => a.name.localeCompare(b.name));
+
+        if (!relevantCategories || relevantCategories.length === 0) {
+            console.log("No categories found for this project type");
+            container.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 10px; color: #888;">No categories available for this type</div>';
+
+            // CRITICAL: Even if no categories, we MUST trigger the initial search
+            searchMods(1);
+            return;
+        }
+
+        // Create the two-column grid container
+        const gridContainer = document.createElement('div');
+        gridContainer.className = 'categories-list collapsed';
+        gridContainer.id = 'categoriesGrid';
+
+        relevantCategories.forEach(cat => {
+            const row = document.createElement('div');
+            row.className = 'category-row';
+            row.id = `cat-row-${cat.name}`;
+
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'category-name';
+            nameSpan.textContent = cat.name;
+
+            const btnGroup = document.createElement('div');
+            btnGroup.className = 'category-btn-group';
+
+            // Include Button
+            const btnInclude = document.createElement('button');
+            btnInclude.className = 'category-btn cat-btn-include';
+            btnInclude.innerHTML = '<i class="fas fa-check"></i>';
+            btnInclude.title = 'Include';
+            btnInclude.onclick = () => toggleCategoryFilter(cat.name, 'include', row, btnInclude, btnExclude);
+
+            // Exclude Button
+            const btnExclude = document.createElement('button');
+            btnExclude.className = 'category-btn cat-btn-exclude';
+            btnExclude.innerHTML = '<i class="fas fa-times"></i>';
+            btnExclude.title = 'Exclude';
+            btnExclude.onclick = () => toggleCategoryFilter(cat.name, 'exclude', row, btnInclude, btnExclude);
+
+            btnGroup.appendChild(btnInclude);
+            btnGroup.appendChild(btnExclude);
+
+            row.appendChild(nameSpan);
+            row.appendChild(btnGroup);
+
+            gridContainer.appendChild(row);
+        });
+
+        container.appendChild(gridContainer);
+
+        // Add expand/collapse toggle if there are many categories
+        if (relevantCategories.length > 5) {
+            const toggleBtn = document.createElement('div');
+            toggleBtn.className = 'categories-expand-toggle';
+            toggleBtn.innerHTML = `
+                <div class="toggle-line"></div>
+                <span class="toggle-text">Show More</span>
+                <i class="fas fa-chevron-down" style="font-size: 10px; color: #888; transition: transform 0.3s;"></i>
+                <div class="toggle-line"></div>
+            `;
+
+            toggleBtn.addEventListener('click', () => {
+                const isCollapsed = gridContainer.classList.contains('collapsed');
+                if (isCollapsed) {
+                    gridContainer.classList.remove('collapsed');
+                    gridContainer.classList.add('expanded');
+                    toggleBtn.querySelector('.toggle-text').textContent = 'Show Less';
+                    toggleBtn.querySelector('.fa-chevron-down').style.transform = 'rotate(180deg)';
+                } else {
+                    gridContainer.classList.remove('expanded');
+                    gridContainer.classList.add('collapsed');
+                    toggleBtn.querySelector('.toggle-text').textContent = 'Show More';
+                    toggleBtn.querySelector('.fa-chevron-down').style.transform = 'rotate(0deg)';
+                }
+            });
+
+            container.appendChild(toggleBtn);
+        }
+
+        // Trigger initial default search
+        searchMods(1);
+
+    } catch (e) {
+        console.error("Error loading mod categories", e);
+        container.innerHTML = '<span class="filter-loading">Error loading categories</span>';
+
+        // Trigger initial default search even if categories fail
+        searchMods(1);
+    }
+}
+
+function toggleCategoryFilter(catName, type, rowElement, includeBtn, excludeBtn) {
+    // Current state check
+    const currentState = activeCategoryFilters[catName];
+
+    // Reset UI
+    rowElement.classList.remove('row-include', 'row-exclude');
+    includeBtn.classList.remove('active');
+    excludeBtn.classList.remove('active');
+
+    if (currentState === type) {
+        // Toggle OFF (reset to neutral)
+        delete activeCategoryFilters[catName];
+    } else {
+        // Toggle ON
+        activeCategoryFilters[catName] = type;
+        if (type === 'include') {
+            rowElement.classList.add('row-include');
+            includeBtn.classList.add('active');
+        } else {
+            rowElement.classList.add('row-exclude');
+            excludeBtn.classList.add('active');
+        }
+    }
+}
+
+// Apply Filters Button Listener
+const applyFiltersBtn = document.getElementById('applyFiltersBtn');
+if (applyFiltersBtn) {
+    applyFiltersBtn.addEventListener('click', () => {
+        // Trigger search with current filters from page 1
+        searchMods(1);
+    });
+}
+
 // Search mods - automatic on input
 if (modSearchInput) {
     // Profile change handler (Installed Mods)
@@ -2279,6 +2836,7 @@ if (modSearchInput) {
     if (worldSelect) {
         worldSelect.addEventListener('change', () => {
             loadInstalledAddons(); // Reload list for new world
+            updateUploadButtonState();
         });
     }
 
@@ -2288,45 +2846,52 @@ if (modSearchInput) {
 
         const query = modSearchInput.value.trim();
 
-        if (query.length === 0) {
-            // Clear results if search is empty
-            modSearchResults.style.display = 'flex';
-            modSearchResults.style.justifyContent = 'center';
-            modSearchResults.style.alignItems = 'center';
-            modSearchResults.innerHTML = `
-                <div class="mod-search-empty">
-                    <i class="fas fa-search"></i>
-                    <p>Search for mods to download</p>
-                </div>
-            `;
-            return;
-        }
-
-        if (query.length >= 3) {
+        // Always search, even if empty, to show top defaults
+        if (query.length >= 0) {
             searchTimeout = setTimeout(() => {
                 modSearchResults.style.display = 'grid';
-                searchMods();
+                searchMods(1);
             }, 500);
         }
     });
 }
 
-async function searchMods() {
-    const query = modSearchInput.value.trim();
+let currentModPage = 1;
 
-    if (!query) {
-        window.pywebview.api.error('Type something to search');
-        return;
-    }
+async function searchMods(page = 1) {
+    currentModPage = page;
+    const query = modSearchInput.value.trim();
 
     // Show loading
     modSearchLoading.style.display = 'block';
     document.getElementById('modDetailTitle').textContent = 'Loading...';
     modSearchResults.innerHTML = '';
 
+    // Get Sort Options
+    const sortSelect = document.getElementById('modSortSelect');
+    const sortIndex = sortSelect ? sortSelect.value : 'relevance';
+
+    // Prepare filter arrays
+    const includedCats = [];
+    const excludedCats = [];
+    Object.keys(activeCategoryFilters).forEach(cat => {
+        if (activeCategoryFilters[cat] === 'include') includedCats.push(cat);
+        if (activeCategoryFilters[cat] === 'exclude') excludedCats.push(cat);
+    });
+
     try {
-        // Pass currentContentType as project_type
-        const result = await window.pywebview.api.search_modrinth_mods(query, null, currentContentType);
+        const queryOptions = {
+            projectType: currentContentType,
+            index: sortIndex,
+            filters: {
+                categories: includedCats.length > 0 ? includedCats : undefined,
+                excludeCategories: excludedCats.length > 0 ? excludedCats : undefined
+            },
+            offset: (currentModPage - 1) * 20
+        };
+
+        // Pass structured options
+        const result = await window.pywebview.api.search_modrinth_mods(query, queryOptions, currentContentType);
 
         modSearchLoading.style.display = 'none';
 
@@ -2362,6 +2927,34 @@ async function searchMods() {
             const card = createModCard(mod);
             modSearchResults.appendChild(card);
         });
+
+        // Update Pagination UI
+        const paginationContainer = document.getElementById('modSearchPagination');
+        const btnPrev = document.getElementById('btnPrevPage');
+        const btnNext = document.getElementById('btnNextPage');
+        const pageIndicator = document.getElementById('pageIndicator');
+
+        if (paginationContainer) {
+            paginationContainer.style.display = 'flex';
+            pageIndicator.textContent = currentModPage;
+
+            btnPrev.disabled = currentModPage === 1;
+            // Modrinth returns offset and limit usually, let's just check length for now
+            btnNext.disabled = result.results.length < 20;
+
+            // Setup listeners only once (remove old ones if necessary by replacing clone)
+            const newBtnPrev = btnPrev.cloneNode(true);
+            const newBtnNext = btnNext.cloneNode(true);
+            btnPrev.parentNode.replaceChild(newBtnPrev, btnPrev);
+            btnNext.parentNode.replaceChild(newBtnNext, btnNext);
+
+            newBtnPrev.addEventListener('click', () => {
+                if (currentModPage > 1) searchMods(currentModPage - 1);
+            });
+            newBtnNext.addEventListener('click', () => {
+                searchMods(currentModPage + 1);
+            });
+        }
     } catch (error) {
         console.error('Error searching mods:', error);
         modSearchLoading.style.display = 'none';
@@ -2395,7 +2988,9 @@ function createModCard(mod) {
         `<span class="mod-category-badge">${cat}</span>`
     ).join('');
 
-    card.onclick = () => openModDetails(mod.id);
+    card.onclick = () => openModDetails(mod.project_id);
+    // Use project_id because Modrinth search returns project_id, not id
+    const modId = mod.project_id;
 
     card.innerHTML = `
         <div class="mod-card-header">
@@ -2416,7 +3011,7 @@ function createModCard(mod) {
             ${categories}
         </div>
         <div class="mod-card-actions">
-            <button id="btn-mod-${mod.id}" class="btn-primary" onclick="event.stopPropagation(); downloadModFromCard('${mod.id}', '${mod.slug}')">
+            <button id="btn-mod-${modId}" class="btn-primary" onclick="event.stopPropagation(); downloadModFromCard('${modId}', '${mod.slug}')">
                 <i class="fas fa-download"></i> Download
             </button>
         </div>
@@ -2478,7 +3073,13 @@ window.openModDetails = async function (projectId) {
         const date = new Date(details.updated);
         document.getElementById('modDetailUpdated').textContent = date.toLocaleDateString();
 
-        document.getElementById('modDetailLicense').textContent = details.license;
+        let licenseText = 'Unknown';
+        if (details.license) {
+            if (typeof details.license === 'string') licenseText = details.license;
+            else if (details.license.name) licenseText = details.license.name;
+            else if (details.license.id) licenseText = details.license.id;
+        }
+        document.getElementById('modDetailLicense').textContent = licenseText;
 
         // Categories
         const catsHtml = details.categories.map(cat =>
@@ -2707,8 +3308,9 @@ window.downloadModFromCard = async function (projectId, slug) {
         if (!downloadResult.success) {
             window.onModDownloadError(projectId, downloadResult.error);
         } else {
-            // Success means it started
-            console.log("Download started for", projectId);
+            // Success
+            console.log("Download finished for", projectId);
+            window.onModDownloadComplete(projectId, version.filename);
         }
 
     } catch (error) {
@@ -2806,16 +3408,9 @@ window.toggleModEnabled = async function (filename, enabled) {
 // ============================================
 // DISABLE BROWSER SHORTCUTS (unless dev mode is on)
 // ============================================
-document.addEventListener('keydown', async function (e) {
-    // Check if developer mode is enabled
-    let devMode = false;
-    try {
-        const userData = await window.pywebview.api.get_user_json();
-        devMode = userData.dev_mode || false;
-    } catch (err) {
-        // If we can't check, assume dev mode is off
-        devMode = false;
-    }
+document.addEventListener('keydown', function (e) {
+    // Check if developer mode is enabled synchronously
+    const devMode = window.isDevMode === true;
 
     // If developer mode is enabled, allow all shortcuts
     if (devMode) {
@@ -2823,6 +3418,11 @@ document.addEventListener('keydown', async function (e) {
     }
 
     // Otherwise, block developer shortcuts
+    // Tab - Block traversing buttons
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        return false;
+    }
     // F5 - Refresh
     if (e.key === 'F5') {
         e.preventDefault();
@@ -2878,6 +3478,23 @@ document.addEventListener('keydown', async function (e) {
     // }
 });
 
+// Intercept all <a> tag clicks to open in external browser
+document.addEventListener('click', function (e) {
+    const target = e.target.closest('a');
+    if (target && target.href) {
+        const url = target.href;
+        // Check if it's an external link (http/https)
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+            e.preventDefault();
+            if (window.pywebview && window.pywebview.api && window.pywebview.api.open_url) {
+                window.pywebview.api.open_url(url);
+            } else {
+                window.open(url, '_blank');
+            }
+        }
+    }
+});
+
 // Disable right-click context menu
 document.addEventListener('contextmenu', function (e) {
     e.preventDefault();
@@ -2904,13 +3521,8 @@ window.deleteModFile = async function (filename) {
     }
 };
 
-// Load moddable profiles when entering mods section
-window.addEventListener('pywebviewready', async () => {
-    // Wait a bit for other initializations
-    setTimeout(async () => {
-        await loadModdableProfiles();
-    }, 500);
-});
+// loadModdableProfiles is called when showSection('mods', type) is triggered
+
 
 // --- Starfield Animation (Canvas) ---
 const canvas = document.getElementById('starfield');
@@ -3034,13 +3646,6 @@ if (remindLaterBtn) {
         if (reviewReminderModal) reviewReminderModal.classList.remove('show');
     });
 }
-
-// Add check to the startup sequence
-window.addEventListener('pywebviewready', () => {
-    // Check immediately on startup
-    checkReviewReminder();
-});
-
 
 
 // Function to render head image in user badge
