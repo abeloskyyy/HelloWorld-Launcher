@@ -125,7 +125,7 @@ Yes, via offline mode.
 
 ## Development
 
-* Main Language: Python
+* Main Language: NodeJS (JavaScript)
 * Compatible with Windows
 * Modular architecture to easily add features
 
