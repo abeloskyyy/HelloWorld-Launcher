@@ -60,7 +60,7 @@ HelloWorld Launcher is a launcher for Minecraft: Java Edition. It is open source
 1. Download the latest version from the **Releases** section.
 2. Make sure you have **Java 17+** installed.
 3. Run the launcher file.
-> IF A VIRUS WARNING APPEARS, DON'T WORRY, IT IS BECAUSE THE APP IS NOT SIGNED, AS IT COSTS MONEY.
+> ⚠️ **Windows SmartScreen warning?** This is a false positive — the app is not digitally signed (certificates cost money). The file is 100% safe. [See how to bypass it ↓](#why-does-windows-show-a-virus-warning)
 4. Log in or use offline mode.
 
 > No additional programs are installed and the system is not modified.
@@ -100,8 +100,14 @@ HelloWorld Launcher is a launcher for Minecraft: Java Edition. It is open source
 
 ## FAQ
 
-**Why does it say the launcher has a virus?**
-Because the app is not signed, as code signing certificates cost money.
+### Why does Windows show a virus warning?
+This is a **false positive** caused by Windows SmartScreen. The launcher is not digitally signed because code signing certificates cost money (~$200/year). The app contains no malware — you can verify it yourself on [VirusTotal](https://www.virustotal.com).
+
+To run it anyway:
+1. Click **"More info"** on the SmartScreen popup.
+2. Click **"Run anyway"**.
+
+> If Windows Defender blocks the file, go to **Windows Security → Virus & threat protection → Protection history**, find the blocked item, and click **"Allow"**.
 
 **Is it legal?**
 The launcher is legal. Using Minecraft utilizes a copy of the game in accordance with Mojang/Microsoft terms.
