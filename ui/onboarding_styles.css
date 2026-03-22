@@ -37,7 +37,9 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    height: 850px;
+    height: 90vh;
+    max-height: 850px;
+    min-height: 480px;
 }
 
 /* Header / Progress */

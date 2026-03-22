@@ -51,7 +51,7 @@ launcher.on('data', (e) => {
   mainWindow && mainWindow.webContents.send('info-message', e);
 })
 launcher.on('progress', (e) => {
-  // console.log("[Launcher Progress]", e); // Too verbose
+  console.log("[Launcher Progress]", e);
   mainWindow && mainWindow.webContents.send('download-progress', e);
 })
 launcher.on('close', (e) => {
@@ -177,7 +177,9 @@ const createWindow = () => {
     },
     backgroundColor: '#1a1a1a',
     show: false,
-    frame: true
+    frame: true,
+    minWidth: 1000,
+    minHeight: 650
   })
 
   win.maximize()
@@ -1640,7 +1642,33 @@ async function refreshMicrosoftSession(userData) {
         }
         throw new Error("Profile not found after refresh");
     } catch (err) {
-        console.warn("[Auth] Failed to auto-refresh token. Using existing tokens in cache.", err.message);
+        console.warn("[Auth] Failed to auto-refresh token.", err.message);
+        
+        // If it's a definitive auth error (not network), clear the tokens
+        const isAuthError = err.message && (
+            err.message.includes("invalid_grant") || 
+            err.message.includes("expired") || 
+            err.message.includes("Profile not found")
+        );
+
+        if (isAuthError) {
+            console.log("[Auth] Definitive auth failure. Clearing cached credentials.");
+            userData.mc_token = "";
+            userData.msmc_auth = "";
+            userData.uuid = "";
+            saveUserData(userData);
+            
+            return {
+                success: false,
+                expired: true,
+                error: err.message,
+                access_token: "null",
+                client_token: "null",
+                uuid: "null",
+                name: userData.username || "Steve"
+            };
+        }
+
         return {
             success: false,
             error: err.message,
@@ -1665,10 +1693,11 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force }) => {
 
         // Robust version extraction
         let mcVersion = profile.version;
-        if (isForge || isFabric) {
+        if (isFabric && profile.version.startsWith('fabric-loader-')) {
             const parts = profile.version.split('-');
             // Fabric format: fabric-loader-LOADER-MCVERSION
-            // Forge format: forge-MCVERSION-FORGEVERSION or MCVERSION-forge-FORGEVERSION
+            if (parts.length >= 4) mcVersion = parts[3];
+        } else if (isForge || isFabric) {
             const versionMatch = profile.version.match(/(\d+\.\d+(\.\d+)?)/);
             if (versionMatch) mcVersion = versionMatch[0];
         }
@@ -1678,6 +1707,10 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force }) => {
 
         // 1. Prepare Auth
         const auth = await refreshMicrosoftSession(userData);
+        if (userData.account_type === 'microsoft' && !auth.success && auth.expired) {
+            return { status: 'error', error: "Your session has expired. Please log in again." };
+        }
+
         if (nickname && userData.account_type === 'offline') {
             auth.name = nickname;
         }

@@ -1,6 +1,6 @@
 {
   "name": "helloworld-launcher",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "HelloWorld Launcher",
   "main": "main.js",
   "scripts": {

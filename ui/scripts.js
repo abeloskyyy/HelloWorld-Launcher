@@ -314,7 +314,8 @@ window.addEventListener('pywebviewready', async () => {
                 } else if (res.expired) {
                     console.warn("[Init] Session expired");
                     window.pywebview.api.info("Your Microsoft session has expired. Please log in again.");
-                    // Fallback: stay as-is or show login button if critical
+                    // Trigger logout to clear UI and update badges
+                    if (window.logout) await window.logout();
                 }
             } catch (err) {
                 console.error("[Init] Session refresh error:", err);
@@ -560,8 +561,11 @@ async function launchGame() {
 
 // Global listener for info messages from main.js (launcher events)
 window.addEventListener('info-message', (e) => {
-    if (e.detail === "Game Closed" || String(e.detail).includes("Game Crashed") || String(e.detail).includes("has exited")) {
+    const msg = String(e.detail);
+    if (msg === "Game Closed" || msg.includes("Game Crashed") || msg.includes("has exited")) {
         onMinecraftClosed();
+    } else if (msg.includes("Sound engine started") || msg.includes("OpenAL initialized")) {
+        onMinecraftReady();
     }
 });
 
@@ -2051,18 +2055,24 @@ document.addEventListener('click', (e) => {
     }
 });
 
-// Logout
-if (logoutBtn) {
-    logoutBtn.addEventListener('click', async () => {
-        try {
-            await window.pywebview.api.logout_user();
-            nickname.value = '';
-            showLoginButton();
-            if (userBadge) userBadge.classList.remove('active');
-        } catch (error) {
-            console.error('Error logging out:', error);
+// Logout function
+window.logout = async function () {
+    try {
+        await window.pywebview.api.logout_user();
+        if (typeof nickname !== 'undefined' && nickname) nickname.value = '';
+        showLoginButton();
+        if (typeof userBadge !== 'undefined' && userBadge) userBadge.classList.remove('active');
+    } catch (error) {
+        console.error('Error logging out:', error);
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.error) {
             window.pywebview.api.error('Error logging out');
         }
+    }
+};
+
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+        await window.logout();
     });
 }
 

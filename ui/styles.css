@@ -860,6 +860,7 @@ select:disabled {
     z-index: 1000;
     display: none;
     overflow-y: auto;
+    padding: 20px 0;
 }
 
 .modal.show {
@@ -867,11 +868,12 @@ select:disabled {
 }
 
 .modal-content {
-    margin-top: 60px;
+    margin: 5vh auto;
     background: rgba(16, 20, 29, 0.95);
     padding: 30px;
     border-radius: 16px;
-    width: 450px;
+    width: 90%;
+    max-width: 450px;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
     border: 1px solid rgba(79, 172, 254, 0.3);
     backdrop-filter: blur(10px);
