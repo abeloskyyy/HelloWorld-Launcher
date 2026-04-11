@@ -1,6 +1,6 @@
 {
   "name": "helloworld-launcher",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "HelloWorld Launcher",
   "main": "main.js",
   "scripts": {
@@ -75,6 +75,7 @@
     "electron-updater": "^6.7.3",
     "form-data": "^4.0.5",
     "fs-extra": "^11.3.3",
+    "graceful-fs": "^4.2.11",
     "minecraft-launcher-core": "^3.18.2",
     "msmc": "^5.0.5",
     "uuid": "^13.0.0"

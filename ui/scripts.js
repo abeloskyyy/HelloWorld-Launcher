@@ -55,22 +55,6 @@ const versionCache = {
     forge: null
 };
 
-// Función global para actualizar el progreso de instalación
-// Función global para actualizar el progreso de instalación
-window.updateInstallProgress = function (version, percentage, status) {
-    const progressContainer = document.getElementById('downloadProgressContainer');
-    const progressBar = document.getElementById('downloadProgressBarFill');
-    const progressText = document.getElementById('downloadProgressText');
-    const progressPercentage = document.getElementById('downloadProgressPercentage');
-
-    if (progressContainer && progressBar && progressText && progressPercentage) {
-        progressContainer.style.display = 'block';
-        progressBar.style.width = percentage + '%';
-        progressText.textContent = status;
-        progressPercentage.textContent = Math.round(percentage) + '%';
-    }
-};
-
 // Helper to resolve secure image sources
 window.resolveImageSource = function (src) {
     if (!src) return '';
@@ -88,24 +72,6 @@ window.resolveImageSource = function (src) {
         }
     }
     return normalized;
-};
-
-// Global function called when download completes
-window.onDownloadComplete = async function (version) {
-    console.log(`Download completed: ${version}`);
-    isDownloading = false;
-    endDownloadState();
-
-    // Refresh version lists
-    await loadVersions();
-
-    // Hide progress after a delay
-    setTimeout(() => {
-        const progressContainer = document.getElementById('downloadProgressContainer');
-        if (progressContainer) {
-            progressContainer.style.display = 'none';
-        }
-    }, 2000);
 };
 
 // Manage download state
@@ -1682,8 +1648,9 @@ async function startVersionDownload() {
         if (currentLoaderType === 'fabric') {
             versionIdToInstall = `fabric-${mcVersion}-${loaderVersion}`;
         } else if (currentLoaderType === 'forge') {
-            // For Forge, the ID is the forge version string (e.g. "1.20.1-47.1.0")
-            versionIdToInstall = `forge-${loaderVersion}`;
+            // Format: forge-{mcVersion}-{loaderVersion} e.g. "forge-1.20.1-47.4.18"
+            // mcVersion comes from the MC version dropdown, loaderVersion from the loader dropdown
+            versionIdToInstall = `forge-${mcVersion}-${loaderVersion}`;
         }
     }
 
@@ -1736,7 +1703,31 @@ function closeDownloadProgress() {
     });
 }
 
-// Override global updateInstallProgress to target the new modal and the global popup
+// Function to update background download progress (mini floating popup only)
+window.updateBackgroundDownloadProgress = function (version, MathPercentage, status, data) {
+    const percentage = MathPercentage || 0;
+
+    // Update Global Download Tracker Popup (background downloads only)
+    const globalPopup = document.getElementById('globalDownloadPopup');
+    if (globalPopup) {
+        // Always show for background downloads
+        globalPopup.classList.add('visible');
+
+        const gdpTitle = document.getElementById('gdpTitle');
+        const gdpProgressBar = document.getElementById('gdpProgressBar');
+        const gdpTask = document.getElementById('gdpTask');
+        const gdpPercent = document.getElementById('gdpPercent');
+
+        if (gdpTitle) gdpTitle.textContent = `Downloading ${version}...`;
+        if (gdpProgressBar) gdpProgressBar.style.width = `${percentage}%`;
+        if (gdpTask) gdpTask.textContent = status || 'Downloading...';
+        if (gdpPercent) gdpPercent.textContent = `${percentage}%`;
+    }
+
+    console.log(`[Background] Progress updated: ${percentage}% - ${status}`);
+};
+
+// Override global updateInstallProgress to target only the modal (manual downloads only)
 window.updateInstallProgress = function (version, MathPercentage, status, data) {
     const percentage = MathPercentage || 0;
 
@@ -1752,12 +1743,10 @@ window.updateInstallProgress = function (version, MathPercentage, status, data) 
         if (progressPercentage) progressPercentage.textContent = `${percentage}%`;
     }
 
-    // Update Download Modal Progress (only if it's not a background update or if modal is open)
+    // Update Download Modal Progress (manual downloads only)
     const dlProgressContainer = document.getElementById('downloadProgressContainer');
     if (dlProgressContainer) {
-        if (!data || !data.isBackgroundUpdate) {
-            dlProgressContainer.style.display = 'block';
-        }
+        dlProgressContainer.style.display = 'block';
 
         const dlProgressBar = document.getElementById('downloadProgressBarFill');
         const dlProgressText = document.getElementById('downloadProgressText');
@@ -1780,28 +1769,7 @@ window.updateInstallProgress = function (version, MathPercentage, status, data) 
         }
     }
 
-    // Update Global Download Tracker Popup (always update, show if background update or explicitly needed)
-    const globalPopup = document.getElementById('globalDownloadPopup');
-    if (globalPopup) {
-        // Show the global popup if it's a background update or no modal is active
-        if ((data && data.isBackgroundUpdate) || (downloadModal && !downloadModal.classList.contains('show'))) {
-            globalPopup.classList.add('visible');
-        }
-
-        const gdpTitle = document.getElementById('gdpTitle');
-        const gdpProgressBar = document.getElementById('gdpProgressBar');
-        const gdpTask = document.getElementById('gdpTask');
-        const gdpPercent = document.getElementById('gdpPercent');
-
-        if (gdpTitle) gdpTitle.textContent = `Downloading ${version}...`;
-        if (gdpProgressBar) gdpProgressBar.style.width = `${percentage}%`;
-        if (gdpTask) gdpTask.textContent = status || 'Downloading...';
-        if (gdpPercent) gdpPercent.textContent = `${percentage}%`;
-    }
-
-    if (!data || !data.isBackgroundUpdate) {
-        console.log(`Progress updated: ${percentage}% - ${status}`);
-    }
+    console.log(`[Manual] Progress updated: ${percentage}% - ${status}`);
 };
 
 
@@ -3223,8 +3191,20 @@ window.downloadModFromCard = async function (projectId, slug) {
             return;
         }
 
-        // Determine loader type
-        const loader = profile.type === 'forge' ? 'forge' : 'fabric';
+        // Determine loader type — check both profile.type and the version string.
+        // Forge installer creates versions like "1.20.1-forge-47.4.10" (no profile.type set),
+        // while our internal ID is "forge-1.20.1-47.4.10". Both must be detected as Forge.
+        const versionStr = (profile.version || '').toLowerCase();
+        const isForgeProfile = profile.type === 'forge' ||
+            versionStr.startsWith('forge-') ||
+            versionStr.includes('-forge-') ||
+            versionStr.includes('forge');
+        const isFabricProfile = !isForgeProfile && (
+            profile.type === 'fabric' ||
+            versionStr.startsWith('fabric-') ||
+            versionStr.includes('fabric-loader')
+        );
+        const loader = isForgeProfile ? 'forge' : isFabricProfile ? 'fabric' : 'forge';
 
         // Extract game version from profile version
         let gameVersion = profile.version;

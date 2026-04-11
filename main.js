@@ -1,5 +1,12 @@
 const { app, BrowserWindow, ipcMain, Menu, shell, dialog, safeStorage } = require('electron')
 const path = require('path')
+
+// Use graceful-fs to handle EMFILE (too many open files) errors automatically
+// Must patch BEFORE loading fs-extra so it uses the patched fs
+const gracefulFs = require('graceful-fs')
+gracefulFs.gracefulify(require('fs'))
+
+// Now load fs-extra which will use the patched fs
 const fs = require('fs-extra')
 const { Client } = require('minecraft-launcher-core')
 const msmc = require('msmc')
@@ -1123,12 +1130,12 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
 
     let forgeInstallerPath = null;
     if (versionType === 'forge' && loaderVersion) {
-      // Forge: Download the installer JAR to a permanent location
+      // Forge: Download the installer JAR to the .HWLauncher/temp location
       // MCLC requires the installer JAR for *every* launch for modern Forge.
       const forgeFileName = `${version_id}-installer.jar`;
-      const forgeDir = path.join(mcDir, 'versions', version_id);
-      fs.ensureDirSync(forgeDir);
-      forgeInstallerPath = path.join(forgeDir, forgeFileName);
+      const tempForgeDir = path.join(mcDir, '.HWLauncher', 'temp');
+      fs.ensureDirSync(tempForgeDir);
+      forgeInstallerPath = path.join(tempForgeDir, forgeFileName);
 
       if (!fs.existsSync(forgeInstallerPath)) {
         if (onProgress) onProgress({
@@ -1154,70 +1161,32 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
     const { Client } = require('minecraft-launcher-core');
     const downloadLauncher = new Client();
     downloadInfo.launcher = downloadLauncher;
-
-    let progressData = { current: 0, total: 100 };
-
     let downloadProgress = 0;
-    let lastProgressUpdate = Date.now();
 
-    // Set up progress listeners
     downloadLauncher.on('progress', (progress) => {
-      if (downloadInfo.cancelled) {
-        console.log('[installVersionLogic] Download cancelled, ignoring progress');
-        return;
-      }
-
-      // Update percentage accurately based on MCLC's per-file progress when available
-      let percentage = 0;
-      let total = progress.total || 2500;
-      
-      if (progress.total) {
-        percentage = Math.round((progress.task / progress.total) * 100);
-      } else {
-        // Fallback or incremental estimation
-        downloadProgress++;
-        percentage = Math.min(95, Math.round((downloadProgress / 2500) * 100));
-        total = 2500;
-      }
-
-      // Determine task description base on progress type
+      if (downloadInfo.cancelled) return;
+      let percentage = progress.total
+        ? Math.round((progress.task / progress.total) * 100)
+        : Math.min(95, Math.round((++downloadProgress / 2500) * 100));
       let taskDescription = 'Downloading...';
-      if (progress.type === 'assets') {
-          taskDescription = 'Downloading assets...';
-      } else if (progress.type === 'classes') {
-          taskDescription = 'Downloading libraries...';
-      } else if (progress.type === 'natives') {
-          taskDescription = 'Downloading natives...';
-      }
-
-      console.log(`[installVersionLogic] Progress: ${progress.type} - ${percentage}% (${progress.task}/${progress.total})`);
-
-      // Send progress update immediately
+      if (progress.type === 'assets') taskDescription = 'Downloading assets...';
+      else if (progress.type === 'classes') taskDescription = 'Downloading libraries...';
+      else if (progress.type === 'natives') taskDescription = 'Downloading natives...';
+      
+      console.log(`[installVersionLogic] Progress: ${progress.type} - ${percentage}%`);
       if (onProgress) onProgress({
-        type: 'version-install',
-        task: taskDescription,
-        version: version_id,
+        type: 'version-install', task: taskDescription, version: version_id,
         current: progress.task || downloadProgress,
-        total: total,
-        percentage: percentage
+        total: progress.total || 2500, percentage
       });
     });
 
-    downloadLauncher.on('debug', (msg) => {
-      console.log('[Download Debug]', msg);
-    });
-
-    downloadLauncher.on('data', (msg) => {
-      console.log('[Download Data]', msg);
-    });
-
-    // Add error listener to catch async download errors
+    downloadLauncher.on('debug', (msg) => console.log('[Download Debug]', msg));
+    downloadLauncher.on('data',  (msg) => console.log('[Download Data]', msg));
     downloadLauncher.on('download-status', (e) => {
       if (e.type === 'error') {
         console.error('[Download Error]', e);
-        if (!downloadInfo.cancelled) {
-          if (onMessage) onMessage(`Download Error: ${e.message || 'Unknown error'}`);
-        }
+        if (!downloadInfo.cancelled && onMessage) onMessage(`Download Error: ${e.message || 'Unknown error'}`);
       }
     });
 
@@ -1227,44 +1196,24 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       fabricJsonPathVar = path.join(mcDir, 'versions', fabricVersionName, `${fabricVersionName}.json`);
     }
 
+    // Set the version type correctly. MCLC needs 'release' for the base vanilla assets part!
+    const resolvedVersionType = versionType === 'forge' ? 'release' : versionType;
+
     const launchOptions = {
-      authorization: {
-        access_token: 'null',
-        client_token: 'null',
-        uuid: 'null',
-        name: 'Installer',
-        user_properties: {}
-      },
+      authorization: { access_token: 'null', client_token: 'null', uuid: 'null', name: 'Installer', user_properties: {} },
       root: mcDir,
-      version: {
-        number: mcVersion,
-        type: versionType
-      },
-      memory: {
-        max: '512M',
-        min: '256M'
-      },
+      version: { number: mcVersion, type: resolvedVersionType },
+      memory: { max: '512M', min: '256M' },
       customArgs: []
     };
 
     if (versionType === 'fabric') {
       launchOptions.version.custom = customVersionId;
-      if (fabricJsonPathVar) {
-        launchOptions.overrides = { versionJson: fabricJsonPathVar };
-      }
+      if (fabricJsonPathVar) launchOptions.overrides = { versionJson: fabricJsonPathVar };
     }
 
-    if (forgeInstallerPath) {
-      launchOptions.forge = forgeInstallerPath;
-      // CRITICAL MCLC FIX: Delete the cached forge wrapper JSON so it is forced to regenerate from *this* specific installer.
-      // Otherwise logic in MCLC will reuse the same cached Forge version for all 1.21.11 profiles.
-      const mclcForgeCache = path.join(mcDir, 'forge', mcVersion);
-      if (fs.existsSync(mclcForgeCache)) {
-        fs.rmSync(mclcForgeCache, { recursive: true, force: true });
-      }
-    }
+    // We only use MCLC to download the base vanilla assets/libraries.
 
-    // Auto Java Runtime Download for installer
     try {
       const jPath = await javaRuntime.getJavaPath(mcVersion, (progressObj) => {
         if (onProgress) onProgress(progressObj);
@@ -1274,27 +1223,24 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
         console.log(`[installVersionLogic] Using auto-downloaded Java: ${jPath}`);
       }
     } catch (javaErr) {
-      console.warn(`[installVersionLogic] Java runtime resolution failed: ${javaErr.message}. Falling back to system java.`);
+      console.warn(`[installVersionLogic] Java runtime resolution failed: ${javaErr.message}`);
     }
 
     console.log('[installVersionLogic] Starting download with options:', launchOptions);
 
-    // Check if cancelled before launching
     if (downloadInfo.cancelled) {
-      console.log('[installVersionLogic] Download cancelled before launch');
       activeDownloads.delete(version_id);
       if (onDownloadCancelled) onDownloadCancelled({ version: version_id });
       return { success: false, message: 'Download cancelled', cancelled: true };
     }
 
-    // Launch to trigger download, then immediately kill the process
     let gameProcess;
     try {
+      // For Forge, MCLC will automatically extract and run the Forge wrapper during the launch resolution
       gameProcess = await downloadLauncher.launch(launchOptions);
       downloadInfo.gameProcess = gameProcess;
     } catch (err) {
       if (downloadInfo.cancelled) {
-        console.log('[installVersionLogic] Download cancelled during launch');
         activeDownloads.delete(version_id);
         if (onDownloadCancelled) onDownloadCancelled({ version: version_id });
         return { success: false, message: 'Download cancelled', cancelled: true };
@@ -1302,25 +1248,18 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       throw err;
     }
 
-    // Check if cancelled during launch
     if (downloadInfo.cancelled) {
-      console.log('[installVersionLogic] Download cancelled during launch');
       if (gameProcess && gameProcess.pid) {
-        try {
-          process.kill(gameProcess.pid, 'SIGKILL');
-        } catch (err) { }
+        try { process.kill(gameProcess.pid, 'SIGKILL'); } catch (err) {}
       }
       activeDownloads.delete(version_id);
       if (onDownloadCancelled) onDownloadCancelled({ version: version_id });
       return { success: false, message: 'Download cancelled', cancelled: true };
     }
 
-    // Kill the game process immediately after it starts
-    // The download will have completed by the time the process starts
+    // Kill game process immediately — download and forge wrapper processing completed!
     if (gameProcess && gameProcess.pid) {
       console.log('[installVersionLogic] Download complete, terminating game process:', gameProcess.pid);
-
-      // Give it a moment to fully start before killing
       setTimeout(() => {
         try {
           if (!downloadInfo.cancelled) {
@@ -1333,35 +1272,71 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       }, 1000);
     }
 
-    // Wait for the close event
     await new Promise((resolve) => {
       downloadLauncher.on('close', () => {
         console.log('[installVersionLogic] Download process closed');
         resolve();
       });
-
-      // Fallback timeout
       setTimeout(resolve, 5000);
     });
 
-    // CRITICAL: Check if cancelled one last time before declaring success
-    // This prevents the race condition where cancel happens during the process close phase
+    if (versionType === 'forge' && forgeInstallerPath) {
+      console.log('[installVersionLogic] Forge Phase 2: Running Forge installer permanently...');
+      if (onProgress) onProgress({
+        type: 'version-install', task: 'Running Forge installer (this creates the versions/ folder)...',
+        version: version_id, current: 50, total: 100, percentage: 50
+      });
+
+      // Use the resolved Java path from MCLC logic if available, else 'java'
+      const jPath = launchOptions.javaPath || 'java';
+
+      await new Promise((resolve, reject) => {
+        const { spawn } = require('child_process');
+        const installerProcess = spawn(jPath, [
+          '-jar', forgeInstallerPath,
+          '--installClient'
+        ], { cwd: mcDir, stdio: ['ignore', 'pipe', 'pipe'] });
+
+        downloadInfo.gameProcess = installerProcess;
+
+        installerProcess.stdout?.on('data', (data) => {
+          const msg = data.toString().trim();
+          if (msg) console.log('[Forge Installer]', msg);
+        });
+        installerProcess.stderr?.on('data', (data) => {
+          const msg = data.toString().trim();
+          if (msg) console.log('[Forge Installer ERR]', msg);
+        });
+
+        installerProcess.on('close', (code) => {
+          console.log(`[Forge Installer] Exited with code ${code}`);
+          if (downloadInfo.cancelled) { resolve(); return; }
+          if (code === 0) {
+            try { fs.removeSync(path.dirname(forgeInstallerPath)); } catch(e){} // Cleanup temp folder
+            resolve();
+          } else {
+            reject(new Error(`Forge installer failed with exit code ${code}`));
+          }
+        });
+
+        installerProcess.on('error', (err) => {
+          console.error('[Forge Installer] Spawn error:', err);
+          reject(new Error(`Could not run Forge installer: ${err.message}`));
+        });
+      });
+    }
+
+    // ─── Shared completion logic ──────────────────────────────────────────────
     if (downloadInfo.cancelled || !activeDownloads.has(version_id)) {
-      console.log('[installVersionLogic] Download was cancelled during completion phase. Suppressing success message.');
+      console.log('[installVersionLogic] Download was cancelled during completion phase.');
       return { success: false, message: 'Download cancelled', cancelled: true };
     }
 
-    // Send completion message
     if (onProgress) onProgress({
-      type: 'version-install',
-      task: 'Installation complete!',
-      version: version_id,
-      current: 100,
-      total: 100,
-      percentage: 100
+      type: 'version-install', task: 'Installation complete!',
+      version: version_id, current: 100, total: 100, percentage: 100
     });
 
-    // Notify completion
     setTimeout(() => {
       if (onDownloadComplete) onDownloadComplete({ version: version_id });
     }, 500);
@@ -1377,6 +1352,7 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
     return { success: false, message: error.message };
   }
 }
+
 
 ipcMain.handle('install-version', async (e, version_id) => {
   return await installVersionLogic(
@@ -1727,7 +1703,9 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force }) => {
             root: actualMcDir,
             version: {
                 number: mcVersion,
-                type: isForge ? 'forge' : isFabric ? 'fabric' : 'release'
+                // MCLC requires type='release' for base MC version resolution.
+                // Forge/Fabric specifics are handled via options.forge and options.version.custom.
+                type: 'release'
             },
             overrides: {
                 gameDirectory: profile.directory || actualMcDir
@@ -1742,14 +1720,6 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force }) => {
             options.version.custom = profile.version;
         }
 
-        if (isForge) {
-            const forgeDir = path.join(actualMcDir, 'versions', profile.version);
-            const forgeInstaller = path.join(forgeDir, `${profile.version}-installer.jar`);
-            if (fs.existsSync(forgeInstaller)) {
-                options.forge = forgeInstaller;
-            }
-        }
-
         if (profile.jvm_args) {
             const maxMatch = profile.jvm_args.match(/-Xmx(\d+[GgMm])/);
             if (maxMatch) options.memory.max = maxMatch[1];
@@ -1758,10 +1728,33 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force }) => {
             
             // Pass other JVM args if they exist
             const otherArgs = profile.jvm_args.split(' ').filter(arg => !arg.startsWith('-Xmx') && !arg.startsWith('-Xms'));
+            if (!options.customArgs) options.customArgs = [];
             if (otherArgs.length > 0) {
-                options.customArgs = otherArgs;
+                options.customArgs = [...options.customArgs, ...otherArgs];
             }
         }
+
+        // 2.5. Modern Java Fixes (Reflection access)
+        // Required for Forge/Fabric on Java 16+
+        const modernJavaArgs = [
+            '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.lang.invoke=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.lang.reflect=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.io=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.net=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.nio=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.util=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.util.concurrent=ALL-UNNAMED',
+            '--add-opens', 'java.base/java.util.concurrent.atomic=ALL-UNNAMED',
+            '--add-opens', 'java.base/sun.nio.ch=ALL-UNNAMED',
+            '--add-opens', 'java.base/sun.nio.cs=ALL-UNNAMED',
+            '--add-opens', 'java.base/sun.security.action=ALL-UNNAMED',
+            '--add-opens', 'java.base/sun.util.calendar=ALL-UNNAMED',
+            '--add-opens', 'java.security.jgss/sun.security.krb5=ALL-UNNAMED'
+        ];
+
+        if (!options.customArgs) options.customArgs = [];
+        options.customArgs = [...options.customArgs, ...modernJavaArgs];
 
         // 3. Java Runtime
         try {
@@ -1828,8 +1821,20 @@ app.whenReady().then(() => {
     const destDir = paths.getProfilesImgDir();
     if (fs.existsSync(srcDir)) {
       fs.ensureDirSync(destDir);
-      fs.copySync(srcDir, destDir, { overwrite: false });
-      console.log("Default profile images copied to:", destDir);
+      const files = fs.readdirSync(srcDir);
+      let copiedCount = 0;
+      for (const file of files) {
+        if (!file.endsWith('.png')) continue;
+        const srcFile = path.join(srcDir, file);
+        const destFile = path.join(destDir, file);
+        if (!fs.existsSync(destFile)) {
+          fs.copySync(srcFile, destFile);
+          copiedCount++;
+        }
+      }
+      if (copiedCount > 0) {
+        console.log(`Default profile images copied (${copiedCount} new files) to:`, destDir);
+      }
     }
   } catch (e) {
     console.error("Error copying default profile images:", e);

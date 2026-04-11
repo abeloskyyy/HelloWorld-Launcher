@@ -1,5 +1,7 @@
-
 // ===== Download Event Listeners =====
+// Track active background downloads separately
+window.activeBackgroundDownloads = window.activeBackgroundDownloads || new Set();
+
 // Listen for download progress updates
 window.addEventListener('download-progress', (event) => {
     const data = event.detail;
@@ -8,13 +10,29 @@ window.addEventListener('download-progress', (event) => {
         // Update current downloading version
         currentDownloadingVersion = data.version;
 
-        // Update progress bar
-        window.updateInstallProgress(
-            data.version,
-            data.percentage || 0,
-            data.task || 'Downloading...',
-            data
-        );
+        // Track background downloads
+        if (data.isBackgroundUpdate) {
+            window.activeBackgroundDownloads.add(data.version);
+        }
+
+        // Route to appropriate viewer based on download type
+        if (data.isBackgroundUpdate) {
+            // Background downloads only update the mini floating viewer
+            window.updateBackgroundDownloadProgress(
+                data.version,
+                data.percentage || 0,
+                data.task || 'Downloading...',
+                data
+            );
+        } else {
+            // Manual downloads only update the modal progress viewer
+            window.updateInstallProgress(
+                data.version,
+                data.percentage || 0,
+                data.task || 'Downloading...',
+                data
+            );
+        }
     }
 });
 
@@ -23,19 +41,34 @@ window.addEventListener('download-complete', (event) => {
     const data = event.detail;
     console.log('[Event] Download complete:', data);
 
-    if (window.onDownloadComplete && data.type !== 'java-download' && !data.isBackgroundUpdate) {
-        window.onDownloadComplete(data.version);
-    } else if (typeof loadVersions === 'function' && data.type !== 'java-download') {
-        // Silently refresh versions list for background updates
-        loadVersions();
+    // Remove from background downloads tracking
+    if (data.version && window.activeBackgroundDownloads) {
+        window.activeBackgroundDownloads.delete(data.version);
     }
 
-    if (typeof resetGlobalDownloadState === 'function') {
-        resetGlobalDownloadState();
+    // Handle manual downloads
+    if (!data.isBackgroundUpdate) {
+        if (window.onDownloadComplete && data.type !== 'java-download') {
+            window.onDownloadComplete(data.version);
+        }
     } else {
+        // Handle background download completion
+        if (typeof loadVersions === 'function' && data.type !== 'java-download') {
+            // Silently refresh versions list for background updates
+            loadVersions();
+        }
+
+        // Hide global popup if no more background downloads
         const globalPopup = document.getElementById('globalDownloadPopup');
-        if (globalPopup) {
+        if (globalPopup && window.activeBackgroundDownloads && window.activeBackgroundDownloads.size === 0) {
             globalPopup.classList.remove('visible');
+        }
+    }
+
+    // Reset global state only if no downloads remain
+    if (window.activeBackgroundDownloads && window.activeBackgroundDownloads.size === 0) {
+        if (typeof resetGlobalDownloadState === 'function') {
+            resetGlobalDownloadState();
         }
     }
 
@@ -47,14 +80,28 @@ window.addEventListener('download-cancelled', (event) => {
     const data = event.detail;
     console.log('[Event] Download cancelled:', data);
 
+    // Remove from background downloads tracking
+    if (data.version && window.activeBackgroundDownloads) {
+        window.activeBackgroundDownloads.delete(data.version);
+    }
+
     currentDownloadingVersion = null;
 
-    if (typeof closeDownloadProgress === 'function') {
+    // Only close modal progress for manual downloads
+    if (!data.isBackgroundUpdate && typeof closeDownloadProgress === 'function') {
         closeDownloadProgress();
     }
 
-    if (typeof resetGlobalDownloadState === 'function') {
-        resetGlobalDownloadState();
+    // Hide global popup if no more background downloads
+    if (window.activeBackgroundDownloads && window.activeBackgroundDownloads.size === 0) {
+        if (typeof resetGlobalDownloadState === 'function') {
+            resetGlobalDownloadState();
+        } else {
+            const globalPopup = document.getElementById('globalDownloadPopup');
+            if (globalPopup) {
+                globalPopup.classList.remove('visible');
+            }
+        }
     }
 });
 
