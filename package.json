@@ -25,12 +25,12 @@
       "icon": "build/icon.ico",
       "verifyUpdateCodeSignature": false,
       "sign": null,
-      "artifactName": "HelloWorld-Launcher-${version}-win.${ext}"
+      "artifactName": "HelloWorld-Launcher-portable.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "HelloWorld-Launcher-Setup-${version}.${ext}",
+      "artifactName": "HelloWorld-Launcher-Installer.${ext}",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeader": "build/installerHeader.bmp",
