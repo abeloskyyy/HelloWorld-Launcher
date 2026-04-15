@@ -5,7 +5,7 @@ const packageJson = require('./package.json');
 
 const version = packageJson.version;
 const distDir = path.join(__dirname, 'dist');
-const appImageName = `HelloWorld-Launcher-${version}.AppImage`;
+const appImageName = `HelloWorld-Launcher.AppImage`;
 const appImagePath = path.join(distDir, appImageName);
 const outputYml = path.join(distDir, 'latest-linux.yml');
 

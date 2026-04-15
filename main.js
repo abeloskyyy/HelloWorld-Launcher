@@ -6,8 +6,47 @@ const path = require('path')
 const gracefulFs = require('graceful-fs')
 gracefulFs.gracefulify(require('fs'))
 
+// Limitador inteligente de concurrencia para evitar el límite real del OS (EMFILE/ENOENT)
+// minecraft-launcher-core a veces ahoga fs.promises lanzando +3000 promesas a la vez.
+class Semaphore {
+    constructor(max) {
+        this.max = max; this.active = 0; this.queue = [];
+    }
+    async acquire() {
+        if (this.active < this.max) { this.active++; return; }
+        return new Promise(resolve => this.queue.push(resolve));
+    }
+    release() {
+        if (this.queue.length > 0) { const next = this.queue.shift(); next(); } 
+        else { this.active--; }
+    }
+}
+const fsSemaphore = new Semaphore(500); // Límite máximo de 500 archivos abiertos de golpe
+const limitFS = (fn) => async function(...args) {
+    await fsSemaphore.acquire();
+    try { return await fn.apply(this, args); } finally { fsSemaphore.release(); }
+};
+
+// Parcheamos fs.promises globalmente
+const nativeFs = require('fs');
+if (nativeFs.promises) {
+    if (nativeFs.promises.stat) nativeFs.promises.stat = limitFS(nativeFs.promises.stat);
+    if (nativeFs.promises.readFile) nativeFs.promises.readFile = limitFS(nativeFs.promises.readFile);
+    if (nativeFs.promises.access) nativeFs.promises.access = limitFS(nativeFs.promises.access);
+}
+
 // Now load fs-extra which will use the patched fs
 const fs = require('fs-extra')
+
+// Catch unhandled exceptions & rejections to stop infinite Electron OS popups if edge cases happen
+process.on('uncaughtException', (error) => {
+    console.error('[Global Error] Uncaught Exception:', error);
+});
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[Global Error] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+
 const { Client } = require('minecraft-launcher-core')
 const msmc = require('msmc')
 const axios = require('axios')
@@ -556,7 +595,7 @@ ipcMain.handle('install-addon', async (e, args) => {
 
     const profiles = profileManager.loadProfiles().profiles;
     const profile = profiles[profile_id];
-    if (!profile) return { success: false, error: "Profile Not Found" };
+    if (!profile) return { success: false, error: "Installation Not Found" };
 
     const mcDir = paths.getMcDir();
     const profileDir = profile.directory || mcDir;
@@ -659,7 +698,7 @@ ipcMain.handle('delete-addon', async (e, { filename, profile_id, type, world_nam
 ipcMain.handle('open-addons-folder', async (e, { profile_id, type, world_name }) => {
   const profiles = profileManager.loadProfiles().profiles;
   const profile = profiles[profile_id];
-  if (!profile) return { success: false, error: "Profile not found" };
+  if (!profile) return { success: false, error: "Installation not found" };
 
   const mcDir = paths.getMcDir();
   const profileDir = profile.directory || mcDir;
@@ -1108,7 +1147,7 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
 
       if (!fs.existsSync(fabricJsonPath)) {
         if (onProgress) onProgress({
-          type: 'version-install', task: 'Downloading Fabric profile...', version: version_id, current: 5, total: 100
+          type: 'version-install', task: 'Downloading Fabric installation...', version: version_id, current: 5, total: 100
         });
 
         try {
@@ -1616,7 +1655,7 @@ async function refreshMicrosoftSession(userData) {
                 profile: mcObj.profile
             };
         }
-        throw new Error("Profile not found after refresh");
+        throw new Error("Installation not found after refresh");
     } catch (err) {
         console.warn("[Auth] Failed to auto-refresh token.", err.message);
         

@@ -65,7 +65,7 @@
                 <i class="fas fa-gamepad"></i> Play
             </button>
             <button class="sidebar-button" id="profilesNavBtn" onclick="showSection('profiles')">
-                <i class="fas fa-user"></i> Profiles
+                <i class="fas fa-user"></i> Installations
             </button>
             <div class="sidebar-group">
                 <button class="sidebar-button" onclick="toggleModsMenu()" id="modsMenuBtn">
@@ -107,8 +107,8 @@
                             <div class="select-trigger-content">
                                 <img src="" alt="" class="select-trigger-icon" id="selectedIcon">
                                 <div class="select-trigger-text">
-                                    <div class="select-trigger-title" id="selectedTitle">No profiles found</div>
-                                    <div class="select-trigger-subtitle" id="selectedSubtitle">Create a profile to play
+                                    <div class="select-trigger-title" id="selectedTitle">No installations found</div>
+                                    <div class="select-trigger-subtitle" id="selectedSubtitle">Create an installation to play
                                     </div>
                                 </div>
                             </div>
@@ -139,10 +139,10 @@
 
             <!-- Profiles Section -->
             <div id="profiles" class="section">
-                <h1>Profiles</h1>
+                <h1>Installations</h1>
                 <div class="profiles-section">
                     <button id="createProfileBtn" class="btn-primary create-profile-btn">
-                        <i class="fas fa-plus"></i> Create new profile
+                        <i class="fas fa-plus"></i> Create new installation
                     </button>
                     <div id="profilesList">
                         <!-- Profiles will be loaded here dynamically -->
@@ -160,12 +160,12 @@
                             <!-- Profile Selector -->
                             <div class="input-group">
                                 <label>
-                                    Profile
+                                    Installation
                                     <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
-                                        data-tooltip="Select a profile with Forge or Fabric to manage mods"></i>
+                                        data-tooltip="Select an installation with Forge or Fabric to manage mods"></i>
                                 </label>
                                 <select id="modsProfileSelect">
-                                    <option value="">Loading profiles...</option>
+                                    <option value="">Loading installations...</option>
                                 </select>
                             </div>
 
@@ -184,7 +184,7 @@
                             <!-- Message if no moddable profiles -->
                             <div id="noModdableProfiles" class="no-moddable-profiles" style="display: none;">
                                 <i class="fas fa-info-circle"></i>
-                                <p id="noModdableMessage">No profiles with Forge or Fabric. Create a profile with a mod
+                                <p id="noModdableMessage">No installations with Forge or Fabric. Create an installation with a mod
                                     loader
                                     to download mods.</p>
                             </div>
@@ -250,7 +250,7 @@
                                         <!-- Mods will be loaded dynamically -->
                                         <div class="no-mods-message">
                                             <i class="fas fa-cube"></i>
-                                            <p>No mods installed in this profile</p>
+                                            <p>No mods installed in this installation</p>
                                         </div>
                                     </div>
                                 </div>
@@ -340,7 +340,7 @@
                         <label>
                             .minecraft Directory
                             <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
-                                data-tooltip="Folder where game versions will be detected (independent of mods, worlds, which are detected in each profile's directory)."></i>
+                                data-tooltip="Folder where game versions will be detected (independent of mods, worlds, which are detected in each installation's directory)."></i>
                         </label>
                         <div style="display: flex; gap: 8px;">
                             <input id="mcdir" type="text" style="flex: 1;">
@@ -448,18 +448,18 @@
     <!-- Create Profile Modal -->
     <div class="modal" id="modal">
         <div class="modal-content">
-            <span>Create New Profile</span>
+            <span>Create New Installation</span>
             <div class="profile-icon-display" id="iconDisplay">
-                <img src="" alt="Profile Icon" class="profile-icon-img" id="iconPreview" style="display: none;">
+                <img src="" alt="Installation Icon" class="profile-icon-img" id="iconPreview" style="display: none;">
                 <span class="placeholder-icon-small" id="placeholderIcon"><i class="fas fa-user"></i></span>
             </div>
             <button type="button" class="btn-add-icon" id="iconButton"
-                data-tooltip="Select a custom icon to visually identify this profile">Add Icon</button>
+                data-tooltip="Select a custom icon to visually identify this installation">Add Icon</button>
             <div class="modal-input-group">
                 <label>
-                    Profile Name
+                    Installation Name
                     <i class="fa-regular fa-question-circle help-icon"
-                        data-tooltip="Name to identify this profile. Example: 'Survival 1.20', 'SkyFactory Modpack'"></i>
+                        data-tooltip="Name to identify this installation. Example: 'Survival 1.20', 'SkyFactory Modpack'"></i>
                 </label>
                 <input id="profileName" type="text">
             </div>
@@ -476,7 +476,7 @@
                 <label>
                     Directory
                     <i class="fa-regular fa-question-circle help-icon"
-                        data-tooltip="Folder where this profile's data will be saved (worlds, mods, settings). Each profile can have its own folder."></i>
+                        data-tooltip="Folder where this installation's data will be saved (worlds, mods, settings). Each installation can have its own folder."></i>
                 </label>
                 <div style="display: flex; gap: 8px;">
                     <input id="profileDir" type="text" style="flex: 1;">
@@ -515,7 +515,7 @@
     <!-- Image Selection Modal -->
     <div class="modal" id="imageModal">
         <div class="modal-content image-selector-modal">
-            <span>Select Profile Image</span>
+            <span>Select Installation Image</span>
             <div class="image-grid" id="imageGrid">
                 <!-- Images will be loaded dynamically here -->
                 <!-- Custom upload button at the end of the grid -->
@@ -1061,7 +1061,7 @@
                             <div class="config-info">
                                 The location where all your game files, worlds, and screenshots will be stored. We've
                                 detected a default for you. Versions will install here, but you can change the directory
-                                for each profile.
+                                for each installation.
                             </div>
                             <div class="folder-input-group">
                                 <input type="text" class="folder-input" id="wizMcDir" readonly>
@@ -1121,7 +1121,7 @@
                     <h2 class="onboarding-title">Interactive Tutorial</h2>
                     <p class="onboarding-description">
                         We will now guide you through the process of downloading Minecraft versions and creating
-                        profiles.
+                        installations.
                         This interactive tour will show you exactly where to click and what each option does.
                     </p>
                     <div class="tutorial-actions"
@@ -1140,7 +1140,7 @@
                 <div class="onboarding-step" id="step3">
                     <h2 class="onboarding-title">Tutorial Completed!</h2>
                     <p class="onboarding-description">
-                        Great job! You have successfully learned how to manage versions and profiles.
+                        Great job! You have successfully learned how to manage versions and installations.
                         You can always replay this tutorial later from the settings.
                     </p>
                     <div class="tutorial-actions"

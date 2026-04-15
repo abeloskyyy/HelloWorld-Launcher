@@ -457,7 +457,7 @@ async function launchGame() {
     const profileSelectElement = document.getElementById("profileSelect");
 
     if (!profileSelectElement || !profileSelectElement.value) {
-        window.pywebview.api.error("You must select a profile before playing");
+        window.pywebview.api.error("You must select an installation before playing");
         return;
     }
 
@@ -658,8 +658,8 @@ async function loadOptions() {
         if (document.getElementById('selectedIcon')) {
             document.getElementById('selectedIcon').style.display = 'none';
         }
-        if (document.getElementById('selectedTitle')) document.getElementById('selectedTitle').textContent = "No profiles found";
-        if (document.getElementById('selectedSubtitle')) document.getElementById('selectedSubtitle').textContent = "Create a profile to play";
+        if (document.getElementById('selectedTitle')) document.getElementById('selectedTitle').textContent = "No installations found";
+        if (document.getElementById('selectedSubtitle')) document.getElementById('selectedSubtitle').textContent = "Create an installation to play";
 
         if (selectOptions) {
             const createOption = document.createElement('div');
@@ -667,7 +667,7 @@ async function loadOptions() {
             createOption.innerHTML = `
                 <div class="option-icon" style="display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff; background: rgba(255, 255, 255, 0.1);"><i class="fas fa-plus"></i></div>
                 <div class="option-content">
-                    <div class="option-title">Create New Profile</div>
+                    <div class="option-title">Create New Installation</div>
                     <div class="option-subtitle">Click to get started</div>
                 </div>
             `;
@@ -691,7 +691,7 @@ async function loadOptions() {
                 emptyMsg.style.padding = '20px';
                 emptyMsg.style.textAlign = 'center';
                 emptyMsg.style.color = '#aaa';
-                emptyMsg.innerHTML = `<i class="fas fa-filter"></i> No ${activeProfileFilter} profiles found`;
+                emptyMsg.innerHTML = `<i class="fas fa-filter"></i> No ${activeProfileFilter} installations found`;
 
                 // Add clear filter button
                 const clearBtn = document.createElement('button');
@@ -946,7 +946,7 @@ async function loadProfiles() {
         deleteBtn.onclick = async (e) => {
             e.stopPropagation();
 
-            const confirmed = await window.pywebview.api.confirm(`Are you sure you want to delete the profile "${profile.name}"?`);
+            const confirmed = await window.pywebview.api.confirm(`Are you sure you want to delete the installation "${profile.name}"?`);
             if (confirmed) {
                 const result = await window.pywebview.api.delete_profile(id);
                 if (result.success) {
@@ -954,13 +954,13 @@ async function loadProfiles() {
                     await loadOptions();
                     await loadModdableProfiles();
                 } else {
-                    window.pywebview.api.error(result.error || "Failed to delete profile");
+                    window.pywebview.api.error(result.error || "Failed to delete installation");
                 }
             }
         };
 
         item.onclick = () => {
-            console.log("Profile selected:", id);
+            console.log("Installation selected:", id);
         };
 
         list.appendChild(item);
@@ -1017,8 +1017,8 @@ async function resetProfileModal() {
     }
 
     editingProfileId = null;
-    if (acceptProfileBtn) acceptProfileBtn.textContent = "Create Profile";
-    if (document.querySelector('#modal h2')) document.querySelector('#modal h2').textContent = "Create New Profile";
+    if (acceptProfileBtn) acceptProfileBtn.textContent = "Create Installation";
+    if (document.querySelector('#modal h2')) document.querySelector('#modal h2').textContent = "Create New Installation";
 }
 
 async function openEditProfileModal(id, profile) {
@@ -1048,7 +1048,7 @@ async function openEditProfileModal(id, profile) {
     }
 
     if (acceptProfileBtn) acceptProfileBtn.textContent = "Save Changes";
-    if (document.querySelector('#modal h2')) document.querySelector('#modal h2').textContent = "Edit Profile";
+    if (document.querySelector('#modal h2')) document.querySelector('#modal h2').textContent = "Edit Installation";
     if (profileModal) profileModal.classList.add('show');
 }
 
@@ -1073,12 +1073,12 @@ if (acceptProfileBtn) {
         const profileName = profileNameInput ? profileNameInput.value.trim() : "";
 
         if (!profileName) {
-            window.pywebview.api.error("Profile name is required");
+            window.pywebview.api.error("Installation name is required");
             return;
         }
 
         if (isReservedProfileName(profileName)) {
-            window.pywebview.api.error("This name is reserved for automatic profiles.");
+            window.pywebview.api.error("This name is reserved for automatic installations.");
             return;
         }
 
@@ -1093,9 +1093,9 @@ if (acceptProfileBtn) {
         const trimmedName = profileName.trim();
 
         if (!trimmedName) {
-            missingFields.push("Profile Name");
+            missingFields.push("Installation Name");
         } else if (trimmedName.length < 2) {
-            window.pywebview.api.error('Profile name must be at least 2 characters');
+            window.pywebview.api.error('Installation name must be at least 2 characters');
             return;
         }
         if (!profileVersion) missingFields.push("Version");
@@ -1143,8 +1143,8 @@ if (acceptProfileBtn) {
                     window.pywebview.api.error(result.message);
                 }
             } catch (error) {
-                console.error('Error creating profile:', error);
-                window.pywebview.api.error('Error creating profile');
+                console.error('Error creating installation:', error);
+                window.pywebview.api.error('Error creating installation');
             }
         }
     });
@@ -2281,10 +2281,10 @@ function updateModsSectionUI() {
     const profileHelpIcon = document.querySelector('#mods .input-group .help-icon');
     if (profileHelpIcon) {
         const tooltips = {
-            'mod': 'Select a profile with Forge or Fabric to manage mods',
-            'resourcepack': 'Select a profile to manage resource packs',
-            'datapack': 'Select a profile and a world to manage data packs',
-            'shader': 'Select a profile with shader support. Forge: requires Optifine. Fabric: requires Sodium + Iris'
+            'mod': 'Select an installation with Forge or Fabric to manage mods',
+            'resourcepack': 'Select an installation to manage resource packs',
+            'datapack': 'Select an installation and a world to manage data packs',
+            'shader': 'Select an installation with shader support. Forge: requires Optifine. Fabric: requires Sodium + Iris'
         };
         profileHelpIcon.setAttribute('data-tooltip', tooltips[currentContentType] || tooltips['mod']);
     }
@@ -2333,15 +2333,15 @@ async function loadModdableProfiles() {
 
 
         if (Object.keys(targetProfiles).length === 0) {
-            modsProfileSelect.innerHTML = '<option value="">No compatible profiles found</option>';
+            modsProfileSelect.innerHTML = '<option value="">No compatible installations found</option>';
             modsProfileSelect.disabled = true;
             if (noModdableProfiles) {
                 noModdableProfiles.style.display = 'block';
 
                 let msg = "";
-                if (currentContentType === 'mod') msg = "No profiles with Forge or Fabric found.";
-                else if (currentContentType === 'shader') msg = "No profiles with Shaders support found. (Requires Forge with Optifine OR Fabric with Iris+Sodium installed).";
-                else msg = "No profiles found.";
+                if (currentContentType === 'mod') msg = "No installations with Forge or Fabric found.";
+                else if (currentContentType === 'shader') msg = "No installations with Shaders support found. (Requires Forge with Optifine OR Fabric with Iris+Sodium installed).";
+                else msg = "No installations found.";
 
                 document.getElementById('noModdableMessage').textContent = msg;
             }
@@ -2366,7 +2366,7 @@ async function loadModdableProfiles() {
             // Tooltip via title (native)
             if (currentContentType === 'shader') {
                 if (typeLabel === 'FORGE' || typeLabel === 'FABRIC') {
-                    option.title = "Profile ready for shaders";
+                    option.title = "Installation ready for shaders";
                 }
             }
 
@@ -2471,7 +2471,7 @@ function updateUploadButtonState() {
 
 async function importLocalAddonFile() {
     if (!currentModsProfile) {
-        window.pywebview.api.error("Please select a profile first.");
+        window.pywebview.api.error("Please select an installation first.");
         return;
     }
 
@@ -3164,7 +3164,7 @@ window.onModDownloadError = function (projectId, errorMsg) {
 
 window.downloadModFromCard = async function (projectId, slug) {
     if (!currentModsProfile) {
-        window.pywebview.api.error('Select a profile first');
+        window.pywebview.api.error('Select an installation first');
         return;
     }
 
@@ -3186,7 +3186,7 @@ window.downloadModFromCard = async function (projectId, slug) {
         const profile = profilesData.profiles[currentModsProfile];
 
         if (!profile) {
-            window.pywebview.api.error('Profile not found');
+            window.pywebview.api.error('Installation not found');
             if (btn) btn.disabled = false;
             return;
         }
