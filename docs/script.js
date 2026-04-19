@@ -50,7 +50,7 @@ async function init() {
     function detectOS() {
         const ua = window.navigator.userAgent.toLowerCase();
         if (ua.includes("win")) return "Windows";
-        if (ua.includes("linux") && !ua.includes("android")) return "Linux";
+        if ((ua.includes("linux") || ua.includes("x11") || ua.includes("ubuntu") || ua.includes("cros")) && !ua.includes("android")) return "Linux";
         if (ua.includes("mac")) return "MacOS";
         if (ua.includes("android") || ua.includes("iphone") || ua.includes("ipad")) return "Mobile";
         return "Unknown";
