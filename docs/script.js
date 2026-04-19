@@ -69,8 +69,10 @@ async function init() {
             const assetWin = data.assets.find(a => a.name.endsWith('.exe') || a.name.endsWith('.jar')) || data.assets[0];
             const downloadUrlWin = assetWin ? assetWin.browser_download_url : data.html_url;
 
-            // Find linux asset (.deb)
-            const assetLinux = data.assets.find(a => a.name.endsWith('.deb')) || data.assets.find(a => a.name.endsWith('.AppImage'));
+            // Find linux asset (.deb) - search by exact name first, then fallback
+            const assetLinux = data.assets.find(a => a.name === 'HelloWorld-Launcher.deb')
+                            || data.assets.find(a => a.name.endsWith('.deb'))
+                            || data.assets.find(a => a.name.endsWith('.AppImage'));
             const downloadUrlLinux = assetLinux ? assetLinux.browser_download_url : data.html_url;
 
             const tagName = data.tag_name; // e.g., "v1.2.0"
