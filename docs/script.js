@@ -64,18 +64,13 @@ async function init() {
             if (!response.ok) throw new Error('Network response was not ok');
             const data = await response.json();
 
-            // Find the browser_download_url for the .exe or .jar
-            // If no specific asset is found, fall back to html_url
+            // Find the browser_download_url for the .exe
             const assetWin = data.assets.find(a => a.name.endsWith('.exe') || a.name.endsWith('.jar')) || data.assets[0];
             const downloadUrlWin = assetWin ? assetWin.browser_download_url : data.html_url;
 
-            // Find linux asset (.deb) - search by exact name first, then fallback
-            const assetLinux = data.assets.find(a => a.name === 'HelloWorld-Launcher.deb')
-                            || data.assets.find(a => a.name.endsWith('.deb'))
-                            || data.assets.find(a => a.name.endsWith('.AppImage'));
-            const downloadUrlLinux = assetLinux ? assetLinux.browser_download_url : data.html_url;
-
-            const tagName = data.tag_name; // e.g., "v1.2.0"
+            // Build linux .deb URL directly from tag name (always same pattern)
+            const tagName = data.tag_name; // e.g., "v1.0.4"
+            const downloadUrlLinux = `https://github.com/${repoOwner}/${repoName}/releases/download/${tagName}/HelloWorld-Launcher.deb`;
 
             if (heroBtn && heroLinuxBtn) {
                 // Apply OS specific ordering and styles
