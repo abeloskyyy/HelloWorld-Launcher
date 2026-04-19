@@ -121,6 +121,7 @@ async function init() {
             // Fallback
             const fallbackUrl = `https://github.com/${repoOwner}/${repoName}/releases/latest`;
             if (heroBtn) heroBtn.href = fallbackUrl;
+            if (heroLinuxBtn) heroLinuxBtn.href = fallbackUrl;
             if (navBtn) navBtn.href = fallbackUrl;
         }
     }
