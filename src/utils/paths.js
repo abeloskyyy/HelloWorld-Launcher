@@ -2,14 +2,16 @@ const path = require('path');
 const fs = require('fs-extra');
 const { app } = require('electron');
 
+const os = require('os');
+
 // Default .minecraft path
 let defaultMcDir = "";
 if (process.platform === 'win32') {
-    defaultMcDir = path.join(process.env.APPDATA, '.minecraft');
+    defaultMcDir = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), '.minecraft');
 } else if (process.platform === 'darwin') {
-    defaultMcDir = path.join(process.env.HOME, 'Library', 'Application Support', 'minecraft');
+    defaultMcDir = path.join(os.homedir(), 'Library', 'Application Support', 'minecraft');
 } else {
-    defaultMcDir = path.join(process.env.HOME, '.minecraft');
+    defaultMcDir = path.join(os.homedir(), '.minecraft');
 }
 
 // Initial guess: Default .minecraft location

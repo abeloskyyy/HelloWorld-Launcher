@@ -1,6 +1,6 @@
 {
   "name": "helloworld-launcher",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "HelloWorld Launcher",
   "main": "main.js",
   "scripts": {
@@ -12,7 +12,7 @@
   },
   "build": {
     "appId": "com.abelosky.helloworldlauncher",
-    "productName": "HelloWorld Launcher",
+    "productName": "HelloWorld-Launcher",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -42,9 +42,9 @@
         "AppImage",
         "deb"
       ],
-      "icon": "build/icon.png",
+      "icon": "build/icons",
       "category": "Game",
-      "artifactName": "HelloWorld-Launcher-${version}.${ext}",
+      "artifactName": "HelloWorld-Launcher.${ext}",
       "publish": [
         "github"
       ]

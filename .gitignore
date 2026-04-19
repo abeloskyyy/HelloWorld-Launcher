@@ -6,5 +6,4 @@ build
 dist
 build-linux.sh
 offline_skins_implementation.md
-rename-build.bat
 generate-linux-yml.js

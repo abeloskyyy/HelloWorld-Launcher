@@ -1,6 +1,8 @@
 @font-face {
     font-family: "Pixel";
     src: url("fonts/pixel.ttf") format("truetype");
+    font-weight: normal;
+    font-style: normal;
 }
 
 * {
@@ -363,6 +365,7 @@ h1 {
     background: linear-gradient(135deg, #ffffff 0%, #4facfe 100%);
     background-clip: text;
     -webkit-background-clip: text;
+    color: transparent;
     -webkit-text-fill-color: transparent;
 
     /* Glow effect */

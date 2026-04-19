@@ -78,6 +78,12 @@ try {
   console.error("Could not read user data for hardware acceleration check:", e);
 }
 
+// Ensure the app runs and detects windows correctly on Linux Wayland/X11
+if (process.platform === 'linux') {
+    app.commandLine.appendSwitch('enable-features', 'WaylandWindowDecorations');
+    app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
+}
+
 // Initialize launcher
 const launcher = new Client()
 

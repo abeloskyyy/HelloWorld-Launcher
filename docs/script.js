@@ -39,7 +39,24 @@ async function init() {
 
     const repoName = 'HelloWorld-Launcher';
     const heroBtn = document.getElementById('heroDownloadBtn');
+    const heroLinuxBtn = document.getElementById('heroDownloadLinuxBtn');
     const navBtn = document.getElementById('navDownloadBtn');
+    const heroButtonsContainer = document.querySelector('.hero-buttons');
+    const osWarningContainer = document.getElementById('osWarningContainer');
+    const detectedOSName = document.getElementById('detectedOSName');
+
+    const iconLinux = `<i class="fa-brands fa-linux" style="font-size: 1.1rem; margin-right: 5px;"></i>`;
+
+    function detectOS() {
+        const ua = window.navigator.userAgent.toLowerCase();
+        if (ua.includes("win")) return "Windows";
+        if (ua.includes("linux") && !ua.includes("android")) return "Linux";
+        if (ua.includes("mac")) return "MacOS";
+        if (ua.includes("android") || ua.includes("iphone") || ua.includes("ipad")) return "Mobile";
+        return "Unknown";
+    }
+
+    const userOS = detectOS();
 
     async function getLatestRelease() {
         try {
@@ -49,17 +66,49 @@ async function init() {
 
             // Find the browser_download_url for the .exe or .jar
             // If no specific asset is found, fall back to html_url
-            const asset = data.assets.find(a => a.name.endsWith('.exe') || a.name.endsWith('.jar')) || data.assets[0];
-            const downloadUrl = asset ? asset.browser_download_url : data.html_url;
+            const assetWin = data.assets.find(a => a.name.endsWith('.exe') || a.name.endsWith('.jar')) || data.assets[0];
+            const downloadUrlWin = assetWin ? assetWin.browser_download_url : data.html_url;
+
+            // Find linux asset (.deb)
+            const assetLinux = data.assets.find(a => a.name.endsWith('.deb')) || data.assets.find(a => a.name.endsWith('.AppImage'));
+            const downloadUrlLinux = assetLinux ? assetLinux.browser_download_url : data.html_url;
+
             const tagName = data.tag_name; // e.g., "v1.2.0"
 
-            if (heroBtn) {
-                heroBtn.href = downloadUrl;
-                heroBtn.innerHTML = `<i class="bi bi-windows"></i> Download ${tagName}<div class="btn-shine"></div>`;
+            if (heroBtn && heroLinuxBtn) {
+                // Apply OS specific ordering and styles
+                if (userOS === "Windows") {
+                    heroBtn.className = "btn btn-primary btn-lg";
+                    heroBtn.innerHTML = `<i class="bi bi-windows"></i> Download for Windows ${tagName}<div class="btn-shine"></div>`;
+                    heroLinuxBtn.className = "btn btn-secondary btn-lg";
+                    heroLinuxBtn.innerHTML = `${iconLinux} Download for Linux ${tagName}`;
+                    heroButtonsContainer.insertBefore(heroBtn, heroLinuxBtn);
+                } else if (userOS === "Linux") {
+                    heroLinuxBtn.className = "btn btn-primary btn-lg";
+                    heroLinuxBtn.innerHTML = `${iconLinux} Download for Linux ${tagName}<div class="btn-shine"></div>`;
+                    heroBtn.className = "btn btn-secondary btn-lg";
+                    heroBtn.innerHTML = `<i class="bi bi-windows"></i> Download for Windows ${tagName}`;
+                    heroButtonsContainer.insertBefore(heroLinuxBtn, heroBtn);
+                } else {
+                    // Mobile / MacOS or unknown
+                    heroBtn.className = "btn btn-secondary btn-lg";
+                    heroBtn.innerHTML = `<i class="bi bi-windows"></i> Download for Windows ${tagName}`;
+                    heroLinuxBtn.className = "btn btn-secondary btn-lg";
+                    heroLinuxBtn.innerHTML = `${iconLinux} Download for Linux ${tagName}`;
+                    
+                    if (osWarningContainer && detectedOSName) {
+                        detectedOSName.textContent = userOS === "Unknown" ? "no reconocido" : userOS;
+                        osWarningContainer.style.display = "block";
+                        heroButtonsContainer.style.flexWrap = "wrap";
+                    }
+                }
+
+                heroBtn.href = downloadUrlWin;
+                heroLinuxBtn.href = downloadUrlLinux;
             }
 
             if (navBtn) {
-                navBtn.href = downloadUrl;
+                navBtn.href = userOS === "Linux" ? downloadUrlLinux : downloadUrlWin;
                 // Keeping the text simple for the nav button
             }
 
