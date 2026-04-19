@@ -104,7 +104,9 @@ async function init() {
                 }
 
                 heroBtn.href = downloadUrlWin;
+                heroBtn.target = '_blank';
                 heroLinuxBtn.href = downloadUrlLinux;
+                heroLinuxBtn.target = '_blank';
             }
 
             if (navBtn) {
