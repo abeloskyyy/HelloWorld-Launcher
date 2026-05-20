@@ -1,0 +1,31 @@
+name: Discord Release Notify
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send Discord webhook
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK }}
+          VERSION: ${{ github.event.release.tag_name }}
+          TITLE: ${{ github.event.release.name }}
+          BODY: ${{ github.event.release.body }}
+          URL: ${{ github.event.release.html_url }}
+
+        run: |
+          # Escapar saltos de línea para JSON
+          BODY_ESCAPED=$(echo "$BODY" | awk '{printf "%s\\n", $0}')
+
+          curl -H "Content-Type: application/json" -X POST $WEBHOOK_URL -d "{
+            \"embeds\": [{
+              \"title\": \"🚀 New Release: $TITLE\",
+              \"description\": \"**Version:** $VERSION\\n\\n**Changelog:**\\n$BODY_ESCAPED\",
+              \"url\": \"$URL\",
+              \"color\": 5814783
+            }]
+          }"
