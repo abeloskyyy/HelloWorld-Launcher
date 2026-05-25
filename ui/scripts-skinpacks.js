@@ -404,15 +404,11 @@ window.loadSkinPacks = function () {
             card.className = `skin-pack-card ${isActive ? 'active' : ''}`;
             card.dataset.packId = id; // Store ID for DOM logic
 
-            // Note: Click to preview functionality removed as per user request
-            // Only the active skin is shown in the large preview
-
-            // Build 3D viewer HTML structure for the card
             // We use inline styles for background images
             const faces = ['top', 'left', 'front', 'right', 'back', 'bottom'];
             const parts = ['head', 'body', 'left-arm', 'right-arm', 'left-leg', 'right-leg'];
 
-            let viewerHTML = `<div class="mini-3d-viewer"><div class="mc-skin-viewer-9x ${isSlim ? 'slim' : ''} legacy"><div class="player">`;
+            let viewerHTML = `<div class="pack-preview-container" style="height: 180px; background: rgba(0, 0, 0, 0.2); border-radius: 8px; margin: 15px 15px 0 15px; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative;"><div class="mc-skin-viewer-9x ${isSlim ? 'slim' : ''} legacy" style="transform: scale(0.65) !important; animation: none;"><div class="player" style="transform: rotateX(-5deg) rotateY(-20deg) !important;">`;
 
             parts.forEach(part => {
                 viewerHTML += `<div class="${part}">`;
@@ -438,23 +434,24 @@ window.loadSkinPacks = function () {
             viewerHTML += `</div></div></div>`;
 
             card.innerHTML = `
-                <div class="pack-preview-container">
-                    ${viewerHTML}
-                </div>
-                <div class="pack-info">
-                    <h3>${pack.name}</h3>
-                    <div class="pack-meta">
+                ${viewerHTML}
+                <div class="pack-info" style="padding: 15px;">
+                    <h3 style="margin: 0; font-size: 18px; color: #fff;">${pack.name}</h3>
+                    <div class="pack-meta" style="margin-top: 5px; font-size: 13px; color: #aaa;">
                         <span>${isSlim ? 'Alex' : 'Steve'}</span>
                         ${hasCape && pack.cape_alias ? `<span>• Cape: ${pack.cape_alias}</span>` : ''}
                     </div>
                 </div>
-                <div class="pack-actions">
-                    ${isActive
-                    ? '<button class="btn-small btn-secondary" disabled>Active</button>'
-                    : `<button class="btn-small btn-blue" onclick="activatePack('${id}')">Use</button>`
-                }
-                    <button class="btn-small btn-secondary edit-btn" onclick="editPack('${id}')" style="margin-right: 5px;"><i class="fas fa-edit"></i></button>
-                    <button class="btn-small btn-red" onclick="deletePack('${id}')"><i class="fas fa-trash"></i></button>
+                <div class="skin-pack-actions" style="display: flex; gap: 10px; padding: 0 15px 15px 15px;">
+                    <button class="${isActive ? 'btn-small btn-secondary' : 'btn-small btn-blue'}" style="flex: 1; padding: 10px; border-radius: 8px;" onclick="activatePack('${id}')" title="Activate" ${isActive ? 'disabled' : ''}>
+                        <i class="fas fa-check"></i> ${isActive ? 'Active' : 'Use'}
+                    </button>
+                    <button class="btn-small btn-secondary" style="padding: 10px 15px; border-radius: 8px;" onclick="editPack('${id}')" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-small btn-danger" style="padding: 10px 15px; border-radius: 8px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444;" onclick="deletePack('${id}')" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
                 </div>
             `;
             grid.appendChild(card);
@@ -464,8 +461,10 @@ window.loadSkinPacks = function () {
         if (typeof updateCooldownVisuals === 'function') {
             updateCooldownVisuals();
         }
-    }).catch(err => {
-        console.error('Error loading skin packs:', err);
+    }).catch(e => {
+        console.error("Error loading skin packs", e);
+        const grid = document.getElementById('skinPacksGrid');
+        if (grid) grid.innerHTML = '<div style="color: #d9534f; padding: 20px;">Error loading skin packs</div>';
     });
 };
 
@@ -695,7 +694,7 @@ window.loadUserCapes = function () {
                 // Store cape data globally
                 window.loadedCapes.push({
                     id: cape.id,
-                    alias: cape.alias,
+                    alias: cape.name || cape.alias,
                     base64: cape.base64
                 });
 
@@ -725,7 +724,7 @@ window.loadUserCapes = function () {
                             box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
                         "></div>
                     </div>
-                    <span>${cape.alias || 'Cape'}</span>
+                    <span>${escapeHtml(cape.name || cape.alias)}</span>
                 `;
                 opt.addEventListener('click', function () { handleCapeSelection(this); });
                 grid.appendChild(opt);

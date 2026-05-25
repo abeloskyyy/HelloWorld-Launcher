@@ -145,24 +145,29 @@ class SkinManager {
             const base64Data = skinBase64.replace(/^data:image\/png;base64,/, "");
             const buffer = Buffer.from(base64Data, 'base64');
 
-            // Prepare Mojang API Upload
-            const form = new FormData();
-            form.append('variant', variant);
-            form.append('file', buffer, { filename: 'skin.png', contentType: 'image/png' });
+            // If we have a Microsoft token, upload to Mojang
+            if (token) {
+                // Prepare Mojang API Upload
+                const form = new FormData();
+                form.append('variant', variant);
+                form.append('file', buffer, { filename: 'skin.png', contentType: 'image/png' });
 
-            console.log(`[SkinManager] Uploading skin to Mojang (Variant: ${variant})...`);
+                console.log(`[SkinManager] Uploading skin to Mojang (Variant: ${variant})...`);
 
-            const response = await axios.post('https://api.minecraftservices.com/minecraft/profile/skins', form, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    ...form.getHeaders()
-                },
-                maxBodyLength: Infinity
-            });
+                const response = await axios.post('https://api.minecraftservices.com/minecraft/profile/skins', form, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        ...form.getHeaders()
+                    },
+                    maxBodyLength: Infinity
+                });
 
-            console.log(`[SkinManager] Upload Success: ${response.status}`);
+                console.log(`[SkinManager] Upload Success: ${response.status}`);
+            } else {
+                console.log(`[SkinManager] Local activation only (No Mojang token)`);
+            }
 
-            // Update local state if successful
+            // Update local state if successful (or if offline)
             const stateFile = path.join(packsDir, 'state.json');
             fs.writeJsonSync(stateFile, { active_pack: id });
 

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://mc-heads.net https://piston-meta.mojang.com https://cdn.modrinth.com; img-src 'self' data: blob: https: file: launcher:; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com;">
+        content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://mc-heads.net https://piston-meta.mojang.com https://cdn.modrinth.com https://api.modrinth.com https://*.googleapis.com https://*.firebaseapp.com https://*.firebasestorage.app https://apis.google.com https://www.gstatic.com; img-src 'self' data: blob: https: file: launcher:; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com wss://*.firebaseio.com https://www.gstatic.com https://api.mojang.com https://sessionserver.mojang.com https://api.modrinth.com https://mc-heads.net https://securetoken.googleapis.com https://identitytoolkit.googleapis.com;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="onboarding_styles.css">
@@ -12,6 +12,29 @@
     <link rel="stylesheet" href="minecraft-skinviewer.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js';
+        import { getAuth, OAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js';
+        const firebaseConfig = {
+            apiKey: atob('QUl6YVN5QUNYRURPNVI0OEhybHhWQ3l6OGZCR2ltRUlWa1kyUVNN'),
+            authDomain: 'helloworld-launcher.firebaseapp.com',
+            projectId: 'helloworld-launcher',
+            appId: '1:1088760222656:web:13aefa81bdecdfdf832e25'
+        };
+        const fbApp = initializeApp(firebaseConfig, 'launcher');
+        const fbAuth = getAuth(fbApp);
+        window._launcherFirebase = { fbAuth, OAuthProvider, signInWithPopup, signOut };
+        // Hide banner once Firebase Auth session is restored
+        onAuthStateChanged(fbAuth, (user) => {
+            if (!user) return;
+            if (window.hideMsVerifyBanner) {
+                window.hideMsVerifyBanner();
+            } else {
+                const banner = document.getElementById('msVerifyBanner');
+                if (banner) banner.style.display = 'none';
+            }
+        });
+    </script>
 </head>
 
 <body>
@@ -19,6 +42,14 @@
         // pywebviewready event is now dispatched by preload.js
         // No need to dispatch it here
     </script>
+
+    <!-- Microsoft verification banner -->
+    <div id="msVerifyBanner" style="display:none;">
+        <i class="fab fa-microsoft"></i>
+        <span>Your Microsoft account is not verified. Web login won't work until you verify.</span>
+        <button id="msVerifyBannerBtn"><i class="fas fa-shield-alt"></i> Verify now</button>
+        <button id="msVerifyBannerClose" title="Dismiss"><i class="fas fa-times"></i></button>
+    </div>
     <!-- Initial Loader -->
     <div id="initialLoader" class="loader-container">
         <div class="cube-spinner">
@@ -38,16 +69,25 @@
 
     <div class="launcher">
         <!-- Login Button / User Badge -->
-        <div id="userBadge" class="user-badge" style="display: none;">
-            <div class="user-avatar" id="userAvatarHead">
-                <i class="fas fa-user"></i>
-            </div>
-            <span id="userDisplayName"></span>
-            <!-- Dropdown menu -->
-            <div class="user-dropdown" id="userDropdown">
-                <button class="dropdown-item" id="logoutBtn">
-                    <i class="fas fa-sign-out-alt"></i> Logout
-                </button>
+        <div id="userAreaControls">
+            <button id="socialBtn" class="social-btn" style="display: none;" title="Social">
+                <i class="fas fa-user-friends"></i>
+                <span id="socialBadge" class="social-badge-count"></span>
+            </button>
+            <div id="userBadge" class="user-badge" style="display: none;">
+                <div class="user-avatar" id="userAvatarHead">
+                    <i class="fas fa-user"></i>
+                </div>
+                <span id="userDisplayName"></span>
+                <!-- Dropdown menu -->
+                <div class="user-dropdown" id="userDropdown">
+                    <button class="dropdown-item" id="editProfileBtn">
+                        <i class="fas fa-user-edit"></i> Edit Profile
+                    </button>
+                    <button class="dropdown-item" id="logoutBtn">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -93,6 +133,20 @@
             <button class="sidebar-button" onclick="showSection('settings')">
                 <i class="fas fa-cog"></i> Settings
             </button>
+
+            <!-- Discord Link -->
+            <div class="sidebar-discord">
+                <a href="https://dsc.gg/helloworld-launcher" target="_blank" class="discord-sidebar-link">
+                    <div class="discord-sidebar-icon">
+                        <i class="fab fa-discord"></i>
+                    </div>
+                    <div class="discord-sidebar-content">
+                        <span class="discord-sidebar-title">Join Community</span>
+                        <span class="discord-sidebar-subtitle">Get support & updates</span>
+                    </div>
+                    <i class="fas fa-external-link-alt discord-sidebar-arrow"></i>
+                </a>
+            </div>
         </div>
 
         <!-- Main Content -->
@@ -120,20 +174,15 @@
                         </div>
                     </div>
 
-                    <div class="button-group">
-                        <button id="openDownloadModalBtn" class="btn-secondary" style="flex: 1;"
-                            data-tooltip="Download new versions of Minecraft (Vanilla, Forge, Fabric)">
-                            <i class="fas fa-download"></i> Download Versions
+
+                    <div class="play-action-container" style="display: flex; width: 100%;">
+                        <button class="play-button" onclick="launchGame()">
+                            Play
                         </button>
-                        <button id="openManageVersionsBtn" class="btn-square btn-manage-versions"
-                            data-tooltip="View & delete installed versions">
-                            <i class="fas fa-pen-to-square"></i>
+                        <button class="cancel-launch-button" id="cancelLaunchBtn" onclick="cancelLaunch()" title="Cancel Launch">
+                            <i class="fas fa-times"></i>
                         </button>
                     </div>
-
-                    <button class="play-button" onclick="launchGame()">
-                        Play
-                    </button>
                 </div>
             </div>
 
@@ -203,31 +252,65 @@
 
                                 <!-- Tab Content: Download -->
                                 <div id="modTabDownload" class="mod-tab-content active">
-                                    <!-- Search Bar -->
-                                    <div class="mod-search-container">
-                                        <input type="text" id="modSearchInput" class="mod-search-bar"
-                                            placeholder="Search mods in Modrinth...">
-                                    </div>
+                                    <div class="mods-download-flex">
+                                        <div class="mods-download-main">
+                                            <!-- Search Bar -->
+                                            <div class="mod-search-container">
+                                                <input type="text" id="modSearchInput" class="mod-search-bar"
+                                                    placeholder="Search mods in Modrinth...">
+                                            </div>
 
-                                    <!-- Loading State -->
-                                    <div id="modSearchLoading" class="mod-search-loading" style="display: none;">
-                                        <div class="spinner"></div>
-                                        <p>Searching mods...</p>
-                                    </div>
+                                            <!-- Loading State -->
+                                            <div id="modSearchLoading" class="mod-search-loading" style="display: none;">
+                                                <div class="spinner"></div>
+                                                <p>Searching mods...</p>
+                                            </div>
 
-                                    <!-- Results Grid -->
-                                    <div id="modSearchResults" class="mod-grid">
-                                    </div>
+                                            <!-- Results Grid -->
+                                            <div id="modSearchResults" class="mod-grid">
+                                            </div>
 
-                                    <!-- Pagination Controls -->
-                                    <div id="modSearchPagination" class="pagination-controls"
-                                        style="display: none; justify-content: center; gap: 10px; margin-top: 15px; align-items: center;">
-                                        <button id="btnPrevPage" class="btn-square" disabled><i
-                                                class="fas fa-chevron-left"></i></button>
-                                        <button id="pageIndicator" class="btn-secondary"
-                                            style="pointer-events: none; padding: 10px 15px; font-weight: bold;">1</button>
-                                        <button id="btnNextPage" class="btn-square"><i
-                                                class="fas fa-chevron-right"></i></button>
+                                            <!-- Pagination Controls -->
+                                            <div id="modSearchPagination" class="pagination-controls"
+                                                style="display: none; justify-content: center; gap: 10px; margin-top: 15px; align-items: center;">
+                                                <button id="btnPrevPage" class="btn-square" disabled><i
+                                                        class="fas fa-chevron-left"></i></button>
+                                                <button id="pageIndicator" class="btn-secondary"
+                                                    style="pointer-events: none; padding: 10px 15px; font-weight: bold;">1</button>
+                                                <button id="btnNextPage" class="btn-square"><i
+                                                        class="fas fa-chevron-right"></i></button>
+                                            </div>
+                                        </div>
+
+                                        <!-- RIGHT: Filter Panel (inside download tab only) -->
+                                        <div class="mod-sidebar-filters" id="modFiltersContainer">
+                                            <div class="mod-filters-header">
+                                                <h3><i class="fas fa-sliders-h"></i> Filters & Sort</h3>
+                                            </div>
+
+                                            <div class="mod-filters-body">
+                                                <div class="filter-group">
+                                                    <label><i class="fas fa-sort-amount-down"></i> Sort By</label>
+                                                    <select id="modSortSelect" class="filter-select">
+                                                        <option value="relevance">Relevance</option>
+                                                        <option value="downloads">Most Downloaded</option>
+                                                        <option value="newest">Recently Uploaded</option>
+                                                        <option value="updated">Recently Updated</option>
+                                                    </select>
+                                                </div>
+
+                                                <div class="filter-group">
+                                                    <label><i class="fas fa-tags"></i> Categories</label>
+                                                    <div id="modCategoriesContainer" class="mod-categories-container">
+                                                        <span class="filter-loading">Loading...</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <button id="applyFiltersBtn" class="btn-apply-filters">
+                                                <i class="fas fa-check"></i> Apply Changes
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -255,36 +338,6 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-
-                        <!-- RIGHT: Filter Panel (completely outside all content) -->
-                        <div class="mod-sidebar-filters" id="modFiltersContainer">
-                            <div class="mod-filters-header">
-                                <h3><i class="fas fa-sliders-h"></i> Filters & Sort</h3>
-                            </div>
-
-                            <div class="mod-filters-body">
-                                <div class="filter-group">
-                                    <label><i class="fas fa-sort-amount-down"></i> Sort By</label>
-                                    <select id="modSortSelect" class="filter-select">
-                                        <option value="relevance">Relevance</option>
-                                        <option value="downloads">Most Downloaded</option>
-                                        <option value="newest">Recently Uploaded</option>
-                                        <option value="updated">Recently Updated</option>
-                                    </select>
-                                </div>
-
-                                <div class="filter-group">
-                                    <label><i class="fas fa-tags"></i> Categories</label>
-                                    <div id="modCategoriesContainer" class="mod-categories-container">
-                                        <span class="filter-loading">Loading...</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <button id="applyFiltersBtn" class="btn-apply-filters">
-                                <i class="fas fa-check"></i> Apply Changes
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -463,14 +516,39 @@
                 </label>
                 <input id="profileName" type="text">
             </div>
-            <div class="modal-input-group">
-                <label>
-                    Version
-                    <i class="fa-regular fa-question-circle help-icon"
-                        data-tooltip="Minecraft version to use. Download new Minecraft versions from the Version Downloader."></i>
-                </label>
-                <select name="create-profile-version" id="profileVersionSelect">
-                </select>
+            <div class="version-selects-row">
+                <div class="modal-input-group">
+                    <label>
+                        Software
+                        <i class="fa-regular fa-question-circle help-icon"
+                            data-tooltip="Choose the software type: Vanilla for the original game, Forge or Fabric to use mods."></i>
+                    </label>
+                    <select id="profileSoftwareSelect">
+                        <option value="vanilla">Vanilla</option>
+                        <option value="forge">Forge</option>
+                        <option value="fabric">Fabric</option>
+                    </select>
+                </div>
+                <div class="modal-input-group">
+                    <label>
+                        Minecraft Version
+                        <i class="fa-regular fa-question-circle help-icon"
+                            data-tooltip="The Minecraft version this installation will use."></i>
+                    </label>
+                    <select id="profileMcVersionSelect">
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
+                <div class="modal-input-group" id="profileLoaderVersionGroup">
+                    <label id="profileLoaderVersionLabel">
+                        Software Version
+                        <i class="fa-regular fa-question-circle help-icon"
+                            data-tooltip="Version of the mod loader (Forge or Fabric). Only active when not Vanilla."></i>
+                    </label>
+                    <select id="profileLoaderVersionSelect" disabled>
+                        <option value="">Select a loader...</option>
+                    </select>
+                </div>
             </div>
             <div class="modal-input-group">
                 <label>
@@ -504,7 +582,7 @@
                             class="fas fa-folder-open"></i></button>
                 </div>
             </div>
-
+            
             <div class="modal-options">
                 <button id="acceptProfileBtn" class="btn-blue">Create</button>
                 <button id="cancelModalBtn" class="btn-red">Cancel</button>
@@ -549,6 +627,10 @@
                     <i class="fab fa-microsoft"></i> Login with Microsoft
                 </button>
 
+                <button class="btn-primary btn-large" id="selectHelloWorldBtn" style="background-color: #ffaa00; margin-top: 15px; border: none; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.3); color: #fff;">
+                    <i class="fas fa-globe"></i> Login with HelloWorld
+                </button>
+
                 <button class="btn-secondary btn-link" id="selectOfflineBtn">
                     Continue in Offline mode
                 </button>
@@ -577,87 +659,71 @@
                     <button class="btn-primary" id="saveOfflineBtn">Enter</button>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Download Modal -->
-    <div class="modal" id="downloadModal">
-        <div class="modal-content download-modal">
-            <span>Download Minecraft Version</span>
+            <!-- Screen 3: HelloWorld Auth -->
+            <div id="loginHelloWorldScreen" class="login-screen">
+                <span class="modal-title">HelloWorld Account</span>
+                <p style="text-align: center; margin-bottom: 20px; color: #666;">
+                    Log in with your HelloWorld web account
+                </p>
 
-            <!-- Loader Type Selection -->
-            <div class="loader-type-selector">
-                <button class="loader-type-btn active" data-type="vanilla">
-                    <i class="fas fa-cube"></i> Vanilla
-                </button>
-                <button class="loader-type-btn" data-type="forge">
-                    <i class="fas fa-hammer"></i> Forge
-                </button>
-                <button class="loader-type-btn" data-type="fabric">
-                    <i class="fas fa-scroll"></i> Fabric
-                </button>
-            </div>
-
-            <!-- MC Version Dropdown -->
-            <div class="modal-input-group">
-                <label>
-                    Minecraft Version
-                    <i class="fa-regular fa-question-circle help-icon"
-                        data-tooltip="Select the Minecraft version you want to download"></i>
-                </label>
-                <select id="downloadMcVersion">
-                    <option value="">Loading...</option>
-                </select>
-            </div>
-
-            <!-- Loader Version Dropdown (hidden for vanilla) -->
-            <div class="modal-input-group" id="loaderVersionGroup" style="display: none;">
-                <label id="loaderVersionLabel">
-                    Loader Version
-                    <i class="fa-regular fa-question-circle help-icon"
-                        data-tooltip="Select the loader version (Forge or Fabric)"></i>
-                </label>
-                <select id="downloadLoaderVersion">
-                    <option value="">Loading...</option>
-                </select>
-            </div>
-
-            <!-- Download Progress -->
-            <div id="downloadProgressContainer" class="install-progress" style="display: none;">
-                <button id="cancelDownloadBtn2" class="cancel-download-icon" title="Cancel download">
-                    <i class="fas fa-times"></i>
-                </button>
-                <div class="install-progress-text" id="downloadProgressText">Downloading...</div>
-                <div class="progress-bar">
-                    <div id="downloadProgressBarFill" class="progress-bar-fill" style="width: 0%;"></div>
+                <div class="modal-input-group">
+                    <label>Email or Username</label>
+                    <input id="hwEmail" type="text" placeholder="Email or Username">
                 </div>
-                <div id="downloadProgressPercentage" class="progress-percentage">0%</div>
-            </div>
 
-            <div class="modal-options">
-                <button id="startDownloadBtn" class="btn-blue">
-                    <i class="fas fa-download"></i> Download
-                </button>
-                <button id="cancelDownloadModalBtn" class="btn-red">Close</button>
+                <div class="modal-input-group" style="margin-top: 15px;">
+                    <label>Password</label>
+                    <div style="position: relative;">
+                        <input id="hwPassword" type="password" placeholder="••••••••" style="padding-right: 40px; width: 100%;">
+                        <i class="fa-regular fa-eye hw-toggle-password" data-target="hwPassword" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #888;"></i>
+                    </div>
+                </div>
+
+                <!-- Error Container -->
+                <div id="hwLoginError" style="color: #ff4444; font-size: 0.9em; margin-top: 15px; text-align: center; display: none; background: rgba(255, 68, 68, 0.1); padding: 8px; border-radius: 8px;"></div>
+
+                <div class="modal-options" style="margin-top: 20px;">
+                    <button class="btn-secondary" id="hwBackBtn" style="color: #a3a3a3;">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                    <button class="btn-primary" id="hwLoginBtn" style="background: linear-gradient(135deg, #ffaa00 0%, #ff8c00 100%); color: #fff; font-weight: 600; border: none; box-shadow: 0 4px 15px rgba(255, 140, 0, 0.4);">
+                        Log In
+                    </button>
+                </div>
+                <p style="text-align: center; margin-top: 15px; font-size: 0.9em; opacity: 0.8; color: #888;">
+                    No account yet? <a href="https://abeloskyyy.github.io/HelloWorld-Launcher/?register=true" target="_blank" style="color: #ffaa00; text-decoration: none; font-weight: 600;">Create an account here</a>
+                </p>
             </div>
         </div>
     </div>
 
-    <!-- Manage Installed Versions Modal -->
-    <div class="modal" id="manageVersionsModal">
-        <div class="modal-content manage-versions-modal">
-            <button class="modal-close-btn" id="closeManageVersionsModal">
-                <i class="fas fa-times"></i>
-            </button>
-            <span>Installed Versions</span>
-            <div id="manageVersionsList" class="manage-versions-list">
-                <div class="spinner" style="margin: 30px auto;"></div>
+
+    <!-- Sync Modal -->
+    <div class="modal" id="syncModal">
+        <div class="modal-content sync-modal-content">
+            <div class="sync-modal-header">
+                <span class="sync-modal-title">Synchronizing Files</span>
             </div>
-            <div class="modal-options">
-                <button id="closeManageVersionsBtn" class="btn-secondary">Close</button>
+            <p class="sync-modal-subtitle">Downloading missing files for this installation.</p>
+            
+            <div id="syncTasksList" class="sync-tasks-list">
+                <!-- Queue Items go here -->
+            </div>
+
+            <div class="sync-progress-section">
+                <div class="sync-progress-bar-wrap">
+                    <div id="syncProgressBar" class="sync-progress-bar-fill" style="width: 0%;"></div>
+                </div>
+                <div id="syncProgressText" class="sync-progress-text">Preparing...</div>
+            </div>
+
+            <div class="modal-options sync-modal-options">
+                <button id="cancelSyncBtn" class="btn-red">Cancel</button>
             </div>
         </div>
     </div>
+
 
     <!-- No Internet Modal -->
     <div class="modal" id="noInternetModal" style="display: none;">
@@ -780,7 +846,7 @@
     <button id="reviewFloatingBtn" class="review-fab" title="Leave a Review">
         <i class="fas fa-heart"></i>
     </button>
-
+        
     <!-- Review Reminder Modal (Full Screen Overlay) -->
     <div id="reviewReminderModal" class="full-screen-overlay">
         <div class="review-overlay-content">
@@ -830,7 +896,7 @@
                             <i class="fa-regular fa-question-circle help-icon"
                                 data-tooltip="Give your skin pack a memorable name"></i>
                         </label>
-                        <input id="packName" type="text" placeholder="e.g., My Cool Look">
+                        <input id="packName" type="text" placeholder="e.g., My Cool Look" style="position: relative; z-index: 10;">
                     </div>
 
                     <!-- Skin Model -->
@@ -1120,8 +1186,7 @@
                 <div class="onboarding-step" id="step2">
                     <h2 class="onboarding-title">Interactive Tutorial</h2>
                     <p class="onboarding-description">
-                        We will now guide you through the process of downloading Minecraft versions and creating
-                        installations.
+                        We will now guide you through the process of creating your first installation.
                         This interactive tour will show you exactly where to click and what each option does.
                     </p>
                     <div class="tutorial-actions"
@@ -1232,6 +1297,527 @@
         </div>
     </div>
 
+    <!-- Social Modal -->
+    <div id="socialModal" class="modal social-modal-overlay">
+        <div class="social-modal-content">
+            <button class="social-close-btn" id="closeSocialModal" title="Close"><i class="fas fa-times"></i></button>
+            <div class="social-modal-inner">
+                <!-- Main Panel -->
+                <div class="social-panel-main" id="socialPanelMain">
+                    <div class="social-modal-title"><i class="fas fa-user-friends"></i> Social</div>
+                    <div class="social-tabs-nav">
+                        <button class="social-tab-btn active" data-tab="friends"><i class="fas fa-user-friends"></i> Friends</button>
+                        <button class="social-tab-btn" data-tab="add"><i class="fas fa-user-plus"></i> Add</button>
+                        <button class="social-tab-btn" data-tab="requests">
+                            <i class="fas fa-envelope"></i> Requests
+                            <span id="requestsTabBadge" class="tab-count-badge" style="display:none">0</span>
+                        </button>
+                    </div>
+
+                    <!-- Tab: Friends -->
+                    <div id="socialTabFriends" class="social-tab-content active">
+                        <div id="socialOfflineMsg" class="social-offline-msg" style="display:none">
+                            <i class="fas fa-wifi"></i>
+                            <p>Social features require a <strong>HelloWorld</strong> or <strong>Premium</strong> account.</p>
+                        </div>
+                        <div id="friendsListContainer">
+                            <div id="friendsList" class="social-user-list"></div>
+                            <div id="blockedSection" style="display:none">
+                                <button class="social-section-toggle" id="blockedToggleBtn">
+                                    <i class="fas fa-ban"></i> Blocked <span id="blockedCount" class="tab-count-badge">0</span>
+                                    <i class="fas fa-chevron-down" id="blockedChevron" style="margin-left:auto;transition:transform 0.2s"></i>
+                                </button>
+                                <div id="blockedList" class="social-user-list" style="display:none"></div>
+                            </div>
+                            
+                            <!-- Create Group Button -->
+                            <div style="padding: 10px; display: flex; justify-content: flex-end; border-top: 1px solid rgba(255,255,255,0.05);">
+                                <button id="openCreateGroupBtn" style="background: rgba(79,172,254,0.2); color: #4facfe; border: 1px solid rgba(79,172,254,0.3); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(79,172,254,0.3)'; this.style.color='#fff';" onmouseout="this.style.background='rgba(79,172,254,0.2)'; this.style.color='#4facfe';">
+                                    <i class="fas fa-comments"></i> <i class="fas fa-plus" style="font-size: 10px;"></i> <span>Create Group</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="friendsLoading" class="social-loading" style="display:none"><div class="spinner"></div></div>
+                    </div>
+
+                    <!-- Tab: Add Friend -->
+                    <div id="socialTabAdd" class="social-tab-content">
+                        <div class="social-search-form">
+                            <input type="text" id="searchUserInput" class="social-search-input" placeholder="Search by username..." maxlength="32">
+                            <button id="searchUserBtn" class="social-search-btn"><i class="fas fa-search"></i></button>
+                        </div>
+                        <div id="searchUserStatus" class="social-status-msg" style="display:none"></div>
+                        <div id="searchUserResults" class="social-user-list" style="margin-top:8px"></div>
+                        <div id="searchLoading" class="social-loading" style="display:none"><div class="spinner"></div></div>
+                    </div>
+
+                    <!-- Tab: Requests -->
+                    <div id="socialTabRequests" class="social-tab-content">
+                        <div class="requests-subtabs">
+                            <button class="req-subtab active" data-subtab="received">
+                                Received <span id="reqReceivedCount" class="tab-count-badge" style="display:none">0</span>
+                            </button>
+                            <button class="req-subtab" data-subtab="sent">Sent</button>
+                        </div>
+                        <div id="reqReceivedList" class="social-user-list"></div>
+                        <div id="reqSentList" class="social-user-list" style="display:none"></div>
+                        <div id="requestsLoading" class="social-loading" style="display:none"><div class="spinner"></div></div>
+                    </div>
+                </div>
+
+                <!-- Resize Handle -->
+                <div class="social-resize-handle" id="socialResizeHandle"></div>
+
+                <!-- Chat Panel -->
+                <div class="social-panel-chat" id="socialPanelChat" style="display:none">
+                    <div class="chat-header">
+                        <button class="chat-back-btn" id="chatBackBtn"><i class="fas fa-arrow-left"></i></button>
+                        <!-- Group Chat Actions -->
+                        <div id="chatHeaderActions" style="display: none; margin-right: 10px;">
+                            <button id="groupSettingsBtn" class="social-action-btn" title="Group Settings"><i class="fas fa-cog"></i></button>
+                        </div>
+                        <div class="chat-header-avatar" id="chatHeaderAvatar"></div>
+                        <div class="chat-header-info">
+                            <span id="chatHeaderName" class="chat-header-name"></span>
+                            <span id="chatHeaderBadge"></span>
+                        </div>
+                    </div>
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="chat-load-more" id="chatLoadMore" style="display:none">
+                            <button id="chatLoadMoreBtn">Load earlier messages</button>
+                        </div>
+                    </div>
+                    <div class="chat-input-area">
+                        <div class="chat-buttons-grid">
+                            <button class="chat-grid-btn chat-btn-installation" data-type="installation">
+                                <i class="fas fa-download"></i>
+                                <span>Installation</span>
+                            </button>
+                            <button class="chat-grid-btn chat-btn-seed" data-type="seed">
+                                <i class="fas fa-seedling"></i>
+                                <span>Seed</span>
+                            </button>
+                            <button class="chat-grid-btn chat-btn-server" data-type="server">
+                                <i class="fas fa-server"></i>
+                                <span>Server Invite</span>
+                            </button>
+                            <button class="chat-grid-btn chat-btn-link" data-type="link">
+                                <i class="fas fa-link"></i>
+                                <span>Link</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Group Modal -->
+    <div id="createGroupModal" class="modal">
+        <div class="modal-content" style="max-width: 400px; padding: 20px;">
+            <h2 id="createGroupTitle">Create Group Chat</h2>
+            
+            <!-- Step 1: Select Friends -->
+            <div id="createGroupStep1">
+                <p style="color: #b0b8c6; margin-bottom: 15px; font-size: 14px;">Select friends to add to the group:</p>
+                <div id="groupFriendsList" class="social-user-list" style="max-height: 250px; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px;">
+                    <!-- Friend items with checkboxes will be loaded here -->
+                </div>
+                <div class="modal-buttons" style="margin-top: 20px;">
+                    <button class="btn btn-secondary" id="cancelCreateGroupBtn">Cancel</button>
+                    <button class="btn btn-primary" id="nextCreateGroupBtn" disabled>Next</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Group Details -->
+            <div id="createGroupStep2" style="display: none;">
+                <div class="modal-input-group" style="align-items: center; margin: 10px 0 20px 0;">
+                    <div class="icon-selector" id="groupIconSelector" style="width: 100px; height: 100px; border-radius: 50%; background: rgba(79,172,254,0.1); border: 2px dashed rgba(79,172,254,0.3); display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; position: relative;">
+                        <img id="groupIconPreview" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+                        <i id="groupIconPlaceholder" class="fas fa-camera" style="font-size: 30px; color: rgba(79,172,254,0.5);"></i>
+                        <div class="icon-selector-overlay" style="position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;">
+                            <i class="fas fa-upload" style="color: white;"></i>
+                        </div>
+                    </div>
+                    <input type="file" id="groupImageInput" accept="image/png, image/jpeg, image/webp" style="display: none;">
+                </div>
+                <div class="modal-input-group" style="margin: 0 0 15px 0;">
+                    <label for="groupNameInput">Group Name</label>
+                    <input type="text" id="groupNameInput" class="input-text" placeholder="Enter group name" maxlength="32">
+                </div>
+                <div class="modal-input-group" style="margin: 0 0 20px 0;">
+                    <label for="groupDescInput">Description (Optional)</label>
+                    <input type="text" id="groupDescInput" class="input-text" placeholder="What's this group about?" maxlength="100">
+                </div>
+                <div class="modal-buttons">
+                    <button class="btn btn-secondary" id="backCreateGroupBtn">Back</button>
+                    <button class="btn btn-primary" id="confirmCreateGroupBtn" disabled>Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Profile Modal -->
+    <div id="shareProfileModal" class="modal">
+        <div class="modal-content" style="max-width: 450px; padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0; font-size: 18px;">Share Profile</h2>
+            </div>
+            <p style="color: #b0b8c6; margin-bottom: 15px; font-size: 14px;">Select a profile to share in the chat.<br><span style="font-size: 11px; opacity: 0.8;">If your profile doesn't have a custom icon, the default icon will be shown.</span></p>
+            
+            <div id="shareProfileList" style="max-height: 300px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 8px;">
+                <!-- Profiles will be loaded here -->
+            </div>
+            
+            <div class="modal-buttons" style="margin-top: 20px;">
+                <button class="btn btn-secondary" id="cancelShareProfileBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Profile Modal -->
+    <div id="viewProfileModal" class="modal">
+        <div class="modal-content" style="max-width: 500px; padding: 0; overflow: hidden; display: flex; flex-direction: column;">
+            <div style="padding: 20px 20px 0 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px;">
+                <h2 id="vpHeaderTitle" style="margin: 0; font-size: 18px;">View Profile</h2>
+            </div>
+            
+            <div class="group-settings-tabs" style="display: flex; gap: 8px; padding: 15px 20px 0 20px;">
+                <button class="group-tab-btn active" data-vp-tab="general" style="flex:1;">General</button>
+                <button class="group-tab-btn" data-vp-tab="mods" id="vpTabMods" style="display:none; flex:1;">Mods</button>
+            </div>
+            
+            <div style="padding: 20px; max-height: 400px; overflow-y: auto;">
+                <!-- General Tab -->
+                <div id="vpTabContentGeneral" style="display:block; transition: opacity 0.2s ease;">
+                    <div style="display: flex; gap: 15px; align-items: flex-start;">
+                        <img id="vpIcon" src="ui/img/icon.png" style="width: 64px; height: 64px; border-radius: 8px; object-fit: cover; image-rendering: pixelated; background: rgba(0,0,0,0.2);">
+                        <div>
+                            <h3 id="vpName" style="margin: 0 0 5px 0; color: #fff; font-size: 22px;">Profile Name</h3>
+                            <p id="vpVersion" style="margin: 0; color: #b0b8c6; font-size: 14px;">Version</p>
+                            <p id="vpLoader" style="margin: 5px 0 0 0; color: #4facfe; font-size: 12px; display:none;"></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Mods Tab -->
+                <div id="vpTabContentMods" style="display:none; transition: opacity 0.2s ease;">
+                    <div id="vpModsList" style="display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Mods go here -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-buttons" style="padding: 20px; background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.05); margin-top: 0;">
+                <button class="btn btn-secondary" id="closeViewProfileBtn">Close</button>
+                <button class="btn btn-primary" id="vpInstallBtn"><i class="fas fa-download"></i> Install Profile</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Install Profile Modal -->
+    <div id="installProfileModal" class="modal">
+        <div class="modal-content" style="max-width: 480px; padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0; font-size: 18px;">Install Profile</h2>
+            </div>
+            
+            <div class="modal-input-group" style="margin: 0 0 15px 0;">
+                <label for="ipNameInput">Profile Name</label>
+                <input type="text" id="ipNameInput" class="input-text" placeholder="Enter profile name" maxlength="32">
+            </div>
+            
+            <div class="modal-input-group" style="margin: 0 0 15px 0;">
+                <label for="ipDirInput">Game Directory</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="ipDirInput" class="input-text" placeholder="Default directory" style="flex:1;">
+                    <button class="btn btn-secondary" id="ipDirBtn" style="padding: 0 15px;"><i class="fas fa-folder-open"></i></button>
+                </div>
+            </div>
+            
+            <div class="modal-input-group" style="margin: 0 0 15px 0;">
+                <label for="ipJavaInput">Java Executable (Optional)</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="ipJavaInput" class="input-text" placeholder="Auto-detect" style="flex:1;">
+                    <button class="btn btn-secondary" id="ipJavaBtn" style="padding: 0 15px;"><i class="fas fa-file-code"></i></button>
+                </div>
+            </div>
+            
+            <div class="modal-input-group" style="margin: 0 0 20px 0;">
+                <label for="ipJvmInput">JVM Arguments (Optional)</label>
+                <input type="text" id="ipJvmInput" class="input-text" placeholder="-Xmx2G ...">
+            </div>
+            
+            <div class="modal-buttons" style="margin-top: 20px;">
+                <button class="btn btn-secondary" id="cancelInstallProfileBtn">Cancel</button>
+                <button class="btn btn-primary" id="confirmInstallProfileBtn">Install</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Group Settings Modal -->
+    <div id="groupSettingsModal" class="modal">
+        <div class="modal-content group-settings-modal" style="max-width: 440px; padding: 20px; display: flex; flex-direction: column; max-height: 85vh; min-height: 520px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0; font-size: 18px;">Group Settings</h2>
+                <button id="closeGroupSettingsBtn" style="background: none; border: none; color: #888; cursor: pointer; font-size: 18px;"><i class="fas fa-times"></i></button>
+            </div>
+
+            <!-- Tabs -->
+            <div class="group-settings-tabs" style="display: flex; gap: 8px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+                <button class="group-tab-btn active" data-tab="info" style="flex:1;">Info</button>
+                <button class="group-tab-btn" data-tab="members" style="flex:1;">Members</button>
+            </div>
+
+            <!-- Tab: Info -->
+            <div id="groupTabInfo" class="group-tab-content active" style="overflow-y: auto; transition: opacity 0.2s ease;">
+                <div class="modal-input-group" style="align-items: center; margin: 10px 0 20px 0;">
+                    <div class="icon-selector" id="editGroupIconSelector" style="width: 100px; height: 100px; border-radius: 50%; background: rgba(79,172,254,0.1); border: 2px dashed rgba(79,172,254,0.3); display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; position: relative;">
+                        <img id="editGroupIconPreview" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+                        <i id="editGroupIconPlaceholder" class="fas fa-camera" style="font-size: 30px; color: rgba(79,172,254,0.5);"></i>
+                        <div class="icon-selector-overlay" style="position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;">
+                            <i class="fas fa-upload" style="color: white;"></i>
+                        </div>
+                    </div>
+                    <input type="file" id="editGroupImageInput" accept="image/png, image/jpeg, image/webp" style="display: none;">
+                </div>
+                <div class="modal-input-group" style="margin: 0 0 15px 0;">
+                    <label for="editGroupNameInput">Group Name</label>
+                    <input type="text" id="editGroupNameInput" class="input-text" placeholder="Enter group name" maxlength="32">
+                </div>
+                <div class="modal-input-group" style="margin: 0 0 20px 0;">
+                    <label for="editGroupDescInput">Description</label>
+                    <input type="text" id="editGroupDescInput" class="input-text" placeholder="What's this group about?" maxlength="100">
+                </div>
+                <button id="saveGroupInfoBtn" class="btn btn-primary" style="width: 100%;">Save Changes</button>
+            </div>
+
+            <!-- Tab: Members -->
+            <div id="groupTabMembers" class="group-tab-content" style="display: none; overflow-y: auto; flex: 1; transition: opacity 0.2s ease;">
+                <div id="groupMembersList" class="social-user-list" style="max-height: none;"></div>
+                
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <p style="color: #b0b8c6; margin-bottom: 10px; font-size: 14px; font-weight: 600;"><i class="fas fa-user-plus"></i> Add Members</p>
+                    <div id="addMembersList" class="social-user-list" style="max-height: 200px; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Profile View Modal -->
+    <div id="userProfileModal" class="modal">
+        <div class="modal-content" style="max-width: 500px; padding: 0; background: rgba(20,20,25,0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px;">
+            <button class="modal-close-btn" id="closeUserProfileModal" style="position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.5); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; z-index: 10;">
+                <i class="fas fa-times"></i>
+            </button>
+            
+            <div id="profileLoadingSpinner" style="display: none; position: absolute; inset: 0; background: rgb(20,20,25); border-radius: 16px; z-index: 50; align-items: center; justify-content: center; transition: opacity 0.3s ease;">
+                <div class="spinner" style="width: 40px; height: 40px; border: 3px solid rgba(79,172,254,0.2); border-top-color: #4facfe; border-radius: 50%;"></div>
+            </div>
+            
+            <div id="profileBackgroundPreview" style="border-radius: 16px 16px 0 0; padding: 30px; background: rgba(255,255,255,0.05); min-height: 250px; position: relative; display: flex; flex-direction: column; align-items: center; z-index: 1;">
+                <h2 id="profileDisplayName" style="margin: 0 0 15px 0; font-size: 2.2rem; font-weight: 600; text-align: center; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; z-index: 1; color: #ffffff !important; background: none !important;">
+                    <span style="font-size: 2.2rem; color: #ffffff !important; background: none !important; -webkit-text-fill-color: #ffffff !important;">Player</span>
+                    <span id="profilePremiumBadge" class="premium-badge" style="display:none;"><i class="fas fa-dollar-sign"></i></span>
+                </h2>
+                <div style="position: relative; display: inline-block; z-index: 1;">
+                    <img id="profileAvatarPreview" src="" alt="Avatar" style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255,255,255,0.2); image-rendering: pixelated;">
+                    <div id="profileCountryBadge" style="position: absolute; top: 0; right: -5px; width: 32px; height: 32px; border-radius: 50%; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; overflow: hidden; border: 2px solid rgba(255,255,255,0.3); z-index: 2;">
+                        <img id="profileCountryFlagSvg" src="" alt="Country" style="width: 100%; height: 100%; object-fit: cover;">
+                    </div>
+                </div>
+            </div>
+
+            <div style="padding: 25px;">
+                <div id="profileRichPresenceSection" style="margin-bottom: 20px; display: none; background: rgba(18, 20, 26, 0.7); border: 1px solid rgba(88, 101, 242, 0.3); border-radius: 8px; padding: 15px; position: relative; overflow: hidden;">
+                    <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background-color: #5865F2;"></div>
+                    <h4 style="margin: 0 0 8px 0; font-size: 0.85rem; color: #b0b8c6; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Activity Status</h4>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <img src="img/icon/icon.png" alt="Game Icon" style="width: 48px; height: 48px; border-radius: 8px; object-fit: cover;">
+                        <div>
+                            <div id="profilePresenceState" style="color: #ffffff; font-weight: 600; font-size: 1rem; margin-bottom: 2px;">Playing Minecraft</div>
+                            <div id="profilePresenceDetails" style="color: #a3a6aa; font-size: 0.85rem; margin-bottom: 2px;">Server: play.hypixel.net</div>
+                            <div id="profilePresenceVersion" style="color: #a3a6aa; font-size: 0.85rem;">Fabric 1.20.1 (Survival Pack)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="profileBiographySection" style="margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 10px 0; font-size: 1rem; color: #b0b8c6;">Biography</h4>
+                    <p id="profileBiography" style="margin: 0; color: #e0e6ed; font-size: 0.95rem; line-height: 1.5; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; white-space: pre-wrap;">No biography</p>
+                </div>
+
+                <div id="profileLinksSection" style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h4 style="margin: 0; font-size: 1rem; color: #b0b8c6;">Links</h4>
+                        <button id="addLinkBtn" class="btn-small btn-secondary" style="padding: 6px 12px; font-size: 12px; display: none;">
+                            <i class="fas fa-plus"></i> Add Link
+                        </button>
+                    </div>
+                    <div id="profileLinksContainer" style="display: flex; flex-direction: column; gap: 8px;">
+                        <p style="margin: 0; color: #6b7280; font-size: 0.9rem; font-style: italic;">No links</p>
+                    </div>
+                </div>
+
+                <div id="profileFavoriteMobSection" style="margin-bottom: 15px;">
+                    <h4 style="margin: 0 0 10px 0; font-size: 1rem; color: #b0b8c6;">Favorite Mob</h4>
+                    <p id="profileFavoriteMob" style="margin: 0; color: #e0e6ed; font-size: 0.95rem; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">-</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Link Modal -->
+    <div id="addLinkModal" class="modal">
+        <div class="modal-content" style="max-width: 500px; padding: 25px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; font-size: 20px;">Add Link</h2>
+                <button id="closeAddLinkBtn" style="background: none; border: none; color: #888; cursor: pointer; font-size: 20px;"><i class="fas fa-times"></i></button>
+            </div>
+
+            <div class="modal-input-group" style="margin-bottom: 15px;">
+                <label for="linkUrlInput">URL</label>
+                <input type="text" id="linkUrlInput" placeholder="https://example.com" style="width: 100%;">
+                <p id="linkUrlError" style="color: #f87171; font-size: 12px; margin-top: 5px; display: none;">Please enter a URL</p>
+            </div>
+
+            <div class="modal-input-group" style="margin-bottom: 15px;">
+                <label for="linkTitleInput">Title (optional)</label>
+                <input type="text" id="linkTitleInput" placeholder="My Channel" style="width: 100%;">
+            </div>
+
+            <div class="modal-input-group" style="margin-bottom: 20px;">
+                <label for="linkTypeSearch">Link Type</label>
+                <div class="searchable-dropdown" id="linkTypeDropdown">
+                    <div class="dropdown-trigger" id="linkTypeTrigger">
+                        <span id="linkTypeSelected">Select type...</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="dropdown-search">
+                        <input type="text" id="linkTypeSearch" placeholder="Search types...">
+                    </div>
+                    <div class="dropdown-options" id="linkTypeOptions">
+                        <!-- Options will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-options">
+                <button id="submitLinkBtn" class="btn-blue">Add Link</button>
+                <button id="cancelLinkBtn" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" style="position: fixed; top: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 10px;"></div>
+
+    <!-- Share Link Modal -->
+    <div id="shareLinkModal" class="modal">
+        <div class="modal-content" style="max-width: 500px; padding: 25px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; font-size: 20px;">Share Link</h2>
+                <button id="closeShareLinkBtn" style="background: none; border: none; color: #888; cursor: pointer; font-size: 20px;"><i class="fas fa-times"></i></button>
+            </div>
+
+            <p style="color: #b0b8c6; font-size: 14px; margin-bottom: 20px;">Share a link with your friend.</p>
+
+            <div class="modal-input-group" style="margin-bottom: 15px;">
+                <label for="shareLinkUrlInput">URL</label>
+                <input type="text" id="shareLinkUrlInput" placeholder="https://example.com" style="width: 100%;">
+                <p id="shareLinkUrlError" style="color: #f87171; font-size: 12px; margin-top: 5px; display: none;">Please enter a URL</p>
+            </div>
+
+            <div class="modal-input-group" style="margin-bottom: 15px;">
+                <label for="shareLinkTitleInput">Title (optional)</label>
+                <input type="text" id="shareLinkTitleInput" placeholder="My Channel" style="width: 100%;">
+            </div>
+
+            <div class="modal-input-group" style="margin-bottom: 20px;">
+                <label for="shareLinkTypeSearch">Link Type</label>
+                <div class="searchable-dropdown" id="shareLinkTypeDropdown">
+                    <div class="dropdown-trigger" id="shareLinkTypeTrigger">
+                        <span id="shareLinkTypeSelected">Select type...</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="dropdown-search">
+                        <input type="text" id="shareLinkTypeSearch" placeholder="Search types...">
+                    </div>
+                    <div class="dropdown-options" id="shareLinkTypeOptions">
+                        <!-- Options will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-options">
+                <button id="submitShareLinkBtn" class="btn-blue">Send Link</button>
+                <button id="cancelShareLinkBtn" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Seed Modal -->
+    <div id="shareSeedModal" class="modal">
+        <div class="modal-content" style="max-width: 500px; padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0; font-size: 18px;">Share Seed</h2>
+                <button id="closeShareSeedBtn" style="background: none; border: none; color: #888; cursor: pointer; font-size: 18px;"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <p style="color: #b0b8c6; font-size: 14px; margin-bottom: 20px;">Share a Minecraft world seed with your friend. Choose to enter it manually or load from an existing world.</p>
+            
+            <!-- Selection Method -->
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button class="btn btn-secondary seed-method-btn active" data-method="text" style="flex: 1;">
+                    <i class="fas fa-keyboard"></i> Manual Entry
+                </button>
+                <button class="btn btn-secondary seed-method-btn" data-method="world" style="flex: 1;">
+                    <i class="fas fa-globe"></i> From World
+                </button>
+            </div>
+            
+            <!-- Manual Entry Section -->
+            <div id="seedTextSection" style="display: block; transition: opacity 0.2s ease;">
+                <div class="modal-input-group" style="margin: 0 0 20px 0;">
+                    <label for="seedTextInput">Seed (place /seed command in your world or server)</label>
+                    <input type="text" id="seedTextInput" class="input-text" placeholder="e.g., 3478381264927704038" maxlength="20">
+                    <p id="seedValidationError" style="color: #f87171; font-size: 12px; margin-top: 5px; display: none;">Seed must be 19-20 digits with optional negative sign</p>
+                </div>
+            </div>
+            
+            <!-- From World Section -->
+            <div id="seedWorldSection" style="display: none; transition: opacity 0.2s ease;">
+                <div class="modal-input-group" style="margin: 0 0 15px 0;">
+                    <label for="seedProfileSelect">Select Installation</label>
+                    <select id="seedProfileSelect" class="input-text">
+                        <option value="">Loading installations...</option>
+                    </select>
+                </div>
+                
+                <div class="modal-input-group" style="margin: 0 0 20px 0;">
+                    <label for="seedWorldSelect">Select World</label>
+                    <select id="seedWorldSelect" class="input-text" disabled>
+                        <option value="">Select an installation first</option>
+                    </select>
+                </div>
+                
+                <div id="seedLoadingSpinner" style="display: none; align-items: center; justify-content: center; gap: 10px; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                    <div class="spinner"></div>
+                    <span style="color: #b0b8c6; font-size: 14px;">Reading seed from world...</span>
+                </div>
+                
+                <div id="seedError" style="display: none; padding: 15px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 8px; color: #f87171; font-size: 14px;">
+                    <i class="fas fa-exclamation-triangle"></i> Could not read seed. The world may be corrupted.
+                </div>
+            </div>
+            
+            <div class="modal-buttons" style="margin-top: 20px;">
+                <button class="btn btn-secondary" id="cancelShareSeedBtn">Cancel</button>
+                <button class="btn btn-primary" id="sendSeedBtn">Send Seed</button>
+            </div>
+        </div>
+    </div>
+
     <script src="scripts.js"></script>
     <script src="download-listeners.js"></script>
     <script src="scripts-skinviewer3d.js"></script>
@@ -1240,6 +1826,7 @@
     <script src="tutorial-spotlight.js"></script>
     <script src="tutorial-steps.js"></script>
     <script src="scripts-onboarding.js"></script>
+    <script src="social.js"></script>
 
 </body>
 

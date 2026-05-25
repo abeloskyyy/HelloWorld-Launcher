@@ -1,5 +1,8 @@
-const { app, BrowserWindow, ipcMain, Menu, shell, dialog, safeStorage } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, shell, dialog, safeStorage, Notification } = require('electron')
 const path = require('path')
+const http = require('http')
+const { URL } = require('url')
+const crypto = require('crypto')
 
 // Use graceful-fs to handle EMFILE (too many open files) errors automatically
 // Must patch BEFORE loading fs-extra so it uses the patched fs
@@ -62,7 +65,6 @@ const rpc = require('./src/utils/rpc')
 const paths = require('./src/utils/paths')
 const profileManager = require('./src/handlers/profiles')
 const modManager = require('./src/handlers/mods')
-const skinManager = require('./src/handlers/skins')
 
 // Hardware Acceleration Check before App Ready
 try {
@@ -94,6 +96,8 @@ const javaRuntime = new JavaRuntimeManager(paths.getMcDir())
 let activeDownloads = new Map() // version_id -> { launcher, gameProcess, cancelled }
 
 // Redirect launcher events to UI and Console
+let launcherAssetProgressLogged = false;
+let launcherAssetCopyProgressLogged = false;
 launcher.on('debug', (e) => {
   console.log("[Launcher Debug]", e);
   mainWindow && mainWindow.webContents.send('info-message', e);
@@ -103,7 +107,21 @@ launcher.on('data', (e) => {
   mainWindow && mainWindow.webContents.send('info-message', e);
 })
 launcher.on('progress', (e) => {
-  console.log("[Launcher Progress]", e);
+  if (e?.type === 'assets') {
+    if (e.task === 0) launcherAssetProgressLogged = false;
+    if (!launcherAssetProgressLogged) {
+      console.log(`[Launcher Progress] Downloading assets (${e.total || 0} total)`);
+      launcherAssetProgressLogged = true;
+    }
+  } else if (e?.type === 'assets-copy') {
+    if (e.task === 0) launcherAssetCopyProgressLogged = false;
+    if (!launcherAssetCopyProgressLogged) {
+      console.log(`[Launcher Progress] Copying legacy assets (${e.total || 0} total)`);
+      launcherAssetCopyProgressLogged = true;
+    }
+  } else {
+    console.log("[Launcher Progress]", e);
+  }
   mainWindow && mainWindow.webContents.send('download-progress', e);
 })
 launcher.on('close', (e) => {
@@ -128,7 +146,8 @@ const DEFAULT_USER_DATA = {
   has_reviewed: false,
   onboarding_completed: false,
   last_skin_url: "",
-  last_skin_variant: "classic"
+  last_skin_variant: "classic",
+  last_cape_url: ""
 };
 
 let userDataCache = null;
@@ -185,15 +204,25 @@ const saveUserData = (data) => {
   const sensitive = {
     mc_token: data.mc_token,
     uuid: data.uuid,
-    msmc_auth: data.msmc_auth
+    msmc_auth: data.msmc_auth,
+    firebase_uid: data.firebase_uid,
+    firebase_refresh_token: data.firebase_refresh_token,
+    firebase_id_token: data.firebase_id_token,
+    firebase_ms_uid: data.firebase_ms_uid,
+    firebase_ms_refresh_token: data.firebase_ms_refresh_token
   };
   const toSave = { ...data };
   delete toSave.mc_token;
   delete toSave.uuid;
   delete toSave.msmc_auth;
+  delete toSave.firebase_uid;
+  delete toSave.firebase_refresh_token;
+  delete toSave.firebase_id_token;
+  delete toSave.firebase_ms_uid;
+  delete toSave.firebase_ms_refresh_token;
   delete toSave.encrypted_tokens;
 
-  const hasSensitive = sensitive.mc_token || sensitive.msmc_auth;
+  const hasSensitive = sensitive.mc_token || sensitive.msmc_auth || sensitive.firebase_refresh_token || sensitive.firebase_ms_refresh_token;
 
   if (hasSensitive && safeStorage.isEncryptionAvailable()) {
     try {
@@ -207,14 +236,390 @@ const saveUserData = (data) => {
   try {
     const userFile = paths.getUserFilePath();
     fs.ensureDirSync(path.dirname(userFile));
-    fs.writeJsonSync(userFile, toSave, { spaces: 4 });
-    paths.refresh();
-  } catch (e) { }
+    fs.writeJsonSync(userFile, toSave, { spaces: 2 });
+  } catch (e) {
+    console.error("Error saving user data:", e);
+  }
 }
 
+const normalizeUuid = (uuid) => (uuid || '').replace(/-/g, '').toLowerCase();
+
+// --- Firebase / Social Constants ---
+const FIREBASE_API_KEY = "AIzaSyACXEDO5R48HrlxVCyz8fBGimEIVkY2QSM";
+const FIREBASE_PROJECT_ID = "helloworld-launcher";
+const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
+
+// --- Social Helper: Parse Firestore doc fields ---
+function parseFirestoreFields(fields) {
+  if (!fields) return {};
+  const out = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if (v.stringValue !== undefined) out[k] = v.stringValue;
+    else if (v.integerValue !== undefined) out[k] = parseInt(v.integerValue);
+    else if (v.doubleValue !== undefined) out[k] = v.doubleValue;
+    else if (v.booleanValue !== undefined) out[k] = v.booleanValue;
+    else if (v.timestampValue !== undefined) out[k] = v.timestampValue;
+    else if (v.nullValue !== undefined) out[k] = null;
+    else if (v.arrayValue !== undefined) {
+      out[k] = (v.arrayValue.values || []).map(item => {
+        if (item.stringValue !== undefined) return item.stringValue;
+        else if (item.integerValue !== undefined) return parseInt(item.integerValue);
+        else if (item.doubleValue !== undefined) return item.doubleValue;
+        else if (item.booleanValue !== undefined) return item.booleanValue;
+        else if (item.mapValue !== undefined) return parseFirestoreFields(item.mapValue.fields || {});
+        else return null;
+      });
+    }
+  }
+  return out;
+}
+
+// --- Social Helper: Build Firestore fields from plain object ---
+function buildFSFields(obj) {
+  const fields = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v === 'string') fields[k] = { stringValue: v };
+    else if (typeof v === 'boolean') fields[k] = { booleanValue: v };
+    else if (typeof v === 'number') fields[k] = Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+    else if (v === null) fields[k] = { nullValue: null };
+    else if (Array.isArray(v)) fields[k] = { arrayValue: { values: v.map(i => ({ stringValue: String(i) })) } };
+  }
+  return fields;
+}
+
+// --- Social Helper: Firestore REST calls ---
+async function fsGet(docPath, idToken) {
+  const res = await axios.get(`${FIRESTORE_BASE}/${docPath}`, { headers: { Authorization: `Bearer ${idToken}` } });
+  return { id: docPath.split('/').pop(), ...parseFirestoreFields(res.data.fields) };
+}
+async function fsSet(docPath, obj, idToken, mask) {
+  const url = mask
+    ? `${FIRESTORE_BASE}/${docPath}?${mask.map(f => `updateMask.fieldPaths=${f}`).join('&')}`
+    : `${FIRESTORE_BASE}/${docPath}`;
+  const res = await axios.patch(url, { fields: buildFSFields(obj) }, { headers: { Authorization: `Bearer ${idToken}` } });
+  return res.data;
+}
+async function fsDel(docPath, idToken) {
+  await axios.delete(`${FIRESTORE_BASE}/${docPath}`, { headers: { Authorization: `Bearer ${idToken}` } });
+}
+async function fsUpdate(docPath, data, idToken) {
+  const fields = buildFSFields(data);
+  const mask = Object.keys(data).map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
+  await axios.patch(`${FIRESTORE_BASE}/${docPath}?${mask}`, { fields }, { headers: { Authorization: `Bearer ${idToken}` } });
+}
+async function fsQuery(collectionId, filters, idToken, orderBy, limit = 50) {
+  const makeFilter = (f) => ({ fieldFilter: { field: { fieldPath: f.field }, op: f.op, value: f.value } });
+  const where = filters.length === 1 ? makeFilter(filters[0])
+    : { compositeFilter: { op: 'AND', filters: filters.map(makeFilter) } };
+  const body = { structuredQuery: { from: [{ collectionId }], where, limit } };
+  if (orderBy) body.structuredQuery.orderBy = [{ field: { fieldPath: orderBy }, direction: 'DESCENDING' }];
+  const res = await axios.post(`${FIRESTORE_BASE}:runQuery`, body,
+    idToken ? { headers: { Authorization: `Bearer ${idToken}` } } : {});
+  return (res.data || []).filter(r => r.document).map(r => ({
+    id: r.document.name.split('/').pop(),
+    ...parseFirestoreFields(r.document.fields)
+  }));
+}
+async function fsQuerySub(parentPath, collectionId, filters, idToken, orderBy, limit = 50) {
+  const makeFilter = (f) => ({ fieldFilter: { field: { fieldPath: f.field }, op: f.op, value: f.value } });
+  const body = { structuredQuery: { from: [{ collectionId }], limit } };
+  if (filters.length === 1) body.structuredQuery.where = makeFilter(filters[0]);
+  else if (filters.length > 1) body.structuredQuery.where = { compositeFilter: { op: 'AND', filters: filters.map(makeFilter) } };
+  if (orderBy) body.structuredQuery.orderBy = [{ field: { fieldPath: orderBy }, direction: 'DESCENDING' }];
+  const res = await axios.post(`${FIRESTORE_BASE}/${parentPath}:runQuery`, body,
+    { headers: { Authorization: `Bearer ${idToken}` } });
+  return (res.data || []).filter(r => r.document).map(r => ({
+    id: r.document.name.split('/').pop(),
+    ...parseFirestoreFields(r.document.fields)
+  }));
+}
+
+// --- Social Helper: Refresh Firebase ID token ---
+async function refreshFirebaseToken(refreshToken) {
+  const res = await axios.post(`https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`, {
+    grant_type: 'refresh_token', refresh_token: refreshToken
+  });
+  return { idToken: res.data.id_token, refreshToken: res.data.refresh_token, uid: res.data.user_id };
+}
+
+// --- Social Helper: Get valid social auth credentials for current user ---
+async function getSocialAuth() {
+  const userData = loadUserData();
+  if (userData.account_type === 'helloworld') {
+    if (!userData.firebase_refresh_token) throw new Error('NO_SOCIAL_AUTH');
+    const refreshed = await refreshFirebaseToken(userData.firebase_refresh_token);
+    userData.firebase_id_token = refreshed.idToken;
+    userData.firebase_refresh_token = refreshed.refreshToken;
+    saveUserData(userData);
+    return { uid: userData.firebase_uid, idToken: refreshed.idToken, accountType: 'helloworld', username: userData.username };
+  }
+  if (userData.account_type === 'microsoft') {
+    if (!userData.firebase_ms_refresh_token) throw new Error('NO_SOCIAL_AUTH');
+    const refreshed = await refreshFirebaseToken(userData.firebase_ms_refresh_token);
+    userData.firebase_ms_refresh_token = refreshed.refreshToken;
+    saveUserData(userData);
+    return { uid: userData.firebase_ms_uid, idToken: refreshed.idToken, accountType: 'microsoft', username: userData.username };
+  }
+  throw new Error('NO_SOCIAL_AUTH');
+}
+
+// --- Social Helper: Deterministic friendship doc ID ---
+function friendshipId(uid1, uid2) { return [uid1, uid2].sort().join('__'); }
+
+// --- Social Helper: Lowercase username for prefix-range search ---
+function usernameLower(username) {
+  return (username || '').toLowerCase();
+}
+const isValidHexUuid = (uuid) => /^[0-9a-f]{32}$/i.test(uuid || '');
+const buildDeterministicUuid = (seed) => crypto.createHash('md5').update(seed).digest('hex');
+
+// --- Helper: Extract email from Microsoft JWT access token ---
+function decodeMsJwtEmail(accessToken) {
+    try {
+        const payload = accessToken.split('.')[1];
+        const decoded = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));
+        return (decoded.preferred_username || decoded.email || decoded.unique_name || '').toLowerCase().trim();
+    } catch (e) {
+        return '';
+    }
+}
+const ensureHelloWorldUuid = (name, uuid) => {
+  const normalized = normalizeUuid(uuid);
+  if (isValidHexUuid(normalized)) return normalized;
+  const safeName = name || 'Steve';
+  return buildDeterministicUuid(`HelloWorldPlayer:${safeName}`);
+};
+
+// ==========================================
+// MESSAGE NOTIFICATION POLLING
+// ==========================================
+let msgPollingInterval = null;
+let seenMsgIds = {};            // { friendshipId: Set<id> } — immune to clock skew
+let msgPollingReady = false;    // true after first init pass
+let msgPollingInitializing = false; // guard against concurrent init passes
+
+function startMessagePolling() {
+    if (msgPollingInterval) { clearInterval(msgPollingInterval); msgPollingInterval = null; }
+    if (!msgPollingReady && !msgPollingInitializing) {
+        msgPollingInitializing = true;
+        seenMsgIds = {};
+        console.log('[MsgPoll] Init pass starting...');
+        pollMessages()
+            .then(() => { msgPollingReady = true; msgPollingInitializing = false;
+                console.log('[MsgPoll] Init done -', Object.keys(seenMsgIds).length, 'chats tracked'); })
+            .catch(err => { msgPollingInitializing = false;
+                if (err.message !== 'NO_SOCIAL_AUTH') console.error('[MsgPoll] Init error:', err.message); });
+    } else if (!msgPollingReady) {
+        console.log('[MsgPoll] Init already in progress, skipping duplicate');
+    } else {
+        console.log('[MsgPoll] Restarting interval (already initialized)');
+    }
+    msgPollingInterval = setInterval(pollMessages, 15000);
+}
+
+function stopMessagePolling() {
+    if (msgPollingInterval) { clearInterval(msgPollingInterval); msgPollingInterval = null; }
+    msgPollingReady = false;
+    msgPollingInitializing = false;
+    seenMsgIds = {};
+}
+
+async function pollMessages() {
+    try {
+        const auth = await getSocialAuth();
+        const friendships = await fsQuery('friendships', [
+            { field: 'users', op: 'ARRAY_CONTAINS', value: { stringValue: auth.uid } }
+        ], auth.idToken, null, 50);
+
+        for (const friendship of friendships) {
+            const fid = friendship.id;
+            if (!seenMsgIds[fid]) seenMsgIds[fid] = new Set();
+            try {
+                const res = await axios.get(
+                    `${FIRESTORE_BASE}/friendships/${fid}/messages?pageSize=1000`,
+                    { headers: { Authorization: `Bearer ${auth.idToken}` } }
+                );
+                const msgs = (res.data.documents || []).map(doc => ({
+                    id: doc.name.split('/').pop(),
+                    ...parseFirestoreFields(doc.fields)
+                }));
+
+                if (!msgPollingReady) {
+                    // Init pass: mark ALL current messages as already seen
+                    msgs.forEach(m => seenMsgIds[fid].add(m.id));
+                    console.log(`[MsgPoll] Init: ${msgs.length} existing msgs marked seen`);
+                    continue;
+                }
+
+                // Find messages from others whose ID we haven't seen yet
+                const newMsgs = msgs
+                    .filter(m => m.senderId !== auth.uid && !seenMsgIds[fid].has(m.id))
+                    .sort((a, b) => a.timestamp < b.timestamp ? -1 : 1);
+
+                // Mark all as seen (including old ones in case set was rebuilt)
+                msgs.forEach(m => seenMsgIds[fid].add(m.id));
+
+                if (newMsgs.length > 0) console.log(`[MsgPoll] ${newMsgs.length} new msg(s) in fid=${fid.slice(-8)}`);
+
+                for (const msg of newMsgs) {
+                    console.log(`[MsgPoll] Notifying: from="${msg.senderName}" body="${msg.content}"`);
+                    showMsgNotification(msg, fid);
+                }
+            } catch (innerErr) {
+                console.error(`[MsgPoll] Error fetching fid=${fid.slice(-8)}:`, innerErr.message);
+            }
+        }
+    } catch (e) {
+        if (e.message !== 'NO_SOCIAL_AUTH') console.error('[MsgPoll] Error:', e.message);
+    }
+}
+
+function buildWindowsToastXml(title, body, friendshipId) {
+    const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    // Minimal valid WinRT toast XML - avoids edge-cases with launch attr
+    return '<toast>'                                                          +
+           '<visual><binding template="ToastGeneric">'                        +
+           '<text>' + esc(title) + '</text>'                                  +
+           '<text>' + esc(body)  + '</text>'                                  +
+           '</binding></visual>'                                               +
+           '<actions>'                                                         +
+           '<input id="r" type="text" placeHolderContent="Reply..."/>'       +
+           '<action content="Send" activationType="background"'               +
+           ' arguments="' + esc(friendshipId) + '" hint-inputId="r"/>'       +
+           '</actions>'                                                        +
+           '</toast>';
+}
+
+function showMsgNotification(msg, friendshipId) {
+    if (!Notification.isSupported()) return;
+    const title = msg.senderName || 'New message';
+    const body = msg.content || '';
+    console.log(`[MsgNotif] title="${title}" body="${body}" fid=${friendshipId}`);
+    if (!body && !title) return;
+
+    let iconPath;
+    try {
+        const p = path.join(__dirname, 'build', 'icon.png');
+        if (require('fs').existsSync(p)) iconPath = p;
+    } catch (_) {}
+
+    const notifOpts = {
+        title,
+        body: body || '(media)',
+        silent: false,
+        ...(iconPath ? { icon: iconPath } : {})
+    };
+    if (process.platform === 'darwin') {
+        notifOpts.hasReply = true;
+        notifOpts.replyPlaceholder = 'Reply…';
+    } else if (process.platform === 'win32') {
+        notifOpts.toastXml = buildWindowsToastXml(title, body || '(media)', friendshipId);
+    }
+
+    const notif = new Notification(notifOpts);
+
+    // Click or Windows "Open" action → focus window and navigate to chat
+    const doNavigate = () => {
+        if (!mainWindow) return;
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+        // Small delay so window is ready before IPC message
+        setTimeout(() => {
+            if (mainWindow) mainWindow.webContents.send('navigate-to-chat', { friendshipId, senderName: msg.senderName || '' });
+        }, 150);
+    };
+
+    notif.on('click', doNavigate);
+
+    // macOS inline reply / Windows toast reply (Electron 28+ toastXml background action)
+    notif.on('reply', async (event, reply) => {
+        if (!reply || !reply.trim()) return;
+        await sendMsgFromMain(friendshipId, reply.trim(), msg);
+        // Also navigate so user sees the sent reply
+        doNavigate();
+    });
+
+    // Windows: foreground action ("Open" button) also uses click path
+    notif.on('action', (event, index) => {
+        // index 0 = Send (background), index 1 = Open (foreground)
+        // "Open" foreground action triggers click on Windows, but handle both
+        doNavigate();
+    });
+
+    notif.show();
+}
+
+async function sendMsgFromMain(friendshipId, content, replyMsg) {
+    try {
+        const auth = await getSocialAuth();
+        const userData = loadUserData();
+        const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const now = new Date().toISOString();
+        const msgData = {
+            senderId: auth.uid,
+            senderName: userData.username || '',
+            content: content.trim(),
+            timestamp: now,
+            status: 'sent'
+        };
+        if (replyMsg) {
+            msgData.replyTo = replyMsg.id;
+            msgData.replyContent = replyMsg.content;
+            msgData.replySender = replyMsg.senderId;
+            msgData.replySenderName = replyMsg.senderName;
+        }
+        await fsSet(`friendships/${friendshipId}/messages/${msgId}`, msgData, auth.idToken);
+        await fsSet(`friendships/${friendshipId}`, { lastMessageAt: now }, auth.idToken, ['lastMessageAt']);
+        
+        // Increment unread for all other users
+        try {
+            const fDoc = await fsGet(`friendships/${friendshipId}`, auth.idToken);
+            const otherUids = (fDoc.users || []).filter(u => u !== auth.uid);
+            for (const otherUid of otherUids) {
+                let currentUnread = 0;
+                try { const ud = await fsGet(`friendships/${friendshipId}/unread/${otherUid}`, auth.idToken); currentUnread = ud.count || 0; } catch (_) {}
+                await fsSet(`friendships/${friendshipId}/unread/${otherUid}`, { count: currentUnread + 1 }, auth.idToken);
+            }
+        } catch (_) {}
+
+        lastSeenMsgTimestamps[friendshipId] = now;
+    } catch (e) {
+        console.error('[MsgPoll] Send error:', e.message);
+    }
+}
+
+// --- Local HTTP server for Firebase Auth compatibility (file:// blocks signInWithPopup) ---
+let localPort = null;
+function startLocalServer() {
+  return new Promise((resolve) => {
+    const fs = require('fs');
+    const mime = {
+      '.html': 'text/html', '.js': 'application/javascript',
+      '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg',
+      '.ico': 'image/x-icon', '.svg': 'image/svg+xml',
+      '.ttf': 'font/ttf', '.woff': 'font/woff', '.woff2': 'font/woff2',
+      '.mp4': 'video/mp4'
+    };
+    const srv = http.createServer((req, res) => {
+      let filePath = path.join(__dirname, 'ui', req.url === '/' ? '/index.html' : req.url);
+      const ext = path.extname(filePath);
+      fs.readFile(filePath, (err, data) => {
+        if (err) { res.writeHead(404); res.end('Not found'); return; }
+        res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream' });
+        res.end(data);
+      });
+    });
+    srv.listen(0, 'localhost', () => {
+      localPort = srv.address().port;
+      console.log('[LocalServer] Running on port', localPort);
+      resolve(localPort);
+    });
+  });
+}
 
 // --- Windows ---
-const createWindow = () => {
+const createWindow = async () => {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -237,8 +642,9 @@ const createWindow = () => {
   win.maximize()
   Menu.setApplicationMenu(null);
 
-  // Start with Updater (Splash)
-  win.loadFile(path.join(__dirname, 'ui/updater.html'))
+  // Start with Updater (Splash) — served from localhost for Firebase Auth compatibility
+  if (!localPort) await startLocalServer();
+  win.loadURL(`http://localhost:${localPort}/updater.html`)
 
   win.once('ready-to-show', () => {
     win.show();
@@ -254,23 +660,37 @@ const createWindow = () => {
     win.webContents.send('sys-ready');
     // Start background checks
     checkLatestVersionsAndInstall();
+    // Start message polling (no-op if not logged in with social account)
+    setTimeout(startMessagePolling, 2000);
   });
 
   win.webContents.on('will-navigate', (event, url) => {
-    // If navigation is to a remote URL, open in external browser
+    // Allow local server navigation (127.0.0.1), open everything else in external browser
     const parsedUrl = new URL(url);
-    if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
+    const isLocal = parsedUrl.hostname === '127.0.0.1' || parsedUrl.hostname === 'localhost';
+    if (!isLocal && (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:')) {
       event.preventDefault();
       shell.openExternal(url);
     }
   });
 
+  win.webContents.on('did-fail-load', () => {
+    win.webContents.send('sys-error');
+  });
+
   win.webContents.setWindowOpenHandler(({ url }) => {
+    // Allow Firebase Auth popup (signInWithPopup needs window.open)
+    if (url.includes('firebaseapp.com/__/auth/') ||
+        url.includes('login.microsoftonline.com') ||
+        url.includes('login.live.com') ||
+        url.includes('accounts.google.com')) {
+      return { action: 'allow' };
+    }
     shell.openExternal(url);
     return { action: 'deny' };
   });
 
-  mainWindow = win
+  mainWindow = win;
 }
 
 // --- Background Version Installer ---
@@ -285,9 +705,8 @@ async function checkLatestVersionsAndInstall() {
   console.log('[Background Update] Checking for latest Minecraft versions...');
   try {
     const manifestUrl = 'https://piston-meta.mojang.com/mc/game/version_manifest.json';
-    const response = await fetch(manifestUrl);
-    if (!response.ok) throw new Error(`Failed to fetch manifest: ${response.status}`);
-    const data = await response.json();
+    const response = await axios.get(manifestUrl, { timeout: 5000 });
+    const data = response.data;
 
     const latestRelease = data.latest?.release;
     const latestSnapshot = data.latest?.snapshot;
@@ -448,6 +867,8 @@ ipcMain.handle('login-microsoft', async () => {
 
     saveUserData(userData)
 
+    // Social auth will be set up after silentMicrosoftVerify runs in the renderer
+
     // Prepare safe payload for IPC
     const safeProfile = {
       name: profileData.name,
@@ -459,6 +880,7 @@ ipcMain.handle('login-microsoft', async () => {
       console.log("Sending login-success to UI");
       mainWindow.webContents.send('login-success', safeProfile);
     }
+    startMessagePolling();
 
     // Return plain object to renderer invoke as well
     return { success: true, profile: safeProfile }
@@ -472,7 +894,133 @@ ipcMain.handle('login-microsoft', async () => {
   }
 })
 
+ipcMain.handle('login-helloworld', async (e, identifier, password) => {
+  console.log(`[HelloWorld Login] Attempting login for: ${identifier}`);
+  try {
+    const PROJECT_ID = FIREBASE_PROJECT_ID;
+    let email = identifier;
+
+    // 1. Resolve Email if username was provided
+    if (!identifier.includes('@')) {
+      console.log(`[HelloWorld Login] Resolving username: ${identifier}`);
+      const queryUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents:runQuery`;
+      const queryBody = {
+        structuredQuery: {
+          from: [{ collectionId: "users" }],
+          where: {
+            fieldFilter: {
+              field: { fieldPath: "username" },
+              op: "EQUAL",
+              value: { stringValue: identifier }
+            }
+          },
+          limit: 1
+        }
+      };
+
+      const queryRes = await axios.post(queryUrl, queryBody);
+      if (queryRes.data && queryRes.data[0] && queryRes.data[0].document) {
+        const fields = queryRes.data[0].document.fields;
+        email = fields.email ? fields.email.stringValue : null;
+        if (!email) throw new Error("Could not find email associated with this username.");
+        console.log(`[HelloWorld Login] Resolved to email: ${email}`);
+      } else {
+        throw new Error("Username not found. Please register first.");
+      }
+    }
+
+    // 2. Authenticate with Firebase Auth REST API
+    const authUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
+    const authRes = await axios.post(authUrl, {
+      email: email,
+      password: password,
+      returnSecureToken: true
+    });
+
+    const { localId, idToken, displayName } = authRes.data;
+    console.log(`[HelloWorld Login] Auth successful for UID: ${localId}`);
+
+    // 3. Fetch full User Profile from Firestore to get Skin/Variant
+    const docUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/${localId}`;
+    const docRes = await axios.get(docUrl);
+    
+    let username = identifier.includes('@') ? (displayName || email.split('@')[0]) : identifier;
+    let avatarUrl = "";
+    let uuid = localId.replace(/-/g, ''); // Minecraft-compatible UUID usually (Firebase UID is different, but we use it as base)
+
+    if (docRes.data && docRes.data.fields) {
+      const f = docRes.data.fields;
+      if (f.username) username = f.username.stringValue;
+      if (f.uuid) uuid = f.uuid.stringValue;
+      if (f.avatarBase64) {
+          avatarUrl = f.avatarBase64.stringValue || "";
+      }
+    }
+
+    uuid = ensureHelloWorldUuid(username, uuid);
+
+    // 4. Persistence
+    const userData = loadUserData();
+    userData.account_type = "helloworld";
+    userData.username = username;
+    userData.uuid = uuid;
+    userData.last_avatar_url = avatarUrl;
+    userData.firebase_uid = localId;
+    userData.firebase_refresh_token = authRes.data.refreshToken;
+    userData.firebase_id_token = idToken;
+    
+    // Clear out old skin/cape data
+    userData.last_skin_url = "";
+    userData.last_skin_variant = "classic";
+    userData.last_cape_url = "";
+
+    saveUserData(userData);
+
+    // 5. Update users doc with social-searchable fields (merge: only update these fields)
+    try {
+      await fsUpdate(`users/${localId}`, {
+        accountType: 'helloworld', username, mcUuid: uuid,
+        usernameLower: usernameLower(username), updatedAt: new Date().toISOString()
+      }, idToken);
+    } catch (spErr) {
+      console.warn('[HelloWorld Login] Could not update users doc:', spErr.message);
+    }
+
+    const safeProfile = {
+      name: username,
+      id: uuid,
+      avatar_url: avatarUrl,
+      skin: [],
+      cape: []
+    };
+
+    if (mainWindow) {
+      mainWindow.webContents.send('login-success', safeProfile);
+    }
+
+    startMessagePolling();
+
+    return { success: true, profile: safeProfile };
+  } catch (err) {
+    console.error("[HelloWorld Login] Error:", err.response ? JSON.stringify(err.response.data) : err.message);
+    let errorMessage = "Authentication failed.";
+    
+    if (err.response && err.response.data && err.response.data.error) {
+      const code = err.response.data.error.message;
+      if (code === "INVALID_PASSWORD") errorMessage = "Incorrect password.";
+      else if (code === "EMAIL_NOT_FOUND") errorMessage = "User not found.";
+      else if (code === "USER_DISABLED") errorMessage = "This account has been disabled.";
+      else errorMessage = code.replace(/_/g, ' ');
+    } else {
+      errorMessage = err.message;
+    }
+
+    return { success: false, error: errorMessage };
+  }
+})
+
 ipcMain.handle('logout', async () => {
+  stopMessagePolling();
   const data = loadUserData()
 
   // Clear persistent auth data
@@ -483,37 +1031,15 @@ ipcMain.handle('logout', async () => {
   data.msmc_auth = "";
   data.last_skin_url = "";
   data.last_skin_variant = "classic";
+  data.last_cape_url = "";
+  data.firebase_uid = "";
+  data.firebase_refresh_token = "";
+  data.firebase_id_token = "";
+  // Keep firebase_ms_uid and firebase_ms_refresh_token for persistence across sessions
+  // Verification is a one-time process
 
   saveUserData(data)
   return data
-})
-
-ipcMain.handle('refresh-session', async () => {
-  console.log("IPC: refresh-session");
-  try {
-    const userData = loadUserData();
-    if (userData.account_type !== 'microsoft' || !userData.msmc_auth) {
-      console.log("[Refresh] Skipping: Not a Microsoft account or no auth string.");
-      return { success: false, error: "No Microsoft session to refresh" };
-    }
-
-    const refreshResult = await refreshMicrosoftSession(userData);
-    
-    if (refreshResult.success) {
-        const safeProfile = {
-            name: userData.username,
-            id: userData.uuid,
-            skin: userData.last_skin_url ? [{ url: userData.last_skin_url, variant: userData.last_skin_variant }] : []
-        };
-        return { success: true, profile: safeProfile };
-    } else {
-        return { success: false, expired: true, error: refreshResult.error || "Session refresh failed" };
-    }
-
-  } catch (err) {
-    console.error("[Refresh] Critical Error:", err);
-    return { success: false, expired: true, error: err.message };
-  }
 })
 
 // 2. Profiles
@@ -550,14 +1076,13 @@ ipcMain.handle('get-profiles-for-addon', async (e, type) => {
   }
   return { profiles: filtered };
 })
+
 ipcMain.handle('add-profile', async (e, name, version, icon, directory, jvm_args, java_path) => {
   // Map frontend positional args to profileManager.addProfile
   return profileManager.addProfile(name, version, icon, directory, jvm_args, java_path);
 })
-ipcMain.handle('edit-profile', async (e, profile_id, name, version, loader, icon, ram_min, ram_max, jvm_args, width, height, java_path) => {
-  // Frontend passes positional args: 
-  // id, name, version, loader, icon, ram_min, ram_max, jvm_args, width, height, java_path
 
+ipcMain.handle('edit-profile', async (e, profile_id, name, version, loader, icon, ram_min, ram_max, jvm_args, width, height, java_path) => {
   const data = {
     name,
     version: version || loader,
@@ -568,11 +1093,16 @@ ipcMain.handle('edit-profile', async (e, profile_id, name, version, loader, icon
 
   return profileManager.editProfile(profile_id, data);
 })
+
 ipcMain.handle('delete-profile', async (e, id) => profileManager.deleteProfile(id))
 ipcMain.handle('get-profile-icon', async (e, f) => profileManager.getProfileIconAsBase64(f))
 ipcMain.handle('get-worlds', async (e, profile_id) => {
   const mcDir = paths.getMcDir();
   return profileManager.getWorlds(profile_id, mcDir);
+})
+ipcMain.handle('read-world-seed', async (e, profile_id, world_name) => {
+  const mcDir = paths.getMcDir();
+  return await profileManager.readWorldSeed(profile_id, world_name, mcDir);
 })
 
 // 3. Modrinth / Addons
@@ -584,62 +1114,98 @@ ipcMain.handle('get-mod-details', async (e, id) => modManager.getModDetails(id))
 ipcMain.handle('install-addon', async (e, args) => {
   try {
     console.log('[install-addon] Request:', args);
-    let { url, filename, profile_id, type, version_id } = args;
+    let { url, filename, profile_id, type, version_id, project_id } = args;
 
-    // Resolve URL from Version ID if provided
-    if (!url && version_id) {
-      console.log('[install-addon] Resolving version ID:', version_id);
-      const vInfo = await modManager.getVersionFromId(version_id);
-      if (!vInfo.success) {
-        console.error('[install-addon] Version resolution failed:', vInfo.error);
-        return { success: false, error: "Could not resolve version info: " + vInfo.error };
+    // Acquire lock for this profile to prevent race conditions
+    const lockKey = profile_id;
+    while (profileUpdateLocks.has(lockKey)) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    profileUpdateLocks.set(lockKey, true);
+
+    try {
+      // Resolve URL from Version ID if provided
+      if (!url && version_id) {
+        console.log('[install-addon] Resolving version ID:', version_id);
+        const vInfo = await modManager.getVersionFromId(version_id);
+        if (!vInfo.success) {
+          console.error('[install-addon] Version resolution failed:', vInfo.error);
+          return { success: false, error: "Could not resolve version info: " + vInfo.error };
+        }
+        url = vInfo.url;
+        filename = vInfo.filename;
+        console.log('[install-addon] Resolved:', { url, filename });
       }
-      url = vInfo.url;
-      filename = vInfo.filename;
-      console.log('[install-addon] Resolved:', { url, filename });
-    }
 
-    const profiles = profileManager.loadProfiles().profiles;
-    const profile = profiles[profile_id];
-    if (!profile) return { success: false, error: "Installation Not Found" };
+      const profilesData = profileManager.loadProfiles();
+      const profiles = profilesData.profiles;
+      const profile = profiles[profile_id];
+      if (!profile) return { success: false, error: "Installation Not Found" };
 
-    const mcDir = paths.getMcDir();
-    const profileDir = profile.directory || mcDir;
+      const mcDir = paths.getMcDir();
+      const profileDir = profile.directory || mcDir;
 
-    let targetDir = path.join(profileDir, 'mods'); // default
-    if (type === 'resourcepack') targetDir = path.join(profileDir, 'resourcepacks');
-    if (type === 'shader') targetDir = path.join(profileDir, 'shaderpacks');
-    if (type === 'datapack') {
-      if (!args.world_name) return { success: false, error: "World Name Required for Datapack" };
-      targetDir = path.join(profileDir, 'saves', args.world_name, 'datapacks');
-    }
-
-    if (type === 'shader') {
-      console.log('[install-addon] Validating shader support...');
-      const check = await modManager.validateShaderSupport(path.join(profileDir, 'mods'));
-      if (!check.supported) {
-        console.error('[install-addon] Shader support validation failed:', check.reason);
-        return { success: false, error: check.reason };
+      let targetDir = path.join(profileDir, 'mods'); // default
+      if (type === 'resourcepack') targetDir = path.join(profileDir, 'resourcepacks');
+      if (type === 'shader') targetDir = path.join(profileDir, 'shaderpacks');
+      if (type === 'datapack') {
+        if (!args.world_name) return { success: false, error: "World Name Required for Datapack" };
+        targetDir = path.join(profileDir, 'saves', args.world_name, 'datapacks');
       }
-    }
 
-    const targetFile = path.join(targetDir, filename);
-    if (fs.existsSync(targetFile)) {
-      console.log('[install-addon] File already exists, skipping download:', filename);
-      return { success: true, alreadyInstalled: true };
-    }
-
-    console.log('[install-addon] Starting download to:', targetDir);
-
-    return await modManager.installProject(url, filename, targetDir, (percentage) => {
-      // Send progress to renderer
-      // We assume 'args.project_id' is available (it is part of args destructuring or lookups)
-      // Wait, args.project_id might be undefined if we passed only version_id?
-      // But scripts.js sends project_id.
-      if (args.project_id) {
-        e.sender.send('mod-download-progress', { projectId: args.project_id, percentage });
+      if (type === 'shader') {
+        console.log('[install-addon] Validating shader support...');
+        const check = await modManager.validateShaderSupport(path.join(profileDir, 'mods'));
+        if (!check.supported) {
+          console.error('[install-addon] Shader support validation failed:', check.reason);
+          return { success: false, error: check.reason };
+        }
       }
-    });
+
+      const targetFile = path.join(targetDir, filename);
+      if (fs.existsSync(targetFile)) {
+        console.log('[install-addon] File already exists, skipping download:', filename);
+        
+        // Update profile JSON addons metadata anyway to ensure it's tracked
+        if (project_id && version_id) {
+          profile.addons = profile.addons || [];
+          profile.addons = profile.addons.filter(a => a.project_id !== project_id && a.filename !== filename);
+          profile.addons.push({ project_id, version_id, filename, type, state: 'enabled' });
+          profileManager.saveProfiles(profilesData);
+        }
+        
+        return { success: true, alreadyInstalled: true };
+      }
+
+      console.log('[install-addon] Starting download to:', targetDir);
+
+      const result = await modManager.installProject(url, filename, targetDir, (percentage) => {
+        // Send progress to renderer
+        if (args.project_id) {
+          e.sender.send('mod-download-progress', { projectId: args.project_id, percentage });
+        }
+      });
+
+      // Update profile JSON with addon metadata after successful download
+      if (result.success && project_id && version_id) {
+        profile.addons = profile.addons || [];
+        // Remove older version of same mod
+        profile.addons = profile.addons.filter(a => a.project_id !== project_id);
+        profile.addons.push({
+          project_id,
+          version_id,
+          filename,
+          type,
+          state: 'enabled'
+        });
+        profileManager.saveProfiles(profilesData);
+      }
+
+      return result;
+    } finally {
+      // Release lock
+      profileUpdateLocks.delete(lockKey);
+    }
   } catch (error) {
     console.error('[install-addon] Critical error:', error);
     return { success: false, error: error.message };
@@ -651,7 +1217,8 @@ ipcMain.handle('get-modrinth-categories', async () => {
 })
 
 ipcMain.handle('get-installed-addons', async (e, { profile_id, type, world_name }) => {
-  const profiles = profileManager.loadProfiles().profiles;
+  const profilesData = profileManager.loadProfiles();
+  const profiles = profilesData.profiles;
   const profile = profiles[profile_id];
   if (!profile) return { success: false };
 
@@ -662,15 +1229,56 @@ ipcMain.handle('get-installed-addons', async (e, { profile_id, type, world_name 
   if (type === 'resourcepack') targetDir = path.join(profileDir, 'resourcepacks');
   if (type === 'shader') targetDir = path.join(profileDir, 'shaderpacks');
   if (type === 'datapack') {
-    if (!world_name) return { success: false, error: "World Name Required for Datapack" };
+    if (!world_name) return { success: false, error: "World Name Required" };
     targetDir = path.join(profileDir, 'saves', world_name, 'datapacks');
   }
 
-  return await modManager.getInstalledAddons(targetDir, type);
+  const result = await modManager.getInstalledAddons(targetDir, type);
+  
+  // Create a map of existing files for quick lookup
+  const existingFilesMap = new Map();
+  if (result.success) {
+    result.mods.forEach(mod => {
+      existingFilesMap.set(mod.filename, mod);
+    });
+  }
+  
+  // Merge profile metadata with local files and add missing addons
+  const finalMods = result.success ? result.mods : [];
+  
+  if (profile.addons) {
+    profile.addons.forEach(addon => {
+      if (addon.type !== type) return;
+      
+      const existingMod = existingFilesMap.get(addon.filename);
+      if (existingMod) {
+        // File exists, merge metadata
+        existingMod.project_id = addon.project_id;
+        existingMod.version_id = addon.version_id;
+        // Use state from metadata if available, otherwise infer from filename
+        existingMod.enabled = addon.state === 'enabled';
+      } else {
+        // File is missing, add it with missing flag
+        finalMods.push({
+          filename: addon.filename,
+          display_name: addon.filename,
+          enabled: addon.state === 'enabled',
+          type: 'file',
+          size_mb: 'Missing file',
+          project_id: addon.project_id,
+          version_id: addon.version_id,
+          missing: true
+        });
+      }
+    });
+  }
+  
+  return { success: true, mods: finalMods };
 })
 
-ipcMain.handle('toggle-addon', async (e, { filename, profile_id, type, world_name }) => {
-  const profiles = profileManager.loadProfiles().profiles;
+ipcMain.handle('toggle-addon', async (e, { filename, profile_id, type, world_name, enabled }) => {
+  const profilesData = profileManager.loadProfiles();
+  const profiles = profilesData.profiles;
   const profile = profiles[profile_id];
   if (!profile) return { success: false };
 
@@ -682,11 +1290,85 @@ ipcMain.handle('toggle-addon', async (e, { filename, profile_id, type, world_nam
   if (type === 'shader') targetDir = path.join(profileDir, 'shaderpacks');
   if (type === 'datapack') targetDir = path.join(profileDir, 'saves', world_name, 'datapacks');
 
-  return await modManager.toggleAddon(filename, targetDir)
+  // Find the addon in profile metadata
+  const addonIndex = profile.addons ? profile.addons.findIndex(a => a.filename === filename && a.type === type) : -1;
+  
+  if (addonIndex === -1) {
+    // If not in metadata, just rename the file on disk
+    const actualFilename = enabled ? filename + '.disabled' : filename;
+    const targetFilename = enabled ? filename : filename + '.disabled';
+    const oldPath = path.join(targetDir, actualFilename);
+    const newPath = path.join(targetDir, targetFilename);
+    
+    if (fs.existsSync(oldPath)) {
+      await fs.rename(oldPath, newPath);
+      return { success: true, new_name: targetFilename };
+    } else {
+      return { success: false, error: 'File not found' };
+    }
+  }
+
+  const addon = profile.addons[addonIndex];
+  const currentFilename = addon.filename;
+  const currentState = addon.state || 'enabled';
+  
+  // Determine target state based on enabled parameter
+  // enabled=true means we want to ENABLE the addon
+  // enabled=false means we want to DISABLE the addon
+  const targetState = enabled ? 'enabled' : 'disabled';
+  
+  // If already in target state, do nothing
+  if (currentState === targetState) {
+    return { success: true, new_name: currentFilename };
+  }
+  
+  // Determine new filename based on target state
+  let newFilename;
+  if (targetState === 'enabled') {
+    // Remove .disabled suffix if present
+    newFilename = currentFilename.replace(/\.disabled$/, '');
+  } else {
+    // Add .disabled suffix only if not already present
+    newFilename = currentFilename.endsWith('.disabled') ? currentFilename : currentFilename + '.disabled';
+  }
+  
+  // Rename the file on disk
+  const oldPath = path.join(targetDir, currentFilename);
+  const newPath = path.join(targetDir, newFilename);
+  
+  if (fs.existsSync(oldPath)) {
+    await fs.rename(oldPath, newPath);
+  }
+  
+  // Update metadata
+  profile.addons[addonIndex].filename = newFilename;
+  profile.addons[addonIndex].state = targetState;
+  profileManager.saveProfiles(profilesData);
+  
+  return { success: true, new_name: newFilename };
+})
+
+ipcMain.handle('delete-addon-file', async (e, { profile_id, type, filename }) => {
+  try {
+    const profilesData = profileManager.loadProfiles();
+    const profile = profilesData.profiles[profile_id];
+    if (!profile) return { success: false };
+    const mcDir = paths.getMcDir();
+    const profileDir = profile.directory || mcDir;
+    let targetDir = path.join(profileDir, 'mods');
+    if (type === 'resourcepack') targetDir = path.join(profileDir, 'resourcepacks');
+    if (type === 'shader') targetDir = path.join(profileDir, 'shaderpacks');
+    const filePath = path.join(targetDir, filename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 })
 
 ipcMain.handle('delete-addon', async (e, { filename, profile_id, type, world_name }) => {
-  const profiles = profileManager.loadProfiles().profiles;
+  const profilesData = profileManager.loadProfiles();
+  const profiles = profilesData.profiles;
   const profile = profiles[profile_id];
   if (!profile) return { success: false };
 
@@ -698,7 +1380,19 @@ ipcMain.handle('delete-addon', async (e, { filename, profile_id, type, world_nam
   if (type === 'shader') targetDir = path.join(profileDir, 'shaderpacks');
   if (type === 'datapack') targetDir = path.join(profileDir, 'saves', world_name, 'datapacks');
 
-  return await modManager.deleteAddon(filename, targetDir)
+  // Find the addon in metadata to get the actual filename (with or without .disabled)
+  const addon = profile.addons ? profile.addons.find(a => a.filename === filename && a.type === type) : null;
+  const actualFilename = addon ? addon.filename : filename;
+  
+  const result = await modManager.deleteAddon(actualFilename, targetDir);
+  
+  // Remove from profile metadata
+  if (result.success && profile.addons) {
+    profile.addons = profile.addons.filter(a => !(a.filename === actualFilename && a.type === type));
+    profileManager.saveProfiles(profilesData);
+  }
+  
+  return result;
 })
 
 ipcMain.handle('open-addons-folder', async (e, { profile_id, type, world_name }) => {
@@ -749,87 +1443,132 @@ ipcMain.handle('import-addon-file', async (e, { profile_id, type, world_name }) 
     filters.unshift({ name: 'Zip Files', extensions: ['zip'] });
   }
 
-  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog(mainWindow, {
     title: `Import ${type}`,
     properties: ['openFile'],
     filters: filters
   });
 
-  if (canceled || filePaths.length === 0) return { success: false, canceled: true };
+  if (!result.canceled && result.filePaths.length > 0) {
+    const sourceFile = result.filePaths[0];
+    const filename = path.basename(sourceFile);
+    const destFile = path.join(targetDir, filename);
 
-  const sourceFile = filePaths[0];
-  const filename = path.basename(sourceFile);
-  const destFile = path.join(targetDir, filename);
-
-  try {
-    fs.ensureDirSync(targetDir);
-    fs.copySync(sourceFile, destFile);
-    return { success: true, filename };
-  } catch (err) {
-    return { success: false, error: err.message };
+    try {
+      fs.ensureDirSync(targetDir);
+      fs.copySync(sourceFile, destFile);
+      return { success: true, filename };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
   }
-})
-
-// 4. Skins
-ipcMain.handle('get-skin-packs', async () => skinManager.getSkinPacks());
-ipcMain.handle('create-skin-pack', async (e, args) => skinManager.createSkinPack(args.name, args.skin_base64, args.skin_model, args.cape_id, args.cape_base64));
-ipcMain.handle('edit-skin-pack', async (e, args) => skinManager.editSkinPack(args.pack_id, args.name, args.skin_base64, args.skin_model, args.cape_id, args.cape_base64));
-ipcMain.handle('delete-skin-pack', async (e, id) => skinManager.deleteSkinPack(id));
-ipcMain.handle('activate-skin-pack', async (e, id) => {
-  const userData = loadUserData();
-  if (userData.account_type !== 'microsoft' || !userData.mc_token) return { success: false, error: 'Login required' };
-  return skinManager.activateSkinPack(id, userData.mc_token);
+  return { success: false, canceled: true };
 });
 
 // 5. User Capes (New)
-ipcMain.handle('get-user-capes', async () => {
+ipcMain.handle('refresh-session', async () => {
   try {
     const userData = loadUserData();
+    console.log(`[Refresh] Checking session type: ${userData.account_type}`);
+
+    if (userData.account_type === 'helloworld') {
+      try {
+        const PROJECT_ID = "helloworld-launcher";
+        const queryUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents:runQuery`;
+        const queryBody = {
+          structuredQuery: {
+            from: [{ collectionId: "users" }],
+            where: {
+              fieldFilter: {
+                field: { fieldPath: "username" },
+                op: "EQUAL",
+                value: { stringValue: userData.username }
+              }
+            },
+            limit: 1
+          }
+        };
+
+        const queryRes = await axios.post(queryUrl, queryBody);
+        if (queryRes.data && queryRes.data[0] && queryRes.data[0].document) {
+          const fields = queryRes.data[0].document.fields;
+          if (fields.avatarBase64) {
+            userData.last_avatar_url = fields.avatarBase64.stringValue || "";
+            saveUserData(userData);
+          }
+        }
+      } catch (err) {
+        console.error("[Refresh] Error fetching helloworld avatar:", err.message);
+      }
+
+      const safeProfile = {
+        name: userData.username,
+        id: userData.uuid,
+        avatar_url: userData.last_avatar_url || ""
+      };
+      return { success: true, profile: safeProfile };
+    }
+
     if (userData.account_type !== 'microsoft' || !userData.msmc_auth) {
       return { success: false, error: "Not logged in with Microsoft" };
     }
 
-    console.log("Refreshing session to fetch capes...");
-    const authManager = new msmc.Auth("select_account");
-    const xboxManager = await authManager.refresh(userData.msmc_auth);
-    const mcObj = await xboxManager.getMinecraft();
-
-    if (!mcObj || !mcObj.profile || !mcObj.profile.capes) {
-      return { success: true, capes: [] };
-    }
-
-    const capes = mcObj.profile.capes;
-    const processedCapes = [];
-
-    for (const cape of capes) {
-      if (cape.url) {
+    // Use centralized refresh helper (handles rate-limiting and credential clearing safely)
+    const refreshResult = await refreshMicrosoftSession(userData);
+    if (refreshResult.success) {
+      // Validate microsoftVerified in Firestore — clear local uid if deleted remotely
+      if (userData.firebase_ms_uid && userData.firebase_ms_refresh_token) {
         try {
-          const response = await fetch(cape.url);
-          if (response.ok) {
-            const arrayBuffer = await response.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
-            const base64 = "data:image/png;base64," + buffer.toString('base64');
-            processedCapes.push({
-              id: cape.id,
-              alias: cape.alias,
-              base64: base64
-            });
+          const refreshed = await refreshFirebaseToken(userData.firebase_ms_refresh_token);
+          const userDoc = await fsGet(`users/${userData.firebase_ms_uid}`, refreshed.idToken);
+          if (!userDoc || !userDoc.microsoftVerified) {
+            console.log('[Refresh] microsoftVerified not found in Firestore — clearing local verification');
+            const ud = loadUserData();
+            ud.firebase_ms_uid = '';
+            ud.firebase_ms_refresh_token = '';
+            saveUserData(ud);
           }
-        } catch (err) {
-          console.error(`Failed to load cape ${cape.alias}:`, err);
+        } catch (verifyErr) {
+          const is404 = verifyErr.response && verifyErr.response.status === 404;
+          if (is404) {
+            console.log('[Refresh] users doc not found in Firestore — clearing local verification');
+            const ud = loadUserData();
+            ud.firebase_ms_uid = '';
+            ud.firebase_ms_refresh_token = '';
+            saveUserData(ud);
+          } else {
+            console.warn('[Refresh] Could not check microsoftVerified:', verifyErr.message);
+          }
         }
       }
+      const freshData = loadUserData();
+      return {
+        success: true,
+        profile: {
+          name: freshData.username,
+          id: freshData.uuid,
+          avatar_url: freshData.last_avatar_url || ""
+        }
+      };
     }
-
-    return { success: true, capes: processedCapes };
+    return { success: false, expired: refreshResult.expired || false, error: refreshResult.error };
   } catch (e) {
-    console.error("Error fetching user capes:", e);
+    console.error("Error refreshing session:", e);
     return { success: false, error: e.message };
   }
 });
 
 // --- Legacy Handlers ---
-ipcMain.handle('close-app', () => app.quit())
+ipcMain.handle('close-app', async () => {
+    try {
+        const auth = await getSocialAuth();
+        if (auth && auth.uid) {
+            await fsSet(`users/${auth.uid}`, { presence: { state: 'Offline' } }, auth.idToken, ['presence']);
+        }
+    } catch(e) {}
+    app.quit();
+});
 ipcMain.handle('get-version', () => app.getVersion())
 ipcMain.handle('check-internet', async () => {
   try {
@@ -861,12 +1600,10 @@ ipcMain.handle('get-available-versions', async () => {
   let web = [];
   try {
     const manifestUrl = "https://piston-meta.mojang.com/mc/game/version_manifest.json";
-    const response = await fetch(manifestUrl);
-    if (response.ok) {
-      const data = await response.json();
-      if (data && data.versions) {
-        web = data.versions.map(v => v.id);
-      }
+    const response = await axios.get(manifestUrl, { timeout: 5000 });
+    const data = response.data;
+    if (data && data.versions) {
+      web = data.versions.map(v => v.id);
     }
   } catch (e) {
     console.error("Error fetching web versions:", e.message);
@@ -988,8 +1725,8 @@ ipcMain.handle('get-vanilla-versions', async () => {
     const showSnapshots = userData.show_snapshots;
     const showOld = userData.show_old;
 
-    const response = await fetch('https://launchermeta.mojang.com/mc/game/version_manifest.json');
-    const data = await response.json();
+    const response = await axios.get('https://launchermeta.mojang.com/mc/game/version_manifest.json', { timeout: 5000 });
+    const data = response.data;
 
     // Return array of version ID strings, filtered by user settings
     return (data.versions || []).filter(v => {
@@ -1006,8 +1743,8 @@ ipcMain.handle('get-vanilla-versions', async () => {
 
 ipcMain.handle('get-forge-mc-versions', async () => {
   try {
-    const response = await fetch('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json');
-    const data = await response.json();
+    const response = await axios.get('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json', { timeout: 5000 });
+    const data = response.data;
     // Extract unique MC versions from promos
     const versions = Object.keys(data.promos || {})
       .map(key => key.split('-')[0])
@@ -1023,8 +1760,8 @@ ipcMain.handle('get-forge-mc-versions', async () => {
 
 ipcMain.handle('get-fabric-mc-versions', async () => {
   try {
-    const response = await fetch('https://meta.fabricmc.net/v2/versions/game');
-    const data = await response.json();
+    const response = await axios.get('https://meta.fabricmc.net/v2/versions/game', { timeout: 5000 });
+    const data = response.data;
     // Return array of version strings
     const versions = data.filter(v => v.stable).map(v => v.version);
     return versions;
@@ -1037,13 +1774,13 @@ ipcMain.handle('get-fabric-mc-versions', async () => {
 ipcMain.handle('get-loader-versions', async (e, { type, mc_version }) => {
   try {
     if (type === 'fabric') {
-      const response = await fetch(`https://meta.fabricmc.net/v2/versions/loader/${mc_version}`);
-      const data = await response.json();
+      const response = await axios.get(`https://meta.fabricmc.net/v2/versions/loader/${mc_version}`, { timeout: 5000 });
+      const data = response.data;
       return data.map(v => v.loader.version);
     } else if (type === 'forge') {
       // Fetch Forge versions from the promotions file
-      const response = await fetch('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json');
-      const data = await response.json();
+      const response = await axios.get('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json', { timeout: 5000 });
+      const data = response.data;
 
       // Extract versions that match the requested MC version
       // Format in promos: "1.20.1-latest": "47.2.0", "1.20.1-recommended": "47.1.3"
@@ -1082,6 +1819,124 @@ ipcMain.handle('get-loader-versions', async (e, { type, mc_version }) => {
   }
 })
 
+// --- Fabric Library Verification & Repair ---
+// MCLC sometimes fails to download Fabric libraries silently (network timeouts, rate limits).
+// These helpers verify all Fabric libraries exist and re-download missing/corrupt ones with retry.
+
+function getFabricLibraryPath(mcDir, libraryName) {
+  const parts = libraryName.split(':');
+  if (parts.length < 3) return null;
+  const [group, artifact, version] = parts;
+  const classifier = parts[3] || null;
+  const fileName = classifier
+    ? `${artifact}-${version}-${classifier}.jar`
+    : `${artifact}-${version}.jar`;
+  const filePath = path.join(mcDir, 'libraries', group.replace(/\./g, path.sep), artifact, version, fileName);
+  return { filePath, fileName, group, artifact, version };
+}
+
+function buildMavenUrl(baseUrl, group, artifact, version, fileName) {
+  return `${baseUrl}${group.replace(/\./g, '/')}/${artifact}/${version}/${fileName}`;
+}
+
+function verifyFabricLibraries(mcDir, fabricVersionName) {
+  const fabricJsonPath = path.join(mcDir, 'versions', fabricVersionName, `${fabricVersionName}.json`);
+  if (!fs.existsSync(fabricJsonPath)) return { ok: false, missing: [], error: 'Fabric profile JSON not found' };
+
+  let profileJson;
+  try { profileJson = fs.readJsonSync(fabricJsonPath); } catch (e) { return { ok: false, missing: [], error: e.message }; }
+
+  const missing = [];
+  for (const lib of (profileJson.libraries || [])) {
+    const info = getFabricLibraryPath(mcDir, lib.name);
+    if (!info) continue;
+
+    try {
+      if (!fs.existsSync(info.filePath) || fs.statSync(info.filePath).size === 0) {
+        missing.push({ ...info, url: lib.url, downloads: lib.downloads, name: lib.name });
+      }
+    } catch (e) {
+      missing.push({ ...info, url: lib.url, downloads: lib.downloads, name: lib.name });
+    }
+  }
+
+  return { ok: missing.length === 0, missing };
+}
+
+async function downloadMissingFabricLibraries(mcDir, fabricVersionName, onProgress) {
+  const result = verifyFabricLibraries(mcDir, fabricVersionName);
+  if (result.ok) {
+    console.log('[FabricFix] All Fabric libraries verified OK.');
+    return true;
+  }
+  if (result.error) {
+    console.error(`[FabricFix] Verification error: ${result.error}`);
+    return false;
+  }
+
+  console.log(`[FabricFix] Found ${result.missing.length} missing/corrupt libraries, downloading...`);
+  let repaired = 0;
+
+  for (let i = 0; i < result.missing.length; i++) {
+    const lib = result.missing[i];
+
+    // Determine download URL
+    let url = null;
+    if (lib.downloads && lib.downloads.artifact && lib.downloads.artifact.url) {
+      url = lib.downloads.artifact.url;
+    } else if (lib.url) {
+      url = buildMavenUrl(lib.url, lib.group, lib.artifact, lib.version, lib.fileName);
+    }
+
+    if (!url) {
+      console.warn(`[FabricFix] No download URL for ${lib.name}, skipping.`);
+      continue;
+    }
+
+    fs.ensureDirSync(path.dirname(lib.filePath));
+
+    let downloaded = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`[FabricFix] Downloading ${lib.fileName} (attempt ${attempt}/3)...`);
+        const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 30000 });
+        if (res.data && res.data.byteLength > 0) {
+          fs.writeFileSync(lib.filePath, Buffer.from(res.data));
+          console.log(`[FabricFix] Downloaded ${lib.fileName} (${res.data.byteLength} bytes)`);
+          repaired++;
+          downloaded = true;
+          break;
+        }
+      } catch (err) {
+        console.warn(`[FabricFix] Attempt ${attempt} failed for ${lib.fileName}: ${err.message}`);
+        if (attempt < 3) await new Promise(r => setTimeout(r, 1500 * attempt));
+      }
+    }
+
+    if (!downloaded) {
+      console.error(`[FabricFix] FAILED to download ${lib.fileName} after 3 attempts`);
+    }
+
+    if (onProgress) {
+      onProgress({
+        type: 'version-install',
+        task: `Verifying Fabric libraries (${i + 1}/${result.missing.length})...`,
+        current: i + 1,
+        total: result.missing.length
+      });
+    }
+  }
+
+  // Final verification
+  const finalResult = verifyFabricLibraries(mcDir, fabricVersionName);
+  if (!finalResult.ok) {
+    console.error(`[FabricFix] Still missing ${finalResult.missing.length} libraries after repair: ${finalResult.missing.map(l => l.fileName).join(', ')}`);
+  } else {
+    console.log(`[FabricFix] All libraries repaired successfully (${repaired} fixed).`);
+  }
+  return finalResult.ok;
+}
+
 // --- Internal Reusable Version Installer ---
 async function installVersionLogic(version_id, onProgress, onMessage, onDownloadComplete, onDownloadCancelled) {
   console.log('[installVersionLogic] Starting installation for:', version_id);
@@ -1092,7 +1947,7 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
     // Initialize download tracking
     const downloadInfo = {
       launcher: null,
-      gameProcess: null,
+      gameProcess: null ,
       cancelled: false
     };
     activeDownloads.set(version_id, downloadInfo);
@@ -1122,9 +1977,18 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       } else {
         mcVersion = parts[1];
       }
-    } else if (versionLower.startsWith('fabric-')) {
+    } else if (versionLower.startsWith('fabric-loader-')) {
+      // Format: fabric-loader-LOADER-MCVERSION (e.g. fabric-loader-0.19.1-26.1)
       versionType = 'fabric';
-      const parts = version_id.split('-'); // e.g. ["fabric", "1.21.7", "0.15.6"]
+      const parts = version_id.split('-');
+      if (parts.length >= 4) {
+        loaderVersion = parts[2]; // "0.19.1"
+        mcVersion = parts[3]; // "26.1"
+      }
+    } else if (versionLower.startsWith('fabric-')) {
+      // Format: fabric-MCVERSION-LOADER (e.g. fabric-1.21.7-0.15.6)
+      versionType = 'fabric';
+      const parts = version_id.split('-');
       if (parts.length >= 3) {
         mcVersion = parts[1];
         loaderVersion = parts.slice(2).join('-');
@@ -1157,7 +2021,9 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
         });
 
         try {
-          const res = await fetch(`https://meta.fabricmc.net/v2/versions/loader/${mcVersion}/${loaderVersion}/profile/json`);
+          const res = await fetch(`https://meta.fabricmc.net/v2/versions/loader/${mcVersion}/${loaderVersion}/profile/json`).catch(() => {
+            throw new Error('Network error or no internet connection');
+          });
           if (!res.ok) throw new Error(`Fabric API returned ${res.status}`);
           const profileJson = await res.json();
           fs.ensureDirSync(fabricDir);
@@ -1191,7 +2057,9 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
           // Note: This relies on the standard forge maven path.
           const forgeUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${mcVersion}-${loaderVersion}/forge-${mcVersion}-${loaderVersion}-installer.jar`;
           console.log(`[installVersionLogic] Downloading Forge from: ${forgeUrl}`);
-          const res = await fetch(forgeUrl);
+          const res = await fetch(forgeUrl).catch(() => {
+            throw new Error('Network error or no internet connection');
+          });
           if (!res.ok) throw new Error(`Forge Maven returned ${res.status}`);
           const buffer = await res.arrayBuffer();
           fs.writeFileSync(forgeInstallerPath, Buffer.from(buffer));
@@ -1207,6 +2075,8 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
     const downloadLauncher = new Client();
     downloadInfo.launcher = downloadLauncher;
     let downloadProgress = 0;
+    let downloadAssetProgressLogged = false;
+    let downloadAssetCopyProgressLogged = false;
 
     downloadLauncher.on('progress', (progress) => {
       if (downloadInfo.cancelled) return;
@@ -1218,7 +2088,21 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       else if (progress.type === 'classes') taskDescription = 'Downloading libraries...';
       else if (progress.type === 'natives') taskDescription = 'Downloading natives...';
       
-      console.log(`[installVersionLogic] Progress: ${progress.type} - ${percentage}%`);
+      if (progress.type === 'assets') {
+        if (progress.task === 0) downloadAssetProgressLogged = false;
+        if (!downloadAssetProgressLogged) {
+          console.log(`[installVersionLogic] Downloading assets (${progress.total || 0} total)`);
+          downloadAssetProgressLogged = true;
+        }
+      } else if (progress.type === 'assets-copy') {
+        if (progress.task === 0) downloadAssetCopyProgressLogged = false;
+        if (!downloadAssetCopyProgressLogged) {
+          console.log(`[installVersionLogic] Copying legacy assets (${progress.total || 0} total)`);
+          downloadAssetCopyProgressLogged = true;
+        }
+      } else {
+        console.log(`[installVersionLogic] Progress: ${progress.type} - ${percentage}%`);
+      }
       if (onProgress) onProgress({
         type: 'version-install', task: taskDescription, version: version_id,
         current: progress.task || downloadProgress,
@@ -1242,19 +2126,20 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
     }
 
     // Set the version type correctly. MCLC needs 'release' for the base vanilla assets part!
-    const resolvedVersionType = versionType === 'forge' ? 'release' : versionType;
+    const resolvedVersionType = (versionType === 'forge' || versionType === 'fabric') ? 'release' : versionType;
 
     const launchOptions = {
       authorization: { access_token: 'null', client_token: 'null', uuid: 'null', name: 'Installer', user_properties: {} },
       root: mcDir,
       version: { number: mcVersion, type: resolvedVersionType },
       memory: { max: '512M', min: '256M' },
+      overrides: { maxSockets: 4 },
       customArgs: []
     };
 
     if (versionType === 'fabric') {
       launchOptions.version.custom = customVersionId;
-      if (fabricJsonPathVar) launchOptions.overrides = { versionJson: fabricJsonPathVar };
+      if (fabricJsonPathVar) launchOptions.overrides = { ...launchOptions.overrides, versionJson: fabricJsonPathVar };
     }
 
     // We only use MCLC to download the base vanilla assets/libraries.
@@ -1371,6 +2256,19 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       });
     }
 
+    // ─── Fabric: Verify & repair libraries after MCLC download ───────────────
+    if (versionType === 'fabric' && loaderVersion && !downloadInfo.cancelled) {
+      const fabricVersionName = `fabric-loader-${loaderVersion}-${mcVersion}`;
+      if (onProgress) onProgress({
+        type: 'version-install', task: 'Verifying Fabric libraries...',
+        version: version_id, current: 95, total: 100, percentage: 95
+      });
+      const libsOk = await downloadMissingFabricLibraries(mcDir, fabricVersionName, onProgress);
+      if (!libsOk && onMessage) {
+        onMessage('Warning: Some Fabric libraries could not be downloaded. The game may fail to start.');
+      }
+    }
+
     // ─── Shared completion logic ──────────────────────────────────────────────
     if (downloadInfo.cancelled || !activeDownloads.has(version_id)) {
       console.log('[installVersionLogic] Download was cancelled during completion phase.');
@@ -1382,12 +2280,12 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       version: version_id, current: 100, total: 100, percentage: 100
     });
 
-    setTimeout(() => {
-      if (onDownloadComplete) onDownloadComplete({ version: version_id });
-    }, 500);
-
     console.log('[installVersionLogic] Installation completed for:', version_id);
     activeDownloads.delete(version_id);
+
+    // Notify frontend only after everything is truly done (avoid premature "Done" badges)
+    if (onDownloadComplete) onDownloadComplete({ version: version_id });
+
     return { success: true, message: 'Version installed successfully' };
 
   } catch (error) {
@@ -1397,7 +2295,6 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
     return { success: false, message: error.message };
   }
 }
-
 
 ipcMain.handle('install-version', async (e, version_id) => {
   return await installVersionLogic(
@@ -1484,17 +2381,12 @@ ipcMain.handle('get-skin-data', async () => {
   try {
     const userData = loadUserData();
 
-    // Priority 1: Check for active local skin pack (Skin Packs menu selection)
-    const packs = skinManager.getSkinPacks();
-    if (packs && packs.active_pack) {
-      const activePackData = packs.packs[packs.active_pack];
-      if (activePackData && activePackData.skin_preview) {
-        return {
-          skin: activePackData.skin_preview,
-          cape: activePackData.cape_preview,
-          variant: activePackData.skin_model || 'classic'
-        };
-      }
+    if (userData.account_type === 'helloworld') {
+      return {
+        skin: userData.last_avatar_url || null,
+        cape: null,
+        variant: 'classic'
+      };
     }
 
     // Priority 2: Return Mojang skin if logged in via Microsoft
@@ -1519,6 +2411,193 @@ ipcMain.handle('get-skin-data', async () => {
   }
 
   return { skin: null, cape: null, variant: 'classic' };
+})
+
+ipcMain.handle('get-user-capes', async () => {
+  try {
+    const userData = loadUserData();
+
+    const processCapeList = async (capes) => {
+      const processedCapes = [];
+      for (const cape of capes) {
+        if (cape.url) {
+          try {
+            const response = await fetch(cape.url);
+            if (response.ok) {
+              const arrayBuffer = await response.arrayBuffer();
+              const buffer = Buffer.from(arrayBuffer);
+              const base64 = "data:image/png;base64," + buffer.toString('base64');
+              processedCapes.push({ id: cape.id, name: cape.alias || cape.id, base64 });
+            }
+          } catch (err) {
+            console.error(`Failed to load cape ${cape.alias}:`, err);
+          }
+        }
+      }
+      return processedCapes;
+    };
+
+    // For Microsoft accounts, fetch capes from Mojang
+    if (userData.account_type === 'microsoft') {
+      // Step 1: Try cached mc_token first (avoids triggering Xbox rate limits)
+      if (userData.mc_token) {
+        try {
+          const profileRes = await axios.get('https://api.minecraftservices.com/minecraft/profile', {
+            headers: { 'Authorization': `Bearer ${userData.mc_token}` }
+          });
+          if (profileRes.data && profileRes.data.capes) {
+            return { success: true, capes: await processCapeList(profileRes.data.capes) };
+          }
+          return { success: true, capes: [] };
+        } catch (profileErr) {
+          const status = profileErr.response?.status;
+          if (status === 429) {
+            console.warn("[Capes] Rate limited by Mojang, returning empty capes.");
+            return { success: true, capes: [] };
+          }
+          if (status !== 401) {
+            console.error("[Capes] Error fetching capes (cached token):", profileErr.message);
+            return { success: true, capes: [] };
+          }
+          // 401 only: fall through to full refresh below
+          console.log("[Capes] Cached mc_token expired, refreshing session...");
+        }
+      }
+
+      // Step 2: Full refresh via msmc (only when token is missing or expired)
+      if (userData.msmc_auth) {
+        try {
+          const refreshResult = await refreshMicrosoftSession(userData);
+          if (refreshResult.success && refreshResult.access_token) {
+            const profileRes = await axios.get('https://api.minecraftservices.com/minecraft/profile', {
+              headers: { 'Authorization': `Bearer ${refreshResult.access_token}` }
+            });
+            if (profileRes.data && profileRes.data.capes) {
+              return { success: true, capes: await processCapeList(profileRes.data.capes) };
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching Microsoft capes:", e);
+        }
+      }
+    }
+    
+    // For HelloWorld accounts, fetch from Firestore
+    if (userData.account_type === 'helloworld') {
+      const auth = await getSocialAuth();
+      if (auth) {
+        try {
+          const userDoc = await fsGet(`users/${auth.uid}`, auth.idToken);
+          if (userDoc.capeBase64) {
+            return { success: true, capes: [{ id: 'default', name: 'Default Cape', base64: userDoc.capeBase64 }] };
+          }
+        } catch (e) {
+          console.error("Error fetching Firestore capes:", e);
+        }
+      }
+    }
+    
+    return { success: true, capes: [] };
+  } catch (e) {
+    console.error("Error getting user capes:", e);
+    return { success: false, capes: [] };
+  }
+})
+
+const skinManager = require('./src/handlers/skins.js');
+
+ipcMain.handle('get-skin-packs', async () => {
+  try {
+    return skinManager.getSkinPacks();
+  } catch (e) {
+    return { packs: {}, active_pack: null };
+  }
+})
+
+ipcMain.handle('create-skin-pack', async (e, data) => {
+  try {
+    const res = await skinManager.createSkinPack(
+      data.name, 
+      data.skin_base64, 
+      data.skin_model, 
+      data.cape_id, 
+      data.cape_base64,
+      data.cape_alias
+    );
+    return res;
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+})
+
+ipcMain.handle('edit-skin-pack', async (e, data) => {
+  try {
+    const res = await skinManager.editSkinPack(
+      data.pack_id, 
+      data.name, 
+      data.skin_base64, 
+      data.skin_model, 
+      data.cape_id, 
+      data.cape_base64,
+      data.cape_alias
+    );
+    return res;
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+})
+
+ipcMain.handle('delete-skin-pack', async (e, id) => {
+  try {
+    const res = await skinManager.deleteSkinPack(id);
+    return res;
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+})
+
+ipcMain.handle('activate-skin-pack', async (e, id) => {
+  try {
+    const userData = loadUserData();
+    let token = null;
+
+    if (userData.account_type === 'microsoft' && userData.msmc_auth) {
+      const refreshResult = await refreshMicrosoftSession(userData);
+      if (refreshResult.success) {
+        token = refreshResult.access_token;
+      }
+    }
+    
+    const res = await skinManager.activateSkinPack(id, token);
+    
+    // Also update UI representation if we're a helloworld user 
+    // or if we just want to update local cache
+    if (res.success) {
+       const packData = skinManager.getSkinPacks().packs[id];
+       if (packData) {
+         const newData = loadUserData();
+         newData.last_skin_url = packData.skin_preview;
+         newData.last_skin_variant = packData.skin_model;
+         newData.last_cape_url = packData.cape_preview;
+         saveUserData(newData);
+         
+         // Notify UI
+         if (mainWindow) {
+           mainWindow.webContents.send('login-success', {
+             name: newData.username,
+             id: newData.uuid,
+             avatar_url: newData.last_avatar_url,
+             skin: [],
+             cape: []
+           });
+         }
+       }
+    }
+    
+    return res;
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
 })
 
 ipcMain.handle('info', async (e, message) => {
@@ -1617,6 +2696,60 @@ ipcMain.handle('open-url', async (e, url) => {
   return { success: true };
 })
 
+ipcMain.handle('ms-write-verified', async (e, emailKey, email, username, uuid, firebaseUid, firebaseRefreshToken) => {
+  try {
+    // Store Firebase Auth credentials for social features
+    const userData = loadUserData();
+    userData.firebase_ms_uid = firebaseUid;
+    userData.firebase_ms_refresh_token = firebaseRefreshToken;
+    saveUserData(userData);
+
+    // Get a fresh idToken to write to Firestore
+    const refreshed = await refreshFirebaseToken(firebaseRefreshToken);
+
+    // Write microsoftVerified for web login check
+    const emailK = emailKey || email.replace(/\./g, '_DOT_').replace(/@/g, '_AT_');
+    await fsSet(`microsoftVerified/${emailK}`, {
+      email, username, uuid, verified: true, verifiedAt: new Date().toISOString()
+    }, refreshed.idToken);
+
+    // Create/update users doc so this account is discoverable in social features
+    await fsUpdate(`users/${firebaseUid}`, {
+      accountType: 'microsoft', username, uuid,
+      mcUuid: uuid, usernameLower: usernameLower(username),
+      microsoftVerified: true,
+      updatedAt: new Date().toISOString()
+    }, refreshed.idToken);
+
+    console.log('[MS Verify] users doc + microsoftVerified written for:', email);
+    return { success: true };
+  } catch (err) {
+    console.warn('[MS Verify] Failed to write:', err.message);
+    return { success: false, error: err.message };
+  }
+})
+
+ipcMain.handle('ms-verify-web', async () => {
+  try {
+    const userData = loadUserData();
+    if (userData.account_type !== 'microsoft') return { success: false, error: 'Not a Microsoft account' };
+    const socialAuth = await getSocialAuth();
+    const verifyToken = require('crypto').randomBytes(20).toString('hex');
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
+    await fsSet(`pendingMsVerify/${verifyToken}`, {
+      username: userData.username,
+      uuid: userData.uuid,
+      expiresAt,
+      used: false
+    }, socialAuth.idToken);
+    const verifyUrl = `https://hwlauncher.abelosky.com/?verify-token=${verifyToken}`;
+    shell.openExternal(verifyUrl);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+})
+
 /**
  * Helper to refresh Microsoft Session and return valid auth tokens
  */
@@ -1664,6 +2797,22 @@ async function refreshMicrosoftSession(userData) {
         throw new Error("Installation not found after refresh");
     } catch (err) {
         console.warn("[Auth] Failed to auto-refresh token.", err.message);
+
+        // Detect Mojang/Xbox rate limiting (429) — never clear credentials for this
+        const isRateLimited = (err.response && err.response.status === 429) ||
+            (err.status === 429) ||
+            (err.ts && typeof err.ts === 'string' && err.ts.includes('error.auth'));
+        if (isRateLimited) {
+            console.warn("[Auth] Rate limited (429). Not clearing credentials.");
+            return {
+                success: false,
+                rateLimited: true,
+                access_token: userData.mc_token || "null",
+                client_token: userData.uuid || "null",
+                uuid: userData.uuid || "null",
+                name: userData.username || "Steve"
+            };
+        }
         
         // If it's a definitive auth error (not network), clear the tokens
         const isAuthError = err.message && (
@@ -1702,9 +2851,15 @@ async function refreshMicrosoftSession(userData) {
 }
 
 let currentGameProcess = null;
+let isLaunchCancelled = false;
+
+// Lock to prevent race conditions when updating profile metadata
+const profileUpdateLocks = new Map();
 
 ipcMain.handle('launch-profile', async (e, { profileId, nickname, force }) => {
+    console.log(`[Launch] launch-profile called with profileId: ${profileId}, force: ${force}`);
     try {
+        isLaunchCancelled = false;
         const profiles = profileManager.loadProfiles().profiles;
         const profile = profiles[profileId];
         if (!profile) return { status: 'error', error: "Profile not found" };
@@ -1724,16 +2879,102 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force }) => {
         }
 
         const actualMcDir = paths.getMcDir();
+
+        // 0. Synchronization Check (Version + Addons)
+        let isMissingVersion = false;
+        let expectedVersionDirName = profile.version;
+        
+        // For Fabric, ensure we have the correct directory name format
+        if (isFabric) {
+            if (profile.version.startsWith('fabric-') && !profile.version.startsWith('fabric-loader-')) {
+                // Format: fabric-MCVERSION-LOADER -> transform to fabric-loader-LOADER-MCVERSION
+                const parts = profile.version.split('-');
+                if (parts.length >= 3) {
+                    expectedVersionDirName = `fabric-loader-${parts.slice(2).join('-')}-${parts[1]}`;
+                }
+            }
+            // fabric-loader-LOADER-MCVERSION format is already correct
+        }
+        
+        const versionPath = path.join(actualMcDir, 'versions', expectedVersionDirName);
+        console.log(`[Launch] Checking for version at: ${versionPath}`);
+        console.log(`[Launch] Expected dir name: ${expectedVersionDirName}, Profile version: ${profile.version}`);
+        
+        if (!fs.existsSync(versionPath)) {
+            isMissingVersion = true;
+            console.log(`[Launch] Version directory not found, marking as missing`);
+        }
+        
+        let missingAddons = [];
+        if (profile.addons && profile.addons.length > 0) {
+            const profileDir = profile.directory || actualMcDir;
+            for (const addon of profile.addons) {
+                // Skip disabled addons — they are intentionally off
+                if (addon.state === 'disabled') continue;
+                if (addon.type === 'datapack') continue; // Skip datapacks since they require world
+
+                let targetDir = path.join(profileDir, 'mods'); // default
+                if (addon.type === 'resourcepack') targetDir = path.join(profileDir, 'resourcepacks');
+                if (addon.type === 'shader') targetDir = path.join(profileDir, 'shaderpacks');
+                
+                const addonPath = path.join(targetDir, addon.filename);
+                // Also check for alternate filename (with/without .disabled)
+                const altFilename = addon.filename.endsWith('.disabled') 
+                    ? addon.filename.replace(/\.disabled$/, '') 
+                    : addon.filename + '.disabled';
+                const altPath = path.join(targetDir, altFilename);
+                
+                if (!fs.existsSync(addonPath) && !fs.existsSync(altPath)) {
+                    missingAddons.push(addon);
+                }
+            }
+        }
+        
+        if (isMissingVersion || missingAddons.length > 0) {
+            console.log(`[Launch] Missing files detected. isMissingVersion: ${isMissingVersion}, missingAddons: ${missingAddons.length}`);
+            return {
+                status: 'missing_files',
+                missing_version: isMissingVersion,
+                version_id: profile.version,
+                missing_addons: missingAddons
+            };
+        }
+
         const userData = loadUserData();
 
         // 1. Prepare Auth
-        const auth = await refreshMicrosoftSession(userData);
-        if (userData.account_type === 'microsoft' && !auth.success && auth.expired) {
-            return { status: 'error', error: "Your session has expired. Please log in again." };
+        let auth;
+        if (userData.account_type === 'helloworld') {
+            const sessionToken = crypto.randomBytes(16).toString('hex');
+            const resolvedUuid = ensureHelloWorldUuid(userData.username, userData.uuid);
+            userData.uuid = resolvedUuid;
+            saveUserData(userData);
+            
+            auth = {
+                success: true,
+                access_token: sessionToken,
+                client_token: sessionToken,
+                uuid: resolvedUuid,
+                name: userData.username || "Steve"
+            };
+
+            console.log(`[Launch] HelloWorld auth: ${auth.name} (${auth.uuid})`);
+        } else {
+            auth = await refreshMicrosoftSession(userData);
+            if (userData.account_type === 'microsoft' && !auth.success && auth.expired) {
+                return { status: 'error', error: "Your session has expired. Please log in again." };
+            }
         }
 
-        if (nickname && userData.account_type === 'offline') {
-            auth.name = nickname;
+        if (userData.account_type === 'offline') {
+            if (nickname) auth.name = nickname;
+            // Generate a deterministic UUID from the player name so authlib-injector
+            // can look up skins consistently for offline players
+            const playerName = auth.name || nickname || "Steve";
+            const nameHash = crypto.createHash('md5').update(`OfflinePlayer:${playerName}`).digest('hex');
+            auth.uuid = nameHash;
+            auth.access_token = crypto.randomBytes(16).toString('hex');
+            auth.client_token = auth.access_token;
         }
 
         // 2. Prepare Launch Options
@@ -1743,7 +2984,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force }) => {
                 client_token: auth.client_token,
                 uuid: auth.uuid,
                 name: auth.name,
-                user_properties: {}
+                user_properties: JSON.stringify({})
             },
             root: actualMcDir,
             version: {
@@ -1753,7 +2994,8 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force }) => {
                 type: 'release'
             },
             overrides: {
-                gameDirectory: profile.directory || actualMcDir
+                gameDirectory: profile.directory || actualMcDir,
+                maxSockets: 4
             },
             memory: {
                 max: "4G",
@@ -1761,8 +3003,25 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force }) => {
             }
         };
 
-        if (isForge || isFabric) {
+        if (isForge) {
             options.version.custom = profile.version;
+        }
+        if (isFabric) {
+            options.version.custom = expectedVersionDirName;
+        }
+
+        // 2.1. Fabric: Verify & repair libraries before launch
+        if (isFabric && profile.version) {
+            try {
+                if (mainWindow) mainWindow.webContents.send('info-message', 'Verifying Fabric libraries...');
+                const libsOk = await downloadMissingFabricLibraries(actualMcDir, profile.version, null);
+                if (!libsOk) {
+                    console.warn('[Launch] Some Fabric libraries are still missing after repair attempt.');
+                    if (mainWindow) mainWindow.webContents.send('info-message', 'Warning: Some Fabric libraries may be missing.');
+                }
+            } catch (verifyErr) {
+                console.warn('[Launch] Fabric library verification failed:', verifyErr.message);
+            }
         }
 
         if (profile.jvm_args) {
@@ -1780,26 +3039,34 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force }) => {
         }
 
         // 2.5. Modern Java Fixes (Reflection access)
-        // Required for Forge/Fabric on Java 16+
-        const modernJavaArgs = [
-            '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
-            '--add-opens', 'java.base/java.lang.invoke=ALL-UNNAMED',
-            '--add-opens', 'java.base/java.lang.reflect=ALL-UNNAMED',
-            '--add-opens', 'java.base/java.io=ALL-UNNAMED',
-            '--add-opens', 'java.base/java.net=ALL-UNNAMED',
-            '--add-opens', 'java.base/java.nio=ALL-UNNAMED',
-            '--add-opens', 'java.base/java.util=ALL-UNNAMED',
-            '--add-opens', 'java.base/java.util.concurrent=ALL-UNNAMED',
-            '--add-opens', 'java.base/java.util.concurrent.atomic=ALL-UNNAMED',
-            '--add-opens', 'java.base/sun.nio.ch=ALL-UNNAMED',
-            '--add-opens', 'java.base/sun.nio.cs=ALL-UNNAMED',
-            '--add-opens', 'java.base/sun.security.action=ALL-UNNAMED',
-            '--add-opens', 'java.base/sun.util.calendar=ALL-UNNAMED',
-            '--add-opens', 'java.security.jgss/sun.security.krb5=ALL-UNNAMED'
-        ];
-
-        if (!options.customArgs) options.customArgs = [];
-        options.customArgs = [...options.customArgs, ...modernJavaArgs];
+        // Required for Minecraft 1.17+ (Java 16+). Old versions like 1.2.3 use Java 8 and crash with --add-opens.
+        const needsModernArgs = (() => {
+            const match = mcVersion.match(/(\d+)\.(\d+)(?:\.(\d+))?/);
+            if (!match) return false;
+            const major = parseInt(match[1]);
+            const minor = parseInt(match[2]);
+            return major > 1 || (major === 1 && minor >= 17);
+        })();
+        if (needsModernArgs) {
+            const modernJavaArgs = [
+                '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
+                '--add-opens', 'java.base/java.lang.invoke=ALL-UNNAMED',
+                '--add-opens', 'java.base/java.lang.reflect=ALL-UNNAMED',
+                '--add-opens', 'java.base/java.io=ALL-UNNAMED',
+                '--add-opens', 'java.base/java.net=ALL-UNNAMED',
+                '--add-opens', 'java.base/java.nio=ALL-UNNAMED',
+                '--add-opens', 'java.base/java.util=ALL-UNNAMED',
+                '--add-opens', 'java.base/java.util.concurrent=ALL-UNNAMED',
+                '--add-opens', 'java.base/java.util.concurrent.atomic=ALL-UNNAMED',
+                '--add-opens', 'java.base/sun.nio.ch=ALL-UNNAMED',
+                '--add-opens', 'java.base/sun.nio.cs=ALL-UNNAMED',
+                '--add-opens', 'java.base/sun.security.action=ALL-UNNAMED',
+                '--add-opens', 'java.base/sun.util.calendar=ALL-UNNAMED',
+                '--add-opens', 'java.security.jgss/sun.security.krb5=ALL-UNNAMED'
+            ];
+            if (!options.customArgs) options.customArgs = [];
+            options.customArgs = [...options.customArgs, ...modernJavaArgs];
+        }
 
         // 3. Java Runtime
         try {
@@ -1818,13 +3085,73 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force }) => {
         // Update RPC
         rpc.setPlaying(mcVersion, auth.name);
 
+        getSocialAuth().then(authSocial => {
+            if (authSocial && authSocial.uid) {
+                fsSet(`users/${authSocial.uid}`, { 
+                    presence: { state: 'Playing Minecraft', version: mcVersion, profileName: profile.name } 
+                }, authSocial.idToken, ['presence']).catch(console.error);
+            }
+        }).catch(() => {});
+
         launcher.launch(options).then(child => {
+            if (isLaunchCancelled) {
+                console.log("[Launch] Launch cancelled while starting, killing immediately.");
+                try { process.kill(child.pid, 'SIGKILL'); } catch(e) {}
+                
+                getSocialAuth().then(authSocial => {
+                    if (authSocial && authSocial.uid) {
+                        fsSet(`users/${authSocial.uid}`, { 
+                            presence: { state: 'Online' } 
+                        }, authSocial.idToken, ['presence']).catch(console.error);
+                    }
+                }).catch(() => {});
+                return;
+            }
+            
             currentGameProcess = child;
+
+            child.stdout?.on('data', (data) => {
+                const message = data.toString().trim();
+                if (!message) return;
+                console.log('[Game stdout]', message);
+                
+                // Try to detect server join from log messages
+                if (message.includes("Connecting to ")) {
+                    const match = message.match(/Connecting to ([a-zA-Z0-9.-]+)/);
+                    if (match && match[1]) {
+                        getSocialAuth().then(authSocial => {
+                            if (authSocial && authSocial.uid) {
+                                fsSet(`users/${authSocial.uid}`, { 
+                                    presence: { state: `Playing on ${match[1]}`, version: mcVersion, profileName: profile.name } 
+                                }, authSocial.idToken, ['presence']).catch(console.error);
+                            }
+                        }).catch(() => {});
+                    }
+                }
+                
+                if (mainWindow) mainWindow.webContents.send('info-message', `[Game stdout] ${message}`);
+            });
+
+            child.stderr?.on('data', (data) => {
+                const message = data.toString().trim();
+                if (!message) return;
+                console.error('[Game stderr]', message);
+                if (mainWindow) mainWindow.webContents.send('info-message', `[Game stderr] ${message}`);
+            });
             
             child.on('close', () => {
                 console.log("[Launch] Game process closed");
                 currentGameProcess = null;
                 rpc.setIdle();
+                
+                getSocialAuth().then(authSocial => {
+                    if (authSocial && authSocial.uid) {
+                        fsSet(`users/${authSocial.uid}`, { 
+                            presence: { state: 'Online' } 
+                        }, authSocial.idToken, ['presence']).catch(console.error);
+                    }
+                }).catch(() => {});
+                
                 if (mainWindow) mainWindow.webContents.send('info-message', "Game Closed");
             });
 
@@ -1851,12 +3178,685 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force }) => {
     }
 })
 
+ipcMain.handle('cancel-launch', async () => {
+    try {
+        isLaunchCancelled = true;
+        if (currentGameProcess && currentGameProcess.pid) {
+            process.kill(currentGameProcess.pid, 'SIGKILL');
+            console.log('[cancel-launch] Killed game process');
+            currentGameProcess = null;
+            return { success: true };
+        }
+        return { success: true, message: 'Launch marked as cancelled (pending process kill)' };
+    } catch(e) {
+        console.error('[cancel-launch] Error killing:', e);
+        return { success: false, error: e.message };
+    }
+})
+
 ipcMain.handle('open-folder-dialog', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory']
   })
   return canceled ? null : filePaths[0]
 })
+
+// ==============================================
+// SOCIAL SYSTEM IPC HANDLERS
+// ==============================================
+
+ipcMain.handle('social-get-auth', async () => {
+  try {
+    const auth = await getSocialAuth();
+    // Whenever auth check happens, assume launcher is open -> Online
+    if (auth.uid) {
+        fsSet(`users/${auth.uid}`, {
+            presence: { state: 'Online' }
+        }, auth.idToken, ['presence']).catch(e => console.error("Failed to update presence to Online on get-auth", e));
+    }
+    return { success: true, uid: auth.uid, accountType: auth.accountType, username: auth.username };
+  } catch (e) {
+    if (e.message === 'NO_SOCIAL_AUTH') return { success: false, error: 'offline' };
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-update-presence', async (e, presenceData) => {
+    try {
+        const auth = await getSocialAuth();
+        await fsSet(`users/${auth.uid}`, { presence: presenceData }, auth.idToken, ['presence']);
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('social-search-user', async (e, query) => {
+  try {
+    const auth = await getSocialAuth();
+    if (!query || query.trim().length < 2) return { success: false, error: 'Query too short' };
+    const q = query.trim();
+    const results = [];
+    const seenUids = new Set([auth.uid]);
+
+    // Prefix range search on usernameLower (e.g. "abe" matches "abelosky")
+    const token = q.toLowerCase();
+    const allResults = await fsQuery('users', [
+      { field: 'usernameLower', op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: token } },
+      { field: 'usernameLower', op: 'LESS_THAN', value: { stringValue: token + '\uf8ff' } }
+    ], auth.idToken, null, 20);
+    for (const u of allResults) {
+      if (!seenUids.has(u.id)) {
+        seenUids.add(u.id);
+        results.push({ uid: u.id, username: u.username, mcUuid: u.mcUuid || u.uuid, accountType: u.accountType || 'helloworld', avatarBase64: u.avatarBase64 || '' });
+      }
+    }
+
+    return { success: true, results };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-send-request', async (e, toUid) => {
+  try {
+    const auth = await getSocialAuth();
+    if (toUid === auth.uid) return { success: false, error: 'cannot_self' };
+
+    // Check if blocked by target user — direct GET, rule allows if blockedUid == auth.uid
+    try {
+      await fsGet(`blocks/${toUid}__${auth.uid}`, auth.idToken);
+      return { success: false, error: 'user_not_found' };
+    } catch (_) {}
+
+    // Check existing friendship
+    const fid = friendshipId(auth.uid, toUid);
+    try { await fsGet(`friendships/${fid}`, auth.idToken); return { success: false, error: 'already_friends' }; } catch (_) {}
+
+    // Check if we already sent a request — direct GET of known doc ID
+    try {
+      const sent = await fsGet(`friendRequests/${auth.uid}__${toUid}`, auth.idToken);
+      if (sent.status === 'pending') return { success: false, error: 'request_already_sent' };
+    } catch (_) {}
+
+    // Check if they already sent us a request — direct GET of known doc ID
+    try {
+      const received = await fsGet(`friendRequests/${toUid}__${auth.uid}`, auth.idToken);
+      if (received.status === 'pending') return { success: false, error: 'request_already_received' };
+    } catch (_) {}
+
+    const reqId = `${auth.uid}__${toUid}`;
+    await fsSet(`friendRequests/${reqId}`, {
+      fromUid: auth.uid, toUid, status: 'pending', createdAt: new Date().toISOString()
+    }, auth.idToken);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-get-requests', async () => {
+  try {
+    const auth = await getSocialAuth();
+    const allSent = await fsQuery('friendRequests', [
+      { field: 'fromUid', op: 'EQUAL', value: { stringValue: auth.uid } }
+    ], auth.idToken);
+    const sent = allSent.filter(r => r.status === 'pending');
+    const allReceived = await fsQuery('friendRequests', [
+      { field: 'toUid', op: 'EQUAL', value: { stringValue: auth.uid } }
+    ], auth.idToken);
+    const received = allReceived.filter(r => r.status === 'pending');
+
+    // Enrich with profile data
+    const enrich = async (reqs, uidField) => {
+      return Promise.all(reqs.map(async r => {
+        const uid = r[uidField];
+        try { const p = await fsGet(`users/${uid}`, auth.idToken); return { ...r, profile: { ...p, uid } }; }
+        catch (_) { return { ...r, profile: { uid, username: 'Unknown', accountType: 'helloworld' } }; }
+      }));
+    };
+    return { success: true, sent: await enrich(sent, 'toUid'), received: await enrich(received, 'fromUid') };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-accept-request', async (e, requestId) => {
+  try {
+    const auth = await getSocialAuth();
+    let req;
+    try { req = await fsGet(`friendRequests/${requestId}`, auth.idToken); }
+    catch (_) { return { success: false, error: 'request_not_found' }; }
+    if (req.toUid !== auth.uid) return { success: false, error: 'not_authorized' };
+
+    const fid = friendshipId(auth.uid, req.fromUid);
+    await fsSet(`friendships/${fid}`, {
+      users: [auth.uid, req.fromUid], createdAt: new Date().toISOString(), lastMessageAt: new Date().toISOString()
+    }, auth.idToken);
+    await fsDel(`friendRequests/${requestId}`, auth.idToken);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-reject-request', async (e, requestId) => {
+  try {
+    const auth = await getSocialAuth();
+    await fsDel(`friendRequests/${requestId}`, auth.idToken);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-cancel-request', async (e, requestId) => {
+  try {
+    const auth = await getSocialAuth();
+    await fsDel(`friendRequests/${requestId}`, auth.idToken);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-get-friends', async () => {
+  try {
+    const auth = await getSocialAuth();
+    // No orderBy here — ARRAY_CONTAINS + orderBy on different field requires composite index.
+    // Sort client-side instead.
+    const friendships = await fsQuery('friendships', [
+      { field: 'users', op: 'ARRAY_CONTAINS', value: { stringValue: auth.uid } }
+    ], auth.idToken, null, 100);
+
+    const friends = await Promise.all(friendships.map(async fs => {
+      // Last message preview
+      let lastMsg = null;
+      try {
+        const msgs = await fsQuerySub(`friendships/${fs.id}`, 'messages', [], auth.idToken, 'timestamp', 1);
+        if (msgs.length > 0) lastMsg = msgs[0];
+      } catch (_) {}
+
+      // Unread count
+      let unread = 0;
+      try {
+        const unreadDoc = await fsGet(`friendships/${fs.id}/unread/${auth.uid}`, auth.idToken);
+        unread = unreadDoc.count || 0;
+      } catch (_) {}
+
+      if (fs.isGroup) {
+        return {
+          friendshipId: fs.id,
+          isGroup: true,
+          groupData: { name: fs.name, description: fs.description, imageBase64: fs.imageBase64, members: fs.users, admin: fs.admin, admins: fs.admins || [fs.admin] },
+          lastMsg, unread, lastMessageAt: fs.lastMessageAt
+        };
+      }
+
+      const friendUid = (fs.users || []).find(u => u !== auth.uid);
+      if (!friendUid) return null;
+      let profile = { uid: friendUid, username: 'Unknown', accountType: 'helloworld' };
+      try { profile = await fsGet(`users/${friendUid}`, auth.idToken); } catch (_) {}
+
+      return { friendshipId: fs.id, profile: { ...profile, uid: friendUid }, lastMsg, unread, lastMessageAt: fs.lastMessageAt };
+    }));
+
+    const sorted = friends.filter(Boolean).sort((a, b) => {
+      const ta = a.lastMessageAt || '';
+      const tb = b.lastMessageAt || '';
+      return tb > ta ? 1 : tb < ta ? -1 : 0;
+    });
+    return { success: true, friends: sorted };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-create-group', async (e, name, description, imageBase64, members) => {
+  try {
+    const auth = await getSocialAuth();
+    if (!members.includes(auth.uid)) members.push(auth.uid);
+    const groupId = `group_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const now = new Date().toISOString();
+    await fsSet(`friendships/${groupId}`, {
+      isGroup: true,
+      name,
+      description: description || '',
+      imageBase64: imageBase64 || '',
+      users: members,
+      admin: auth.uid,
+      admins: [auth.uid],
+      createdAt: now,
+      lastMessageAt: now
+    }, auth.idToken);
+    return { success: true, groupId };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+async function deleteFriendshipCompletely(fid, idToken) {
+  const deleteSub = async (sub) => {
+    try {
+      let hasMore = true;
+      while (hasMore) {
+        const docs = await fsQuerySub(`friendships/${fid}`, sub, [], idToken, null, 100);
+        if (docs.length === 0) hasMore = false;
+        else {
+          for (const d of docs) await fsDel(`friendships/${fid}/${sub}/${d.id}`, idToken);
+        }
+      }
+    } catch (e) { console.error(`Error deleting subcollection ${sub} of ${fid}:`, e.message); }
+  };
+  await deleteSub('messages');
+  await deleteSub('unread');
+  await deleteSub('replyState');
+  await fsDel(`friendships/${fid}`, idToken);
+}
+
+ipcMain.handle('social-remove-friend', async (e, targetFriendshipId) => {
+  try {
+    const auth = await getSocialAuth();
+    const doc = await fsGet(`friendships/${targetFriendshipId}`, auth.idToken);
+    
+    if (doc.isGroup) {
+      // Leave group
+      const newUsers = (doc.users || []).filter(u => u !== auth.uid);
+      const newAdmins = (doc.admins || []).filter(u => u !== auth.uid);
+      if (newUsers.length === 0) {
+        // Delete group if empty
+        await deleteFriendshipCompletely(targetFriendshipId, auth.idToken);
+      } else {
+        const update = { users: newUsers };
+        // If owner leaves, transfer ownership to next admin or first member
+        if (doc.admin === auth.uid) {
+          const nextAdmin = newAdmins.length > 0 ? newAdmins[0] : newUsers[0];
+          update.admin = nextAdmin;
+          // Ensure new owner is in admins
+          if (!newAdmins.includes(nextAdmin)) {
+            update.admins = [...newAdmins, nextAdmin];
+          } else {
+            update.admins = newAdmins;
+          }
+        } else {
+          update.admins = newAdmins;
+        }
+        await fsSet(`friendships/${targetFriendshipId}`, update, auth.idToken, Object.keys(update));
+      }
+    } else {
+      // Remove friend (DM)
+      await deleteFriendshipCompletely(targetFriendshipId, auth.idToken);
+    }
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-block-user', async (e, targetUid, sourceFriendshipId) => {
+  try {
+    const auth = await getSocialAuth();
+    const blockId = `${auth.uid}__${targetUid}`;
+    await fsSet(`blocks/${blockId}`, { blockerUid: auth.uid, blockedUid: targetUid, createdAt: new Date().toISOString() }, auth.idToken);
+    if (sourceFriendshipId) {
+      try { await deleteFriendshipCompletely(sourceFriendshipId, auth.idToken); } catch (_) {}
+    }
+    // Cancel any pending requests between the two
+    const reqId1 = `${auth.uid}__${targetUid}`;
+    const reqId2 = `${targetUid}__${auth.uid}`;
+    try { await fsDel(`friendRequests/${reqId1}`, auth.idToken); } catch (_) {}
+    try { await fsDel(`friendRequests/${reqId2}`, auth.idToken); } catch (_) {}
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-unblock-user', async (e, targetUid) => {
+  try {
+    const auth = await getSocialAuth();
+    const blockId = `${auth.uid}__${targetUid}`;
+    await fsDel(`blocks/${blockId}`, auth.idToken);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-get-blocked', async () => {
+  try {
+    const auth = await getSocialAuth();
+    const blocks = await fsQuery('blocks', [
+      { field: 'blockerUid', op: 'EQUAL', value: { stringValue: auth.uid } }
+    ], auth.idToken);
+    const enriched = await Promise.all(blocks.map(async b => {
+      let profile = { uid: b.blockedUid, username: 'Unknown', accountType: 'helloworld' };
+      try { profile = await fsGet(`users/${b.blockedUid}`, auth.idToken); } catch (_) {}
+      return { blockId: b.id, profile: { ...profile, uid: b.blockedUid } };
+    }));
+    return { success: true, blocked: enriched };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-send-message', async (e, targetFriendshipId, content, replyTo = null) => {
+  try {
+    const auth = await getSocialAuth();
+    if (!content || !content.trim()) return { success: false, error: 'empty_message' };
+    const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const now = new Date().toISOString();
+    const msgData = {
+      senderId: auth.uid,
+      content: content.trim(),
+      timestamp: now,
+      status: 'sent'
+    };
+    if (replyTo) {
+      msgData.replyTo = replyTo.id;
+      msgData.replyContent = replyTo.content;
+      msgData.replySender = replyTo.senderId;
+      msgData.replySenderName = replyTo.senderName;
+    }
+    await fsSet(`friendships/${targetFriendshipId}/messages/${msgId}`, msgData, auth.idToken);
+    // Update friendship lastMessageAt
+    await fsSet(`friendships/${targetFriendshipId}`, { lastMessageAt: now }, auth.idToken, ['lastMessageAt']);
+    // Increment unread for all other users
+    const fDoc = await fsGet(`friendships/${targetFriendshipId}`, auth.idToken);
+    const otherUids = (fDoc.users || []).filter(u => u !== auth.uid);
+    for (const otherUid of otherUids) {
+      let currentUnread = 0;
+      try { const ud = await fsGet(`friendships/${targetFriendshipId}/unread/${otherUid}`, auth.idToken); currentUnread = ud.count || 0; } catch (_) {}
+      await fsSet(`friendships/${targetFriendshipId}/unread/${otherUid}`, { count: currentUnread + 1 }, auth.idToken);
+    }
+    return { success: true, msgId };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-edit-message', async (e, targetFriendshipId, msgId, newContent) => {
+  try {
+    const auth = await getSocialAuth();
+    if (!newContent || !newContent.trim()) return { success: false, error: 'empty_message' };
+    const msgDoc = await fsGet(`friendships/${targetFriendshipId}/messages/${msgId}`, auth.idToken);
+    if (msgDoc.senderId !== auth.uid) return { success: false, error: 'not_owner' };
+    
+    // Pass the full document back to satisfy strict Firestore rules
+    const updatedMsg = { 
+      ...msgDoc,
+      content: newContent.trim(),
+      edited: true,
+      editedAt: new Date().toISOString()
+    };
+    delete updatedMsg.id; // remove local id property
+    
+    await fsSet(`friendships/${targetFriendshipId}/messages/${msgId}`, updatedMsg, auth.idToken);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-delete-message', async (e, targetFriendshipId, msgId) => {
+  try {
+    const auth = await getSocialAuth();
+    const msgDoc = await fsGet(`friendships/${targetFriendshipId}/messages/${msgId}`, auth.idToken);
+    if (msgDoc.senderId !== auth.uid) return { success: false, error: 'not_owner' };
+    await fsDel(`friendships/${targetFriendshipId}/messages/${msgId}`, auth.idToken);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-set-reply', async (e, targetFriendshipId, replyTo) => {
+  try {
+    const auth = await getSocialAuth();
+    const replyData = replyTo ? {
+      msgId: replyTo.id,
+      content: replyTo.content,
+      senderId: replyTo.senderId,
+      senderName: replyTo.senderName
+    } : null;
+    await fsSet(`friendships/${targetFriendshipId}/replyState/${auth.uid}`, { reply: replyData }, auth.idToken);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-get-reply', async (e, targetFriendshipId) => {
+  try {
+    const auth = await getSocialAuth();
+    const doc = await fsGet(`friendships/${targetFriendshipId}/replyState/${auth.uid}`, auth.idToken);
+    return { success: true, reply: doc.reply || null };
+  } catch (e) {
+    return { success: true, reply: null };
+  }
+});
+
+ipcMain.handle('social-get-messages', async (e, targetFriendshipId, beforeTimestamp) => {
+  try {
+    const auth = await getSocialAuth();
+    // Use listDocuments for subcollection without filters (avoids 400 error from runQuery with empty where)
+    const res = await axios.get(`${FIRESTORE_BASE}/friendships/${targetFriendshipId}/messages?pageSize=1000`,
+      { headers: { Authorization: `Bearer ${auth.idToken}` } });
+    const allMsgs = (res.data.documents || []).map(doc => ({
+      id: doc.name.split('/').pop(),
+      ...parseFirestoreFields(doc.fields)
+    }));
+    const msgs = beforeTimestamp ? allMsgs.filter(m => m.timestamp < beforeTimestamp) : allMsgs;
+    const sorted = msgs.sort((a, b) => a.timestamp > b.timestamp ? 1 : a.timestamp < b.timestamp ? -1 : 0);
+    return { success: true, messages: sorted };
+  } catch (e) {
+    console.error('[Social] social-get-messages error:', e.message);
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-mark-read', async (e, targetFriendshipId) => {
+  try {
+    const auth = await getSocialAuth();
+    await fsSet(`friendships/${targetFriendshipId}/unread/${auth.uid}`, { count: 0 }, auth.idToken);
+    // Mark messages from other users as delivered
+    try {
+      const msgs = await fsQuerySub(`friendships/${targetFriendshipId}`, 'messages', [], auth.idToken, null, 100);
+      for (const msg of msgs) {
+        if (msg.senderId !== auth.uid && (!msg.status || msg.status === 'sent')) {
+          await fsSet(`friendships/${targetFriendshipId}/messages/${msg.id}`, { status: 'delivered' }, auth.idToken, ['status']);
+        }
+      }
+    } catch (_) {}
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-get-badge-counts', async () => {
+  try {
+    const auth = await getSocialAuth();
+    const allRecv = await fsQuery('friendRequests', [
+      { field: 'toUid', op: 'EQUAL', value: { stringValue: auth.uid } }
+    ], auth.idToken, null, 100);
+    const received = allRecv.filter(r => r.status === 'pending');
+    const friendships = await fsQuery('friendships', [
+      { field: 'users', op: 'ARRAY_CONTAINS', value: { stringValue: auth.uid } }
+    ], auth.idToken, null, 100);
+    let totalUnread = 0;
+    for (const fs of friendships) {
+      try { const ud = await fsGet(`friendships/${fs.id}/unread/${auth.uid}`, auth.idToken); totalUnread += ud.count || 0; } catch (_) {}
+    }
+    return { success: true, pendingRequests: received.length, unreadMessages: totalUnread };
+  } catch (e) {
+    if (e.message === 'NO_SOCIAL_AUTH') return { success: true, pendingRequests: 0, unreadMessages: 0 };
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-edit-group', async (e, groupId, updates) => {
+  try {
+    const auth = await getSocialAuth();
+    const doc = await fsGet(`friendships/${groupId}`, auth.idToken);
+    if (!doc.isGroup) return { success: false, error: 'not_a_group' };
+    const admins = doc.admins || [doc.admin];
+    if (!admins.includes(auth.uid)) return { success: false, error: 'not_admin' };
+    const allowed = {};
+    if (updates.name !== undefined) allowed.name = updates.name;
+    if (updates.description !== undefined) allowed.description = updates.description;
+    if (updates.imageBase64 !== undefined) allowed.imageBase64 = updates.imageBase64;
+    if (Object.keys(allowed).length === 0) return { success: false, error: 'no_changes' };
+    await fsSet(`friendships/${groupId}`, allowed, auth.idToken, Object.keys(allowed));
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-add-group-members', async (e, groupId, memberUids) => {
+  try {
+    const auth = await getSocialAuth();
+    const doc = await fsGet(`friendships/${groupId}`, auth.idToken);
+    if (!doc.isGroup) return { success: false, error: 'not_a_group' };
+    const admins = doc.admins || [doc.admin];
+    if (!admins.includes(auth.uid)) return { success: false, error: 'not_admin' };
+    const currentUsers = doc.users || [];
+    const newUsers = [...new Set([...currentUsers, ...memberUids])];
+    await fsSet(`friendships/${groupId}`, { users: newUsers }, auth.idToken, ['users']);
+    return { success: true, users: newUsers };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-remove-group-member', async (e, groupId, memberUid) => {
+  try {
+    const auth = await getSocialAuth();
+    const doc = await fsGet(`friendships/${groupId}`, auth.idToken);
+    if (!doc.isGroup) return { success: false, error: 'not_a_group' };
+    const admins = doc.admins || [doc.admin];
+    const isAdmin = admins.includes(auth.uid);
+    const isOwner = doc.admin === auth.uid;
+    // Only admin can remove others; user can remove themselves via leave group (social-remove-friend)
+    if (memberUid !== auth.uid && !isAdmin) return { success: false, error: 'not_admin' };
+    if (memberUid === doc.admin && !isOwner) return { success: false, error: 'cannot_remove_owner' };
+    if (memberUid === doc.admin) return { success: false, error: 'owner_must_transfer' };
+    const newUsers = (doc.users || []).filter(u => u !== memberUid);
+    const newAdmins = (doc.admins || []).filter(u => u !== memberUid);
+    if (newUsers.length === 0) {
+      await deleteFriendshipCompletely(groupId, auth.idToken);
+    } else {
+      await fsSet(`friendships/${groupId}`, { users: newUsers, admins: newAdmins }, auth.idToken, ['users', 'admins']);
+    }
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('get-user-profile', async (e, uid) => {
+  try {
+    const auth = await getSocialAuth();
+    // Fetch user data from Firestore users collection
+    const userDoc = await fsGet(`users/${uid}`, auth.idToken);
+    return { success: true, data: userDoc };
+  } catch (e) {
+    console.error('[get-user-profile] Error:', e);
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('add-profile-link', async (e, uid, url, title, type) => {
+  try {
+    const auth = await getSocialAuth();
+    // Verify user is editing their own profile
+    if (auth.uid !== uid) {
+      return { success: false, error: 'Cannot edit other users profile' };
+    }
+    
+    // Get current user document
+    const userDoc = await fsGet(`users/${uid}`, auth.idToken);
+    const existingLinks = userDoc.links || [];
+    
+    // Add new link
+    const newLink = { url, title, type, createdAt: new Date().toISOString() };
+    const updatedLinks = [...existingLinks, newLink];
+    
+    // Update user document
+    await fsSet(`users/${uid}`, { links: updatedLinks }, auth.idToken, ['links']);
+    
+    return { success: true };
+  } catch (e) {
+    console.error('[add-profile-link] Error:', e);
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-promote-admin', async (e, groupId, memberUid) => {
+  try {
+    const auth = await getSocialAuth();
+    const doc = await fsGet(`friendships/${groupId}`, auth.idToken);
+    if (!doc.isGroup) return { success: false, error: 'not_a_group' };
+    const admins = doc.admins || [doc.admin];
+    if (!admins.includes(auth.uid)) return { success: false, error: 'not_admin' };
+    if (!(doc.users || []).includes(memberUid)) return { success: false, error: 'not_member' };
+    if (admins.includes(memberUid)) return { success: false, error: 'already_admin' };
+    const newAdmins = [...admins, memberUid];
+    await fsSet(`friendships/${groupId}`, { admins: newAdmins }, auth.idToken, ['admins']);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-demote-admin', async (e, groupId, adminUid) => {
+  try {
+    const auth = await getSocialAuth();
+    const doc = await fsGet(`friendships/${groupId}`, auth.idToken);
+    if (!doc.isGroup) return { success: false, error: 'not_a_group' };
+    if (doc.admin !== auth.uid) return { success: false, error: 'not_owner' };
+    if (adminUid === doc.admin) return { success: false, error: 'cannot_demote_self' };
+    const admins = doc.admins || [doc.admin];
+    if (!admins.includes(adminUid)) return { success: false, error: 'not_admin' };
+    const newAdmins = admins.filter(u => u !== adminUid);
+    await fsSet(`friendships/${groupId}`, { admins: newAdmins }, auth.idToken, ['admins']);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-get-group-details', async (e, groupId) => {
+  try {
+    const auth = await getSocialAuth();
+    const doc = await fsGet(`friendships/${groupId}`, auth.idToken);
+    if (!doc.isGroup) return { success: false, error: 'not_a_group' };
+    if (!(doc.users || []).includes(auth.uid)) return { success: false, error: 'not_member' };
+    const profiles = await Promise.all((doc.users || []).map(async uid => {
+      try { const p = await fsGet(`users/${uid}`, auth.idToken); return { ...p, uid: p.uid || p.id || uid }; } catch (_) { return { uid, username: 'Unknown', accountType: 'helloworld' }; }
+    }));
+    return {
+      success: true,
+      group: {
+        id: groupId,
+        name: doc.name,
+        description: doc.description || '',
+        imageBase64: doc.imageBase64 || '',
+        members: doc.users || [],
+        admin: doc.admin,
+        admins: doc.admins || [doc.admin],
+        createdAt: doc.createdAt
+      },
+      profiles
+    };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+// Required for Windows toast notifications - must be before app.whenReady()
+if (process.platform === 'win32') app.setAppUserModelId('com.abelosky.helloworldlauncher');
 
 // --- App Events ---
 app.whenReady().then(() => {
@@ -1900,18 +3900,27 @@ app.whenReady().then(() => {
     }
   });
 
-  createWindow()
+  createWindow();
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-})
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+});
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
-})
+  if (process.platform !== 'darwin') app.quit();
+});
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
   console.log("App closing, cleaning up processes...");
+
+  // Sync presence to offline if possible
+  getSocialAuth().then(authSocial => {
+      if (authSocial && authSocial.uid) {
+          fsSet(`users/${authSocial.uid}`, { 
+              presence: { state: 'Offline' } 
+          }, authSocial.idToken, ['presence']).catch(() => {});
+      }
+  }).catch(() => {});
 
   // 1. Kill all active download game processes
   for (const [version_id, info] of activeDownloads) {
@@ -1932,4 +3941,4 @@ app.on('before-quit', () => {
   // 2. Kill main game process if running (optional, but good practice)
   // Assuming 'launcher' might have internal state, but MCLC doesn't expose the main process easily globally unless we track it
   // But we have rpc.setIdle() which is good.
-})
+});
