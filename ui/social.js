@@ -24,6 +24,8 @@
     let editingMessageId = null; // ID of message being edited
     let cachedFriends = null;   // Last loaded friends array
     let pendingChatOpen = null; // friendshipId to open once friends are loaded
+    let currentProfileUid = null; // UID of currently viewed profile
+    let profileRefreshInterval = null; // Interval for refreshing profile presence
 
     // --- Helpers ---
     function showNotification(title, body) {
@@ -119,8 +121,6 @@
     };
 
     // --- Badge polling ---
-    let lastKnownPresences = {};
-
     async function updateBadge() {
         try {
             const res = await api().social_get_badge_counts();
@@ -148,28 +148,6 @@
             }
             lastPendingRequests = pending;
             lastUnreadMessages = unread;
-            
-            // Check presences for notifications
-            const friendsRes = await api().social_get_friends();
-            if (friendsRes && friendsRes.success) {
-                friendsRes.friends.forEach(f => {
-                    if (f.isGroup || !f.profile) return;
-                    const p = f.profile;
-                    const presence = p.presence || { state: 'Offline' };
-                    const previous = lastKnownPresences[p.uid];
-
-                    if (previous && previous.state !== presence.state) {
-                        if (presence.state === 'Online' && previous.state === 'Offline') {
-                            showNotification('Friend Online', `${p.username} is now Online`);
-                        } else if (presence.state === 'Playing Minecraft' && previous.state !== 'Playing Minecraft' && !presence.state.startsWith('Playing on')) {
-                            showNotification('Friend Playing', `${p.username} started playing Minecraft`);
-                        } else if (presence.state.startsWith('Playing on') && (!previous.state.startsWith('Playing on') || previous.state !== presence.state)) {
-                            showNotification('Friend Playing', `${p.username} joined a server`);
-                        }
-                    }
-                    lastKnownPresences[p.uid] = presence;
-                });
-            }
         } catch (e) { /* silently ignore */ }
     }
 
@@ -273,6 +251,7 @@
         const blockedSection = document.getElementById('blockedSection');
         if (blockedSection) blockedSection.style.display = 'none';
     }
+    window.closeSocialModal = closeSocialModal;
 
     // --- Tabs ---
     function switchSocialTab(tab) {
@@ -342,7 +321,48 @@
                 p = f.profile;
                 avatarHtml = getAvatarHtml(p, 38);
                 const pb = p.accountType === 'microsoft' ? premiumBadge() : '';
-                nameHtml = `${escapeHtml(p.username)} ${pb}`;
+                const presence = f.presence || {};
+                const state = presence.state || 'offline';
+                const pillClassMap = {
+                    online: 'presence-indicator-online',
+                    menu: 'presence-indicator-menu',
+                    playing: 'presence-indicator-playing',
+                    server: 'presence-indicator-server',
+                    offline: 'presence-indicator-offline'
+                };
+                // Map menu to playing class, playing to singleplayer class
+                const displayStateClass = state === 'menu' ? 'presence-indicator-playing' : 
+                                         state === 'playing' ? 'presence-indicator-playing' :
+                                         pillClassMap[state] || 'presence-indicator-offline';
+                const stateClass = displayStateClass;
+                
+                // Simplified status labels - only show basic states
+                let stateLabel = 'Offline';
+                if (state === 'online') stateLabel = 'Online';
+                else if (state === 'menu') stateLabel = 'Playing';
+                else if (state === 'playing') stateLabel = 'Playing Singleplayer';
+                else if (state === 'server') stateLabel = 'Playing Multiplayer';
+                
+                // Join button for server and singleplayer
+                let joinTarget = '';
+                if (state === 'server' && presence.serverIp) {
+                    joinTarget = presence.serverIp;
+                } else if (state === 'playing' && presence.worldName) {
+                    joinTarget = `singleplayer:${presence.worldName}`;
+                }
+                
+                const joinButtonHtml = joinTarget 
+                    ? `<button class="social-action-btn social-btn-join" title="Join" onclick='socialJoinServer("${escapeHtml(joinTarget)}", "${escapeHtml(p.username)}")'><i class="fas fa-sign-in-alt"></i></button>` 
+                    : '';
+                
+                const presenceInline = `
+                    <div class="friend-presence-badge">
+                        <span class="friend-presence-pill ${stateClass}"></span>
+                        <span>${escapeHtml(stateLabel)}</span>
+                        ${joinButtonHtml}
+                    </div>
+                `;
+                nameHtml = `${escapeHtml(p.username)} ${pb}<div style="margin-top:6px;">${presenceInline}</div>`;
                 profileJson = escapeHtml(JSON.stringify(p));
                 const uidSafe = escapeHtml(p.uid);
                 const nameSafe = escapeHtml(p.username);
@@ -382,6 +402,122 @@
     window.socialBlockFriend = function (uid, fid, username) { blockFriend(uid, fid, username); };
     window.socialRemoveFriend = function (fid, username) { removeFriend(fid, username); };
     window.socialUnblockUser = function (uid, username) { unblockUser(uid, username); };
+    window.socialJoinServer = function (serverIp, username) { openJoinServerModal(serverIp, username); };
+
+    function openJoinServerModal(serverIp, username) {
+        const modal = document.getElementById('joinServerModal');
+        if (!modal) return;
+
+        // Set server info
+        document.getElementById('joinServerIp').textContent = serverIp;
+        document.getElementById('joinServerFriend').textContent = username;
+
+        // Load profiles directly from API
+        if (window.pywebview && window.pywebview.api) {
+            window.pywebview.api.get_profiles().then(profilesData => {
+                if (profilesData && profilesData.profiles) {
+                    window.profilesData = profilesData;
+                    renderJoinServerProfiles(serverIp);
+                }
+            }).catch(err => {
+                console.error('Failed to load profiles:', err);
+                const container = document.getElementById('joinServerProfilesList');
+                if (container) {
+                    container.innerHTML = '<div style="color: #f87171; text-align: center; padding: 20px;">Failed to load profiles.</div>';
+                }
+            });
+        }
+
+        modal.classList.add('show');
+    }
+
+    function closeJoinServerModal() {
+        const modal = document.getElementById('joinServerModal');
+        if (modal) modal.classList.remove('show');
+    }
+
+    function renderJoinServerProfiles(serverIp) {
+        const container = document.getElementById('joinServerProfilesList');
+        if (!container) return;
+
+        const profiles = window.profilesData?.profiles || {};
+        const profileIds = Object.keys(profiles);
+
+        if (profileIds.length === 0) {
+            container.innerHTML = '<div style="color: #888; text-align: center; padding: 20px;">No profiles available. Create one first.</div>';
+            return;
+        }
+
+        container.innerHTML = profileIds.map(id => {
+            const profile = profiles[id];
+            return `
+                <div class="join-server-profile-item" onclick="joinServerWithProfile('${id}', '${serverIp}')">
+                    <div style="font-weight: 600; color: #fff;">${escapeHtml(profile.name || id)}</div>
+                    <div style="font-size: 0.85rem; color: #aaa;">${escapeHtml(profile.version || 'Unknown version')}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    window.joinServerWithProfile = async function(profileId, serverIp) {
+        closeJoinServerModal();
+        
+        // Close the social modal
+        closeSocialModal();
+        
+        // Close the profile modal
+        const profileModal = document.getElementById('userProfileModal');
+        if (profileModal) profileModal.style.display = 'none';
+        
+        // Clear profile refresh interval
+        if (profileRefreshInterval) {
+            clearInterval(profileRefreshInterval);
+            profileRefreshInterval = null;
+        }
+        currentProfileUid = null;
+        
+        // Select the profile in the UI explicitly
+        const profileSelect = document.getElementById('profileSelect');
+        if (profileSelect) {
+            profileSelect.value = profileId;
+            if (window.selectProfile) {
+                window.selectProfile(profileId);
+            }
+        }
+        
+        // Wait a tiny bit for the UI state to update before launching
+        await new Promise(r => setTimeout(r, 50));
+        
+        // Launch game with server parameter using the central launch function
+        if (typeof window.launchGame === 'function') {
+            if (serverIp.startsWith('singleplayer:')) {
+                const worldName = serverIp.replace('singleplayer:', '');
+                console.log(`Launching singleplayer world ${worldName} with profile ${profileId}`);
+                window.pendingServerParam = null;
+            } else {
+                console.log(`Joining server ${serverIp} with profile ${profileId}`);
+                window.pendingServerParam = serverIp;
+            }
+            window.launchGame();
+        } else {
+            console.error("Global launchGame function not found!");
+        }
+    };
+
+    // Initialize join server modal event listeners
+    function initJoinServerModal() {
+        const closeBtn = document.getElementById('closeJoinServerBtn');
+        const cancelBtn = document.getElementById('cancelJoinServerBtn');
+        if (closeBtn) closeBtn.addEventListener('click', closeJoinServerModal);
+        if (cancelBtn) cancelBtn.addEventListener('click', closeJoinServerModal);
+    }
+
+    // Call initialization when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initJoinServerModal);
+    } else {
+        initJoinServerModal();
+    }
 
     async function blockFriend(uid, fid, username) {
         if (!confirm(`Block ${username}? They will be removed from friends and unable to send you requests.`)) return;
@@ -521,6 +657,113 @@
         }
     };
 
+    // Refresh profile presence only (called by interval)
+    async function refreshProfilePresence(uid, username) {
+        try {
+            const res = await api().get_user_profile(uid);
+            if (!res || !res.success || !res.data) return;
+            
+            const presence = res.presence || res.data.presence || null;
+            const state = presence ? (presence.state || 'offline') : 'offline';
+            
+            // Simplified status labels
+            let statusText = 'Offline';
+            if (state === 'online') statusText = 'Online';
+            else if (state === 'menu') statusText = 'Playing';
+            else if (state === 'playing') statusText = 'Playing Singleplayer';
+            else if (state === 'server') statusText = 'Playing Multiplayer';
+            
+            const serverText = presence && presence.state === 'server' && presence.serverIp ? presence.serverIp : '';
+            const worldText = presence && presence.state === 'playing' && presence.worldName ? presence.worldName : '';
+            const instanceText = presence && presence.instanceName ? presence.instanceName : '';
+            const versionText = presence && presence.mcVersion ? presence.mcVersion : '';
+            const instanceDisplay = instanceText && versionText ? `${instanceText} (${versionText})` : (instanceText || versionText || '');
+
+            const presenceStatus = document.getElementById('profilePresenceStatus');
+            const presenceIndicator = document.getElementById('profilePresenceIndicator');
+            const presenceCard = document.getElementById('profilePresenceCard');
+            const presenceDetails = document.getElementById('profilePresenceDetails');
+            
+            if (presenceStatus) presenceStatus.textContent = statusText;
+            
+            // Show installation if available
+            const instanceRow = document.getElementById('profilePresenceInstanceRow');
+            const instanceSpan = document.getElementById('profilePresenceInstance');
+            if (instanceRow && instanceSpan) {
+                if (instanceDisplay) {
+                    instanceRow.style.display = 'flex';
+                    instanceSpan.textContent = instanceDisplay;
+                } else {
+                    instanceRow.style.display = 'none';
+                }
+            }
+            
+            // Show server IP if available
+            const serverRow = document.getElementById('profilePresenceServerRow');
+            const serverSpan = document.getElementById('profilePresenceServer');
+            if (serverRow && serverSpan) {
+                if (serverText) {
+                    serverRow.style.display = 'flex';
+                    serverSpan.textContent = serverText;
+                } else {
+                    serverRow.style.display = 'none';
+                }
+            }
+            
+            // Show world name if available
+            const worldRow = document.getElementById('profilePresenceWorldRow');
+            const worldSpan = document.getElementById('profilePresenceWorld');
+            if (worldRow && worldSpan) {
+                if (worldText) {
+                    worldRow.style.display = 'flex';
+                    worldSpan.textContent = worldText;
+                } else {
+                    worldRow.style.display = 'none';
+                }
+            }
+            
+            // Show/hide details section
+            if (presenceDetails) {
+                const hasDetail = instanceDisplay || serverText || worldText;
+                presenceDetails.style.display = hasDetail ? 'flex' : 'none';
+            }
+
+            if (presenceIndicator) {
+                presenceIndicator.classList.remove('presence-indicator-online', 'presence-indicator-menu', 'presence-indicator-playing', 'presence-indicator-server', 'presence-indicator-offline');
+                // Map menu to playing class, playing to playing class (both green)
+                const stateClassMap = {
+                    online: 'presence-indicator-online',
+                    menu: 'presence-indicator-playing',
+                    playing: 'presence-indicator-playing',
+                    server: 'presence-indicator-server',
+                    offline: 'presence-indicator-offline'
+                };
+                presenceIndicator.classList.add(stateClassMap[state] || 'presence-indicator-offline');
+            }
+            if (presenceCard) presenceCard.style.opacity = '1';
+            
+            // Handle Join button
+            const joinBtn = document.getElementById('profileJoinBtn');
+            if (joinBtn) {
+                let joinTarget = '';
+                if (state === 'server' && serverText) {
+                    joinTarget = serverText;
+                } else if (state === 'playing' && worldText) {
+                    joinTarget = `singleplayer:${worldText}`;
+                }
+                
+                if (joinTarget) {
+                    joinBtn.style.display = 'inline-flex';
+                    joinBtn.onclick = () => openJoinServerModal(joinTarget, username);
+                } else {
+                    joinBtn.style.display = 'none';
+                }
+            }
+        } catch (e) {
+            console.error('Failed to refresh profile presence:', e);
+        }
+    }
+
     // View User Profile
     window.viewUserProfile = async function (uid, username) {
         const modal = document.getElementById('userProfileModal');
@@ -528,6 +771,12 @@
         
         // Set current profile UID
         currentProfileUid = uid;
+        
+        // Clear existing refresh interval
+        if (profileRefreshInterval) {
+            clearInterval(profileRefreshInterval);
+            profileRefreshInterval = null;
+        }
         
         // Show loading state
         modal.style.display = 'flex';
@@ -549,12 +798,17 @@
         const countryBadge = document.getElementById('profileCountryBadge');
         const countryFlagSvg = document.getElementById('profileCountryFlagSvg');
         const premiumBadge = document.getElementById('profilePremiumBadge');
-        
-        // Presence elements
-        const presenceSection = document.getElementById('profileRichPresenceSection');
-        const presenceState = document.getElementById('profilePresenceState');
+        const presenceCard = document.getElementById('profilePresenceCard');
+        const presenceIndicator = document.getElementById('profilePresenceIndicator');
+        const presenceStatus = document.getElementById('profilePresenceStatus');
+        const presenceServer = document.getElementById('profilePresenceServer');
+        const presenceWorld = document.getElementById('profilePresenceWorld');
+        const presenceInstance = document.getElementById('profilePresenceInstance');
         const presenceDetails = document.getElementById('profilePresenceDetails');
-        const presenceVersion = document.getElementById('profilePresenceVersion');
+        const serverRow = document.getElementById('profilePresenceServerRow');
+        const worldRow = document.getElementById('profilePresenceWorldRow');
+        const instanceRow = document.getElementById('profilePresenceInstanceRow');
+        const joinBtn = document.getElementById('profileJoinBtn');
         
         if (displayName) {
             const nameSpan = displayName.querySelector('span');
@@ -566,7 +820,34 @@
         if (biography) biography.textContent = 'Loading...';
         if (linksContainer) linksContainer.innerHTML = '<p style="margin: 0; color: #6b7280; font-size: 0.9rem; font-style: italic;">Loading...</p>';
         if (favoriteMob) favoriteMob.textContent = '-';
-        if (presenceSection) presenceSection.style.display = 'none';
+        if (presenceStatus) presenceStatus.textContent = 'Loading...';
+        const memberSinceEl = document.getElementById('profileMemberSince');
+        if (memberSinceEl) memberSinceEl.textContent = '';
+        const playstyleSection = document.getElementById('profilePlaystyleSection');
+        if (playstyleSection) playstyleSection.style.display = 'none';
+        const playstyleTags = document.getElementById('profilePlaystyleTags');
+        if (playstyleTags) playstyleTags.innerHTML = '';
+        if (serverRow) serverRow.style.display = 'none';
+        if (worldRow) worldRow.style.display = 'none';
+        if (instanceRow) instanceRow.style.display = 'none';
+        if (presenceDetails) presenceDetails.style.display = 'none';
+        if (joinBtn) joinBtn.style.display = 'none';
+        
+        const viewStatsBtn = document.getElementById('viewProfileStatsBtn');
+        if (viewStatsBtn) {
+            viewStatsBtn.onclick = () => {
+                if (window.showUserStats) {
+                    const avatarUrl = document.getElementById('profileAvatarPreview')?.src;
+                    window.showUserStats(uid, username, avatarUrl);
+                }
+            };
+        }
+
+        if (presenceIndicator) {
+            presenceIndicator.classList.remove('presence-indicator-online', 'presence-indicator-menu', 'presence-indicator-playing', 'presence-indicator-server', 'presence-indicator-offline');
+            presenceIndicator.classList.add('presence-indicator-offline');
+        }
+        if (presenceCard) presenceCard.style.opacity = '0.6';
         
         // Reset background
         if (backgroundPreview) {
@@ -581,6 +862,13 @@
         
         // Hide country badge
         if (countryBadge) countryBadge.style.display = 'none';
+        
+        // Start 5-second refresh interval for presence
+        profileRefreshInterval = setInterval(() => {
+            if (currentProfileUid && modal.style.display === 'flex') {
+                refreshProfilePresence(currentProfileUid, username);
+            }
+        }, 5000);
         
         try {
             // Fetch user profile data from Firestore
@@ -606,44 +894,6 @@
                     premiumBadge.style.display = 'none';
                 }
                 
-                // Presence
-                if (data.presence && presenceSection) {
-                    presenceSection.style.display = 'block';
-                    presenceState.textContent = data.presence.state || 'Online';
-                    
-                    if (data.presence.state === 'Offline') {
-                        presenceSection.style.opacity = '0.6';
-                        presenceDetails.style.display = 'none';
-                        presenceVersion.style.display = 'none';
-                    } else {
-                        presenceSection.style.opacity = '1';
-                        
-                        if (data.presence.details) {
-                            presenceDetails.textContent = data.presence.details;
-                            presenceDetails.style.display = 'block';
-                        } else {
-                            presenceDetails.style.display = 'none';
-                        }
-                        
-                        if (data.presence.version || data.presence.profileName) {
-                            let verText = [];
-                            if (data.presence.version) verText.push(data.presence.version);
-                            if (data.presence.profileName) verText.push(`(${data.presence.profileName})`);
-                            presenceVersion.textContent = verText.join(' ');
-                            presenceVersion.style.display = 'block';
-                        } else {
-                            presenceVersion.style.display = 'none';
-                        }
-                    }
-                } else if (presenceSection) {
-                    // Assume offline if not set
-                    presenceSection.style.display = 'block';
-                    presenceSection.style.opacity = '0.6';
-                    presenceState.textContent = 'Offline';
-                    presenceDetails.style.display = 'none';
-                    presenceVersion.style.display = 'none';
-                }
-
                 // Update avatar if available
                 if (data.avatarBase64 && avatarPreview) {
                     // Check if avatarBase64 already has the prefix
@@ -658,10 +908,137 @@
                 if (biography) {
                     biography.textContent = data.biography || 'No biography';
                 }
-                
+
+                // Update Member Since
+                const memberSinceEl = document.getElementById('profileMemberSince');
+                if (memberSinceEl) {
+                    let memberSinceText = '';
+                    const createdAt = data.createdAt || data.created_at;
+                    if (createdAt) {
+                        const date = createdAt.toDate ? createdAt.toDate() : new Date(createdAt._seconds ? createdAt._seconds * 1000 : createdAt);
+                        if (!isNaN(date.getTime())) {
+                            const opts = { year: 'numeric', month: 'long' };
+                            memberSinceText = `Member since ${date.toLocaleDateString('en-US', opts)}`;
+                        }
+                    }
+                    memberSinceEl.textContent = memberSinceText;
+                }
+
+                // Update Playstyle Tags
+                const playstyleSection = document.getElementById('profilePlaystyleSection');
+                const playstyleTagsEl = document.getElementById('profilePlaystyleTags');
+                if (playstyleSection && playstyleTagsEl) {
+                    const tags = data.playstyleTags;
+                    if (tags && Array.isArray(tags) && tags.length > 0) {
+                        playstyleTagsEl.innerHTML = tags.map(tag => {
+                            const def = PLAYSTYLE_TAGS.find(t => t.id === tag);
+                            if (!def) return '';
+                            const iconHtml = def.icon ? `<i class="${def.icon}" style="color:${def.color};font-size:10px;line-height:1;flex-shrink:0;"></i>` : '';
+                            return `<span class="playstyle-badge" style="background:${def.bg};border:1px solid ${def.border};">${iconHtml}<span style="color:${def.color};font-size:12px;font-weight:600;line-height:1;">${escapeHtml(def.label)}</span></span>`;
+                        }).join('');
+                        playstyleSection.style.display = 'block';
+                    } else {
+                        playstyleSection.style.display = 'none';
+                    }
+                }
+
                 // Update favorite mob
                 if (favoriteMob) {
                     favoriteMob.textContent = data.favoriteMob || '-';
+                }
+
+                // Update presence info
+                const presence = res.presence || data.presence || null;
+                const state = presence ? (presence.state || 'offline') : 'offline';
+                
+                // Simplified status labels
+                let statusText = 'Offline';
+                if (state === 'online') statusText = 'Online';
+                else if (state === 'menu') statusText = 'Playing';
+                else if (state === 'playing') statusText = 'Playing Singleplayer';
+                else if (state === 'server') statusText = 'Playing Multiplayer';
+                
+                const serverText = presence && presence.state === 'server' && presence.serverIp ? presence.serverIp : '';
+                const worldText = presence && presence.state === 'playing' && presence.worldName ? presence.worldName : '';
+                const instanceText = presence && presence.instanceName ? presence.instanceName : '';
+                const versionText = presence && presence.mcVersion ? presence.mcVersion : '';
+                const instanceDisplay = instanceText && versionText ? `${instanceText} (${versionText})` : (instanceText || versionText || '');
+
+                if (presenceStatus) presenceStatus.textContent = statusText;
+                
+                // Show installation if available
+                const instanceRow = document.getElementById('profilePresenceInstanceRow');
+                const instanceSpan = document.getElementById('profilePresenceInstance');
+                if (instanceRow && instanceSpan) {
+                    if (instanceDisplay) {
+                        instanceRow.style.display = 'flex';
+                        instanceSpan.textContent = instanceDisplay;
+                    } else {
+                        instanceRow.style.display = 'none';
+                    }
+                }
+                
+                // Show server IP if available (privacy check is done on the sender's side)
+                const serverRow = document.getElementById('profilePresenceServerRow');
+                const serverSpan = document.getElementById('profilePresenceServer');
+                if (serverRow && serverSpan) {
+                    if (serverText) {
+                        serverRow.style.display = 'flex';
+                        serverSpan.textContent = serverText;
+                        serverSpan.dataset.ip = serverText;
+                    } else {
+                        serverRow.style.display = 'none';
+                    }
+                }
+                
+                // Show world name if available
+                const worldRow = document.getElementById('profilePresenceWorldRow');
+                const worldSpan = document.getElementById('profilePresenceWorld');
+                if (worldRow && worldSpan) {
+                    if (worldText) {
+                        worldRow.style.display = 'flex';
+                        worldSpan.textContent = worldText;
+                    } else {
+                        worldRow.style.display = 'none';
+                    }
+                }
+                
+                // Show/hide details section
+                if (presenceDetails) {
+                    const hasDetail = instanceDisplay || serverText || worldText;
+                    presenceDetails.style.display = hasDetail ? 'flex' : 'none';
+                }
+
+                if (presenceIndicator) {
+                    presenceIndicator.classList.remove('presence-indicator-online', 'presence-indicator-menu', 'presence-indicator-playing', 'presence-indicator-server', 'presence-indicator-offline');
+                    // Map menu to playing class, playing to playing class (both green)
+                    const stateClassMap = {
+                        online: 'presence-indicator-online',
+                        menu: 'presence-indicator-playing',
+                        playing: 'presence-indicator-playing',
+                        server: 'presence-indicator-server',
+                        offline: 'presence-indicator-offline'
+                    };
+                    presenceIndicator.classList.add(stateClassMap[state] || 'presence-indicator-offline');
+                }
+                if (presenceCard) presenceCard.style.opacity = '1';
+                
+                // Handle Join button
+                const joinBtn = document.getElementById('profileJoinBtn');
+                if (joinBtn) {
+                    let joinTarget = '';
+                    if (state === 'server' && serverText) {
+                        joinTarget = serverText;
+                    } else if (state === 'playing' && worldText) {
+                        joinTarget = `singleplayer:${worldText}`;
+                    }
+                    
+                    if (joinTarget) {
+                        joinBtn.style.display = 'inline-flex';
+                        joinBtn.onclick = () => openJoinServerModal(joinTarget, username);
+                    } else {
+                        joinBtn.style.display = 'none';
+                    }
                 }
                 
                 // Update links
@@ -803,6 +1180,25 @@
                     if (loadingSpinner) loadingSpinner.style.display = 'none';
                 }, 300);
             }
+            if (presenceStatus) presenceStatus.textContent = 'Offline';
+            if (presenceVersion) {
+                presenceVersion.textContent = '-';
+                if (presenceVersion.parentElement) presenceVersion.parentElement.style.display = 'none';
+            }
+            if (presenceInstance) {
+                presenceInstance.textContent = '-';
+                if (presenceInstance.parentElement) presenceInstance.parentElement.style.display = 'none';
+            }
+            if (presenceServer) {
+                presenceServer.textContent = '-';
+                if (presenceServer.parentElement) presenceServer.parentElement.style.display = 'none';
+            }
+            if (presenceDetails) presenceDetails.style.display = 'none';
+            if (presenceIndicator) {
+                presenceIndicator.classList.remove('presence-indicator-online', 'presence-indicator-menu', 'presence-indicator-playing', 'presence-indicator-server', 'presence-indicator-offline');
+                presenceIndicator.classList.add('presence-indicator-offline');
+            }
+            if (presenceCard) presenceCard.style.opacity = '0.6';
         }
     };
 
@@ -812,8 +1208,48 @@
         closeProfileModalBtn.addEventListener('click', () => {
             const modal = document.getElementById('userProfileModal');
             if (modal) modal.style.display = 'none';
+            // Clear profile refresh interval
+            if (profileRefreshInterval) {
+                clearInterval(profileRefreshInterval);
+                profileRefreshInterval = null;
+            }
+            currentProfileUid = null;
         });
     }
+
+    // --- Playstyle Tags Data ---
+    const PLAYSTYLE_TAGS = [
+        // Combat / PvP
+        { id: 'pvp',         label: 'PvP',           icon: 'fas fa-shield-halved', bg: 'rgba(239,68,68,0.15)',    color: '#f87171', border: 'rgba(239,68,68,0.3)' },
+        { id: 'pvp_pro',     label: 'PvP Pro',        icon: 'fas fa-fire',          bg: 'rgba(220,38,38,0.18)',    color: '#ef4444', border: 'rgba(220,38,38,0.35)' },
+        // Building
+        { id: 'builder',     label: 'Builder',        icon: 'fas fa-hammer',        bg: 'rgba(251,191,36,0.15)',   color: '#fbbf24', border: 'rgba(251,191,36,0.3)' },
+        { id: 'architect',   label: 'Architect',      icon: 'fas fa-drafting-compass', bg: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
+        // Survival
+        { id: 'survival',    label: 'Survival',       icon: 'fas fa-tree',          bg: 'rgba(34,197,94,0.15)',    color: '#4ade80', border: 'rgba(34,197,94,0.3)' },
+        { id: 'hardcore',    label: 'Hardcore',       icon: 'fas fa-skull',         bg: 'rgba(127,29,29,0.25)',    color: '#fca5a5', border: 'rgba(185,28,28,0.4)' },
+        // Technical
+        { id: 'redstone',    label: 'Redstone',       icon: 'fas fa-bolt',          bg: 'rgba(239,68,68,0.12)',    color: '#fca5a5', border: 'rgba(239,68,68,0.25)' },
+        { id: 'technical',   label: 'Technical',      icon: 'fas fa-cog',           bg: 'rgba(107,114,128,0.2)',   color: '#9ca3af', border: 'rgba(107,114,128,0.35)' },
+        { id: 'farms',       label: 'Farm Builder',   icon: 'fas fa-tractor',       bg: 'rgba(132,204,22,0.15)',   color: '#a3e635', border: 'rgba(132,204,22,0.3)' },
+        // Exploration
+        { id: 'explorer',    label: 'Explorer',       icon: 'fas fa-compass',       bg: 'rgba(6,182,212,0.15)',    color: '#22d3ee', border: 'rgba(6,182,212,0.3)' },
+        { id: 'speedrunner', label: 'Speedrunner',    icon: 'fas fa-person-running', bg: 'rgba(168,85,247,0.15)',  color: '#c084fc', border: 'rgba(168,85,247,0.3)' },
+        // Social
+        { id: 'socialite',   label: 'Socialite',      icon: 'fas fa-users',         bg: 'rgba(236,72,153,0.15)',   color: '#f472b6', border: 'rgba(236,72,153,0.3)' },
+        { id: 'roleplayer',  label: 'Roleplayer',     icon: 'fas fa-masks-theater', bg: 'rgba(139,92,246,0.15)',   color: '#a78bfa', border: 'rgba(139,92,246,0.3)' },
+        // Modded
+        { id: 'modded',      label: 'Modded',         icon: 'fas fa-puzzle-piece',  bg: 'rgba(79,172,254,0.15)',   color: '#60a5fa', border: 'rgba(79,172,254,0.3)' },
+        { id: 'modpack',     label: 'Modpack Player', icon: 'fas fa-layer-group',   bg: 'rgba(59,130,246,0.15)',   color: '#93c5fd', border: 'rgba(59,130,246,0.3)' },
+        // Creative
+        { id: 'creative',    label: 'Creative',       icon: 'fas fa-paintbrush',    bg: 'rgba(234,179,8,0.15)',    color: '#fde047', border: 'rgba(234,179,8,0.3)' },
+        { id: 'artist',      label: 'Pixel Artist',   icon: 'fas fa-palette',       bg: 'rgba(244,114,182,0.15)',  color: '#f9a8d4', border: 'rgba(244,114,182,0.3)' },
+        // Misc
+        { id: 'streamer',    label: 'Streamer',       icon: 'fas fa-video',         bg: 'rgba(124,58,237,0.15)',   color: '#c4b5fd', border: 'rgba(124,58,237,0.3)' },
+        { id: 'casual',      label: 'Casual',         icon: 'fas fa-couch',         bg: 'rgba(75,85,99,0.2)',      color: '#9ca3af', border: 'rgba(75,85,99,0.35)' },
+        { id: 'minigames',   label: 'Minigames',      icon: 'fas fa-gamepad',       bg: 'rgba(20,184,166,0.15)',   color: '#2dd4bf', border: 'rgba(20,184,166,0.3)' },
+        { id: 'skyblock',    label: 'Skyblock',       icon: 'fas fa-cloud',         bg: 'rgba(14,165,233,0.15)',   color: '#38bdf8', border: 'rgba(14,165,233,0.3)' },
+    ];
 
     // --- Link Types Data ---
     const linkTypes = [
@@ -847,7 +1283,6 @@
     ];
 
     let selectedLinkType = null;
-    let currentProfileUid = null;
     let selectedShareLinkType = null;
 
     function getLinkTypeIcon(typeId) {

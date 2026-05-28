@@ -58,7 +58,7 @@ class ProfileManager {
             icon: iconFilename,
             directory: directory || "",
             jvm_args: jvmArgs || "",
-            java_path: javaPath || ""
+            java_path: javaPath || "",
         };
 
         this.saveProfiles(profiles);
@@ -185,6 +185,70 @@ class ProfileManager {
         if (version.includes('forge') || version.includes('fabric')) return true;
         // Check local folder?
         return false;
+    }
+
+    // --- Read Seed from World ---
+    async readWorldSeed(profileId, worldName, mcDirDefault) {
+        const profiles = this.loadProfiles().profiles;
+        const profile = profiles[profileId];
+        if (!profile) return { success: false, error: "Profile Not Found" };
+
+        const profileDir = profile.directory || mcDirDefault;
+        const levelDatPath = path.join(profileDir, 'saves', worldName, 'level.dat');
+        const worldGenSettingsPath = path.join(profileDir, 'saves', worldName, 'world_gen_settings.dat');
+
+        if (!fs.existsSync(levelDatPath)) {
+            return { success: false, error: "World not found" };
+        }
+
+        try {
+            const nbt = require('prismarine-nbt');
+            
+            // Try world_gen_settings.dat first (newer Minecraft versions)
+            if (fs.existsSync(worldGenSettingsPath)) {
+                const data = fs.readFileSync(worldGenSettingsPath);
+                const { parsed } = await nbt.parse(data);
+                const simplified = nbt.simplify(parsed);
+                
+                if (simplified.seed !== undefined) {
+                    const seedString = typeof simplified.seed === 'bigint' ? simplified.seed.toString() : String(simplified.seed);
+                    return { success: true, seed: seedString };
+                }
+            }
+            
+            // Fallback to level.dat
+            const data = fs.readFileSync(levelDatPath);
+            
+            // Parse NBT data (prismarine-nbt auto-decompresses gzipped data)
+            const { parsed } = await nbt.parse(data);
+            
+            // Simplify the NBT structure for easier access
+            const simplified = nbt.simplify(parsed);
+            
+            // Try to find seed in various locations
+            let seed = null;
+            
+            // Check Data.seed
+            if (simplified.Data && simplified.Data.seed !== undefined) {
+                seed = simplified.Data.seed;
+            }
+            
+            // Check WorldGenSettings.seed
+            if (seed === null && simplified.Data && simplified.Data.WorldGenSettings && simplified.Data.WorldGenSettings.seed !== undefined) {
+                seed = simplified.Data.WorldGenSettings.seed;
+            }
+            
+            if (seed === null) {
+                return { success: false, error: "Seed not found in world data (try using /seed command in-game)" };
+            }
+            
+            // Convert to string to avoid precision loss with large numbers
+            const seedString = typeof seed === 'bigint' ? seed.toString() : String(seed);
+            
+            return { success: true, seed: seedString };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
     }
 }
 

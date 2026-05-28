@@ -1,31 +1,26 @@
 /**
- * TUTORIAL STEP 1: Download Version & Create Profile
- * 
+ * TUTORIAL STEP 1: Create Installation
+ *
  * Refactored for Broad Modal Spotlight & Dynamic Tooltips
  */
 
 (function () {
     'use strict';
 
-    // State tracking
-    let downloadCompleted = false;
-    let downloadCancelled = false;
-    let tutorialPhase = 'idle'; // 'download', 'profile', 'complete'
+    let tutorialPhase = 'idle';
 
     /**
-     * Start the first tutorial (Download + Create Profile)
+     * Start the first tutorial (Create Installation)
      */
     window.startTutorialStep1 = async function () {
-        tutorialPhase = 'download';
-        downloadCompleted = false;
-        downloadCancelled = false;
+        window.currentActiveTutorialStep = 1;
+        tutorialPhase = 'profile';
 
         // Check if user is on Play section
         const playSection = document.getElementById('play');
         const isOnPlay = playSection && playSection.classList.contains('active');
 
         if (!isOnPlay) {
-            // Guide user to Play section first
             await startSpotlightTutorial([
                 {
                     target: '#playNavBtn',
@@ -38,171 +33,12 @@
                     }
                 }
             ], () => {
-                // After clicking Play, start the actual tutorial
-                setTimeout(() => startDownloadTutorial(), 600);
+                setTimeout(() => startProfileTutorial(), 600);
             });
         } else {
-            // Already on Play, start directly
-            startDownloadTutorial();
+            startProfileTutorial();
         }
     };
-
-    /**
-     * Download Version Tutorial Flow
-     */
-    async function startDownloadTutorial() {
-        // Listen for download events
-        setupDownloadListeners();
-
-        // Step 1: Broad Modal for Version Selection
-        const swSelectBtns = document.querySelectorAll('.loader-type-btn');
-        const verSelect = document.getElementById('downloadMcVersion');
-        const downBtn = document.getElementById('startDownloadBtn');
-
-        // Helper to update tooltip based on selection
-        const updateDownloadTooltip = (forceType) => {
-            // Find active type if not forced
-            let sw = forceType;
-            if (!sw) {
-                const activeBtn = document.querySelector('.loader-type-btn.active');
-                sw = activeBtn ? activeBtn.dataset.type : 'vanilla';
-            }
-
-            let title = 'Select Version';
-            let text = 'Choose your Minecraft version.';
-
-            if (sw === 'vanilla') {
-                title = 'Vanilla Minecraft';
-                text = 'The original, unmodified game. Perfect for standard gameplay without mods. Select the release version you want to play.';
-            } else if (sw === 'forge' || sw === 'fabric' || sw === 'quilt') {
-                title = 'Mod Loader (' + sw.charAt(0).toUpperCase() + sw.slice(1) + ')';
-                text = 'These versions allow you to install mods. Make sure to select the correct game version that matches your mods.';
-            }
-
-            if (window.updateSpotlightContent) {
-                window.updateSpotlightContent(title, text, 'Configure and click Download');
-            }
-        };
-
-        // Attach listeners
-        swSelectBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                // Small delay to allow class update
-                setTimeout(() => updateDownloadTooltip(btn.dataset.type), 50);
-            });
-        });
-
-        if (verSelect) verSelect.addEventListener('change', () => updateDownloadTooltip());
-
-        // Custom start logic
-        await startSpotlightTutorial([
-            // Step 1: Open Modal
-            {
-                target: '#openDownloadModalBtn',
-                title: 'Download a Version',
-                text: 'Click here to open the version downloader.',
-                hint: 'Click "Download Versions"',
-                position: 'bottom',
-                onComplete: async () => {
-                    await new Promise(r => setTimeout(r, 400));
-                }
-            },
-            // Step 2: Broad Modal Interaction
-            {
-                target: '#downloadModal .modal-content',
-                title: 'Select Software & Version',
-                text: 'First, choose your software type (Vanilla, Forge, Fabric). Then select your game version.',
-                hint: 'Configure and click Download',
-                position: 'right', // Side of modal
-                advanceOn: 'manual', // Manual advance when Download clicked
-                beforeShow: async () => {
-                    // Initial update
-                    setTimeout(() => updateDownloadTooltip(), 100);
-
-                    // Attach Download Click Listener to advance
-                    if (downBtn) {
-                        downBtn.addEventListener('click', onDownloadClick);
-                    }
-                }
-            }
-        ], () => {
-            // Tutorial sequence ended
-        });
-
-        async function onDownloadClick() {
-            if (downBtn) downBtn.removeEventListener('click', onDownloadClick);
-
-            // Advance to monitor step
-            if (window.advanceSpotlightTutorial) {
-                await window.advanceSpotlightTutorial();
-
-                // Manually start monitor
-                setTimeout(monitorDownload, 500);
-            }
-        }
-    }
-
-    /**
-     * Download Monitoring Step
-     */
-    async function monitorDownload() {
-        const progressContainer = document.getElementById('downloadProgressContainer');
-        // Wait for visibility
-        let waited = 0;
-        while ((!progressContainer || progressContainer.style.display === 'none') && waited < 5000) {
-            await new Promise(r => setTimeout(r, 200));
-            waited += 200;
-        }
-
-        if (progressContainer) {
-            const modal = document.getElementById('downloadModal');
-            if (modal) modal.classList.add('tutorial-elevated-modal');
-
-            await startSpotlightTutorial([
-                {
-                    target: '#downloadProgressContainer',
-                    title: 'Downloading...',
-                    text: 'Please wait while we download the necessary files. This may take a few minutes depending on your connection.',
-                    hint: 'Please wait...',
-                    position: 'top',
-                    advanceOn: 'manual' // Wait for completion
-                }
-            ]);
-        }
-
-        // Wait for result
-        await waitForDownloadResult();
-    }
-
-    /**
-     * Wait for download completion
-     */
-    function waitForDownloadResult() {
-        return new Promise((resolve) => {
-            const checkInterval = setInterval(() => {
-                const modal = document.getElementById('downloadModal');
-
-                if (downloadCompleted) {
-                    clearInterval(checkInterval);
-                    if (modal) modal.classList.remove('tutorial-elevated-modal');
-
-                    if (window.endSpotlightTutorial) window.endSpotlightTutorial();
-
-                    // Proceed to Profile Tutorial
-                    setTimeout(() => {
-                        startProfileTutorial();
-                    }, 800);
-                    resolve();
-                } else if (downloadCancelled) {
-                    clearInterval(checkInterval);
-                    if (modal) modal.classList.remove('tutorial-elevated-modal');
-                    if (window.endSpotlightTutorial) window.endSpotlightTutorial();
-                    // Maybe show retry?
-                    resolve();
-                }
-            }, 500);
-        });
-    }
 
     /**
      * Profile Creation Tutorial Flow
@@ -211,28 +47,35 @@
         tutorialPhase = 'profile';
 
         const nameInput = document.getElementById('profileName');
-        const verSelect = document.getElementById('profileVersionSelect');
+        const swSelect = document.getElementById('profileSoftwareSelect');
+        const mcSelect = document.getElementById('profileMcVersionSelect');
+        const loaderSelect = document.getElementById('profileLoaderVersionSelect');
         const dirInput = document.getElementById('profileDir');
         const dirBtn = document.getElementById('selectFolderBtn');
         const javaInput = document.getElementById('profileJavaPath');
         const jvmInput = document.getElementById('profileJVMArgs');
         const createBtn = document.getElementById('acceptProfileBtn');
 
-        // Dynamic Tooltip Logic
         const updateProfileTooltip = (e) => {
-            let title = 'Configure Profile';
-            let text = 'Fill in the details for your new profile.';
+            let title = 'Configure Installation';
+            let text = 'Fill in the details for your new installation.';
 
             if (e && e.target) {
                 if (e.target.id === 'profileName') {
-                    title = 'Profile Name';
-                    text = 'Give your profile a unique name (e.g., "Survival World"). Min 3 characters.';
-                } else if (e.target.id === 'profileVersionSelect') {
-                    title = 'Select Version';
-                    text = 'Choose the version you just downloaded.';
+                    title = 'Installation Name';
+                    text = 'Give your installation a unique name (e.g., "Survival World"). Min 3 characters.';
+                } else if (e.target.id === 'profileSoftwareSelect') {
+                    title = 'Software Type';
+                    text = 'Choose Vanilla for standard gameplay, or Forge/Fabric if you want to use mods.';
+                } else if (e.target.id === 'profileMcVersionSelect') {
+                    title = 'Minecraft Version';
+                    text = 'Select the Minecraft version this installation will use.';
+                } else if (e.target.id === 'profileLoaderVersionSelect') {
+                    title = 'Loader Version';
+                    text = 'Select the version of the mod loader. Only shown for Forge/Fabric.';
                 } else if (e.target.id === 'profileDir' || e.target.id === 'selectFolderBtn') {
-                    title = 'Profile Directory';
-                    text = 'Folder where this profile\'s data will be saved (worlds, mods, settings). Useful for keeping modpacks separate.';
+                    title = 'Installation Directory';
+                    text = 'Folder where this installation\'s data will be saved (worlds, mods, settings). Useful for keeping modpacks separate.';
                 } else if (e.target.id === 'profileJavaPath') {
                     title = 'Java Path (Advanced)';
                     text = 'Optional: Specify a custom Java executable. Leave empty to use the bundled Java.';
@@ -241,9 +84,8 @@
                     text = 'Optional: Customize RAM allocation (e.g., -Xmx4G). The default is usually fine.';
                 }
             } else {
-                // Default state
                 title = 'Configure & Create';
-                text = 'Customize your profile details. You can change the Icon, Name, and Version.';
+                text = 'Customize your installation details: choose Software, Minecraft Version, and optionally a Loader Version.';
             }
 
             if (window.updateSpotlightContent) {
@@ -251,17 +93,11 @@
             }
         };
 
-        // Icon modal integration removed - users can click the icon button freely during tutorial
-        // The CSS rules ensure the button is clickable within the tutorial-target modal
-
         // Attach listeners
-        [nameInput, verSelect, dirInput, dirBtn, javaInput, jvmInput].forEach(el => {
+        [nameInput, swSelect, mcSelect, loaderSelect, dirInput, dirBtn, javaInput, jvmInput].forEach(el => {
             if (el) el.addEventListener('focus', updateProfileTooltip);
             if (el && el.tagName !== 'INPUT' && el.tagName !== 'SELECT') {
-                // For buttons like dirBtn
-                el.addEventListener('click', (e) => {
-                    updateProfileTooltip(e);
-                });
+                el.addEventListener('click', (e) => updateProfileTooltip(e));
             }
         });
 
@@ -269,62 +105,51 @@
         await startSpotlightTutorial([
             {
                 target: '#profilesNavBtn',
-                title: 'Go to Profiles',
-                text: 'Navigate to the Profiles section.',
-                hint: 'Click "Profiles"',
+                title: 'Go to Installations',
+                text: 'Navigate to the Installations section.',
+                hint: 'Click "Installations"',
                 position: 'right',
                 onComplete: async () => { await new Promise(r => setTimeout(r, 400)); }
             },
             {
                 target: '#createProfileBtn',
-                title: 'Create New Profile',
-                text: 'Click here to create a new profile.',
-                hint: 'Click "Create Profile"',
+                title: 'Create New Installation',
+                text: 'Click here to create a new installation.',
+                hint: 'Click "Create new installation"',
                 position: 'bottom',
                 onComplete: async () => { await new Promise(r => setTimeout(r, 400)); }
             },
             // Main Config Step
             {
                 target: '#modal .modal-content',
-                title: 'Configure Profile',
-                text: 'Customize your profile. Click on fields to see details, or click the Icon to change it.',
+                title: 'Configure Installation',
+                text: 'Customize your installation. Choose Software, Minecraft Version, and optionally a Loader.',
                 hint: 'Click "Create" when done',
                 position: 'right',
                 advanceOn: 'manual',
                 beforeShow: () => {
-                    // Icon button is now freely clickable within the modal
                     if (createBtn) createBtn.addEventListener('click', onCreateClick);
-                    updateProfileTooltip(); // Initial text
+                    updateProfileTooltip();
                 }
             }
         ]);
 
-
-        // --- Completion Logic ---
         async function onCreateClick() {
-            // Basic validation check
             const nameInput = document.getElementById('profileName');
-            if (nameInput && nameInput.value.length >= 3) {
-                // Cleanup
+            const mcSelect = document.getElementById('profileMcVersionSelect');
+            if (nameInput && nameInput.value.length >= 2 && mcSelect && mcSelect.value) {
                 if (createBtn) createBtn.removeEventListener('click', onCreateClick);
 
-                // Wait for the modal to close (profile creation successful)
                 const profileModal = document.getElementById('modal');
                 const checkModalClosed = setInterval(() => {
                     if (!profileModal || !profileModal.classList.contains('show')) {
                         clearInterval(checkModalClosed);
-
                         if (window.endSpotlightTutorial) window.endSpotlightTutorial();
-
-                        // Return to wizard
                         setTimeout(showTutorialPart1Complete, 500);
                     }
                 }, 200);
 
-                // Timeout after 10 seconds if modal doesn't close
-                setTimeout(() => {
-                    clearInterval(checkModalClosed);
-                }, 10000);
+                setTimeout(() => clearInterval(checkModalClosed), 10000);
             }
         }
     }
@@ -348,29 +173,10 @@
     }
 
     /**
-     * Setup download event listeners
-     */
-    function setupDownloadListeners() {
-        const originalOnDownloadComplete = window.onDownloadComplete;
-        window.onDownloadComplete = function (version) {
-            downloadCompleted = true;
-            if (originalOnDownloadComplete) {
-                originalOnDownloadComplete(version);
-            }
-        };
-
-        const cancelBtn = document.getElementById('cancelDownloadBtn2');
-        if (cancelBtn) {
-            cancelBtn.addEventListener('click', () => {
-                downloadCancelled = true;
-            }, { once: true });
-        }
-    }
-
-    /**
      * TUTORIAL STEP 2: Identity & Access
      */
     window.startTutorialStep2 = async function () {
+        window.currentActiveTutorialStep = 2;
         // --- Auto-logout if already authenticated ---
         try {
             const userData = await window.pywebview.api.get_user_json();
@@ -421,12 +227,19 @@
             if (closeLoginModalBtn) closeLoginModalBtn.removeEventListener('click', blockCloseBtn, true);
         }
 
+        // Ensure we restore behavior if skipped
+        const originalOnTutorialStep2Complete = window.onTutorialStep2Complete;
+        window.onTutorialStep2Complete = async () => {
+            restoreModalBehavior();
+            if (originalOnTutorialStep2Complete) await originalOnTutorialStep2Complete();
+        };
+
         // 1. Spotlight Login Button
         await startSpotlightTutorial([
             {
                 target: '#loginButton',
                 title: 'Log In',
-                text: 'Click here to log in. You can use a Microsoft Account or play Offline.',
+                text: 'Click here to log in. You can use a Microsoft, HelloWorld, or Offline account.',
                 hint: 'Click "Login"',
                 position: 'bottom',
                 advanceOn: 'click',
@@ -442,7 +255,7 @@
             {
                 target: '#loginModal .modal-content',
                 title: 'Select Login Method',
-                text: 'Choose your preferred method. Microsoft accounts allow skins and online play.',
+                text: 'Choose your preferred method. Microsoft and HelloWorld accounts allow skins and online play.',
                 hint: 'Select an option',
                 position: 'right',
                 advanceOn: 'manual',
@@ -454,14 +267,40 @@
                     await new Promise(r => setTimeout(r, 300));
 
                     // Hide spotlight when clicking login to avoid it jumping to top-left
-                    const msBtn = document.getElementById('selectMicrosoftBtn');
-                    if (msBtn) {
-                        msBtn.addEventListener('click', () => {
-                            const spotlight = document.querySelector('.tutorial-spotlight');
-                            const overlay = document.querySelector('.tutorial-overlay');
-                            const tooltip = document.querySelector('.tutorial-tooltip');
-                            if (spotlight) spotlight.style.opacity = '0';
-                            if (tooltip) tooltip.style.opacity = '0';
+                    const hideSpotlight = () => {
+                        const spotlight = document.querySelector('.tutorial-spotlight');
+                        const tooltip = document.querySelector('.tutorial-tooltip');
+                        if (spotlight) spotlight.style.opacity = '0';
+                        if (tooltip) tooltip.style.opacity = '0';
+                    };
+                    ['selectMicrosoftBtn', 'selectOfflineBtn'].forEach(id => {
+                        const btn = document.getElementById(id);
+                        if (btn) btn.addEventListener('click', hideSpotlight);
+                    });
+
+                    const hwBtn = document.getElementById('selectHelloWorldBtn');
+                    if (hwBtn) {
+                        hwBtn.addEventListener('click', () => {
+                            if (window.updateSpotlightContent) {
+                                window.updateSpotlightContent(
+                                    'HelloWorld Account',
+                                    'If you don\'t have a HelloWorld account, you must create one on the website first, then log in here.',
+                                    'Log in to continue'
+                                );
+                            }
+                        });
+                    }
+
+                    const hwBackBtn = document.getElementById('hwBackBtn');
+                    if (hwBackBtn) {
+                        hwBackBtn.addEventListener('click', () => {
+                            if (window.updateSpotlightContent) {
+                                window.updateSpotlightContent(
+                                    'Select Login Method',
+                                    'Choose your preferred method. Microsoft and HelloWorld accounts allow skins and online play.',
+                                    'Select an option'
+                                );
+                            }
                         });
                     }
 
@@ -496,6 +335,8 @@
                             const data = await window.pywebview.api.get_user_json();
                             if (data && data.account_type === 'microsoft') {
                                 startMicrosoftFlow();
+                            } else if (data && data.account_type === 'helloworld') {
+                                startHelloWorldFlow();
                             } else {
                                 startOfflineFlow();
                             }
@@ -622,6 +463,23 @@
                 }
             ]);
         }
+
+        async function startHelloWorldFlow() {
+            // Wait for user badge to be visible
+            await waitForElement('#userBadge', 5000);
+            await new Promise(r => setTimeout(r, 300));
+
+            await startSpotlightTutorial([
+                {
+                    target: '#userBadge',
+                    title: 'Login Successful',
+                    text: 'You are now logged in with HelloWorld. You can manage your skins and capes directly from the website dashboard.<button id="tutorialFinishBtnHW" class="btn-primary" style="margin-top:15px; width:100%;" onclick="if(window.onTutorialStep2Complete) window.onTutorialStep2Complete(); window.advanceSpotlightTutorial();">Finish</button>',
+                    hint: 'Click Finish above',
+                    position: 'bottom',
+                    advanceOn: 'manual'
+                }
+            ]);
+        }
     };
 
     /**
@@ -629,6 +487,7 @@
      * A fast flow to show users how to install mods
      */
     window.startTutorialStep3 = async function () {
+        window.currentActiveTutorialStep = 3;
         let downloadingProjectId = null;
         let cardHoverListener = null;
 
@@ -647,10 +506,13 @@
         window.onModDownloadComplete = function (projectId, filename) {
             if (originalOnModDownloadComplete) originalOnModDownloadComplete(projectId, filename);
             if (downloadingProjectId === projectId) {
-                // Let the checkmark show for a bit before advancing
-                setTimeout(() => {
-                    if (window.advanceSpotlightTutorial) window.advanceSpotlightTutorial();
-                }, 1000);
+                if (window.updateSpotlightContent) {
+                    window.updateSpotlightContent(
+                        'Installation Complete!',
+                        'Your mod has been installed successfully! You can manage it anytime in the "Installed" tab.<button id="tutorialFinishBtnStep3" class="btn-primary" style="margin-top:15px; width:100%;" onclick="if(window.onTutorialStep3Complete) window.onTutorialStep3Complete(); if(window.advanceSpotlightTutorial) window.advanceSpotlightTutorial();">Finish</button>',
+                        'Click Finish above'
+                    );
+                }
             }
         };
 
@@ -667,6 +529,79 @@
             }
         };
 
+        // Check if user has any moddable profiles first
+        let hasModdableProfiles = false;
+        try {
+            if (window.pywebview && window.pywebview.api && window.pywebview.api.get_profiles_for_addon) {
+                const data = await window.pywebview.api.get_profiles_for_addon('mod');
+                const profiles = data && data.profiles ? data.profiles : {};
+                hasModdableProfiles = Object.keys(profiles).length > 0;
+            }
+        } catch (e) {
+            console.warn('Could not check moddable profiles for tutorial:', e);
+        }
+
+        if (!hasModdableProfiles) {
+            // No moddable profiles: guide user to create one
+            await startSpotlightTutorial([
+                {
+                    target: '#modsMenuBtn',
+                    title: 'Add-ons Menu',
+                    text: 'Expand the Add-ons menu to access Mods, Resource Packs, Data Packs, and Shaders.',
+                    hint: 'Click "Add-ons"',
+                    position: 'right',
+                    advanceOn: 'click',
+                    onComplete: async () => {
+                        await new Promise(r => setTimeout(r, 400));
+                    }
+                },
+                {
+                    target: '#modsSubmenu .submenu-item',
+                    title: 'Manage Mods',
+                    text: 'Click here to explore and install mods.',
+                    hint: 'Click "Mods"',
+                    position: 'right',
+                    advanceOn: 'click',
+                    onComplete: async () => {
+                        await new Promise(r => setTimeout(r, 500));
+                    }
+                },
+                {
+                    target: '#noModdableProfiles',
+                    title: 'Mod Loader Required',
+                    text: 'You need an installation with Forge or Fabric to use mods. Let\'s create one now.',
+                    hint: 'Click to continue',
+                    position: 'bottom',
+                    advanceOn: 'manual',
+                    beforeShow: async () => {
+                        // Wait a moment for the section to render
+                        await new Promise(r => setTimeout(r, 300));
+                        if (window.advanceSpotlightTutorial) window.advanceSpotlightTutorial();
+                    }
+                }
+            ], async () => {
+                // After explaining, redirect to profile creation tutorial
+                // Save original callback so we can chain back to mod tutorial
+                const originalOnTutorialStep1Complete = window.onTutorialStep1Complete;
+                window.onTutorialStep1Complete = async () => {
+                    // Restore original
+                    window.onTutorialStep1Complete = originalOnTutorialStep1Complete;
+                    // Now retry the mod tutorial
+                    setTimeout(() => window.startTutorialStep3(), 500);
+                };
+                // Start profile creation flow
+                setTimeout(() => {
+                    if (typeof window.startTutorialStep1 === 'function') {
+                        window.startTutorialStep1();
+                    } else if (typeof startProfileTutorial === 'function') {
+                        startProfileTutorial();
+                    }
+                }, 400);
+            });
+            return;
+        }
+
+        // Main mod tutorial flow
         await startSpotlightTutorial([
             {
                 target: '#modsMenuBtn',
@@ -680,7 +615,7 @@
                 }
             },
             {
-                target: '#modsSubmenu .submenu-item', // The 'Mods' button
+                target: '#modsSubmenu .submenu-item',
                 title: 'Manage Mods',
                 text: 'Click here to explore and install mods.',
                 hint: 'Click "Mods"',
@@ -691,48 +626,28 @@
                 }
             },
             {
-                target: '#modSearchInput',
-                title: 'Search Mods',
-                text: 'Type a mod name here (e.g. "Fabric API" or "Sodium"). Include spaces for better results.',
-                hint: 'Type a name',
+                target: '#modsProfileSelect',
+                title: 'Select Installation',
+                text: 'Choose an installation with Forge or Fabric. This determines which mods are compatible.',
+                hint: 'Click the dropdown',
                 position: 'bottom',
-                advanceOn: 'manual', // Advance dynamically when results load
-                beforeShow: () => {
-                    const resultsContainer = document.getElementById('modSearchResults');
-
-                    // We need to wait for cards to appear
-                    const checkResults = setInterval(() => {
-                        const cards = resultsContainer.querySelectorAll('.mod-card');
-                        if (cards.length > 0) {
-                            clearInterval(checkResults);
-                            if (window.advanceSpotlightTutorial) window.advanceSpotlightTutorial();
-                        }
-                    }, 500);
+                advanceOn: 'click',
+                onComplete: async () => {
+                    await new Promise(r => setTimeout(r, 600));
                 }
             },
             {
-                target: '#modSearchResults', // Initially target the whole container
-                title: 'Select a Mod',
-                text: 'Hover over any mod card you like. Click the "Download" button to install it to your profile.',
+                target: '.mods-download-flex',
+                title: 'Search, Filter & Install Mods',
+                text: 'Search mods above, use the filters on the right to sort and pick categories, and navigate pages with the arrows. When you find a mod you like, click its "Download" button to install it.',
                 hint: 'Click "Download" on a mod',
-                position: 'right',
+                position: 'left',
                 advanceOn: 'manual',
                 beforeShow: () => {
                     document.body.classList.add('tutorial-step-search');
                     const container = document.getElementById('modSearchResults');
 
-                    // 1. Hover logic with delegation
-                    const onMouseMove = (e) => {
-                        const card = e.target.closest('.mod-card');
-                        if (card && window.setSpotlightTarget) {
-                            const rect = card.getBoundingClientRect();
-                            const isLeftHalf = rect.left + rect.width / 2 < window.innerWidth / 2;
-                            window.setSpotlightTarget(card, isLeftHalf ? 'left' : 'right');
-                        }
-                    };
-                    container.addEventListener('mousemove', onMouseMove);
-
-                    // 2. Click blocker for details modal
+                    // Prevent opening mod details during tutorial
                     const onCardClick = (e) => {
                         if (e.target.closest('.mod-card') && !e.target.closest('button')) {
                             e.stopPropagation();
@@ -741,7 +656,7 @@
                     };
                     container.addEventListener('click', onCardClick, true);
 
-                    // 3. Button hooks
+                    // Hook download buttons
                     const hookButtons = () => {
                         const dlButtons = container.querySelectorAll('.mod-card-actions button');
                         dlButtons.forEach(btn => {
@@ -750,14 +665,8 @@
                             const originalOnclick = btn.onclick;
                             btn.onclick = (event) => {
                                 document.body.classList.remove('tutorial-step-search');
-                                container.removeEventListener('mousemove', onMouseMove);
                                 container.removeEventListener('click', onCardClick, true);
                                 downloadingProjectId = btn.id.replace('btn-mod-', '');
-                                if (window.setSpotlightTarget) {
-                                    const rect = btn.getBoundingClientRect();
-                                    const pos = (rect.left + rect.width / 2 < window.innerWidth / 2) ? 'left' : 'right';
-                                    window.setSpotlightTarget(btn, pos);
-                                }
                                 if (window.updateSpotlightContent) {
                                     window.updateSpotlightContent('Downloading...', 'Please wait while the mod downloads. Progress: 0%', 'Installing...');
                                 }
@@ -770,46 +679,6 @@
                     hookButtons();
                 }
             },
-            {
-                // This step is reached automatically via window.onModDownloadComplete hook
-                target: '.mod-tab[data-tab="installed"]',
-                title: 'Installation Complete!',
-                text: 'Great! The mod has been installed. Now click on the "Installed" tab to manage it.',
-                hint: 'Click "Installed"',
-                position: 'bottom',
-                advanceOn: 'click',
-                onComplete: async () => {
-                    await new Promise(r => setTimeout(r, 800)); // wait for list to render
-                }
-            },
-            {
-                target: () => {
-                    // Target the first list item if available for better precision
-                    const firstItem = document.querySelector('#installedModsList .mod-list-item');
-                    return firstItem || document.getElementById('installedModsList');
-                },
-                title: 'Manage Your Add-ons',
-                text: 'Here you can toggle mods on/off or delete them completely using the buttons on the right.<button id="tutorialFinishBtnStep3" class="btn-primary" style="margin-top:15px; width:100%;" onclick="if(window.onTutorialStep3Complete) window.onTutorialStep3Complete(); window.advanceSpotlightTutorial();">Finish</button>',
-                hint: 'Click Finish above',
-                position: 'bottom',
-                advanceOn: 'manual',
-                beforeShow: () => {
-                    document.body.classList.add('tutorial-step-installed');
-                    const container = document.getElementById('installedModsList');
-                    const itemObserver = new MutationObserver(() => {
-                        // Wait a tick for rendering to complete
-                        setTimeout(() => {
-                            const firstItem = document.querySelector('#installedModsList .mod-list-item');
-                            const target = firstItem || container;
-                            if (window.setSpotlightTarget) window.setSpotlightTarget(target);
-                        }, 100);
-                    });
-                    itemObserver.observe(container, { childList: true, subtree: true });
-                },
-                onComplete: () => {
-                    document.body.classList.remove('tutorial-step-installed');
-                }
-            }
         ]);
     };
 

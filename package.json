@@ -1,6 +1,6 @@
 {
   "name": "helloworld-launcher",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "description": "HelloWorld Launcher",
   "main": "main.js",
   "scripts": {
@@ -19,32 +19,57 @@
     },
     "win": {
       "target": [
-        "nsis",
-        "zip"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "icon": "build/icon.ico",
       "verifyUpdateCodeSignature": false,
       "sign": null,
-      "artifactName": "HelloWorld-Launcher-portable.${ext}"
+      "artifactName": "HelloWorld-Launcher-portable-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "HelloWorld-Launcher-Installer.${ext}",
+      "artifactName": "HelloWorld-Launcher-Installer-${arch}.${ext}",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeader": "build/installerHeader.bmp",
       "installerSidebar": "build/installerSidebar.bmp",
-      "deleteAppDataOnUninstall": true
+      "deleteAppDataOnUninstall": true,
+      "shortcutName": "HelloWorld Launcher"
     },
     "linux": {
       "target": [
-        "AppImage",
-        "deb"
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "icon": "build/icons",
       "category": "Game",
-      "artifactName": "HelloWorld-Launcher.${ext}",
+      "artifactName": "HelloWorld-Launcher-${arch}.${ext}",
       "publish": [
         "github"
       ]
@@ -78,6 +103,7 @@
     "graceful-fs": "^4.2.11",
     "minecraft-launcher-core": "^3.18.2",
     "msmc": "^5.0.5",
+    "prismarine-nbt": "^2.8.0",
     "uuid": "^13.0.0"
   }
 }

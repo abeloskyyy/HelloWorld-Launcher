@@ -3,6 +3,8 @@ const path = require('path')
 const http = require('http')
 const { URL } = require('url')
 const crypto = require('crypto')
+const { exec } = require('child_process')
+const dns = require('dns').promises
 
 // Use graceful-fs to handle EMFILE (too many open files) errors automatically
 // Must patch BEFORE loading fs-extra so it uses the patched fs
@@ -12,30 +14,30 @@ gracefulFs.gracefulify(require('fs'))
 // Limitador inteligente de concurrencia para evitar el límite real del OS (EMFILE/ENOENT)
 // minecraft-launcher-core a veces ahoga fs.promises lanzando +3000 promesas a la vez.
 class Semaphore {
-    constructor(max) {
-        this.max = max; this.active = 0; this.queue = [];
-    }
-    async acquire() {
-        if (this.active < this.max) { this.active++; return; }
-        return new Promise(resolve => this.queue.push(resolve));
-    }
-    release() {
-        if (this.queue.length > 0) { const next = this.queue.shift(); next(); } 
-        else { this.active--; }
-    }
+  constructor(max) {
+    this.max = max; this.active = 0; this.queue = [];
+  }
+  async acquire() {
+    if (this.active < this.max) { this.active++; return; }
+    return new Promise(resolve => this.queue.push(resolve));
+  }
+  release() {
+    if (this.queue.length > 0) { const next = this.queue.shift(); next(); }
+    else { this.active--; }
+  }
 }
 const fsSemaphore = new Semaphore(500); // Límite máximo de 500 archivos abiertos de golpe
-const limitFS = (fn) => async function(...args) {
-    await fsSemaphore.acquire();
-    try { return await fn.apply(this, args); } finally { fsSemaphore.release(); }
+const limitFS = (fn) => async function (...args) {
+  await fsSemaphore.acquire();
+  try { return await fn.apply(this, args); } finally { fsSemaphore.release(); }
 };
 
 // Parcheamos fs.promises globalmente
 const nativeFs = require('fs');
 if (nativeFs.promises) {
-    if (nativeFs.promises.stat) nativeFs.promises.stat = limitFS(nativeFs.promises.stat);
-    if (nativeFs.promises.readFile) nativeFs.promises.readFile = limitFS(nativeFs.promises.readFile);
-    if (nativeFs.promises.access) nativeFs.promises.access = limitFS(nativeFs.promises.access);
+  if (nativeFs.promises.stat) nativeFs.promises.stat = limitFS(nativeFs.promises.stat);
+  if (nativeFs.promises.readFile) nativeFs.promises.readFile = limitFS(nativeFs.promises.readFile);
+  if (nativeFs.promises.access) nativeFs.promises.access = limitFS(nativeFs.promises.access);
 }
 
 // Now load fs-extra which will use the patched fs
@@ -43,10 +45,10 @@ const fs = require('fs-extra')
 
 // Catch unhandled exceptions & rejections to stop infinite Electron OS popups if edge cases happen
 process.on('uncaughtException', (error) => {
-    console.error('[Global Error] Uncaught Exception:', error);
+  console.error('[Global Error] Uncaught Exception:', error);
 });
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('[Global Error] Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('[Global Error] Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 
@@ -82,8 +84,8 @@ try {
 
 // Ensure the app runs and detects windows correctly on Linux Wayland/X11
 if (process.platform === 'linux') {
-    app.commandLine.appendSwitch('enable-features', 'WaylandWindowDecorations');
-    app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
+  app.commandLine.appendSwitch('enable-features', 'WaylandWindowDecorations');
+  app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
 }
 
 // Initialize launcher
@@ -124,12 +126,7 @@ launcher.on('progress', (e) => {
   }
   mainWindow && mainWindow.webContents.send('download-progress', e);
 })
-launcher.on('close', (e) => {
-  console.log("[Launcher Close]", e);
-  mainWindow && mainWindow.webContents.send('info-message', "Game Closed");
-  // Check Discord RPC
-  rpc.setIdle();
-});
+launcher.on('close', handleLauncherClose);
 
 let mainWindow = null
 
@@ -336,10 +333,17 @@ async function fsQuerySub(parentPath, collectionId, filters, idToken, orderBy, l
 
 // --- Social Helper: Refresh Firebase ID token ---
 async function refreshFirebaseToken(refreshToken) {
-  const res = await axios.post(`https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`, {
-    grant_type: 'refresh_token', refresh_token: refreshToken
-  });
-  return { idToken: res.data.id_token, refreshToken: res.data.refresh_token, uid: res.data.user_id };
+  try {
+    const res = await axios.post(`https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`, {
+      grant_type: 'refresh_token', refresh_token: refreshToken
+    });
+    return { idToken: res.data.id_token, refreshToken: res.data.refresh_token, uid: res.data.user_id };
+  } catch (err) {
+    if (err.response && err.response.status === 400) {
+      throw new Error('INVALID_REFRESH_TOKEN');
+    }
+    throw err;
+  }
 }
 
 // --- Social Helper: Get valid social auth credentials for current user ---
@@ -347,18 +351,38 @@ async function getSocialAuth() {
   const userData = loadUserData();
   if (userData.account_type === 'helloworld') {
     if (!userData.firebase_refresh_token) throw new Error('NO_SOCIAL_AUTH');
-    const refreshed = await refreshFirebaseToken(userData.firebase_refresh_token);
-    userData.firebase_id_token = refreshed.idToken;
-    userData.firebase_refresh_token = refreshed.refreshToken;
-    saveUserData(userData);
-    return { uid: userData.firebase_uid, idToken: refreshed.idToken, accountType: 'helloworld', username: userData.username };
+    try {
+      const refreshed = await refreshFirebaseToken(userData.firebase_refresh_token);
+      userData.firebase_id_token = refreshed.idToken;
+      userData.firebase_refresh_token = refreshed.refreshToken;
+      saveUserData(userData);
+      return { uid: userData.firebase_uid, idToken: refreshed.idToken, accountType: 'helloworld', username: userData.username };
+    } catch (err) {
+      if (err.message === 'INVALID_REFRESH_TOKEN') {
+        userData.firebase_uid = "";
+        userData.firebase_refresh_token = "";
+        saveUserData(userData);
+        throw new Error('NO_SOCIAL_AUTH');
+      }
+      throw err;
+    }
   }
   if (userData.account_type === 'microsoft') {
     if (!userData.firebase_ms_refresh_token) throw new Error('NO_SOCIAL_AUTH');
-    const refreshed = await refreshFirebaseToken(userData.firebase_ms_refresh_token);
-    userData.firebase_ms_refresh_token = refreshed.refreshToken;
-    saveUserData(userData);
-    return { uid: userData.firebase_ms_uid, idToken: refreshed.idToken, accountType: 'microsoft', username: userData.username };
+    try {
+      const refreshed = await refreshFirebaseToken(userData.firebase_ms_refresh_token);
+      userData.firebase_ms_refresh_token = refreshed.refreshToken;
+      saveUserData(userData);
+      return { uid: userData.firebase_ms_uid, idToken: refreshed.idToken, accountType: 'microsoft', username: userData.username };
+    } catch (err) {
+      if (err.message === 'INVALID_REFRESH_TOKEN') {
+        userData.firebase_ms_uid = "";
+        userData.firebase_ms_refresh_token = "";
+        saveUserData(userData);
+        throw new Error('NO_SOCIAL_AUTH');
+      }
+      throw err;
+    }
   }
   throw new Error('NO_SOCIAL_AUTH');
 }
@@ -375,13 +399,13 @@ const buildDeterministicUuid = (seed) => crypto.createHash('md5').update(seed).d
 
 // --- Helper: Extract email from Microsoft JWT access token ---
 function decodeMsJwtEmail(accessToken) {
-    try {
-        const payload = accessToken.split('.')[1];
-        const decoded = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));
-        return (decoded.preferred_username || decoded.email || decoded.unique_name || '').toLowerCase().trim();
-    } catch (e) {
-        return '';
-    }
+  try {
+    const payload = accessToken.split('.')[1];
+    const decoded = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));
+    return (decoded.preferred_username || decoded.email || decoded.unique_name || '').toLowerCase().trim();
+  } catch (e) {
+    return '';
+  }
 }
 const ensureHelloWorldUuid = (name, uuid) => {
   const normalized = normalizeUuid(uuid);
@@ -389,6 +413,831 @@ const ensureHelloWorldUuid = (name, uuid) => {
   const safeName = name || 'Steve';
   return buildDeterministicUuid(`HelloWorldPlayer:${safeName}`);
 };
+
+const PRESENCE_HEARTBEAT_MS = 45 * 1000;
+const PRESENCE_STALE_THRESHOLD_MS = 90 * 1000;
+
+function formatPresenceVersionLabel(version, fallbackMcVersion) {
+  if (!version) return fallbackMcVersion || '';
+  const lower = version.toLowerCase();
+  if (lower.startsWith('fabric-loader-')) {
+    const parts = version.split('-');
+    if (parts.length >= 4) {
+      const mc = parts[3];
+      return `Fabric ${mc}`;
+    }
+  }
+  if (lower.startsWith('fabric-')) {
+    const parts = version.split('-');
+    if (parts.length >= 2) {
+      return `Fabric ${parts[1]}`;
+    }
+  }
+  if (lower.startsWith('forge-')) {
+    const parts = version.split('-');
+    if (parts.length >= 2) {
+      return `Forge ${parts[1]}`;
+    }
+  }
+  return fallbackMcVersion || version;
+}
+
+function presenceStatusLabel(status, serverIp, worldName) {
+  switch (status) {
+    case 'online':
+      return 'Online';
+    case 'menu':
+      return 'In Menu';
+    case 'playing':
+      return worldName ? `Playing ${worldName}` : 'Playing Minecraft';
+    case 'server':
+      return serverIp ? `Playing on ${serverIp}` : 'Playing Multiplayer';
+    default:
+      return 'Offline';
+  }
+}
+
+function isPresenceStale(updatedAt) {
+  if (!updatedAt) return true;
+  const ts = Date.parse(updatedAt);
+  if (Number.isNaN(ts)) return true;
+  return Date.now() - ts > PRESENCE_STALE_THRESHOLD_MS;
+}
+
+class PresenceManager {
+  constructor() {
+    this.currentState = null;
+    this.heartbeatTimer = null;
+    this.gameContext = null;
+    this.lastServerIp = '';
+    this.pendingWorldName = null;
+    this.lastServerRealIp = '';
+    this.connectionCheckTimer = null;
+    this.gameProcessPid = null;
+    this.isLeavingSingleplayer = false;
+  }
+
+  canUsePresence() {
+    const data = loadUserData();
+    if (data.account_type === 'helloworld') {
+      return Boolean(data.firebase_uid && data.firebase_refresh_token);
+    }
+    if (data.account_type === 'microsoft') {
+      return Boolean(data.firebase_ms_uid && data.firebase_ms_refresh_token);
+    }
+    return false;
+  }
+
+  getUid() {
+    const data = loadUserData();
+    if (data.account_type === 'helloworld') return data.firebase_uid || null;
+    if (data.account_type === 'microsoft') return data.firebase_ms_uid || null;
+    return null;
+  }
+
+  getPlayerName() {
+    const data = loadUserData();
+    return data.username || '';
+  }
+
+  async withAuth(fn) {
+    try {
+      const auth = await getSocialAuth();
+      await fn(auth);
+      return true;
+    } catch (e) {
+      if (e && e.message && e.message !== 'NO_SOCIAL_AUTH') {
+        const status = e?.response?.status;
+        const data = e?.response?.data;
+        if (status) {
+          console.warn('[Presence]', e.message, { status, data });
+        } else {
+          console.warn('[Presence]', e.message);
+        }
+      }
+      return false;
+    }
+  }
+
+  statesEqual(a, b) {
+    if (!a || !b) return false;
+    return a.status === b.status &&
+      (a.mcVersion || '') === (b.mcVersion || '') &&
+      (a.instanceName || '') === (b.instanceName || '') &&
+      (a.serverIp || '') === (b.serverIp || '') &&
+      (a.worldName || '') === (b.worldName || '') &&
+      (a.statusText || '') === (b.statusText || '') &&
+      (a.ign || '') === (b.ign || '');
+  }
+
+  async writeState(state) {
+    if (!this.canUsePresence()) return;
+    const uid = this.getUid();
+    if (!uid) return;
+    if (this.currentState && this.statesEqual(this.currentState, state)) {
+      await this.sendHeartbeat();
+      return true;
+    }
+
+    // Check privacy mode setting
+    const userData = loadUserData();
+    const privacyMode = userData.privacy_mode === true;
+
+    // Hide server IP if privacy mode is enabled
+    const serverIpToWrite = privacyMode ? '' : (state.serverIp || '');
+
+    const now = new Date().toISOString();
+    const statusText = state.statusText || presenceStatusLabel(state.status, serverIpToWrite, state.worldName);
+    const payload = {
+      status: state.status,
+      statusText,
+      mcVersion: state.mcVersion || '',
+      instanceName: state.instanceName || '',
+      serverIp: serverIpToWrite,
+      worldName: state.worldName || '',
+      playerName: state.ign || '',
+      updatedAt: now
+    };
+    const wrote = await this.withAuth(async (auth) => {
+      await fsSet(`presence/${uid}`, payload, auth.idToken);
+    });
+    if (!wrote) return false;
+    this.currentState = { ...state, statusText, updatedAt: now };
+    this.startHeartbeat();
+    return true;
+  }
+
+  startHeartbeat() {
+    if (this.heartbeatTimer) return;
+    this.heartbeatTimer = setInterval(() => this.sendHeartbeat(), PRESENCE_HEARTBEAT_MS);
+  }
+
+  stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  stopConnectionCheck() {
+    if (this.connectionCheckTimer) {
+      clearInterval(this.connectionCheckTimer);
+      this.connectionCheckTimer = null;
+    }
+    this.lastServerRealIp = '';
+  }
+
+  async resolveServerIp(hostname) {
+    try {
+      console.log(`[Presence] Resolving hostname: ${hostname}`);
+      const addresses = await dns.resolve4(hostname);
+      const realIp = addresses[0] || null;
+      console.log(`[Presence] Resolved ${hostname} to ${realIp}`);
+      return realIp;
+    } catch (e) {
+      console.warn(`[Presence] Failed to resolve ${hostname}:`, e.message);
+      return null;
+    }
+  }
+
+  async checkServerConnection(serverIp) {
+    if (!serverIp) return false;
+
+    const [hostname, port] = serverIp.split(':');
+    if (!hostname) return false;
+
+    console.log(`[Presence] Checking connection to ${serverIp} (PID: ${this.gameProcessPid})`);
+
+    // Resolve to real IP
+    const realIp = await this.resolveServerIp(hostname);
+    if (!realIp) {
+      console.log(`[Presence] Could not resolve ${hostname}, assuming disconnected`);
+      return false;
+    }
+
+    this.lastServerRealIp = realIp;
+
+    // Check if there's an active connection to this IP using netstat with PID
+    return new Promise((resolve) => {
+      exec('netstat -ano', (error, stdout) => {
+        if (error) {
+          console.warn('[Presence] netstat failed:', error.message);
+          resolve(false);
+          return;
+        }
+
+        // Look for ESTABLISHED connections to the server IP from the game process
+        const lines = stdout.split('\n');
+        let connectionExists = false;
+
+        for (const line of lines) {
+          if (line.includes('ESTABLISHED') && line.includes(realIp)) {
+            // Extract PID from the line (last column)
+            const parts = line.trim().split(/\s+/);
+            const pid = parts[parts.length - 1];
+
+            if (pid && this.gameProcessPid && parseInt(pid) === this.gameProcessPid) {
+              connectionExists = true;
+              console.log(`[Presence] Found game connection: ${realIp} (PID: ${pid})`);
+              break;
+            }
+          }
+        }
+
+        console.log(`[Presence] Connection check for ${realIp}: ${connectionExists ? 'CONNECTED' : 'DISCONNECTED'}`);
+        resolve(connectionExists);
+      });
+    });
+  }
+
+  startConnectionCheck() {
+    this.stopConnectionCheck();
+    if (!this.lastServerIp) return;
+
+    console.log(`[Presence] Starting connection check for ${this.lastServerIp}`);
+    this.connectionCheckTimer = setInterval(async () => {
+      if (!this.lastServerIp) {
+        this.stopConnectionCheck();
+        return;
+      }
+
+      const isConnected = await this.checkServerConnection(this.lastServerIp);
+      if (!isConnected && this.currentState?.status === 'server') {
+        console.log('[Presence] Server connection lost, updating state');
+        this.safeRun(this.onServerLeave());
+        this.stopConnectionCheck();
+      }
+    }, 5000); // Check every 5 seconds
+  }
+
+  async sendHeartbeat() {
+    if (!this.currentState || !this.canUsePresence()) return;
+    const uid = this.getUid();
+    if (!uid) return;
+    const now = new Date().toISOString();
+    const wrote = await this.withAuth(async (auth) => {
+      await fsSet(`presence/${uid}`, { updatedAt: now }, auth.idToken, ['updatedAt']);
+    });
+    if (wrote && this.currentState) {
+      this.currentState.updatedAt = now;
+    }
+  }
+
+  async setLauncherOnline() {
+    this.gameContext = null;
+    this.lastServerIp = '';
+    this.pendingWorldName = null;
+    rpc.setLauncher();
+    if (!this.canUsePresence()) return;
+    const wrote = await this.writeState({
+      status: 'online',
+      mcVersion: '',
+      instanceName: '',
+      serverIp: '',
+      worldName: '',
+      ign: this.getPlayerName()
+    });
+    if (!wrote) {
+      console.warn('[Presence] Failed to mark launcher online. Presence will not update until authentication succeeds.');
+    }
+  }
+
+  async ensureLauncherOnline() {
+    if (this.gameContext) {
+      return;
+    }
+    await this.setLauncherOnline();
+  }
+
+  async setOffline() {
+    this.stopHeartbeat();
+    if (!this.canUsePresence()) return;
+    const uid = this.getUid();
+    if (!uid) return;
+    const now = new Date().toISOString();
+    await this.withAuth(async (auth) => {
+      await fsSet(`presence/${uid}`, {
+        status: 'offline',
+        statusText: presenceStatusLabel('offline'),
+        mcVersion: '',
+        instanceName: '',
+        serverIp: '',
+        worldName: '',
+        playerName: this.getPlayerName(),
+        updatedAt: now,
+        lastSeenAt: now
+      }, auth.idToken);
+    });
+    this.currentState = { status: 'offline', mcVersion: '', instanceName: '', serverIp: '', worldName: '', statusText: presenceStatusLabel('offline'), ign: this.getPlayerName(), updatedAt: now };
+    this.gameContext = null;
+    this.lastServerIp = '';
+    this.pendingWorldName = null;
+  }
+
+  async onGameLaunch({ versionLabel, profileName, ign, pid }) {
+    this.gameContext = { versionLabel, profileName, ign, worldName: null };
+    this.lastServerIp = '';
+    this.pendingWorldName = null;
+    this.gameProcessPid = pid;
+    rpc.setMenu({ version: versionLabel, profileName, ign });
+    if (!this.canUsePresence()) return;
+    await this.writeState({
+      status: 'menu',
+      mcVersion: versionLabel,
+      instanceName: profileName || '',
+      serverIp: '',
+      worldName: '',
+      ign: ign || this.getPlayerName()
+    });
+  }
+
+  async onSingleplayerStart(worldName) {
+    if (!this.gameContext) return;
+    // Don't start if we're in the process of leaving singleplayer
+    if (this.isLeavingSingleplayer) {
+      console.log('[Presence] Ignoring singleplayer start - leaving in progress');
+      return;
+    }
+    // Don't start if we're currently on a server
+    if (this.lastServerIp) {
+      console.log('[Presence] Ignoring singleplayer start - on server');
+      return;
+    }
+    this.gameContext.worldName = worldName || this.gameContext.worldName || '';
+    const { versionLabel, profileName, ign } = this.gameContext;
+    rpc.setPlaying({ version: versionLabel, profileName, ign, worldName: this.gameContext.worldName });
+    if (!this.canUsePresence()) return;
+    await this.writeState({
+      status: 'playing',
+      mcVersion: versionLabel,
+      instanceName: profileName || '',
+      serverIp: '',
+      worldName: this.gameContext.worldName || '',
+      ign: ign || this.getPlayerName()
+    });
+  }
+
+  async onServerJoin(serverIp) {
+    if (!this.gameContext) return;
+    const { versionLabel, profileName, ign } = this.gameContext;
+    this.lastServerIp = serverIp;
+    this.isLeavingSingleplayer = false; // Clear leaving flag when joining server
+    this.gameContext.worldName = null; // Clear singleplayer world when joining server
+    const userData = loadUserData();
+    const privacyMode = userData.privacy_mode === true;
+    rpc.setServer({ version: versionLabel, profileName, ign, serverIp, privacyMode });
+    if (!this.canUsePresence()) return;
+    await this.writeState({
+      status: 'server',
+      mcVersion: versionLabel,
+      instanceName: profileName || '',
+      serverIp: serverIp, // writeState will handle privacy mode
+      worldName: '',
+      ign: ign || this.getPlayerName()
+    });
+    // Start network connection monitoring
+    this.startConnectionCheck();
+  }
+
+  async onServerLeave() {
+    if (!this.gameContext) return;
+    const { versionLabel, profileName, ign } = this.gameContext;
+    // Stop connection monitoring
+    this.stopConnectionCheck();
+    // Always go back to menu when leaving a server
+    // Singleplayer state is managed separately by singleplayer-specific logs
+    rpc.setMenu({ version: versionLabel, profileName, ign });
+    if (!this.canUsePresence()) return;
+    await this.writeState({
+      status: 'menu',
+      mcVersion: versionLabel,
+      instanceName: profileName || '',
+      serverIp: '',
+      worldName: '',
+      ign: ign || this.getPlayerName()
+    });
+    this.lastServerIp = '';
+  }
+
+  async onSingleplayerStop() {
+    if (!this.gameContext) return;
+    const { versionLabel, profileName, ign } = this.gameContext;
+    this.gameContext.worldName = null;
+    this.pendingWorldName = null; // Clear pending world name to prevent re-activation
+    this.isLeavingSingleplayer = true; // Set flag to prevent re-activation
+    rpc.setMenu({ version: versionLabel, profileName, ign });
+    if (!this.canUsePresence()) return;
+    await this.writeState({
+      status: 'menu',
+      mcVersion: versionLabel,
+      instanceName: profileName || '',
+      serverIp: '',
+      worldName: '',
+      ign: ign || this.getPlayerName()
+    });
+    // Clear flag after a longer delay to allow all saving logs to process
+    setTimeout(() => {
+      this.isLeavingSingleplayer = false;
+    }, 5000);
+  }
+
+  async onGameClosed() {
+    this.stopConnectionCheck();
+    this.isLeavingSingleplayer = false; // Clear flag on game close
+    this.pendingWorldName = null; // Clear pending world name
+    await this.setLauncherOnline(); // Set to launcher online, not offline
+  }
+
+  handleGameLog(line) {
+    if (!line) return;
+    const cleaned = line.trim();
+    if (!cleaned) return;
+
+    // Debug: log all relevant lines
+    if (cleaned.includes('Connecting') || cleaned.includes('server') || cleaned.includes('Server') ||
+      cleaned.includes('level') || cleaned.includes('world') || cleaned.includes('integrated') ||
+      cleaned.includes('Saving') || cleaned.includes('Stopping')) {
+      console.log(`[Presence] Game log: ${cleaned}`);
+    }
+
+    // Check for singleplayer stop FIRST - highest priority
+    if (/Stopping singleplayer server/i.test(cleaned) ||
+      /Saving worlds/i.test(cleaned) ||
+      /Saving the world/i.test(cleaned) ||
+      /Saving level/i.test(cleaned) ||
+      (/lost connection/i.test(cleaned) && cleaned.includes('Disconnected'))) {
+      console.log('[Presence] Detected singleplayer stop');
+      this.safeRun(this.onSingleplayerStop());
+      return;
+    }
+
+    // Skip all world detection if we're leaving singleplayer
+    if (this.isLeavingSingleplayer) {
+      console.log('[Presence] Skipping world detection - leaving singleplayer');
+      return;
+    }
+
+    // Multiple patterns for world loading - extract name from ServerLevel[Name] format
+    const serverLevelMatch = cleaned.match(/ServerLevel\[([^\]]+)\]/i);
+    if (serverLevelMatch && serverLevelMatch[1]) {
+      this.pendingWorldName = serverLevelMatch[1];
+      console.log(`[Presence] Detected world name from ServerLevel: ${this.pendingWorldName}`);
+    }
+
+    const worldMatch = cleaned.match(/Loaded level '([^']+)'/i) ||
+      cleaned.match(/Preparing level "([^"]+)"/i) ||
+      cleaned.match(/Loading level '([^']+)'/i) ||
+      cleaned.match(/Loading world '([^']+)'/i) ||
+      cleaned.match(/loading world '([^']+)'/i) ||
+      cleaned.match(/Saving chunks for level '([^']+)'/i);
+    if (worldMatch && worldMatch[1]) {
+      this.pendingWorldName = worldMatch[1];
+      console.log(`[Presence] Detected world name: ${this.pendingWorldName}`);
+      
+      if (this.gameContext && this.currentState && this.currentState.status === 'playing' && !this.gameContext.worldName) {
+        this.safeRun(this.onSingleplayerStart(this.pendingWorldName));
+      }
+    }
+
+    // Multiple patterns for integrated server start - only trigger when we have a world name
+    if (/Starting integrated server/i.test(cleaned) ||
+      /Starting minecraft server/i.test(cleaned)) {
+      const worldName = this.pendingWorldName || this.gameContext?.worldName || '';
+      this.pendingWorldName = null;
+      console.log(`[Presence] Starting singleplayer world: ${worldName}`);
+      this.safeRun(this.onSingleplayerStart(worldName));
+      return;
+    }
+
+    // Also trigger on Server thread if we have a pending world name
+    if (/Server thread/i.test(cleaned) && this.pendingWorldName) {
+      const worldName = this.pendingWorldName;
+      this.pendingWorldName = null;
+      console.log(`[Presence] Starting singleplayer world (from Server thread): ${worldName}`);
+      this.safeRun(this.onSingleplayerStart(worldName));
+      return;
+    }
+
+    // Multiple patterns for server connection
+    const connectMatch = cleaned.match(/Connecting to ([^,]+),\s*(\d+)/i) ||
+      cleaned.match(/Connecting to '([^:]+):(\d+)'/i) ||
+      cleaned.match(/Connecting to ([^:]+):(\d+)/i) ||
+      cleaned.match(/Logging into ([^:]+):(\d+)/i) ||
+      cleaned.match(/Joining ([^:]+):(\d+)/i) ||
+      cleaned.match(/joined the game/i);
+    if (connectMatch) {
+      // If it's "joined the game", we can't get IP from this, but we know we're on a server
+      if (cleaned.includes('joined the game')) {
+        if (cleaned.includes('Server thread') || cleaned.includes('Integrated Server')) {
+          const worldName = this.pendingWorldName || this.gameContext?.worldName || '';
+          this.pendingWorldName = null;
+          console.log(`[Presence] Player joined singleplayer world: ${worldName}`);
+          this.safeRun(this.onSingleplayerStart(worldName));
+          return;
+        }
+        console.log('[Presence] Player joined a server (no IP in log)');
+        // We'll stay in menu state since we don't have the IP
+        return;
+      }
+      const host = (connectMatch[1] || '').trim();
+      const port = (connectMatch[2] || '').trim();
+      const serverIp = port === '25565' ? host : `${host}:${port}`;
+      console.log(`[Presence] Detected server connection to: ${serverIp}`);
+      this.safeRun(this.onServerJoin(serverIp));
+      return;
+    }
+    if (/Disconnected from server/i.test(cleaned) || /Disconnecting from server/i.test(cleaned) || /Lost connection/i.test(cleaned) || /Connection closed/i.test(cleaned)) {
+      this.safeRun(this.onServerLeave());
+      return;
+    }
+    if (/Stopping!/i.test(cleaned) && this.lastServerIp) {
+      this.safeRun(this.onServerLeave());
+    }
+  }
+
+  safeRun(promise) {
+    promise?.catch?.((err) => {
+      if (err && err.message && err.message !== 'NO_SOCIAL_AUTH') {
+        console.warn('[Presence]', err.message);
+      }
+    });
+  }
+}
+
+const presenceManager = new PresenceManager();
+
+function buildPresenceResponse(rawDoc) {
+  if (!rawDoc) {
+    return {
+      state: 'offline',
+      statusText: presenceStatusLabel('offline'),
+      mcVersion: '',
+      instanceName: '',
+      serverIp: '',
+      updatedAt: null,
+      lastSeenAt: null
+    };
+  }
+  const updatedAt = rawDoc.updatedAt || null;
+  const lastSeenAt = rawDoc.lastSeenAt || updatedAt;
+  const stale = isPresenceStale(updatedAt) || rawDoc.status === 'offline';
+  const status = stale ? 'offline' : (rawDoc.status || 'offline');
+  return {
+    state: status,
+    statusText: stale ? presenceStatusLabel('offline') : (rawDoc.statusText || presenceStatusLabel(status, rawDoc.serverIp, rawDoc.worldName)),
+    mcVersion: rawDoc.mcVersion || '',
+    instanceName: rawDoc.instanceName || '',
+    serverIp: rawDoc.serverIp || '',
+    playerName: rawDoc.playerName || '',
+    worldName: rawDoc.worldName || '',
+    updatedAt,
+    lastSeenAt: lastSeenAt || updatedAt || null
+  };
+}
+
+async function fetchPresenceForUser(uid, auth) {
+  if (!uid || !auth) return buildPresenceResponse(null);
+  try {
+    const doc = await fsGet(`presence/${uid}`, auth.idToken);
+    return buildPresenceResponse(doc);
+  } catch (e) {
+    if (e?.response?.status === 404) {
+      return buildPresenceResponse(null);
+    }
+    if (e?.response?.status === 403) {
+      console.warn('[Presence] fetchPresenceForUser unauthorized (403). Check Firestore rules allow read on presence/* for friends.');
+    } else {
+      console.warn('[Presence] fetchPresenceForUser failed:', e.message || e);
+    }
+    return buildPresenceResponse(null);
+  }
+}
+
+let gameStartTime = null;
+
+async function updateStreakAndSessions() {
+  try {
+    const auth = await getSocialAuth().catch(() => null);
+    if (!auth) return;
+    
+    let stats;
+    try {
+      stats = await fsGet(`users/${auth.uid}/stats/main`, auth.idToken);
+    } catch (e) {
+      stats = { streak: 0, lastPlayed: 0, totalHours: 0, totalSessions: 0, totalDaysPlayed: 0 };
+    }
+    
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const lastDate = stats.lastPlayed ? new Date(stats.lastPlayed).toISOString().split('T')[0] : null;
+    
+    let streak = stats.streak || 0;
+    let totalDaysPlayed = stats.totalDaysPlayed || 0;
+    
+    if (lastDate !== todayStr) {
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      
+      if (lastDate === yesterdayStr) {
+        streak += 1;
+      } else {
+        streak = 1;
+      }
+      totalDaysPlayed += 1;
+    }
+    
+    const updates = {
+      streak,
+      lastPlayed: now.getTime(),
+      totalSessions: (stats.totalSessions || 0) + 1,
+      totalDaysPlayed
+    };
+    
+    await fsSet(`users/${auth.uid}/stats/main`, { ...stats, ...updates }, auth.idToken);
+    
+    if (mainWindow) {
+      mainWindow.webContents.send('stats-updated');
+    }
+  } catch (e) {
+    console.error('[Stats] Error updating streak/sessions:', e.message);
+  }
+}
+
+async function handleLauncherClose(e) {
+  console.log('[Launcher Close]', e);
+  if (mainWindow) mainWindow.webContents.send('info-message', 'Game Closed');
+  presenceManager.safeRun(presenceManager.onGameClosed());
+
+  if (gameStartTime) {
+    const playTimeHours = (Date.now() - gameStartTime) / (1000 * 60 * 60);
+    gameStartTime = null;
+    try {
+      const auth = await getSocialAuth().catch(() => null);
+      if (auth) {
+        let stats;
+        try {
+          stats = await fsGet(`users/${auth.uid}/stats/main`, auth.idToken);
+        } catch (e) {
+          stats = { totalHours: 0 };
+        }
+        const newHours = (stats.totalHours || 0) + playTimeHours;
+        await fsSet(`users/${auth.uid}/stats/main`, { ...stats, totalHours: newHours }, auth.idToken);
+        
+        if (mainWindow) {
+          mainWindow.webContents.send('stats-updated');
+        }
+      }
+    } catch (e) {
+      console.error('[Stats] Error updating playtime:', e.message);
+    }
+  }
+}
+
+function focusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+let presencePollingInterval = null;
+let presencePollingReady = false;
+let presencePollingInitializing = false;
+const lastPresenceStates = new Map();
+const friendProfileCache = new Map();
+
+function resetPresenceCaches() {
+  presencePollingReady = false;
+  presencePollingInitializing = false;
+  lastPresenceStates.clear();
+  friendProfileCache.clear();
+}
+
+function showPresenceNotification(title, body) {
+  if (!Notification.isSupported() || !title || !body) return;
+  const notif = new Notification({ title, body, silent: false });
+  const handler = () => {
+    focusMainWindow();
+    setTimeout(() => {
+      if (mainWindow) mainWindow.webContents.send('navigate-to-chat', { fromPresence: true, friendName: title });
+    }, 150);
+  };
+  notif.on('click', handler);
+  notif.on('action', handler);
+  notif.show();
+}
+
+function shouldNotifyPresence(prev, next) {
+  if (!next || next.state === 'offline') return null;
+  const prevState = prev?.state || 'offline';
+
+  if (next.state === 'server') {
+    if (prevState !== 'server' || prev?.serverIp !== next.serverIp) {
+      const serverLabel = next.serverIp ? next.serverIp : 'un servidor';
+      return `está jugando en ${serverLabel}`;
+    }
+    return null;
+  }
+
+  if (next.state === 'online' && prevState !== 'online') {
+    return 'se ha conectado';
+  }
+
+  const playingStates = new Set(['menu', 'playing']);
+  const wasPlaying = playingStates.has(prevState) || prevState === 'server';
+  if (playingStates.has(next.state) && !wasPlaying) {
+    return 'ha empezado a jugar Minecraft';
+  }
+
+  return null;
+}
+
+async function pollPresence(initPass = false) {
+  if (!presenceManager.canUsePresence()) {
+    resetPresenceCaches();
+    return;
+  }
+
+  let auth;
+  try {
+    auth = await getSocialAuth();
+  } catch (e) {
+    if (e.message !== 'NO_SOCIAL_AUTH') console.error('[PresencePoll] Auth error:', e.message);
+    resetPresenceCaches();
+    return;
+  }
+
+  try {
+    const friendships = await fsQuery('friendships', [
+      { field: 'users', op: 'ARRAY_CONTAINS', value: { stringValue: auth.uid } }
+    ], auth.idToken, null, 100);
+
+    const seenUids = new Set();
+
+    for (const fsDoc of friendships) {
+      if (fsDoc.isGroup) continue;
+      const friendUid = (fsDoc.users || []).find(u => u !== auth.uid);
+      if (!friendUid) continue;
+      seenUids.add(friendUid);
+
+      let profile = friendProfileCache.get(friendUid);
+      if (!profile) {
+        try {
+          profile = await fsGet(`users/${friendUid}`, auth.idToken);
+          friendProfileCache.set(friendUid, { ...profile, uid: friendUid });
+        } catch (_) {
+          profile = { uid: friendUid, username: 'Unknown', accountType: 'helloworld' };
+        }
+      }
+
+      const presence = await fetchPresenceForUser(friendUid, auth);
+      const prev = lastPresenceStates.get(friendUid);
+      lastPresenceStates.set(friendUid, presence);
+
+      if (!presencePollingReady || initPass) continue;
+      const message = shouldNotifyPresence(prev, presence);
+      if (message) {
+        const name = profile?.username || 'Amigo';
+        showPresenceNotification(name, message);
+      }
+    }
+
+    for (const uid of Array.from(lastPresenceStates.keys())) {
+      if (!seenUids.has(uid)) {
+        lastPresenceStates.delete(uid);
+        friendProfileCache.delete(uid);
+      }
+    }
+
+    presencePollingReady = true;
+  } catch (e) {
+    console.error('[PresencePoll] Error:', e.message || e);
+  }
+}
+
+function startPresencePolling() {
+  if (!presenceManager.canUsePresence()) return;
+  if (presencePollingInterval) {
+    clearInterval(presencePollingInterval);
+    presencePollingInterval = null;
+  }
+  if (!presencePollingReady && !presencePollingInitializing) {
+    presencePollingInitializing = true;
+    pollPresence(true)
+      .then(() => { presencePollingReady = true; })
+      .finally(() => { presencePollingInitializing = false; });
+  }
+  presencePollingInterval = setInterval(pollPresence, 30000);
+}
+
+function stopPresencePolling() {
+  if (presencePollingInterval) {
+    clearInterval(presencePollingInterval);
+    presencePollingInterval = null;
+  }
+  resetPresenceCaches();
+}
 
 // ==========================================
 // MESSAGE NOTIFICATION POLLING
@@ -399,194 +1248,199 @@ let msgPollingReady = false;    // true after first init pass
 let msgPollingInitializing = false; // guard against concurrent init passes
 
 function startMessagePolling() {
-    if (msgPollingInterval) { clearInterval(msgPollingInterval); msgPollingInterval = null; }
-    if (!msgPollingReady && !msgPollingInitializing) {
-        msgPollingInitializing = true;
-        seenMsgIds = {};
-        console.log('[MsgPoll] Init pass starting...');
-        pollMessages()
-            .then(() => { msgPollingReady = true; msgPollingInitializing = false;
-                console.log('[MsgPoll] Init done -', Object.keys(seenMsgIds).length, 'chats tracked'); })
-            .catch(err => { msgPollingInitializing = false;
-                if (err.message !== 'NO_SOCIAL_AUTH') console.error('[MsgPoll] Init error:', err.message); });
-    } else if (!msgPollingReady) {
-        console.log('[MsgPoll] Init already in progress, skipping duplicate');
-    } else {
-        console.log('[MsgPoll] Restarting interval (already initialized)');
-    }
-    msgPollingInterval = setInterval(pollMessages, 15000);
+  if (msgPollingInterval) { clearInterval(msgPollingInterval); msgPollingInterval = null; }
+  if (!msgPollingReady && !msgPollingInitializing) {
+    msgPollingInitializing = true;
+    seenMsgIds = {};
+    console.log('[MsgPoll] Init pass starting...');
+    pollMessages()
+      .then(() => {
+        msgPollingReady = true; msgPollingInitializing = false;
+        console.log('[MsgPoll] Init done -', Object.keys(seenMsgIds).length, 'chats tracked');
+      })
+      .catch(err => {
+        msgPollingInitializing = false;
+        if (err.message !== 'NO_SOCIAL_AUTH') console.error('[MsgPoll] Init error:', err.message);
+      });
+  } else if (!msgPollingReady) {
+    console.log('[MsgPoll] Init already in progress, skipping duplicate');
+  } else {
+    console.log('[MsgPoll] Restarting interval (already initialized)');
+  }
+  msgPollingInterval = setInterval(pollMessages, 15000);
+  startPresencePolling();
 }
 
 function stopMessagePolling() {
-    if (msgPollingInterval) { clearInterval(msgPollingInterval); msgPollingInterval = null; }
-    msgPollingReady = false;
-    msgPollingInitializing = false;
-    seenMsgIds = {};
+  if (msgPollingInterval) { clearInterval(msgPollingInterval); msgPollingInterval = null; }
+  msgPollingReady = false;
+  msgPollingInitializing = false;
+  seenMsgIds = {};
 }
 
 async function pollMessages() {
-    try {
-        const auth = await getSocialAuth();
-        const friendships = await fsQuery('friendships', [
-            { field: 'users', op: 'ARRAY_CONTAINS', value: { stringValue: auth.uid } }
-        ], auth.idToken, null, 50);
+  try {
+    const auth = await getSocialAuth();
+    const friendships = await fsQuery('friendships', [
+      { field: 'users', op: 'ARRAY_CONTAINS', value: { stringValue: auth.uid } }
+    ], auth.idToken, null, 50);
 
-        for (const friendship of friendships) {
-            const fid = friendship.id;
-            if (!seenMsgIds[fid]) seenMsgIds[fid] = new Set();
-            try {
-                const res = await axios.get(
-                    `${FIRESTORE_BASE}/friendships/${fid}/messages?pageSize=1000`,
-                    { headers: { Authorization: `Bearer ${auth.idToken}` } }
-                );
-                const msgs = (res.data.documents || []).map(doc => ({
-                    id: doc.name.split('/').pop(),
-                    ...parseFirestoreFields(doc.fields)
-                }));
+    for (const friendship of friendships) {
+      const fid = friendship.id;
+      if (!seenMsgIds[fid]) seenMsgIds[fid] = new Set();
+      try {
+        const res = await axios.get(
+          `${FIRESTORE_BASE}/friendships/${fid}/messages?pageSize=1000`,
+          { headers: { Authorization: `Bearer ${auth.idToken}` } }
+        );
+        const msgs = (res.data.documents || []).map(doc => ({
+          id: doc.name.split('/').pop(),
+          ...parseFirestoreFields(doc.fields)
+        }));
 
-                if (!msgPollingReady) {
-                    // Init pass: mark ALL current messages as already seen
-                    msgs.forEach(m => seenMsgIds[fid].add(m.id));
-                    console.log(`[MsgPoll] Init: ${msgs.length} existing msgs marked seen`);
-                    continue;
-                }
-
-                // Find messages from others whose ID we haven't seen yet
-                const newMsgs = msgs
-                    .filter(m => m.senderId !== auth.uid && !seenMsgIds[fid].has(m.id))
-                    .sort((a, b) => a.timestamp < b.timestamp ? -1 : 1);
-
-                // Mark all as seen (including old ones in case set was rebuilt)
-                msgs.forEach(m => seenMsgIds[fid].add(m.id));
-
-                if (newMsgs.length > 0) console.log(`[MsgPoll] ${newMsgs.length} new msg(s) in fid=${fid.slice(-8)}`);
-
-                for (const msg of newMsgs) {
-                    console.log(`[MsgPoll] Notifying: from="${msg.senderName}" body="${msg.content}"`);
-                    showMsgNotification(msg, fid);
-                }
-            } catch (innerErr) {
-                console.error(`[MsgPoll] Error fetching fid=${fid.slice(-8)}:`, innerErr.message);
-            }
+        if (!msgPollingReady) {
+          // Init pass: mark ALL current messages as already seen
+          msgs.forEach(m => seenMsgIds[fid].add(m.id));
+          console.log(`[MsgPoll] Init: ${msgs.length} existing msgs marked seen`);
+          continue;
         }
-    } catch (e) {
-        if (e.message !== 'NO_SOCIAL_AUTH') console.error('[MsgPoll] Error:', e.message);
+
+        // Find messages from others whose ID we haven't seen yet
+        const newMsgs = msgs
+          .filter(m => m.senderId !== auth.uid && !seenMsgIds[fid].has(m.id))
+          .sort((a, b) => a.timestamp < b.timestamp ? -1 : 1);
+
+        // Mark all as seen (including old ones in case set was rebuilt)
+        msgs.forEach(m => seenMsgIds[fid].add(m.id));
+
+        if (newMsgs.length > 0) console.log(`[MsgPoll] ${newMsgs.length} new msg(s) in fid=${fid.slice(-8)}`);
+
+        for (const msg of newMsgs) {
+          console.log(`[MsgPoll] Notifying: from="${msg.senderName}" body="${msg.content}"`);
+          showMsgNotification(msg, fid);
+        }
+      } catch (innerErr) {
+        console.error(`[MsgPoll] Error fetching fid=${fid.slice(-8)}:`, innerErr.message);
+      }
     }
+  } catch (e) {
+    if (e.message !== 'NO_SOCIAL_AUTH') console.error('[MsgPoll] Error:', e.message);
+  }
 }
 
 function buildWindowsToastXml(title, body, friendshipId) {
-    const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    // Minimal valid WinRT toast XML - avoids edge-cases with launch attr
-    return '<toast>'                                                          +
-           '<visual><binding template="ToastGeneric">'                        +
-           '<text>' + esc(title) + '</text>'                                  +
-           '<text>' + esc(body)  + '</text>'                                  +
-           '</binding></visual>'                                               +
-           '<actions>'                                                         +
-           '<input id="r" type="text" placeHolderContent="Reply..."/>'       +
-           '<action content="Send" activationType="background"'               +
-           ' arguments="' + esc(friendshipId) + '" hint-inputId="r"/>'       +
-           '</actions>'                                                        +
-           '</toast>';
+  const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  // Minimal valid WinRT toast XML - avoids edge-cases with launch attr
+  return '<toast>' +
+    '<visual><binding template="ToastGeneric">' +
+    '<text>' + esc(title) + '</text>' +
+    '<text>' + esc(body) + '</text>' +
+    '</binding></visual>' +
+    '<actions>' +
+    '<input id="r" type="text" placeHolderContent="Reply..."/>' +
+    '<action content="Send" activationType="background"' +
+    ' arguments="' + esc(friendshipId) + '" hint-inputId="r"/>' +
+    '</actions>' +
+    '</toast>';
 }
 
 function showMsgNotification(msg, friendshipId) {
-    if (!Notification.isSupported()) return;
-    const title = msg.senderName || 'New message';
-    const body = msg.content || '';
-    console.log(`[MsgNotif] title="${title}" body="${body}" fid=${friendshipId}`);
-    if (!body && !title) return;
+  if (!Notification.isSupported()) return;
+  const title = msg.senderName || 'New message';
+  const body = msg.content || '';
+  console.log(`[MsgNotif] title="${title}" body="${body}" fid=${friendshipId}`);
+  if (!body && !title) return;
 
-    let iconPath;
-    try {
-        const p = path.join(__dirname, 'build', 'icon.png');
-        if (require('fs').existsSync(p)) iconPath = p;
-    } catch (_) {}
+  let iconPath;
+  try {
+    const p = path.join(__dirname, 'build', 'icon.png');
+    if (require('fs').existsSync(p)) iconPath = p;
+  } catch (_) { }
 
-    const notifOpts = {
-        title,
-        body: body || '(media)',
-        silent: false,
-        ...(iconPath ? { icon: iconPath } : {})
-    };
-    if (process.platform === 'darwin') {
-        notifOpts.hasReply = true;
-        notifOpts.replyPlaceholder = 'Reply…';
-    } else if (process.platform === 'win32') {
-        notifOpts.toastXml = buildWindowsToastXml(title, body || '(media)', friendshipId);
-    }
+  const notifOpts = {
+    title,
+    body: body || '(media)',
+    silent: false,
+    ...(iconPath ? { icon: iconPath } : {})
+  };
+  if (process.platform === 'darwin') {
+    notifOpts.hasReply = true;
+    notifOpts.replyPlaceholder = 'Reply…';
+  } else if (process.platform === 'win32') {
+    notifOpts.toastXml = buildWindowsToastXml(title, body || '(media)', friendshipId);
+  }
 
-    const notif = new Notification(notifOpts);
+  const notif = new Notification(notifOpts);
 
-    // Click or Windows "Open" action → focus window and navigate to chat
-    const doNavigate = () => {
-        if (!mainWindow) return;
-        if (mainWindow.isMinimized()) mainWindow.restore();
-        mainWindow.show();
-        mainWindow.focus();
-        // Small delay so window is ready before IPC message
-        setTimeout(() => {
-            if (mainWindow) mainWindow.webContents.send('navigate-to-chat', { friendshipId, senderName: msg.senderName || '' });
-        }, 150);
-    };
+  // Click or Windows "Open" action → focus window and navigate to chat
+  const doNavigate = () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    // Small delay so window is ready before IPC message
+    setTimeout(() => {
+      if (mainWindow) mainWindow.webContents.send('navigate-to-chat', { friendshipId, senderName: msg.senderName || '' });
+    }, 150);
+  };
 
-    notif.on('click', doNavigate);
+  notif.on('click', doNavigate);
 
-    // macOS inline reply / Windows toast reply (Electron 28+ toastXml background action)
-    notif.on('reply', async (event, reply) => {
-        if (!reply || !reply.trim()) return;
-        await sendMsgFromMain(friendshipId, reply.trim(), msg);
-        // Also navigate so user sees the sent reply
-        doNavigate();
-    });
+  // macOS inline reply / Windows toast reply (Electron 28+ toastXml background action)
+  notif.on('reply', async (event, reply) => {
+    if (!reply || !reply.trim()) return;
+    await sendMsgFromMain(friendshipId, reply.trim(), msg);
+    // Also navigate so user sees the sent reply
+    doNavigate();
+  });
 
-    // Windows: foreground action ("Open" button) also uses click path
-    notif.on('action', (event, index) => {
-        // index 0 = Send (background), index 1 = Open (foreground)
-        // "Open" foreground action triggers click on Windows, but handle both
-        doNavigate();
-    });
+  // Windows: foreground action ("Open" button) also uses click path
+  notif.on('action', (event, index) => {
+    // index 0 = Send (background), index 1 = Open (foreground)
+    // "Open" foreground action triggers click on Windows, but handle both
+    doNavigate();
+  });
 
-    notif.show();
+  notif.show();
 }
 
 async function sendMsgFromMain(friendshipId, content, replyMsg) {
-    try {
-        const auth = await getSocialAuth();
-        const userData = loadUserData();
-        const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        const now = new Date().toISOString();
-        const msgData = {
-            senderId: auth.uid,
-            senderName: userData.username || '',
-            content: content.trim(),
-            timestamp: now,
-            status: 'sent'
-        };
-        if (replyMsg) {
-            msgData.replyTo = replyMsg.id;
-            msgData.replyContent = replyMsg.content;
-            msgData.replySender = replyMsg.senderId;
-            msgData.replySenderName = replyMsg.senderName;
-        }
-        await fsSet(`friendships/${friendshipId}/messages/${msgId}`, msgData, auth.idToken);
-        await fsSet(`friendships/${friendshipId}`, { lastMessageAt: now }, auth.idToken, ['lastMessageAt']);
-        
-        // Increment unread for all other users
-        try {
-            const fDoc = await fsGet(`friendships/${friendshipId}`, auth.idToken);
-            const otherUids = (fDoc.users || []).filter(u => u !== auth.uid);
-            for (const otherUid of otherUids) {
-                let currentUnread = 0;
-                try { const ud = await fsGet(`friendships/${friendshipId}/unread/${otherUid}`, auth.idToken); currentUnread = ud.count || 0; } catch (_) {}
-                await fsSet(`friendships/${friendshipId}/unread/${otherUid}`, { count: currentUnread + 1 }, auth.idToken);
-            }
-        } catch (_) {}
-
-        lastSeenMsgTimestamps[friendshipId] = now;
-    } catch (e) {
-        console.error('[MsgPoll] Send error:', e.message);
+  try {
+    const auth = await getSocialAuth();
+    const userData = loadUserData();
+    const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const now = new Date().toISOString();
+    const msgData = {
+      senderId: auth.uid,
+      senderName: userData.username || '',
+      content: content.trim(),
+      timestamp: now,
+      status: 'sent'
+    };
+    if (replyMsg) {
+      msgData.replyTo = replyMsg.id;
+      msgData.replyContent = replyMsg.content;
+      msgData.replySender = replyMsg.senderId;
+      msgData.replySenderName = replyMsg.senderName;
     }
+    await fsSet(`friendships/${friendshipId}/messages/${msgId}`, msgData, auth.idToken);
+    await fsSet(`friendships/${friendshipId}`, { lastMessageAt: now }, auth.idToken, ['lastMessageAt']);
+
+    // Increment unread for all other users
+    try {
+      const fDoc = await fsGet(`friendships/${friendshipId}`, auth.idToken);
+      const otherUids = (fDoc.users || []).filter(u => u !== auth.uid);
+      for (const otherUid of otherUids) {
+        let currentUnread = 0;
+        try { const ud = await fsGet(`friendships/${friendshipId}/unread/${otherUid}`, auth.idToken); currentUnread = ud.count || 0; } catch (_) { }
+        await fsSet(`friendships/${friendshipId}/unread/${otherUid}`, { count: currentUnread + 1 }, auth.idToken);
+      }
+    } catch (_) { }
+
+    lastSeenMsgTimestamps[friendshipId] = now;
+  } catch (e) {
+    console.error('[MsgPoll] Send error:', e.message);
+  }
 }
 
 // --- Local HTTP server for Firebase Auth compatibility (file:// blocks signInWithPopup) ---
@@ -681,9 +1535,9 @@ const createWindow = async () => {
   win.webContents.setWindowOpenHandler(({ url }) => {
     // Allow Firebase Auth popup (signInWithPopup needs window.open)
     if (url.includes('firebaseapp.com/__/auth/') ||
-        url.includes('login.microsoftonline.com') ||
-        url.includes('login.live.com') ||
-        url.includes('accounts.google.com')) {
+      url.includes('login.microsoftonline.com') ||
+      url.includes('login.live.com') ||
+      url.includes('accounts.google.com')) {
       return { action: 'allow' };
     }
     shell.openExternal(url);
@@ -691,6 +1545,11 @@ const createWindow = async () => {
   });
 
   mainWindow = win;
+
+  if (presenceManager.canUsePresence()) {
+    presenceManager.safeRun(presenceManager.setLauncherOnline());
+    startPresencePolling();
+  }
 }
 
 // --- Background Version Installer ---
@@ -721,76 +1580,62 @@ async function checkLatestVersionsAndInstall() {
     const mcDir = paths.getMcDir();
     const versionsDir = path.join(mcDir, 'versions');
 
-    // Helper to install silently and create/update profile
+    // Helper to update profile and notify without installing
     const installAndProfile = async (version, profileName) => {
-      if (activeDownloads.has(version)) {
-        console.log(`[Background Update] Version ${version} is already being downloaded. Skipping.`);
-        return;
-      }
-
       const versionDir = path.join(versionsDir, version);
       let isInstalled = fs.existsSync(versionDir);
 
-      if (!isInstalled) {
-        console.log(`[Background Update] Version ${version} not found. Starting background installation...`);
-        const result = await installVersionLogic(
-          version,
-          (progress) => {
-            progress.isBackgroundUpdate = true;
-            if (mainWindow) mainWindow.webContents.send('download-progress', progress);
-          },
-          null,
-          (data) => {
-            data.isBackgroundUpdate = true;
-            if (mainWindow) mainWindow.webContents.send('download-complete', data);
-            
-            // Tell the frontend to reload profiles so it shows up instantly without restarting
-            if (mainWindow) mainWindow.webContents.send('reload-profiles');
-          },
-          null
-        );
-        if (result.success) {
-          console.log(`[Background Update] Successfully installed ${version}.`);
-          isInstalled = true;
-        } else {
-          console.error(`[Background Update] Failed to install ${version}: ${result.message}`);
+      const profilesData = profileManager.loadProfiles();
+      const profiles = profilesData.profiles || {};
+
+      let existingProfileId = null;
+      for (const [id, prof] of Object.entries(profiles)) {
+        if (prof.name === profileName) {
+          existingProfileId = id;
+          break;
         }
-      } else {
-        console.log(`[Background Update] Version ${version} is already installed.`);
       }
 
-      // If installed (or newly installed), ensure profile exists
-      if (isInstalled) {
-        const profilesData = profileManager.loadProfiles();
-        const profiles = profilesData.profiles || {};
+      let versionChanged = false;
 
-        let existingProfileId = null;
-        for (const [id, prof] of Object.entries(profiles)) {
-          if (prof.name === profileName) {
-            existingProfileId = id;
-            break;
+      if (existingProfileId) {
+        // Update existing — always ensure directory, icon and version are correct
+        const existingProfile = profiles[existingProfileId];
+        const needsUpdate = existingProfile.version !== version || !existingProfile.directory;
+        if (needsUpdate) {
+          console.log(`[Background Update] Updating profile "${profileName}" to version ${version}.`);
+          versionChanged = true;
+          if (typeof profileManager.forceEditProfile === 'function') {
+            profileManager.forceEditProfile(existingProfileId, { version: version, icon: 'default.png', directory: mcDir });
+          } else {
+            profileManager.editProfile(existingProfileId, { version: version, icon: 'default.png', directory: mcDir });
           }
-        }
-
-        if (existingProfileId) {
-          // Update existing — always ensure directory, icon and version are correct
-          const existingProfile = profiles[existingProfileId];
-          const needsUpdate = existingProfile.version !== version || !existingProfile.directory;
-          if (needsUpdate) {
-            console.log(`[Background Update] Updating profile "${profileName}" to version ${version}.`);
-            if (typeof profileManager.forceEditProfile === 'function') {
-              profileManager.forceEditProfile(existingProfileId, { version: version, icon: 'default.png', directory: mcDir });
-            } else {
-              profileManager.editProfile(existingProfileId, { version: version, icon: 'default.png', directory: mcDir });
-            }
-            if (mainWindow) mainWindow.webContents.send('reload-profiles');
-          }
-        } else {
-          // Create new
-          console.log(`[Background Update] Creating profile "${profileName}" for version ${version}.`);
-          profileManager.addProfile(profileName, version, 'default.png', mcDir, '', null, true);
           if (mainWindow) mainWindow.webContents.send('reload-profiles');
         }
+      } else {
+        // Create new
+        console.log(`[Background Update] Creating profile "${profileName}" for version ${version}.`);
+        versionChanged = true;
+        profileManager.addProfile(profileName, version, 'default.png', mcDir, '', null, true);
+        if (mainWindow) mainWindow.webContents.send('reload-profiles');
+      }
+
+      if (versionChanged) {
+        console.log(`[Background Update] Version ${version} is now available. Sending notification...`);
+        new Notification({
+          title: 'Nueva versión de Minecraft',
+          body: `La versión ${version} (${profileName}) ya está disponible para jugar.`
+        }).show();
+        
+        if (mainWindow) {
+          mainWindow.webContents.send('show-in-app-notification', {
+            title: 'Nueva versión de Minecraft',
+            message: `La versión ${version} (${profileName}) ya está disponible para jugar.`,
+            duration: 10000
+          });
+        }
+      } else if (isInstalled) {
+        console.log(`[Background Update] Version ${version} is already installed.`);
       }
     };
 
@@ -859,6 +1704,13 @@ ipcMain.handle('login-microsoft', async () => {
     console.log("Inner profile name:", profileData.name);
 
     const userData = loadUserData()
+    
+    // If the user logs in with a DIFFERENT Microsoft account, clear the old social verification
+    if (userData.uuid && userData.uuid !== profileData.id) {
+        userData.firebase_ms_uid = "";
+        userData.firebase_ms_refresh_token = "";
+    }
+
     userData.account_type = "microsoft"
     userData.username = profileData.name
     userData.uuid = profileData.id
@@ -881,6 +1733,8 @@ ipcMain.handle('login-microsoft', async () => {
       mainWindow.webContents.send('login-success', safeProfile);
     }
     startMessagePolling();
+    presenceManager.safeRun(presenceManager.setLauncherOnline());
+    startPresencePolling();
 
     // Return plain object to renderer invoke as well
     return { success: true, profile: safeProfile }
@@ -903,29 +1757,22 @@ ipcMain.handle('login-helloworld', async (e, identifier, password) => {
     // 1. Resolve Email if username was provided
     if (!identifier.includes('@')) {
       console.log(`[HelloWorld Login] Resolving username: ${identifier}`);
-      const queryUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents:runQuery`;
-      const queryBody = {
-        structuredQuery: {
-          from: [{ collectionId: "users" }],
-          where: {
-            fieldFilter: {
-              field: { fieldPath: "username" },
-              op: "EQUAL",
-              value: { stringValue: identifier }
-            }
-          },
-          limit: 1
+      const queryUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/usernames/${encodeURIComponent(identifier.toLowerCase())}`;
+      
+      try {
+        const queryRes = await axios.get(queryUrl);
+        if (queryRes.data && queryRes.data.fields) {
+          email = queryRes.data.fields.email ? queryRes.data.fields.email.stringValue : null;
+          if (!email) throw new Error("Could not find email associated with this username.");
+          console.log(`[HelloWorld Login] Resolved to email: ${email}`);
+        } else {
+          throw new Error("Username not found. Please register first.");
         }
-      };
-
-      const queryRes = await axios.post(queryUrl, queryBody);
-      if (queryRes.data && queryRes.data[0] && queryRes.data[0].document) {
-        const fields = queryRes.data[0].document.fields;
-        email = fields.email ? fields.email.stringValue : null;
-        if (!email) throw new Error("Could not find email associated with this username.");
-        console.log(`[HelloWorld Login] Resolved to email: ${email}`);
-      } else {
-        throw new Error("Username not found. Please register first.");
+      } catch (err) {
+        if (err.response && err.response.status === 404) {
+          throw new Error("Username not found. Please register first.");
+        }
+        throw err;
       }
     }
 
@@ -943,7 +1790,7 @@ ipcMain.handle('login-helloworld', async (e, identifier, password) => {
     // 3. Fetch full User Profile from Firestore to get Skin/Variant
     const docUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/${localId}`;
     const docRes = await axios.get(docUrl);
-    
+
     let username = identifier.includes('@') ? (displayName || email.split('@')[0]) : identifier;
     let avatarUrl = "";
     let uuid = localId.replace(/-/g, ''); // Minecraft-compatible UUID usually (Firebase UID is different, but we use it as base)
@@ -953,7 +1800,7 @@ ipcMain.handle('login-helloworld', async (e, identifier, password) => {
       if (f.username) username = f.username.stringValue;
       if (f.uuid) uuid = f.uuid.stringValue;
       if (f.avatarBase64) {
-          avatarUrl = f.avatarBase64.stringValue || "";
+        avatarUrl = f.avatarBase64.stringValue || "";
       }
     }
 
@@ -968,7 +1815,7 @@ ipcMain.handle('login-helloworld', async (e, identifier, password) => {
     userData.firebase_uid = localId;
     userData.firebase_refresh_token = authRes.data.refreshToken;
     userData.firebase_id_token = idToken;
-    
+
     // Clear out old skin/cape data
     userData.last_skin_url = "";
     userData.last_skin_variant = "classic";
@@ -999,12 +1846,14 @@ ipcMain.handle('login-helloworld', async (e, identifier, password) => {
     }
 
     startMessagePolling();
+    presenceManager.safeRun(presenceManager.setLauncherOnline());
+    startPresencePolling();
 
     return { success: true, profile: safeProfile };
   } catch (err) {
     console.error("[HelloWorld Login] Error:", err.response ? JSON.stringify(err.response.data) : err.message);
     let errorMessage = "Authentication failed.";
-    
+
     if (err.response && err.response.data && err.response.data.error) {
       const code = err.response.data.error.message;
       if (code === "INVALID_PASSWORD") errorMessage = "Incorrect password.";
@@ -1021,6 +1870,8 @@ ipcMain.handle('login-helloworld', async (e, identifier, password) => {
 
 ipcMain.handle('logout', async () => {
   stopMessagePolling();
+  stopPresencePolling();
+  presenceManager.safeRun(presenceManager.setOffline());
   const data = loadUserData()
 
   // Clear persistent auth data
@@ -1035,10 +1886,13 @@ ipcMain.handle('logout', async () => {
   data.firebase_uid = "";
   data.firebase_refresh_token = "";
   data.firebase_id_token = "";
-  // Keep firebase_ms_uid and firebase_ms_refresh_token for persistence across sessions
-  // Verification is a one-time process
+  data.firebase_ms_uid = "";
+  data.firebase_ms_refresh_token = "";
 
   saveUserData(data)
+  presenceManager.currentState = null;
+  presenceManager.gameContext = null;
+  presenceManager.stopHeartbeat();
   return data
 })
 
@@ -1165,7 +2019,7 @@ ipcMain.handle('install-addon', async (e, args) => {
       const targetFile = path.join(targetDir, filename);
       if (fs.existsSync(targetFile)) {
         console.log('[install-addon] File already exists, skipping download:', filename);
-        
+
         // Update profile JSON addons metadata anyway to ensure it's tracked
         if (project_id && version_id) {
           profile.addons = profile.addons || [];
@@ -1173,7 +2027,7 @@ ipcMain.handle('install-addon', async (e, args) => {
           profile.addons.push({ project_id, version_id, filename, type, state: 'enabled' });
           profileManager.saveProfiles(profilesData);
         }
-        
+
         return { success: true, alreadyInstalled: true };
       }
 
@@ -1234,7 +2088,7 @@ ipcMain.handle('get-installed-addons', async (e, { profile_id, type, world_name 
   }
 
   const result = await modManager.getInstalledAddons(targetDir, type);
-  
+
   // Create a map of existing files for quick lookup
   const existingFilesMap = new Map();
   if (result.success) {
@@ -1242,14 +2096,14 @@ ipcMain.handle('get-installed-addons', async (e, { profile_id, type, world_name 
       existingFilesMap.set(mod.filename, mod);
     });
   }
-  
+
   // Merge profile metadata with local files and add missing addons
   const finalMods = result.success ? result.mods : [];
-  
+
   if (profile.addons) {
     profile.addons.forEach(addon => {
       if (addon.type !== type) return;
-      
+
       const existingMod = existingFilesMap.get(addon.filename);
       if (existingMod) {
         // File exists, merge metadata
@@ -1272,7 +2126,7 @@ ipcMain.handle('get-installed-addons', async (e, { profile_id, type, world_name 
       }
     });
   }
-  
+
   return { success: true, mods: finalMods };
 })
 
@@ -1292,14 +2146,14 @@ ipcMain.handle('toggle-addon', async (e, { filename, profile_id, type, world_nam
 
   // Find the addon in profile metadata
   const addonIndex = profile.addons ? profile.addons.findIndex(a => a.filename === filename && a.type === type) : -1;
-  
+
   if (addonIndex === -1) {
     // If not in metadata, just rename the file on disk
     const actualFilename = enabled ? filename + '.disabled' : filename;
     const targetFilename = enabled ? filename : filename + '.disabled';
     const oldPath = path.join(targetDir, actualFilename);
     const newPath = path.join(targetDir, targetFilename);
-    
+
     if (fs.existsSync(oldPath)) {
       await fs.rename(oldPath, newPath);
       return { success: true, new_name: targetFilename };
@@ -1311,17 +2165,17 @@ ipcMain.handle('toggle-addon', async (e, { filename, profile_id, type, world_nam
   const addon = profile.addons[addonIndex];
   const currentFilename = addon.filename;
   const currentState = addon.state || 'enabled';
-  
+
   // Determine target state based on enabled parameter
   // enabled=true means we want to ENABLE the addon
   // enabled=false means we want to DISABLE the addon
   const targetState = enabled ? 'enabled' : 'disabled';
-  
+
   // If already in target state, do nothing
   if (currentState === targetState) {
     return { success: true, new_name: currentFilename };
   }
-  
+
   // Determine new filename based on target state
   let newFilename;
   if (targetState === 'enabled') {
@@ -1331,20 +2185,20 @@ ipcMain.handle('toggle-addon', async (e, { filename, profile_id, type, world_nam
     // Add .disabled suffix only if not already present
     newFilename = currentFilename.endsWith('.disabled') ? currentFilename : currentFilename + '.disabled';
   }
-  
+
   // Rename the file on disk
   const oldPath = path.join(targetDir, currentFilename);
   const newPath = path.join(targetDir, newFilename);
-  
+
   if (fs.existsSync(oldPath)) {
     await fs.rename(oldPath, newPath);
   }
-  
+
   // Update metadata
   profile.addons[addonIndex].filename = newFilename;
   profile.addons[addonIndex].state = targetState;
   profileManager.saveProfiles(profilesData);
-  
+
   return { success: true, new_name: newFilename };
 })
 
@@ -1383,15 +2237,15 @@ ipcMain.handle('delete-addon', async (e, { filename, profile_id, type, world_nam
   // Find the addon in metadata to get the actual filename (with or without .disabled)
   const addon = profile.addons ? profile.addons.find(a => a.filename === filename && a.type === type) : null;
   const actualFilename = addon ? addon.filename : filename;
-  
+
   const result = await modManager.deleteAddon(actualFilename, targetDir);
-  
+
   // Remove from profile metadata
   if (result.success && profile.addons) {
     profile.addons = profile.addons.filter(a => !(a.filename === actualFilename && a.type === type));
     profileManager.saveProfiles(profilesData);
   }
-  
+
   return result;
 })
 
@@ -1561,14 +2415,9 @@ ipcMain.handle('refresh-session', async () => {
 
 // --- Legacy Handlers ---
 ipcMain.handle('close-app', async () => {
-    try {
-        const auth = await getSocialAuth();
-        if (auth && auth.uid) {
-            await fsSet(`users/${auth.uid}`, { presence: { state: 'Offline' } }, auth.idToken, ['presence']);
-        }
-    } catch(e) {}
-    app.quit();
-});
+  await presenceManager.setOffline();
+  app.quit();
+})
 ipcMain.handle('get-version', () => app.getVersion())
 ipcMain.handle('check-internet', async () => {
   try {
@@ -1947,7 +2796,7 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
     // Initialize download tracking
     const downloadInfo = {
       launcher: null,
-      gameProcess: null ,
+      gameProcess: null,
       cancelled: false
     };
     activeDownloads.set(version_id, downloadInfo);
@@ -2087,7 +2936,7 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       if (progress.type === 'assets') taskDescription = 'Downloading assets...';
       else if (progress.type === 'classes') taskDescription = 'Downloading libraries...';
       else if (progress.type === 'natives') taskDescription = 'Downloading natives...';
-      
+
       if (progress.type === 'assets') {
         if (progress.task === 0) downloadAssetProgressLogged = false;
         if (!downloadAssetProgressLogged) {
@@ -2111,7 +2960,7 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
     });
 
     downloadLauncher.on('debug', (msg) => console.log('[Download Debug]', msg));
-    downloadLauncher.on('data',  (msg) => console.log('[Download Data]', msg));
+    downloadLauncher.on('data', (msg) => console.log('[Download Data]', msg));
     downloadLauncher.on('download-status', (e) => {
       if (e.type === 'error') {
         console.error('[Download Error]', e);
@@ -2180,7 +3029,7 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
 
     if (downloadInfo.cancelled) {
       if (gameProcess && gameProcess.pid) {
-        try { process.kill(gameProcess.pid, 'SIGKILL'); } catch (err) {}
+        try { process.kill(gameProcess.pid, 'SIGKILL'); } catch (err) { }
       }
       activeDownloads.delete(version_id);
       if (onDownloadCancelled) onDownloadCancelled({ version: version_id });
@@ -2242,7 +3091,7 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
           console.log(`[Forge Installer] Exited with code ${code}`);
           if (downloadInfo.cancelled) { resolve(); return; }
           if (code === 0) {
-            try { fs.removeSync(path.dirname(forgeInstallerPath)); } catch(e){} // Cleanup temp folder
+            try { fs.removeSync(path.dirname(forgeInstallerPath)); } catch (e) { } // Cleanup temp folder
             resolve();
           } else {
             reject(new Error(`Forge installer failed with exit code ${code}`));
@@ -2481,7 +3330,7 @@ ipcMain.handle('get-user-capes', async () => {
         }
       }
     }
-    
+
     // For HelloWorld accounts, fetch from Firestore
     if (userData.account_type === 'helloworld') {
       const auth = await getSocialAuth();
@@ -2496,7 +3345,7 @@ ipcMain.handle('get-user-capes', async () => {
         }
       }
     }
-    
+
     return { success: true, capes: [] };
   } catch (e) {
     console.error("Error getting user capes:", e);
@@ -2517,10 +3366,10 @@ ipcMain.handle('get-skin-packs', async () => {
 ipcMain.handle('create-skin-pack', async (e, data) => {
   try {
     const res = await skinManager.createSkinPack(
-      data.name, 
-      data.skin_base64, 
-      data.skin_model, 
-      data.cape_id, 
+      data.name,
+      data.skin_base64,
+      data.skin_model,
+      data.cape_id,
       data.cape_base64,
       data.cape_alias
     );
@@ -2533,11 +3382,11 @@ ipcMain.handle('create-skin-pack', async (e, data) => {
 ipcMain.handle('edit-skin-pack', async (e, data) => {
   try {
     const res = await skinManager.editSkinPack(
-      data.pack_id, 
-      data.name, 
-      data.skin_base64, 
-      data.skin_model, 
-      data.cape_id, 
+      data.pack_id,
+      data.name,
+      data.skin_base64,
+      data.skin_model,
+      data.cape_id,
       data.cape_base64,
       data.cape_alias
     );
@@ -2567,33 +3416,33 @@ ipcMain.handle('activate-skin-pack', async (e, id) => {
         token = refreshResult.access_token;
       }
     }
-    
+
     const res = await skinManager.activateSkinPack(id, token);
-    
+
     // Also update UI representation if we're a helloworld user 
     // or if we just want to update local cache
     if (res.success) {
-       const packData = skinManager.getSkinPacks().packs[id];
-       if (packData) {
-         const newData = loadUserData();
-         newData.last_skin_url = packData.skin_preview;
-         newData.last_skin_variant = packData.skin_model;
-         newData.last_cape_url = packData.cape_preview;
-         saveUserData(newData);
-         
-         // Notify UI
-         if (mainWindow) {
-           mainWindow.webContents.send('login-success', {
-             name: newData.username,
-             id: newData.uuid,
-             avatar_url: newData.last_avatar_url,
-             skin: [],
-             cape: []
-           });
-         }
-       }
+      const packData = skinManager.getSkinPacks().packs[id];
+      if (packData) {
+        const newData = loadUserData();
+        newData.last_skin_url = packData.skin_preview;
+        newData.last_skin_variant = packData.skin_model;
+        newData.last_cape_url = packData.cape_preview;
+        saveUserData(newData);
+
+        // Notify UI
+        if (mainWindow) {
+          mainWindow.webContents.send('login-success', {
+            name: newData.username,
+            id: newData.uuid,
+            avatar_url: newData.last_avatar_url,
+            skin: [],
+            cape: []
+          });
+        }
+      }
     }
-    
+
     return res;
   } catch (e) {
     return { success: false, error: e.message };
@@ -2628,11 +3477,12 @@ ipcMain.handle('save-version-settings', async (e, showSnapshots, showOld) => {
   return { success: true };
 })
 
-ipcMain.handle('save-app-settings', async (e, enableTransitions, hwAccel) => {
+ipcMain.handle('save-app-settings', async (e, enableTransitions, hwAccel, privacyMode) => {
   const data = loadUserData();
   // hwAccel needs restart, enableTransitions is instant
   data.enable_transitions = enableTransitions !== false;
   data.hw_accel = hwAccel !== false;
+  data.privacy_mode = privacyMode === true;
   saveUserData(data);
   return { success: true };
 })
@@ -2729,125 +3579,104 @@ ipcMain.handle('ms-write-verified', async (e, emailKey, email, username, uuid, f
   }
 })
 
-ipcMain.handle('ms-verify-web', async () => {
-  try {
-    const userData = loadUserData();
-    if (userData.account_type !== 'microsoft') return { success: false, error: 'Not a Microsoft account' };
-    const socialAuth = await getSocialAuth();
-    const verifyToken = require('crypto').randomBytes(20).toString('hex');
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
-    await fsSet(`pendingMsVerify/${verifyToken}`, {
-      username: userData.username,
-      uuid: userData.uuid,
-      expiresAt,
-      used: false
-    }, socialAuth.idToken);
-    const verifyUrl = `https://hwlauncher.abelosky.com/?verify-token=${verifyToken}`;
-    shell.openExternal(verifyUrl);
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-})
-
 /**
  * Helper to refresh Microsoft Session and return valid auth tokens
  */
 async function refreshMicrosoftSession(userData) {
-    if (userData.account_type !== 'microsoft' || !userData.msmc_auth) {
-        return { 
-            success: false,
-            access_token: "null", 
-            client_token: "null", 
-            uuid: "null", 
-            name: userData.username || "Steve" 
-        };
+  if (userData.account_type !== 'microsoft' || !userData.msmc_auth) {
+    return {
+      success: false,
+      access_token: "null",
+      client_token: "null",
+      uuid: "null",
+      name: userData.username || "Steve"
+    };
+  }
+
+  try {
+    console.log("[Auth] Auto-refreshing Microsoft session...");
+    const authManager = new msmc.Auth("select_account");
+    const xboxManager = await authManager.refresh(userData.msmc_auth);
+    const mcObj = await xboxManager.getMinecraft();
+
+    if (mcObj && mcObj.profile) {
+      userData.username = mcObj.profile.name;
+      userData.uuid = mcObj.profile.id;
+      userData.mc_token = mcObj.mcToken;
+      userData.msmc_auth = xboxManager.save();
+
+      // Save skin URL if available
+      if (mcObj.profile.skins && mcObj.profile.skins.length > 0) {
+        userData.last_skin_url = mcObj.profile.skins[0].url;
+        userData.last_skin_variant = mcObj.profile.skins[0].variant || 'classic';
+      }
+
+      saveUserData(userData);
+      console.log("[Auth] Token successfully refreshed!");
+
+      return {
+        success: true,
+        access_token: userData.mc_token,
+        client_token: userData.uuid,
+        uuid: userData.uuid,
+        name: userData.username,
+        profile: mcObj.profile
+      };
+    }
+    throw new Error("Installation not found after refresh");
+  } catch (err) {
+    console.warn("[Auth] Failed to auto-refresh token.", err.message);
+
+    // Detect Mojang/Xbox rate limiting (429) — never clear credentials for this
+    const isRateLimited = (err.response && err.response.status === 429) ||
+      (err.status === 429) ||
+      (err.ts && typeof err.ts === 'string' && err.ts.includes('error.auth'));
+    if (isRateLimited) {
+      console.warn("[Auth] Rate limited (429). Not clearing credentials.");
+      return {
+        success: false,
+        rateLimited: true,
+        access_token: userData.mc_token || "null",
+        client_token: userData.uuid || "null",
+        uuid: userData.uuid || "null",
+        name: userData.username || "Steve"
+      };
     }
 
-    try {
-        console.log("[Auth] Auto-refreshing Microsoft session...");
-        const authManager = new msmc.Auth("select_account");
-        const xboxManager = await authManager.refresh(userData.msmc_auth);
-        const mcObj = await xboxManager.getMinecraft();
+    // If it's a definitive auth error (not network), clear the tokens
+    const isAuthError = err.message && (
+      err.message.includes("invalid_grant") ||
+      err.message.includes("expired") ||
+      err.message.includes("Profile not found")
+    );
 
-        if (mcObj && mcObj.profile) {
-            userData.username = mcObj.profile.name;
-            userData.uuid = mcObj.profile.id;
-            userData.mc_token = mcObj.mcToken;
-            userData.msmc_auth = xboxManager.save();
-            
-            // Save skin URL if available
-            if (mcObj.profile.skins && mcObj.profile.skins.length > 0) {
-                userData.last_skin_url = mcObj.profile.skins[0].url;
-                userData.last_skin_variant = mcObj.profile.skins[0].variant || 'classic';
-            }
-            
-            saveUserData(userData);
-            console.log("[Auth] Token successfully refreshed!");
-            
-            return {
-                success: true,
-                access_token: userData.mc_token,
-                client_token: userData.uuid,
-                uuid: userData.uuid,
-                name: userData.username,
-                profile: mcObj.profile
-            };
-        }
-        throw new Error("Installation not found after refresh");
-    } catch (err) {
-        console.warn("[Auth] Failed to auto-refresh token.", err.message);
+    if (isAuthError) {
+      console.log("[Auth] Definitive auth failure. Clearing cached credentials.");
+      userData.mc_token = "";
+      userData.msmc_auth = "";
+      userData.uuid = "";
+      saveUserData(userData);
 
-        // Detect Mojang/Xbox rate limiting (429) — never clear credentials for this
-        const isRateLimited = (err.response && err.response.status === 429) ||
-            (err.status === 429) ||
-            (err.ts && typeof err.ts === 'string' && err.ts.includes('error.auth'));
-        if (isRateLimited) {
-            console.warn("[Auth] Rate limited (429). Not clearing credentials.");
-            return {
-                success: false,
-                rateLimited: true,
-                access_token: userData.mc_token || "null",
-                client_token: userData.uuid || "null",
-                uuid: userData.uuid || "null",
-                name: userData.username || "Steve"
-            };
-        }
-        
-        // If it's a definitive auth error (not network), clear the tokens
-        const isAuthError = err.message && (
-            err.message.includes("invalid_grant") || 
-            err.message.includes("expired") || 
-            err.message.includes("Profile not found")
-        );
-
-        if (isAuthError) {
-            console.log("[Auth] Definitive auth failure. Clearing cached credentials.");
-            userData.mc_token = "";
-            userData.msmc_auth = "";
-            userData.uuid = "";
-            saveUserData(userData);
-            
-            return {
-                success: false,
-                expired: true,
-                error: err.message,
-                access_token: "null",
-                client_token: "null",
-                uuid: "null",
-                name: userData.username || "Steve"
-            };
-        }
-
-        return {
-            success: false,
-            error: err.message,
-            access_token: userData.mc_token || "null",
-            client_token: userData.uuid || "null",
-            uuid: userData.uuid || "null",
-            name: userData.username || "Steve"
-        };
+      return {
+        success: false,
+        expired: true,
+        error: err.message,
+        access_token: "null",
+        client_token: "null",
+        uuid: "null",
+        name: userData.username || "Steve"
+      };
     }
+
+    return {
+      success: false,
+      error: err.message,
+      access_token: userData.mc_token || "null",
+      client_token: userData.uuid || "null",
+      uuid: userData.uuid || "null",
+      name: userData.username || "Steve"
+    };
+  }
 }
 
 let currentGameProcess = null;
@@ -2856,342 +3685,327 @@ let isLaunchCancelled = false;
 // Lock to prevent race conditions when updating profile metadata
 const profileUpdateLocks = new Map();
 
-ipcMain.handle('launch-profile', async (e, { profileId, nickname, force }) => {
-    console.log(`[Launch] launch-profile called with profileId: ${profileId}, force: ${force}`);
-    try {
-        isLaunchCancelled = false;
-        const profiles = profileManager.loadProfiles().profiles;
-        const profile = profiles[profileId];
-        if (!profile) return { status: 'error', error: "Profile not found" };
+ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverIp }) => {
+  console.log(`[Launch] launch-profile called with profileId: ${profileId}, force: ${force}, serverIp: ${serverIp || 'none'}`);
+  try {
+    isLaunchCancelled = false;
+    const profiles = profileManager.loadProfiles().profiles;
+    const profile = profiles[profileId];
+    if (!profile) return { status: 'error', error: "Profile not found" };
 
-        const isForge = profile.version.toLowerCase().includes('forge');
-        const isFabric = profile.version.toLowerCase().includes('fabric');
+    const isForge = profile.version.toLowerCase().includes('forge');
+    const isFabric = profile.version.toLowerCase().includes('fabric');
 
-        // Robust version extraction
-        let mcVersion = profile.version;
-        if (isFabric && profile.version.startsWith('fabric-loader-')) {
-            const parts = profile.version.split('-');
-            // Fabric format: fabric-loader-LOADER-MCVERSION
-            if (parts.length >= 4) mcVersion = parts[3];
-        } else if (isForge || isFabric) {
-            const versionMatch = profile.version.match(/(\d+\.\d+(\.\d+)?)/);
-            if (versionMatch) mcVersion = versionMatch[0];
-        }
-
-        const actualMcDir = paths.getMcDir();
-
-        // 0. Synchronization Check (Version + Addons)
-        let isMissingVersion = false;
-        let expectedVersionDirName = profile.version;
-        
-        // For Fabric, ensure we have the correct directory name format
-        if (isFabric) {
-            if (profile.version.startsWith('fabric-') && !profile.version.startsWith('fabric-loader-')) {
-                // Format: fabric-MCVERSION-LOADER -> transform to fabric-loader-LOADER-MCVERSION
-                const parts = profile.version.split('-');
-                if (parts.length >= 3) {
-                    expectedVersionDirName = `fabric-loader-${parts.slice(2).join('-')}-${parts[1]}`;
-                }
-            }
-            // fabric-loader-LOADER-MCVERSION format is already correct
-        }
-        
-        const versionPath = path.join(actualMcDir, 'versions', expectedVersionDirName);
-        console.log(`[Launch] Checking for version at: ${versionPath}`);
-        console.log(`[Launch] Expected dir name: ${expectedVersionDirName}, Profile version: ${profile.version}`);
-        
-        if (!fs.existsSync(versionPath)) {
-            isMissingVersion = true;
-            console.log(`[Launch] Version directory not found, marking as missing`);
-        }
-        
-        let missingAddons = [];
-        if (profile.addons && profile.addons.length > 0) {
-            const profileDir = profile.directory || actualMcDir;
-            for (const addon of profile.addons) {
-                // Skip disabled addons — they are intentionally off
-                if (addon.state === 'disabled') continue;
-                if (addon.type === 'datapack') continue; // Skip datapacks since they require world
-
-                let targetDir = path.join(profileDir, 'mods'); // default
-                if (addon.type === 'resourcepack') targetDir = path.join(profileDir, 'resourcepacks');
-                if (addon.type === 'shader') targetDir = path.join(profileDir, 'shaderpacks');
-                
-                const addonPath = path.join(targetDir, addon.filename);
-                // Also check for alternate filename (with/without .disabled)
-                const altFilename = addon.filename.endsWith('.disabled') 
-                    ? addon.filename.replace(/\.disabled$/, '') 
-                    : addon.filename + '.disabled';
-                const altPath = path.join(targetDir, altFilename);
-                
-                if (!fs.existsSync(addonPath) && !fs.existsSync(altPath)) {
-                    missingAddons.push(addon);
-                }
-            }
-        }
-        
-        if (isMissingVersion || missingAddons.length > 0) {
-            console.log(`[Launch] Missing files detected. isMissingVersion: ${isMissingVersion}, missingAddons: ${missingAddons.length}`);
-            return {
-                status: 'missing_files',
-                missing_version: isMissingVersion,
-                version_id: profile.version,
-                missing_addons: missingAddons
-            };
-        }
-
-        const userData = loadUserData();
-
-        // 1. Prepare Auth
-        let auth;
-        if (userData.account_type === 'helloworld') {
-            const sessionToken = crypto.randomBytes(16).toString('hex');
-            const resolvedUuid = ensureHelloWorldUuid(userData.username, userData.uuid);
-            userData.uuid = resolvedUuid;
-            saveUserData(userData);
-            
-            auth = {
-                success: true,
-                access_token: sessionToken,
-                client_token: sessionToken,
-                uuid: resolvedUuid,
-                name: userData.username || "Steve"
-            };
-
-            console.log(`[Launch] HelloWorld auth: ${auth.name} (${auth.uuid})`);
-        } else {
-            auth = await refreshMicrosoftSession(userData);
-            if (userData.account_type === 'microsoft' && !auth.success && auth.expired) {
-                return { status: 'error', error: "Your session has expired. Please log in again." };
-            }
-        }
-
-        if (userData.account_type === 'offline') {
-            if (nickname) auth.name = nickname;
-            // Generate a deterministic UUID from the player name so authlib-injector
-            // can look up skins consistently for offline players
-            const playerName = auth.name || nickname || "Steve";
-            const nameHash = crypto.createHash('md5').update(`OfflinePlayer:${playerName}`).digest('hex');
-            auth.uuid = nameHash;
-            auth.access_token = crypto.randomBytes(16).toString('hex');
-            auth.client_token = auth.access_token;
-        }
-
-        // 2. Prepare Launch Options
-        const options = {
-            authorization: {
-                access_token: auth.access_token,
-                client_token: auth.client_token,
-                uuid: auth.uuid,
-                name: auth.name,
-                user_properties: JSON.stringify({})
-            },
-            root: actualMcDir,
-            version: {
-                number: mcVersion,
-                // MCLC requires type='release' for base MC version resolution.
-                // Forge/Fabric specifics are handled via options.forge and options.version.custom.
-                type: 'release'
-            },
-            overrides: {
-                gameDirectory: profile.directory || actualMcDir,
-                maxSockets: 4
-            },
-            memory: {
-                max: "4G",
-                min: "1G"
-            }
-        };
-
-        if (isForge) {
-            options.version.custom = profile.version;
-        }
-        if (isFabric) {
-            options.version.custom = expectedVersionDirName;
-        }
-
-        // 2.1. Fabric: Verify & repair libraries before launch
-        if (isFabric && profile.version) {
-            try {
-                if (mainWindow) mainWindow.webContents.send('info-message', 'Verifying Fabric libraries...');
-                const libsOk = await downloadMissingFabricLibraries(actualMcDir, profile.version, null);
-                if (!libsOk) {
-                    console.warn('[Launch] Some Fabric libraries are still missing after repair attempt.');
-                    if (mainWindow) mainWindow.webContents.send('info-message', 'Warning: Some Fabric libraries may be missing.');
-                }
-            } catch (verifyErr) {
-                console.warn('[Launch] Fabric library verification failed:', verifyErr.message);
-            }
-        }
-
-        if (profile.jvm_args) {
-            const maxMatch = profile.jvm_args.match(/-Xmx(\d+[GgMm])/);
-            if (maxMatch) options.memory.max = maxMatch[1];
-            const minMatch = profile.jvm_args.match(/-Xms(\d+[GgMm])/);
-            if (minMatch) options.memory.min = minMatch[1];
-            
-            // Pass other JVM args if they exist
-            const otherArgs = profile.jvm_args.split(' ').filter(arg => !arg.startsWith('-Xmx') && !arg.startsWith('-Xms'));
-            if (!options.customArgs) options.customArgs = [];
-            if (otherArgs.length > 0) {
-                options.customArgs = [...options.customArgs, ...otherArgs];
-            }
-        }
-
-        // 2.5. Modern Java Fixes (Reflection access)
-        // Required for Minecraft 1.17+ (Java 16+). Old versions like 1.2.3 use Java 8 and crash with --add-opens.
-        const needsModernArgs = (() => {
-            const match = mcVersion.match(/(\d+)\.(\d+)(?:\.(\d+))?/);
-            if (!match) return false;
-            const major = parseInt(match[1]);
-            const minor = parseInt(match[2]);
-            return major > 1 || (major === 1 && minor >= 17);
-        })();
-        if (needsModernArgs) {
-            const modernJavaArgs = [
-                '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
-                '--add-opens', 'java.base/java.lang.invoke=ALL-UNNAMED',
-                '--add-opens', 'java.base/java.lang.reflect=ALL-UNNAMED',
-                '--add-opens', 'java.base/java.io=ALL-UNNAMED',
-                '--add-opens', 'java.base/java.net=ALL-UNNAMED',
-                '--add-opens', 'java.base/java.nio=ALL-UNNAMED',
-                '--add-opens', 'java.base/java.util=ALL-UNNAMED',
-                '--add-opens', 'java.base/java.util.concurrent=ALL-UNNAMED',
-                '--add-opens', 'java.base/java.util.concurrent.atomic=ALL-UNNAMED',
-                '--add-opens', 'java.base/sun.nio.ch=ALL-UNNAMED',
-                '--add-opens', 'java.base/sun.nio.cs=ALL-UNNAMED',
-                '--add-opens', 'java.base/sun.security.action=ALL-UNNAMED',
-                '--add-opens', 'java.base/sun.util.calendar=ALL-UNNAMED',
-                '--add-opens', 'java.security.jgss/sun.security.krb5=ALL-UNNAMED'
-            ];
-            if (!options.customArgs) options.customArgs = [];
-            options.customArgs = [...options.customArgs, ...modernJavaArgs];
-        }
-
-        // 3. Java Runtime
-        try {
-            // Priority: Profile Custom Java Path > Automatic Java Runtime
-            const jPath = profile.java_path || await javaRuntime.getJavaPath(mcVersion);
-            if (jPath && jPath !== 'java') {
-                options.javaPath = jPath;
-            }
-        } catch (javaErr) {
-            console.warn(`[Launch] Java resolution failed: ${javaErr.message}`);
-        }
-
-        // 4. Finalize & Launch
-        console.log(`[Launch] Starting Minecraft ${mcVersion} for ${auth.name}...`);
-        
-        // Update RPC
-        rpc.setPlaying(mcVersion, auth.name);
-
-        getSocialAuth().then(authSocial => {
-            if (authSocial && authSocial.uid) {
-                fsSet(`users/${authSocial.uid}`, { 
-                    presence: { state: 'Playing Minecraft', version: mcVersion, profileName: profile.name } 
-                }, authSocial.idToken, ['presence']).catch(console.error);
-            }
-        }).catch(() => {});
-
-        launcher.launch(options).then(child => {
-            if (isLaunchCancelled) {
-                console.log("[Launch] Launch cancelled while starting, killing immediately.");
-                try { process.kill(child.pid, 'SIGKILL'); } catch(e) {}
-                
-                getSocialAuth().then(authSocial => {
-                    if (authSocial && authSocial.uid) {
-                        fsSet(`users/${authSocial.uid}`, { 
-                            presence: { state: 'Online' } 
-                        }, authSocial.idToken, ['presence']).catch(console.error);
-                    }
-                }).catch(() => {});
-                return;
-            }
-            
-            currentGameProcess = child;
-
-            child.stdout?.on('data', (data) => {
-                const message = data.toString().trim();
-                if (!message) return;
-                console.log('[Game stdout]', message);
-                
-                // Try to detect server join from log messages
-                if (message.includes("Connecting to ")) {
-                    const match = message.match(/Connecting to ([a-zA-Z0-9.-]+)/);
-                    if (match && match[1]) {
-                        getSocialAuth().then(authSocial => {
-                            if (authSocial && authSocial.uid) {
-                                fsSet(`users/${authSocial.uid}`, { 
-                                    presence: { state: `Playing on ${match[1]}`, version: mcVersion, profileName: profile.name } 
-                                }, authSocial.idToken, ['presence']).catch(console.error);
-                            }
-                        }).catch(() => {});
-                    }
-                }
-                
-                if (mainWindow) mainWindow.webContents.send('info-message', `[Game stdout] ${message}`);
-            });
-
-            child.stderr?.on('data', (data) => {
-                const message = data.toString().trim();
-                if (!message) return;
-                console.error('[Game stderr]', message);
-                if (mainWindow) mainWindow.webContents.send('info-message', `[Game stderr] ${message}`);
-            });
-            
-            child.on('close', () => {
-                console.log("[Launch] Game process closed");
-                currentGameProcess = null;
-                rpc.setIdle();
-                
-                getSocialAuth().then(authSocial => {
-                    if (authSocial && authSocial.uid) {
-                        fsSet(`users/${authSocial.uid}`, { 
-                            presence: { state: 'Online' } 
-                        }, authSocial.idToken, ['presence']).catch(console.error);
-                    }
-                }).catch(() => {});
-                
-                if (mainWindow) mainWindow.webContents.send('info-message', "Game Closed");
-            });
-
-            child.on('error', (err) => {
-                console.error("[Launch] Process Error:", err);
-                if (mainWindow) mainWindow.webContents.send('error', "Process Error: " + err.message);
-            });
-        }).catch(err => {
-            console.error("[Launch] Launcher Error:", err);
-            rpc.setIdle();
-            if (mainWindow) mainWindow.webContents.send('error', "Launch Failed: " + err.message);
-        });
-
-        // 5. Update Metadata
-        try {
-            profile.last_played = new Date().toISOString();
-            profileManager.saveProfiles({ profiles });
-        } catch (e) {}
-
-        return { success: true };
-    } catch (e) {
-        console.error("[Launch] Critical Exception:", e);
-        return { success: false, error: e.message };
+    // Robust version extraction
+    let mcVersion = profile.version;
+    if (isFabric && profile.version.startsWith('fabric-loader-')) {
+      const parts = profile.version.split('-');
+      // Fabric format: fabric-loader-LOADER-MCVERSION
+      if (parts.length >= 4) mcVersion = parts[3];
+    } else if (isForge || isFabric) {
+      const versionMatch = profile.version.match(/(\d+\.\d+(\.\d+)?)/);
+      if (versionMatch) mcVersion = versionMatch[0];
     }
+
+    const actualMcDir = paths.getMcDir();
+
+    // 0. Synchronization Check (Version + Addons)
+    let isMissingVersion = false;
+    let expectedVersionDirName = profile.version;
+
+    // For Fabric, ensure we have the correct directory name format
+    if (isFabric) {
+      if (profile.version.startsWith('fabric-') && !profile.version.startsWith('fabric-loader-')) {
+        // Format: fabric-MCVERSION-LOADER -> transform to fabric-loader-LOADER-MCVERSION
+        const parts = profile.version.split('-');
+        if (parts.length >= 3) {
+          expectedVersionDirName = `fabric-loader-${parts.slice(2).join('-')}-${parts[1]}`;
+        }
+      }
+      // fabric-loader-LOADER-MCVERSION format is already correct
+    }
+
+    const versionPath = path.join(actualMcDir, 'versions', expectedVersionDirName);
+    console.log(`[Launch] Checking for version at: ${versionPath}`);
+    console.log(`[Launch] Expected dir name: ${expectedVersionDirName}, Profile version: ${profile.version}`);
+
+    if (!fs.existsSync(versionPath)) {
+      isMissingVersion = true;
+      console.log(`[Launch] Version directory not found, marking as missing`);
+    }
+
+    let missingAddons = [];
+    if (profile.addons && profile.addons.length > 0) {
+      const profileDir = profile.directory || actualMcDir;
+      for (const addon of profile.addons) {
+        // Skip disabled addons — they are intentionally off
+        if (addon.state === 'disabled') continue;
+        if (addon.type === 'datapack') continue; // Skip datapacks since they require world
+
+        let targetDir = path.join(profileDir, 'mods'); // default
+        if (addon.type === 'resourcepack') targetDir = path.join(profileDir, 'resourcepacks');
+        if (addon.type === 'shader') targetDir = path.join(profileDir, 'shaderpacks');
+
+        const addonPath = path.join(targetDir, addon.filename);
+        // Also check for alternate filename (with/without .disabled)
+        const altFilename = addon.filename.endsWith('.disabled')
+          ? addon.filename.replace(/\.disabled$/, '')
+          : addon.filename + '.disabled';
+        const altPath = path.join(targetDir, altFilename);
+
+        if (!fs.existsSync(addonPath) && !fs.existsSync(altPath)) {
+          missingAddons.push(addon);
+        }
+      }
+    }
+
+    if (isMissingVersion || missingAddons.length > 0) {
+      console.log(`[Launch] Missing files detected. isMissingVersion: ${isMissingVersion}, missingAddons: ${missingAddons.length}`);
+      return {
+        status: 'missing_files',
+        missing_version: isMissingVersion,
+        version_id: profile.version,
+        missing_addons: missingAddons
+      };
+    }
+
+    const userData = loadUserData();
+
+    // 1. Prepare Auth
+    let auth;
+    if (userData.account_type === 'helloworld') {
+      const sessionToken = crypto.randomBytes(16).toString('hex');
+      const resolvedUuid = ensureHelloWorldUuid(userData.username, userData.uuid);
+      userData.uuid = resolvedUuid;
+      saveUserData(userData);
+
+      auth = {
+        success: true,
+        access_token: sessionToken,
+        client_token: sessionToken,
+        uuid: resolvedUuid,
+        name: userData.username || "Steve"
+      };
+
+      console.log(`[Launch] HelloWorld auth: ${auth.name} (${auth.uuid})`);
+    } else {
+      auth = await refreshMicrosoftSession(userData);
+      if (userData.account_type === 'microsoft' && !auth.success && auth.expired) {
+        return { status: 'error', error: "Your session has expired. Please log in again." };
+      }
+      presenceManager.gameContext = null;
+    }
+
+    if (userData.account_type === 'offline') {
+      if (nickname) auth.name = nickname;
+      // Generate a deterministic UUID from the player name so authlib-injector
+      // can look up skins consistently for offline players
+      const playerName = auth.name || nickname || "Steve";
+      const nameHash = crypto.createHash('md5').update(`OfflinePlayer:${playerName}`).digest('hex');
+      auth.uuid = nameHash;
+      auth.access_token = crypto.randomBytes(16).toString('hex');
+      auth.client_token = auth.access_token;
+      presenceManager.gameContext = { versionLabel: formatPresenceVersionLabel(profile.version, mcVersion), profileName: profile.name, ign: playerName, worldName: null };
+    }
+
+    // 2. Prepare Launch Options
+    const presenceVersionLabel = formatPresenceVersionLabel(profile.version, mcVersion);
+
+    const options = {
+      authorization: {
+        access_token: auth.access_token,
+        client_token: auth.client_token,
+        uuid: auth.uuid,
+        name: auth.name,
+        user_properties: JSON.stringify({})
+      },
+      root: actualMcDir,
+      version: {
+        number: mcVersion,
+        // MCLC requires type='release' for base MC version resolution.
+        // Forge/Fabric specifics are handled via options.forge and options.version.custom.
+        type: 'release'
+      },
+      overrides: {
+        gameDirectory: profile.directory || actualMcDir,
+        maxSockets: 4
+      },
+      memory: {
+        max: "4G",
+        min: "1G"
+      }
+    };
+
+    if (isForge) {
+      options.version.custom = profile.version;
+    }
+    if (isFabric) {
+      options.version.custom = expectedVersionDirName;
+    }
+
+    // 2.1. Fabric: Verify & repair libraries before launch
+    if (isFabric && profile.version) {
+      try {
+        if (mainWindow) mainWindow.webContents.send('info-message', 'Verifying Fabric libraries...');
+        const libsOk = await downloadMissingFabricLibraries(actualMcDir, profile.version, null);
+        if (!libsOk) {
+          console.warn('[Launch] Some Fabric libraries are still missing after repair attempt.');
+          if (mainWindow) mainWindow.webContents.send('info-message', 'Warning: Some Fabric libraries may be missing.');
+        }
+      } catch (verifyErr) {
+        console.warn('[Launch] Fabric library verification failed:', verifyErr.message);
+      }
+    }
+
+    if (profile.jvm_args) {
+      const maxMatch = profile.jvm_args.match(/-Xmx(\d+[GgMm])/);
+      if (maxMatch) options.memory.max = maxMatch[1];
+      const minMatch = profile.jvm_args.match(/-Xms(\d+[GgMm])/);
+      if (minMatch) options.memory.min = minMatch[1];
+
+      // Pass other JVM args if they exist
+      const otherArgs = profile.jvm_args.split(' ').filter(arg => !arg.startsWith('-Xmx') && !arg.startsWith('-Xms'));
+      if (!options.customArgs) options.customArgs = [];
+      if (otherArgs.length > 0) {
+        options.customArgs = [...options.customArgs, ...otherArgs];
+      }
+    }
+
+    // 2.5. Modern Java Fixes (Reflection access)
+    // Required for Minecraft 1.17+ (Java 16+). Old versions like 1.2.3 use Java 8 and crash with --add-opens.
+    const needsModernArgs = (() => {
+      const match = mcVersion.match(/(\d+)\.(\d+)(?:\.(\d+))?/);
+      if (!match) return false;
+      const major = parseInt(match[1]);
+      const minor = parseInt(match[2]);
+      return major > 1 || (major === 1 && minor >= 17);
+    })();
+    if (needsModernArgs) {
+      const modernJavaArgs = [
+        '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
+        '--add-opens', 'java.base/java.lang.invoke=ALL-UNNAMED',
+        '--add-opens', 'java.base/java.lang.reflect=ALL-UNNAMED',
+        '--add-opens', 'java.base/java.io=ALL-UNNAMED',
+        '--add-opens', 'java.base/java.net=ALL-UNNAMED',
+        '--add-opens', 'java.base/java.nio=ALL-UNNAMED',
+        '--add-opens', 'java.base/java.util=ALL-UNNAMED',
+        '--add-opens', 'java.base/java.util.concurrent=ALL-UNNAMED',
+        '--add-opens', 'java.base/java.util.concurrent.atomic=ALL-UNNAMED',
+        '--add-opens', 'java.base/sun.nio.ch=ALL-UNNAMED',
+        '--add-opens', 'java.base/sun.nio.cs=ALL-UNNAMED',
+        '--add-opens', 'java.base/sun.security.action=ALL-UNNAMED',
+        '--add-opens', 'java.base/sun.util.calendar=ALL-UNNAMED',
+        '--add-opens', 'java.security.jgss/sun.security.krb5=ALL-UNNAMED'
+      ];
+      if (!options.customArgs) options.customArgs = [];
+      options.customArgs = [...options.customArgs, ...modernJavaArgs];
+    }
+
+    // Add server connection arguments if serverIp is provided
+    if (serverIp) {
+      // Use quickPlay type "legacy" to pass --server <ip> --port <port> to the game arguments
+      options.quickPlay = {
+        type: "legacy",
+        identifier: serverIp
+      };
+      console.log(`[Launch] Auto-connecting to server: ${serverIp}`);
+    }
+
+    // 3. Java Runtime
+    try {
+      // Priority: Profile Custom Java Path > Automatic Java Runtime
+      const jPath = profile.java_path || await javaRuntime.getJavaPath(mcVersion);
+      if (jPath && jPath !== 'java') {
+        options.javaPath = jPath;
+      }
+    } catch (javaErr) {
+      console.warn(`[Launch] Java resolution failed: ${javaErr.message}`);
+    }
+
+    // 4. Finalize & Launch
+    console.log(`[Launch] Starting Minecraft ${mcVersion} for ${auth.name}...`);
+
+    launcher.launch(options).then(child => {
+      if (isLaunchCancelled) {
+        console.log("[Launch] Launch cancelled while starting, killing immediately.");
+        try { process.kill(child.pid, 'SIGKILL'); } catch (e) { }
+        return;
+      }
+
+      gameStartTime = Date.now();
+      updateStreakAndSessions();
+
+      currentGameProcess = child;
+
+      // Update Presence / RPC state with PID
+      presenceManager.safeRun(presenceManager.onGameLaunch({
+        versionLabel: presenceVersionLabel,
+        profileName: profile.name,
+        ign: auth.name,
+        pid: child.pid
+      }));
+
+      child.stdout?.on('data', (data) => {
+        const message = data.toString().trim();
+        if (!message) return;
+        console.log('[Game stdout]', message);
+        presenceManager.handleGameLog(message);
+        if (mainWindow) mainWindow.webContents.send('info-message', `[Game stdout] ${message}`);
+      });
+
+      child.stderr?.on('data', (data) => {
+        const message = data.toString().trim();
+        if (!message) return;
+        console.error('[Game stderr]', message);
+        presenceManager.handleGameLog(message);
+        if (mainWindow) mainWindow.webContents.send('info-message', `[Game stderr] ${message}`);
+      });
+
+      child.on('close', () => {
+        console.log("[Launch] Game process closed");
+        currentGameProcess = null;
+        presenceManager.safeRun(presenceManager.onGameClosed());
+        if (mainWindow) mainWindow.webContents.send('info-message', "Game Closed");
+      });
+
+      child.on('error', (err) => {
+        console.error("[Launch] Process Error:", err);
+        presenceManager.safeRun(presenceManager.onGameClosed());
+        if (mainWindow) mainWindow.webContents.send('error', "Process Error: " + err.message);
+      });
+    }).catch(err => {
+      console.error("[Launch] Launcher Error:", err);
+      presenceManager.safeRun(presenceManager.onGameClosed());
+      if (mainWindow) mainWindow.webContents.send('error', "Launch Failed: " + err.message);
+    });
+
+    // 5. Update Metadata
+    try {
+      profile.last_played = new Date().toISOString();
+      profileManager.saveProfiles({ profiles });
+    } catch (e) { }
+
+    return { success: true };
+  } catch (e) {
+    console.error("[Launch] Critical Exception:", e);
+    return { success: false, error: e.message };
+  }
 })
 
 ipcMain.handle('cancel-launch', async () => {
-    try {
-        isLaunchCancelled = true;
-        if (currentGameProcess && currentGameProcess.pid) {
-            process.kill(currentGameProcess.pid, 'SIGKILL');
-            console.log('[cancel-launch] Killed game process');
-            currentGameProcess = null;
-            return { success: true };
-        }
-        return { success: true, message: 'Launch marked as cancelled (pending process kill)' };
-    } catch(e) {
-        console.error('[cancel-launch] Error killing:', e);
-        return { success: false, error: e.message };
+  try {
+    isLaunchCancelled = true;
+    if (currentGameProcess && currentGameProcess.pid) {
+      process.kill(currentGameProcess.pid, 'SIGKILL');
+      console.log('[cancel-launch] Killed game process');
+      currentGameProcess = null;
+      return { success: true };
     }
+    return { success: true, message: 'Launch marked as cancelled (pending process kill)' };
+  } catch (e) {
+    console.error('[cancel-launch] Error killing:', e);
+    return { success: false, error: e.message };
+  }
 })
 
 ipcMain.handle('open-folder-dialog', async () => {
@@ -3208,12 +4022,8 @@ ipcMain.handle('open-folder-dialog', async () => {
 ipcMain.handle('social-get-auth', async () => {
   try {
     const auth = await getSocialAuth();
-    // Whenever auth check happens, assume launcher is open -> Online
-    if (auth.uid) {
-        fsSet(`users/${auth.uid}`, {
-            presence: { state: 'Online' }
-        }, auth.idToken, ['presence']).catch(e => console.error("Failed to update presence to Online on get-auth", e));
-    }
+    presenceManager.safeRun(presenceManager.setLauncherOnline());
+    startPresencePolling();
     return { success: true, uid: auth.uid, accountType: auth.accountType, username: auth.username };
   } catch (e) {
     if (e.message === 'NO_SOCIAL_AUTH') return { success: false, error: 'offline' };
@@ -3221,14 +4031,26 @@ ipcMain.handle('social-get-auth', async () => {
   }
 });
 
-ipcMain.handle('social-update-presence', async (e, presenceData) => {
-    try {
-        const auth = await getSocialAuth();
-        await fsSet(`users/${auth.uid}`, { presence: presenceData }, auth.idToken, ['presence']);
-        return { success: true };
-    } catch (e) {
-        return { success: false, error: e.message };
-    }
+ipcMain.handle('stats-get-my-stats', async () => {
+  try {
+    const auth = await getSocialAuth();
+    const stats = await fsGet(`users/${auth.uid}/stats/main`, auth.idToken);
+    return { success: true, stats };
+  } catch (e) {
+    if (e.message === 'NO_SOCIAL_AUTH') return { success: false, error: 'offline' };
+    return { success: true, stats: { streak: 0, totalHours: 0, totalSessions: 0, totalDaysPlayed: 0 } };
+  }
+});
+
+ipcMain.handle('stats-get-user', async (e, targetUid) => {
+  try {
+    const auth = await getSocialAuth();
+    const stats = await fsGet(`users/${targetUid}/stats/main`, auth.idToken);
+    return { success: true, stats };
+  } catch (e) {
+    if (e.message === 'NO_SOCIAL_AUTH') return { success: false, error: 'offline' };
+    return { success: true, stats: { streak: 0, totalHours: 0, totalSessions: 0, totalDaysPlayed: 0 } };
+  }
 });
 
 ipcMain.handle('social-search-user', async (e, query) => {
@@ -3267,23 +4089,23 @@ ipcMain.handle('social-send-request', async (e, toUid) => {
     try {
       await fsGet(`blocks/${toUid}__${auth.uid}`, auth.idToken);
       return { success: false, error: 'user_not_found' };
-    } catch (_) {}
+    } catch (_) { }
 
     // Check existing friendship
     const fid = friendshipId(auth.uid, toUid);
-    try { await fsGet(`friendships/${fid}`, auth.idToken); return { success: false, error: 'already_friends' }; } catch (_) {}
+    try { await fsGet(`friendships/${fid}`, auth.idToken); return { success: false, error: 'already_friends' }; } catch (_) { }
 
     // Check if we already sent a request — direct GET of known doc ID
     try {
       const sent = await fsGet(`friendRequests/${auth.uid}__${toUid}`, auth.idToken);
       if (sent.status === 'pending') return { success: false, error: 'request_already_sent' };
-    } catch (_) {}
+    } catch (_) { }
 
     // Check if they already sent us a request — direct GET of known doc ID
     try {
       const received = await fsGet(`friendRequests/${toUid}__${auth.uid}`, auth.idToken);
       if (received.status === 'pending') return { success: false, error: 'request_already_received' };
-    } catch (_) {}
+    } catch (_) { }
 
     const reqId = `${auth.uid}__${toUid}`;
     await fsSet(`friendRequests/${reqId}`, {
@@ -3375,14 +4197,14 @@ ipcMain.handle('social-get-friends', async () => {
       try {
         const msgs = await fsQuerySub(`friendships/${fs.id}`, 'messages', [], auth.idToken, 'timestamp', 1);
         if (msgs.length > 0) lastMsg = msgs[0];
-      } catch (_) {}
+      } catch (_) { }
 
       // Unread count
       let unread = 0;
       try {
         const unreadDoc = await fsGet(`friendships/${fs.id}/unread/${auth.uid}`, auth.idToken);
         unread = unreadDoc.count || 0;
-      } catch (_) {}
+      } catch (_) { }
 
       if (fs.isGroup) {
         return {
@@ -3396,9 +4218,18 @@ ipcMain.handle('social-get-friends', async () => {
       const friendUid = (fs.users || []).find(u => u !== auth.uid);
       if (!friendUid) return null;
       let profile = { uid: friendUid, username: 'Unknown', accountType: 'helloworld' };
-      try { profile = await fsGet(`users/${friendUid}`, auth.idToken); } catch (_) {}
+      try { profile = await fsGet(`users/${friendUid}`, auth.idToken); } catch (_) { }
 
-      return { friendshipId: fs.id, profile: { ...profile, uid: friendUid }, lastMsg, unread, lastMessageAt: fs.lastMessageAt };
+      const presence = await fetchPresenceForUser(friendUid, auth);
+
+      return {
+        friendshipId: fs.id,
+        profile: { ...profile, uid: friendUid },
+        presence,
+        lastMsg,
+        unread,
+        lastMessageAt: fs.lastMessageAt
+      };
     }));
 
     const sorted = friends.filter(Boolean).sort((a, b) => {
@@ -3458,7 +4289,7 @@ ipcMain.handle('social-remove-friend', async (e, targetFriendshipId) => {
   try {
     const auth = await getSocialAuth();
     const doc = await fsGet(`friendships/${targetFriendshipId}`, auth.idToken);
-    
+
     if (doc.isGroup) {
       // Leave group
       const newUsers = (doc.users || []).filter(u => u !== auth.uid);
@@ -3499,13 +4330,13 @@ ipcMain.handle('social-block-user', async (e, targetUid, sourceFriendshipId) => 
     const blockId = `${auth.uid}__${targetUid}`;
     await fsSet(`blocks/${blockId}`, { blockerUid: auth.uid, blockedUid: targetUid, createdAt: new Date().toISOString() }, auth.idToken);
     if (sourceFriendshipId) {
-      try { await deleteFriendshipCompletely(sourceFriendshipId, auth.idToken); } catch (_) {}
+      try { await deleteFriendshipCompletely(sourceFriendshipId, auth.idToken); } catch (_) { }
     }
     // Cancel any pending requests between the two
     const reqId1 = `${auth.uid}__${targetUid}`;
     const reqId2 = `${targetUid}__${auth.uid}`;
-    try { await fsDel(`friendRequests/${reqId1}`, auth.idToken); } catch (_) {}
-    try { await fsDel(`friendRequests/${reqId2}`, auth.idToken); } catch (_) {}
+    try { await fsDel(`friendRequests/${reqId1}`, auth.idToken); } catch (_) { }
+    try { await fsDel(`friendRequests/${reqId2}`, auth.idToken); } catch (_) { }
     return { success: true };
   } catch (e) {
     return { success: false, error: e.message };
@@ -3531,7 +4362,7 @@ ipcMain.handle('social-get-blocked', async () => {
     ], auth.idToken);
     const enriched = await Promise.all(blocks.map(async b => {
       let profile = { uid: b.blockedUid, username: 'Unknown', accountType: 'helloworld' };
-      try { profile = await fsGet(`users/${b.blockedUid}`, auth.idToken); } catch (_) {}
+      try { profile = await fsGet(`users/${b.blockedUid}`, auth.idToken); } catch (_) { }
       return { blockId: b.id, profile: { ...profile, uid: b.blockedUid } };
     }));
     return { success: true, blocked: enriched };
@@ -3566,7 +4397,7 @@ ipcMain.handle('social-send-message', async (e, targetFriendshipId, content, rep
     const otherUids = (fDoc.users || []).filter(u => u !== auth.uid);
     for (const otherUid of otherUids) {
       let currentUnread = 0;
-      try { const ud = await fsGet(`friendships/${targetFriendshipId}/unread/${otherUid}`, auth.idToken); currentUnread = ud.count || 0; } catch (_) {}
+      try { const ud = await fsGet(`friendships/${targetFriendshipId}/unread/${otherUid}`, auth.idToken); currentUnread = ud.count || 0; } catch (_) { }
       await fsSet(`friendships/${targetFriendshipId}/unread/${otherUid}`, { count: currentUnread + 1 }, auth.idToken);
     }
     return { success: true, msgId };
@@ -3581,16 +4412,16 @@ ipcMain.handle('social-edit-message', async (e, targetFriendshipId, msgId, newCo
     if (!newContent || !newContent.trim()) return { success: false, error: 'empty_message' };
     const msgDoc = await fsGet(`friendships/${targetFriendshipId}/messages/${msgId}`, auth.idToken);
     if (msgDoc.senderId !== auth.uid) return { success: false, error: 'not_owner' };
-    
+
     // Pass the full document back to satisfy strict Firestore rules
-    const updatedMsg = { 
+    const updatedMsg = {
       ...msgDoc,
       content: newContent.trim(),
       edited: true,
       editedAt: new Date().toISOString()
     };
     delete updatedMsg.id; // remove local id property
-    
+
     await fsSet(`friendships/${targetFriendshipId}/messages/${msgId}`, updatedMsg, auth.idToken);
     return { success: true };
   } catch (e) {
@@ -3667,7 +4498,7 @@ ipcMain.handle('social-mark-read', async (e, targetFriendshipId) => {
           await fsSet(`friendships/${targetFriendshipId}/messages/${msg.id}`, { status: 'delivered' }, auth.idToken, ['status']);
         }
       }
-    } catch (_) {}
+    } catch (_) { }
     return { success: true };
   } catch (e) {
     return { success: false, error: e.message };
@@ -3686,7 +4517,7 @@ ipcMain.handle('social-get-badge-counts', async () => {
     ], auth.idToken, null, 100);
     let totalUnread = 0;
     for (const fs of friendships) {
-      try { const ud = await fsGet(`friendships/${fs.id}/unread/${auth.uid}`, auth.idToken); totalUnread += ud.count || 0; } catch (_) {}
+      try { const ud = await fsGet(`friendships/${fs.id}/unread/${auth.uid}`, auth.idToken); totalUnread += ud.count || 0; } catch (_) { }
     }
     return { success: true, pendingRequests: received.length, unreadMessages: totalUnread };
   } catch (e) {
@@ -3760,7 +4591,8 @@ ipcMain.handle('get-user-profile', async (e, uid) => {
     const auth = await getSocialAuth();
     // Fetch user data from Firestore users collection
     const userDoc = await fsGet(`users/${uid}`, auth.idToken);
-    return { success: true, data: userDoc };
+    const presence = await fetchPresenceForUser(uid, auth);
+    return { success: true, data: userDoc, presence };
   } catch (e) {
     console.error('[get-user-profile] Error:', e);
     return { success: false, error: e.message };
@@ -3774,18 +4606,18 @@ ipcMain.handle('add-profile-link', async (e, uid, url, title, type) => {
     if (auth.uid !== uid) {
       return { success: false, error: 'Cannot edit other users profile' };
     }
-    
+
     // Get current user document
     const userDoc = await fsGet(`users/${uid}`, auth.idToken);
     const existingLinks = userDoc.links || [];
-    
+
     // Add new link
     const newLink = { url, title, type, createdAt: new Date().toISOString() };
     const updatedLinks = [...existingLinks, newLink];
-    
+
     // Update user document
     await fsSet(`users/${uid}`, { links: updatedLinks }, auth.idToken, ['links']);
-    
+
     return { success: true };
   } catch (e) {
     console.error('[add-profile-link] Error:', e);
@@ -3906,21 +4738,16 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('window-all-closed', () => {
+app.on('window-all-closed', async () => {
+  await presenceManager.setOffline();
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', (event) => {
+app.on('before-quit', async () => {
   console.log("App closing, cleaning up processes...");
 
-  // Sync presence to offline if possible
-  getSocialAuth().then(authSocial => {
-      if (authSocial && authSocial.uid) {
-          fsSet(`users/${authSocial.uid}`, { 
-              presence: { state: 'Offline' } 
-          }, authSocial.idToken, ['presence']).catch(() => {});
-      }
-  }).catch(() => {});
+  // Set presence to offline when launcher closes (await to ensure it completes)
+  await presenceManager.setOffline();
 
   // 1. Kill all active download game processes
   for (const [version_id, info] of activeDownloads) {

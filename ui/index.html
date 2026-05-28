@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://mc-heads.net https://piston-meta.mojang.com https://cdn.modrinth.com https://api.modrinth.com https://*.googleapis.com https://*.firebaseapp.com https://*.firebasestorage.app https://apis.google.com https://www.gstatic.com; img-src 'self' data: blob: https: file: launcher:; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com wss://*.firebaseio.com https://www.gstatic.com https://api.mojang.com https://sessionserver.mojang.com https://api.modrinth.com https://mc-heads.net https://securetoken.googleapis.com https://identitytoolkit.googleapis.com;">
+        content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://mc-heads.net https://piston-meta.mojang.com https://cdn.modrinth.com https://api.modrinth.com https://*.googleapis.com https://*.firebaseapp.com https://*.firebasestorage.app https://apis.google.com https://www.gstatic.com; img-src 'self' data: blob: https: file: launcher: https://launchercontent.mojang.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com wss://*.firebaseio.com https://www.gstatic.com https://api.mojang.com https://sessionserver.mojang.com https://api.modrinth.com https://mc-heads.net https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://launchercontent.mojang.com;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="onboarding_styles.css">
@@ -70,26 +70,70 @@
     <div class="launcher">
         <!-- Login Button / User Badge -->
         <div id="userAreaControls">
+
+            <button id="statsBtn" class="social-btn" style="display: none;" title="Stats">
+                <i class="fas fa-chart-bar"></i>
+            </button>
             <button id="socialBtn" class="social-btn" style="display: none;" title="Social">
                 <i class="fas fa-user-friends"></i>
                 <span id="socialBadge" class="social-badge-count"></span>
             </button>
-            <div id="userBadge" class="user-badge" style="display: none;">
-                <div class="user-avatar" id="userAvatarHead">
-                    <i class="fas fa-user"></i>
+            <div id="userBadgeWrapper" style="display: flex; flex-direction: column; gap: 8px;">
+                <div id="userBadge" class="user-badge" style="display: none;">
+                    <div class="user-avatar" id="userAvatarHead">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <span id="userDisplayName"></span>
+                    <!-- Dropdown menu -->
+                    <div class="user-dropdown" id="userDropdown">
+                        <button class="dropdown-item" id="editProfileBtn">
+                            <i class="fas fa-user-edit"></i> Edit Profile
+                        </button>
+                        <button class="dropdown-item" id="logoutBtn">
+                            <i class="fas fa-sign-out-alt"></i> Logout
+                        </button>
+                    </div>
                 </div>
-                <span id="userDisplayName"></span>
-                <!-- Dropdown menu -->
-                <div class="user-dropdown" id="userDropdown">
-                    <button class="dropdown-item" id="editProfileBtn">
-                        <i class="fas fa-user-edit"></i> Edit Profile
-                    </button>
-                    <button class="dropdown-item" id="logoutBtn">
-                        <i class="fas fa-sign-out-alt"></i> Logout
-                    </button>
+                
+                <!-- Streak Badge positioned below User Badge -->
+                <div id="streakBadgeContainer" style="display: none; width: 100%; aspect-ratio: 1 / 1; position: relative; flex-direction: column; align-items: center; justify-content: center; z-index: 99; background: rgba(20, 20, 30, 0.5); backdrop-filter: blur(8px); border-radius: 12px; border: 1px solid rgba(255,170,0,0.2); box-shadow: 0 4px 15px rgba(0,0,0,0.3); overflow: hidden;">
+                    <div class="css-fire-container" style="position: absolute; bottom: 25px; left: -20px; width: 100%; height: 100%; z-index: 1; filter: url(#gooey-fire); opacity: 0.65;">
+                        <div class="flame-base" style="width: 80px; height: 50px; margin-left: 20px;"></div>
+                        <div class="flame-particle p1" style="width: 55px; height: 55px;"></div>
+                        <div class="flame-particle p2" style="width: 65px; height: 65px;"></div>
+                        <div class="flame-particle p3" style="width: 40px; height: 40px;"></div>
+                        <div class="flame-particle p4" style="width: 50px; height: 50px;"></div>
+                        <div class="flame-particle p5" style="width: 70px; height: 70px;"></div>
+                        <div class="flame-particle p6" style="width: 60px; height: 60px;"></div>
+                        <div class="flame-particle p7" style="width: 45px; height: 45px;"></div>
+                        <div class="flame-particle p8" style="width: 50px; height: 50px;"></div>
+                        <div class="flame-particle p9" style="width: 35px; height: 35px;"></div>
+                        <div class="flame-particle p10" style="width: 55px; height: 55px;"></div>
+                        <div class="flame-particle p11" style="width: 65px; height: 65px;"></div>
+                        <div class="flame-particle p12" style="width: 40px; height: 40px;"></div>
+                        <div class="flame-particle p13" style="width: 45px; height: 45px;"></div>
+                        <div class="flame-particle p14" style="width: 50px; height: 50px;"></div>
+                        <div class="flame-particle p15" style="width: 60px; height: 60px;"></div>
+                    </div>
+                    <span id="streakCount" class="streak-text" style="position: relative; z-index: 2; font-size: 52px; font-weight: 900; color: #fff; text-shadow: 0 3px 6px rgba(0,0,0,0.9), 0 0 12px rgba(255,170,0,0.8); line-height: 1; margin-top: 10px;">0</span>
+                    <span style="position: relative; z-index: 2; font-size: 16px; text-transform: uppercase; color: #ffcc00; font-weight: 800; text-shadow: 0 1px 3px rgba(0,0,0,0.9); margin-top: 4px;">Days</span>
+                    <i class="fas fa-info-circle" data-tooltip="Increments automatically on your first login to the game each day." style="position: absolute; top: 12px; right: 12px; color: rgba(255,255,255,0.4); cursor: help; font-size: 14px; z-index: 5; transition: color 0.2s;" onmouseover="this.style.color='rgba(255,255,255,0.8)'" onmouseout="this.style.color='rgba(255,255,255,0.4)'"></i>
                 </div>
             </div>
         </div>
+
+        <!-- SVG Filter for Gooey Fire Effect -->
+        <svg style="position: absolute; width: 0; height: 0;">
+            <defs>
+                <filter id="gooey-fire">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
+                    <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo" />
+                    <feBlend in="SourceGraphic" in2="goo" />
+                </filter>
+            </defs>
+        </svg>
+
+
 
         <button class="login-button" id="loginButton">
             <i class="fas fa-user"></i> Login
@@ -182,6 +226,16 @@
                         <button class="cancel-launch-button" id="cancelLaunchBtn" onclick="cancelLaunch()" title="Cancel Launch">
                             <i class="fas fa-times"></i>
                         </button>
+                    </div>
+                    
+                    <!-- Minecraft News Section -->
+                    <div class="news-section-wrapper" style="margin-top: 50px; display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                        <h2 style="font-size: 16px; color: #fff; margin-bottom: 12px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-newspaper" style="color: #4facfe;"></i> Latest Minecraft News
+                        </h2>
+                        <div id="minecraftNewsContainer" class="minecraft-news-container">
+                            <!-- News will be populated here by scripts.js -->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -479,6 +533,21 @@
                                     Show Old Versions
                                     <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
                                         data-tooltip="Shows old Alpha and Beta versions in the version selector."></i>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="input-group"
+                            style="padding-top: 15px; border-top: 1px solid rgba(255, 255, 255, 0.1); margin-top: 15px;">
+                            <div class="toggle-container">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="privacyModeCheckbox">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <span class="toggle-label">
+                                    Privacy Mode
+                                    <i class="fa-regular fa-question-circle help-icon" style="color: #fff;"
+                                        data-tooltip="Hides your server IP address from friends in Rich Presence. Your status will still show you're playing on a server, but the IP will be hidden."></i>
                                 </span>
                             </div>
                         </div>
@@ -1626,18 +1695,38 @@
                         <img id="profileCountryFlagSvg" src="" alt="Country" style="width: 100%; height: 100%; object-fit: cover;">
                     </div>
                 </div>
+                <button id="viewProfileStatsBtn" class="btn-secondary" style="margin-top: 15px; z-index: 1; border-radius: 20px; padding: 6px 16px; font-size: 13px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); transition: background 0.2s, transform 0.2s;" onmouseover="this.style.background='rgba(0,0,0,0.6)'; this.style.transform='scale(1.05)';" onmouseout="this.style.background='rgba(0,0,0,0.4)'; this.style.transform='scale(1)';">
+                    <i class="fas fa-chart-bar"></i> View Statistics
+                </button>
+                <p id="profileMemberSince"></p>
             </div>
 
             <div style="padding: 25px;">
-                <div id="profileRichPresenceSection" style="margin-bottom: 20px; display: none; background: rgba(18, 20, 26, 0.7); border: 1px solid rgba(88, 101, 242, 0.3); border-radius: 8px; padding: 15px; position: relative; overflow: hidden;">
-                    <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background-color: #5865F2;"></div>
-                    <h4 style="margin: 0 0 8px 0; font-size: 0.85rem; color: #b0b8c6; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Activity Status</h4>
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <img src="img/icon/icon.png" alt="Game Icon" style="width: 48px; height: 48px; border-radius: 8px; object-fit: cover;">
-                        <div>
-                            <div id="profilePresenceState" style="color: #ffffff; font-weight: 600; font-size: 1rem; margin-bottom: 2px;">Playing Minecraft</div>
-                            <div id="profilePresenceDetails" style="color: #a3a6aa; font-size: 0.85rem; margin-bottom: 2px;">Server: play.hypixel.net</div>
-                            <div id="profilePresenceVersion" style="color: #a3a6aa; font-size: 0.85rem;">Fabric 1.20.1 (Survival Pack)</div>
+                <div id="profilePresenceSection" style="margin-bottom: 20px;">
+                    <div id="profilePresenceCard" style="background: rgba(30, 41, 59, 0.45); border: 1px solid rgba(255, 255, 255, 0.08); border-top: 2px solid rgba(79, 172, 254, 0.55); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);">
+                        <div style="display:flex; align-items:center; justify-content:space-between;">
+                            <div style="display:flex; align-items:center; gap:10px; flex:1;">
+                                <div id="profilePresenceIndicator" style="width:10px; height:10px; border-radius:50%; background:#6b7280; box-shadow:0 0 8px rgba(107, 114, 128, 0.4); flex-shrink:0;"></div>
+                                <div id="profilePresenceStatus" style="font-size:1.05rem; font-weight:600; color:#ffffff; letter-spacing: 0.2px; display:flex; align-items:center; height:100%;">Offline</div>
+                            </div>
+                            <div id="profileJoinBtn" style="display:none; align-items:center; justify-content:center; gap:6px; padding: 0 16px; font-size:0.85rem; font-weight:600; border-radius:8px; white-space:nowrap; cursor:pointer; height:32px; width:max-content; border:1px solid rgba(52, 211, 153, 0.3); background:rgba(52, 211, 153, 0.12); color:#34d399; transition:all 0.2s ease; box-sizing:border-box;" title="Join" onmouseover="this.style.background='rgba(52, 211, 153, 0.2)';" onmouseout="this.style.background='rgba(52, 211, 153, 0.12)';">
+                                <i class="fas fa-sign-in-alt" style="font-size: 0.9rem; display:flex; align-items:center; height:100%;"></i>
+                                <div style="display:flex; align-items:center; height:100%; font-size:0.75rem; font-weight:700; letter-spacing:0.5px; line-height:1; padding-top:1px;">JOIN</div>
+                            </div>
+                        </div>
+                        <div id="profilePresenceDetails" style="display:none; flex-direction: column; gap:12px; padding-top:16px; border-top:1px solid rgba(255, 255, 255, 0.06);">
+                            <div id="profilePresenceInstanceRow" style="display:none; align-items:center; justify-content:space-between; gap:16px;">
+                                <div style="color:#94a3b8; font-size:0.85rem; font-weight:500; flex-shrink:0; display:flex; align-items:center; height:100%;">Installation</div>
+                                <div id="profilePresenceInstance" style="color:#f1f5f9; font-size:0.82rem; font-weight:600; background:rgba(255, 255, 255, 0.04); padding:4px 10px; border-radius:6px; border:1px solid rgba(255, 255, 255, 0.04); line-height:normal; text-align:right; word-break:break-word;">-</div>
+                            </div>
+                            <div id="profilePresenceServerRow" style="display:none; align-items:center; justify-content:space-between; gap:16px;">
+                                <div style="color:#94a3b8; font-size:0.85rem; font-weight:500; flex-shrink:0; display:flex; align-items:center; height:100%;">Server</div>
+                                <div id="profilePresenceServer" style="color:#60a5fa; font-size:0.82rem; font-weight:600; background:rgba(96, 165, 250, 0.08); padding:4px 10px; border-radius:6px; border:1px solid rgba(96, 165, 250, 0.15); line-height:normal; cursor:pointer; text-align:right; word-break:break-word; transition:all 0.2s ease;" title="Click to copy IP" onclick="if(this.innerText==='Copied!') return; const ip = this.dataset.ip || this.innerText; navigator.clipboard.writeText(ip); this.innerText = 'Copied!'; this.style.color = '#34d399'; this.style.background = 'rgba(52, 211, 153, 0.08)'; this.style.borderColor = 'rgba(52, 211, 153, 0.15)'; setTimeout(() => { this.innerText = this.dataset.ip || ip; this.style.color = '#60a5fa'; this.style.background = 'rgba(96, 165, 250, 0.08)'; this.style.borderColor = 'rgba(96, 165, 250, 0.15)'; }, 1500);">-</div>
+                            </div>
+                            <div id="profilePresenceWorldRow" style="display:none; align-items:center; justify-content:space-between; gap:16px;">
+                                <div style="color:#94a3b8; font-size:0.85rem; font-weight:500; flex-shrink:0; display:flex; align-items:center; height:100%;">World</div>
+                                <div id="profilePresenceWorld" style="color:#34d399; font-size:0.82rem; font-weight:600; background:rgba(52, 211, 153, 0.08); padding:4px 10px; border-radius:6px; border:1px solid rgba(52, 211, 153, 0.15); line-height:normal; text-align:right; word-break:break-word;">-</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1657,6 +1746,11 @@
                     <div id="profileLinksContainer" style="display: flex; flex-direction: column; gap: 8px;">
                         <p style="margin: 0; color: #6b7280; font-size: 0.9rem; font-style: italic;">No links</p>
                     </div>
+                </div>
+
+                <div id="profilePlaystyleSection" style="margin-bottom: 20px; display: none;">
+                    <h4 style="margin: 0 0 10px 0; font-size: 1rem; color: #b0b8c6;">Playstyle</h4>
+                    <div id="profilePlaystyleTags" style="display: flex; flex-wrap: wrap; gap: 6px 8px;"></div>
                 </div>
 
                 <div id="profileFavoriteMobSection" style="margin-bottom: 15px;">
@@ -1818,7 +1912,91 @@
         </div>
     </div>
 
+    <!-- Join Server Modal -->
+    <div id="joinServerModal" class="modal">
+        <div class="modal-content" style="max-width: 500px; padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0; font-size: 18px;">Join Server</h2>
+                <button id="closeJoinServerBtn" style="background: none; border: none; color: #888; cursor: pointer; font-size: 18px;"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <p style="color: #b0b8c6; font-size: 14px; margin-bottom: 20px;">
+                Join <strong id="joinServerFriend">Friend</strong> on server <strong id="joinServerIp">server.ip</strong>. Select a profile to launch.
+            </p>
+            
+            <div id="joinServerProfilesList" style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
+                <!-- Profiles will be rendered here -->
+            </div>
+            
+            <div class="modal-buttons" style="margin-top: 20px;">
+                <button class="btn btn-secondary" id="cancelJoinServerBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Modal -->
+    <div id="statsModal" class="modal">
+        <div class="modal-content profile-viewer-modal" style="max-width: 600px; padding: 0; overflow: hidden; border-radius: 12px; background: #1a1a24;">
+            <div style="position: relative; height: 120px; background: linear-gradient(135deg, #1c1c28 0%, #2a2a3c 100%);">
+                <button id="closeStatsModalBtn" style="position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; font-size: 14px; padding: 6px 14px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; z-index: 10; transition: background 0.2s;"><i class="fas fa-times"></i> Close</button>
+            </div>
+            
+            <div style="padding: 20px; text-align: center; margin-top: -60px; position: relative;">
+                <div id="statsUserAvatar" style="width: 100px; height: 100px; border-radius: 50%; background: #333; margin: 0 auto 15px auto; border: 4px solid #1a1a24; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
+                    <img src="" id="statsUserAvatarImg" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+                    <i class="fas fa-user" id="statsUserAvatarFallback" style="font-size: 40px; color: #666;"></i>
+                </div>
+                
+                <h2 id="statsUsername" style="margin: 0 0 5px 0; font-size: 24px; color: #fff;">Username</h2>
+                <div style="color: #a0a0b0; font-size: 14px; margin-bottom: 25px;"><i class="fas fa-chart-line"></i> Player Statistics</div>
+                
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; text-align: left; padding: 0 10px 20px 10px;">
+                    <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center;">
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background: rgba(255, 170, 0, 0.2); color: #ffaa00; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-right: 15px;">
+                            <i class="fas fa-fire"></i>
+                        </div>
+                        <div>
+                            <div style="color: #a0a0b0; font-size: 12px; text-transform: uppercase; font-weight: bold;">Streak</div>
+                            <div id="statsModalStreak" style="color: #fff; font-size: 20px; font-weight: bold; display: flex; align-items: baseline; gap: 4px; white-space: nowrap;">0 <span style="font-size: 14px; font-weight: normal; color: #888;">days</span></div>
+                        </div>
+                    </div>
+                    
+                    <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center;">
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background: rgba(79, 172, 254, 0.2); color: #4facfe; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-right: 15px;">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div>
+                            <div style="color: #a0a0b0; font-size: 12px; text-transform: uppercase; font-weight: bold;">Total Hours</div>
+                            <div id="statsModalHours" style="color: #fff; font-size: 20px; font-weight: bold; display: flex; align-items: baseline; gap: 4px; white-space: nowrap;">0.0 <span style="font-size: 14px; font-weight: normal; color: #888;">h</span></div>
+                        </div>
+                    </div>
+                    
+                    <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center;">
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background: rgba(0, 242, 254, 0.2); color: #00f2fe; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-right: 15px;">
+                            <i class="fas fa-calendar-check"></i>
+                        </div>
+                        <div>
+                            <div style="color: #a0a0b0; font-size: 12px; text-transform: uppercase; font-weight: bold;">Days Played</div>
+                            <div id="statsModalDays" style="color: #fff; font-size: 20px; font-weight: bold; display: flex; align-items: baseline; gap: 4px; white-space: nowrap;">0 <span style="font-size: 14px; font-weight: normal; color: #888;">days</span></div>
+                        </div>
+                    </div>
+                    
+                    <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center;">
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background: rgba(167, 112, 239, 0.2); color: #a770ef; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-right: 15px;">
+                            <i class="fas fa-gamepad"></i>
+                        </div>
+                        <div>
+                            <div style="color: #a0a0b0; font-size: 12px; text-transform: uppercase; font-weight: bold;">Sessions</div>
+                            <div id="statsModalSessions" style="color: #fff; font-size: 20px; font-weight: bold; display: flex; align-items: baseline; gap: 4px; white-space: nowrap;">0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="scripts.js"></script>
+    <script src="stats.js"></script>
     <script src="download-listeners.js"></script>
     <script src="scripts-skinviewer3d.js"></script>
     <script src="scripts-skinpacks.js"></script>

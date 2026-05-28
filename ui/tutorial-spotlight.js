@@ -21,6 +21,7 @@
     let spotlight = null;
     let tooltip = null;
     let progressContainer = null;
+    let skipButton = null;
     let currentResizeObserver = null;
 
     /**
@@ -60,6 +61,28 @@
         progressContainer = document.createElement('div');
         progressContainer.className = 'tutorial-progress';
         document.body.appendChild(progressContainer);
+
+        // Create skip button
+        skipButton = document.createElement('button');
+        skipButton.className = 'tutorial-skip-btn';
+        skipButton.innerHTML = 'Skip Tutorial';
+        skipButton.onclick = () => {
+            window.isTutorialSkipped = true;
+            endTutorial();
+            
+            // Close all modals
+            document.querySelectorAll('.modal').forEach(m => m.classList.remove('show'));
+
+            // Notify completion callbacks based on which tutorial step was active
+            if (window.currentActiveTutorialStep === 1 && window.onTutorialStep1Complete) {
+                window.onTutorialStep1Complete();
+            } else if (window.currentActiveTutorialStep === 2 && window.onTutorialStep2Complete) {
+                window.onTutorialStep2Complete();
+            } else if (window.currentActiveTutorialStep === 3 && window.onTutorialStep3Complete) {
+                window.onTutorialStep3Complete();
+            }
+        };
+        document.body.appendChild(skipButton);
     }
 
     /**
@@ -84,6 +107,7 @@
 
         initDOM();
 
+        window.isTutorialSkipped = false;
         tutorialSteps = steps;
         currentStepIndex = 0;
         onComplete = onCompleteCallback;
@@ -91,6 +115,7 @@
 
         // Activate UI (no dots since flow is dynamic)
         overlay.classList.add('active');
+        if (skipButton) skipButton.classList.add('active');
 
         // Show first step
         await showStep(0);
@@ -116,8 +141,9 @@
         const currentTarget = document.querySelector('.tutorial-target');
         if (currentTarget) {
             currentTarget.classList.remove('tutorial-target');
-            currentTarget.removeEventListener('click', handleTargetClick);
-            currentTarget.removeEventListener('change', handleTargetClick);
+            currentTarget.removeEventListener('click', handleTargetClick, { capture: true });
+            currentTarget.removeEventListener('change', handleTargetClick, { capture: true });
+            currentTarget.removeEventListener('blur', handleTargetClick, { capture: true });
         }
 
         // Reset any elevated modals
@@ -129,6 +155,7 @@
         overlay.classList.add('closing');
         spotlight.classList.add('closing');
         tooltip.classList.add('closing');
+        if (skipButton) skipButton.classList.add('closing');
 
         // Wait for animation to finish before fully hiding
         setTimeout(() => {
@@ -136,9 +163,10 @@
             spotlight.classList.remove('active', 'closing');
             tooltip.classList.remove('active', 'closing');
             progressContainer.classList.remove('active');
+            if (skipButton) skipButton.classList.remove('active', 'closing');
 
             // Callback
-            if (onComplete) {
+            if (onComplete && !window.isTutorialSkipped) {
                 onComplete();
             }
         }, 300);
@@ -193,7 +221,9 @@
         const prevTarget = document.querySelector('.tutorial-target');
         if (prevTarget && prevTarget !== targetEl) {
             prevTarget.classList.remove('tutorial-target');
-            prevTarget.removeEventListener('click', handleTargetClick);
+            prevTarget.removeEventListener('click', handleTargetClick, { capture: true });
+            prevTarget.removeEventListener('change', handleTargetClick, { capture: true });
+            prevTarget.removeEventListener('blur', handleTargetClick, { capture: true });
         }
 
         // Reset any previously elevated containers
@@ -453,7 +483,7 @@
         const hint = tooltip.querySelector('.tutorial-tooltip-hint span');
 
         if (title && titleStr) title.textContent = titleStr;
-        if (text && textStr) text.textContent = textStr;
+        if (text && textStr) text.innerHTML = textStr;
         if (hint && hintStr) hint.textContent = hintStr;
 
         // Re-position tooltip

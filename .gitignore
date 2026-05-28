@@ -7,3 +7,6 @@ dist
 build-linux.sh
 offline_skins_implementation.md
 generate-linux-yml.js
+firebase-backend/functions/keys.json
+firebase-backend/functions/node_modules/
+firebase-backend/.firebase/

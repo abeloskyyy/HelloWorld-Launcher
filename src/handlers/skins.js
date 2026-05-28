@@ -44,7 +44,8 @@ class SkinManager {
                                 skin_preview: data.skin,
                                 skin_model: data.model,
                                 cape_id: data.cape,
-                                cape_preview: data.cape_data || null
+                                cape_preview: data.cape_data || null,
+                                cape_alias: data.cape_alias || null
                             };
                         } catch (e) {
                             console.error(`[SkinManager] Error reading ${f}:`, e);
@@ -69,7 +70,7 @@ class SkinManager {
         console.log(`[SkinManager] Pack saved to ${filePath}`);
     }
 
-    createSkinPack(name, skinBase64, model, capeId, capeBase64) {
+    createSkinPack(name, skinBase64, model, capeId, capeBase64, capeAlias) {
         // console.log(`[SkinManager] Creating pack: ${name}, Model: ${model}, Cape: ${capeId}`);
         const id = uuid.v4();
         const pack = {
@@ -78,13 +79,14 @@ class SkinManager {
             skin: skinBase64,
             model: model || 'classic',
             cape: capeId || null,
-            cape_data: capeBase64 || null
+            cape_data: capeBase64 || null,
+            cape_alias: capeAlias || null
         };
         this.saveSkinPack(pack);
         return { success: true, pack };
     }
 
-    editSkinPack(id, name, skinBase64, model, capeId, capeBase64) {
+    editSkinPack(id, name, skinBase64, model, capeId, capeBase64, capeAlias) {
         const packDir = paths.getSkinsDir();
         const packFile = path.join(packDir, `${id}.json`);
 
@@ -103,6 +105,9 @@ class SkinManager {
             if (capeBase64 !== undefined) {
                 pack.cape_data = capeBase64;
             }
+            if (capeAlias !== undefined) {
+                pack.cape_alias = capeAlias;
+            }
 
             this.saveSkinPack(pack);
             return { success: true, pack };
@@ -117,6 +122,16 @@ class SkinManager {
             const file = path.join(packsDir, `${id}.json`);
             if (fs.existsSync(file)) {
                 fs.removeSync(file);
+                // Clear active state if we just deleted the active pack
+                const stateFile = path.join(packsDir, 'state.json');
+                if (fs.existsSync(stateFile)) {
+                    try {
+                        const state = fs.readJsonSync(stateFile);
+                        if (state.active_pack === id) {
+                            fs.writeJsonSync(stateFile, { active_pack: null });
+                        }
+                    } catch (e) { }
+                }
                 return { success: true };
             }
         } catch (e) { }

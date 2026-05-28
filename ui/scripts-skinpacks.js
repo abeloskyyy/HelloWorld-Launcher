@@ -2,6 +2,39 @@
 // Skin Pack Management
 // ============================================
 
+// Toast notification system
+function showToast(message, type = 'error') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    
+    const icon = type === 'error' ? 'fas fa-exclamation-circle' : 'fas fa-check-circle';
+    
+    toast.innerHTML = `
+        <i class="${icon} toast-icon"></i>
+        <span class="toast-message">${message}</span>
+    `;
+    
+    container.appendChild(toast);
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        toast.style.animation = 'toastSlideOut 0.3s ease forwards';
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 300);
+    }, 3000);
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
 let currentSkinFile = null;
 let currentCapeId = 'none';
 let editingPackId = null;
@@ -91,7 +124,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // Validate file type
             if (!file.type.match('image/png')) {
-                alert('Please select a PNG file');
+                showToast('Please select a PNG file');
                 skinFileInput.value = '';
                 return;
             }
@@ -117,7 +150,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     triggerPreviewUpdate();
                 } else {
-                    alert('Invalid skin dimensions! Skin must be exactly 64x64 or 64x32 pixels.');
+                    showToast('Invalid skin dimensions! Skin must be exactly 64x64 or 64x32 pixels.');
                     skinFileInput.value = '';
                 }
             };
@@ -203,24 +236,26 @@ function handlePackSubmit() {
     const createPackConfirmBtn = document.getElementById('createPackBtn');
 
     if (!name) {
-        alert('Please enter a pack name');
+        showToast('Please enter a pack name');
         return;
     }
 
     if (!editingPackId && !currentSkinFile) {
-        alert('Please upload a skin file');
+        showToast('Please upload a skin file');
         return;
     }
 
     const modelType = skinModelSelect ? skinModelSelect.value : 'classic';
     const capeId = currentCapeId;
 
-    // Find cape base64
+    // Find cape base64 and alias
     let capeBase64 = null;
+    let capeAlias = null;
     if (capeId && capeId !== 'none' && window.loadedCapes) {
         const capeObj = window.loadedCapes.find(c => c.id === capeId);
         if (capeObj) {
             capeBase64 = capeObj.base64;
+            capeAlias = capeObj.alias || null;
         }
     }
 
@@ -231,18 +266,11 @@ function handlePackSubmit() {
         if (editingPackId) {
             // When editing, only pass capeBase64 if we have it
             // Otherwise pass undefined to preserve existing cape_data
-            if (capeBase64) {
-                window.pywebview.api.edit_skin_pack(editingPackId, name, skinBase64, modelType, capeId, capeBase64)
-                    .then(response => handleResponse(response))
-                    .catch(handleError);
-            } else {
-                // Don't pass capeBase64 at all to preserve existing data
-                window.pywebview.api.edit_skin_pack(editingPackId, name, skinBase64, modelType, capeId)
-                    .then(response => handleResponse(response))
-                    .catch(handleError);
-            }
+            window.pywebview.api.edit_skin_pack(editingPackId, name, skinBase64, modelType, capeId, capeBase64 || undefined, capeAlias || undefined)
+                .then(response => handleResponse(response))
+                .catch(handleError);
         } else {
-            window.pywebview.api.create_skin_pack(name, skinBase64, modelType, capeId, capeBase64)
+            window.pywebview.api.create_skin_pack(name, skinBase64, modelType, capeId, capeBase64, capeAlias)
                 .then(response => handleResponse(response))
                 .catch(handleError);
         }
@@ -256,14 +284,14 @@ function handlePackSubmit() {
             clearSkinPackModal();
             if (window.loadSkinPacks) window.loadSkinPacks();
         } else {
-            alert('Error: ' + (response.error || 'Unknown error'));
+            showToast('Error: ' + (response.error || 'Unknown error'));
         }
     };
 
     const handleError = (err) => {
         createPackConfirmBtn.disabled = false;
         createPackConfirmBtn.innerHTML = editingPackId ? '<i class="fas fa-save"></i> Save Changes' : '<i class="fas fa-plus"></i> Create Pack';
-        alert('Error calling backend: ' + err);
+        showToast('Error calling backend: ' + err);
     };
 
     if (currentSkinFile) {
@@ -382,10 +410,6 @@ window.loadSkinPacks = function () {
         let activePackData = null;
         if (activePackId && packs[activePackId]) {
             activePackData = { ...packs[activePackId], id: activePackId };
-        } else if (packIds.length > 0) {
-            // Fallback to first if no active
-            const firstId = packIds[0];
-            activePackData = { ...packs[firstId], id: firstId };
         }
 
         if (activePackData) {
@@ -408,7 +432,7 @@ window.loadSkinPacks = function () {
             const faces = ['top', 'left', 'front', 'right', 'back', 'bottom'];
             const parts = ['head', 'body', 'left-arm', 'right-arm', 'left-leg', 'right-leg'];
 
-            let viewerHTML = `<div class="pack-preview-container" style="height: 180px; background: rgba(0, 0, 0, 0.2); border-radius: 8px; margin: 15px 15px 0 15px; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative;"><div class="mc-skin-viewer-9x ${isSlim ? 'slim' : ''} legacy" style="transform: scale(0.65) !important; animation: none;"><div class="player" style="transform: rotateX(-5deg) rotateY(-20deg) !important;">`;
+            let viewerHTML = `<div class="pack-preview-container" style="height: 220px; width: auto; background: rgba(0, 0, 0, 0.2); border-radius: 8px; margin: 15px; display: flex; justify-content: center; align-items: center; overflow: hidden; clip-path: inset(0 round 8px); position: relative;"><div class="mc-skin-viewer-9x ${isSlim ? 'slim' : ''} legacy" style="transform: scale(0.65) !important; animation: none; flex-shrink: 0;"><div class="player" style="transform: rotateX(-5deg) rotateY(-20deg) !important;">`;
 
             parts.forEach(part => {
                 viewerHTML += `<div class="${part}">`;
@@ -435,10 +459,10 @@ window.loadSkinPacks = function () {
 
             card.innerHTML = `
                 ${viewerHTML}
-                <div class="pack-info" style="padding: 15px;">
+                <div class="pack-info" style="padding: 8px 15px 5px 15px;">
                     <h3 style="margin: 0; font-size: 18px; color: #fff;">${pack.name}</h3>
                     <div class="pack-meta" style="margin-top: 5px; font-size: 13px; color: #aaa;">
-                        <span>${isSlim ? 'Alex' : 'Steve'}</span>
+                        <span>${isSlim ? 'Slim' : 'Classic'}</span>
                         ${hasCape && pack.cape_alias ? `<span>• Cape: ${pack.cape_alias}</span>` : ''}
                     </div>
                 </div>
@@ -538,7 +562,7 @@ function resetCooldownVisuals() {
     disabledBtns.forEach(btn => {
         btn.classList.remove('disabled-cooldown');
         if (btn.classList.contains('btn-blue')) {
-            btn.textContent = 'Use';
+            btn.innerHTML = '<i class="fas fa-check"></i> Use';
         }
     });
 }
@@ -591,7 +615,7 @@ window.activatePack = function (packId) {
                 const prevId = prevActive.dataset.packId;
                 prevBtn.className = 'btn-small btn-blue';
                 prevBtn.disabled = false;
-                prevBtn.textContent = 'Use';
+                prevBtn.innerHTML = '<i class="fas fa-check"></i> Use';
                 if (prevId) {
                     prevBtn.setAttribute('onclick', `activatePack('${prevId}')`);
                 }
@@ -607,7 +631,7 @@ window.activatePack = function (packId) {
         }
         clickedBtn.className = 'btn-small btn-secondary';
         clickedBtn.disabled = true;
-        clickedBtn.textContent = 'Active';
+        clickedBtn.innerHTML = '<i class="fas fa-check"></i> Active';
     }
 
     // Force update visuals
@@ -616,13 +640,13 @@ window.activatePack = function (packId) {
     // Call backend
     window.pywebview.api.activate_skin_pack(packId).then(response => {
         if (!response.success) {
-            alert('Error activating skin: ' + (response.error || 'Unknown error'));
+            showToast('Error activating skin: ' + (response.error || 'Unknown error'));
             loadSkinPacks();
         } else {
             console.log('Skin activated successfully');
         }
     }).catch(err => {
-        alert('Error calling backend: ' + err);
+        showToast('Error calling backend: ' + err);
         loadSkinPacks();
     });
 };
@@ -638,18 +662,23 @@ window.deletePack = function (packId) {
             if (response.success) {
                 loadSkinPacks();
             } else {
-                alert('Error deleting pack: ' + (response.error || 'Unknown error'));
+                showToast('Error deleting pack: ' + (response.error || 'Unknown error'));
             }
-        }).catch(err => alert('Error calling backend: ' + err));
+        }).catch(err => showToast('Error calling backend: ' + err));
     });
 };
+
+let capeLoadLock = false;
 
 // Load User Capes Dynamically
 window.loadUserCapes = function () {
     if (!window.pywebview || !window.pywebview.api) return;
+    if (capeLoadLock) return;
 
     const grid = document.getElementById('capeSelectionGrid');
     if (!grid) return;
+
+    capeLoadLock = true;
 
     // Show Loader
     grid.style.position = 'relative';
@@ -733,6 +762,8 @@ window.loadUserCapes = function () {
     }).catch(e => {
         console.error("Error loading capes", e);
         grid.innerHTML = '<div style="color: #d9534f; padding: 20px;">Error loading capes</div>';
+    }).finally(() => {
+        capeLoadLock = false;
     });
 }
 

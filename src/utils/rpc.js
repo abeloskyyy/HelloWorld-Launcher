@@ -1,59 +1,81 @@
 const client = require('discord-rich-presence')('1464624951578595368');
 
-// We use a simpler approach as this library handles connection internally more gracefully
-const clientId = '1464624951578595368';
-
 class RPCManager {
     constructor() {
         this.startTimestamp = new Date();
-        this.isConnected = false;
-
-        // discord-rich-presence is simpler, it just works or swallows errors usually.
-        // We can't easily detect "ready" event with the wrapper as it abstracts it.
-        // But it doesn't crash on build.
+        this.currentState = null;
         console.log('Discord RPC Initialized (Rich Presence)');
-        this.isConnected = true;
-
-        // Initial set
-        this.setIdle();
+        this.setLauncher();
     }
 
-    setIdle() {
+    basePresence() {
+        return {
+            startTimestamp: this.startTimestamp,
+            largeImageKey: 'logo',
+            largeImageText: 'HelloWorld Launcher',
+            instance: true,
+            buttons: [
+                { label: 'Download Launcher', url: 'https://hwlauncher.abelosky.com' }
+            ]
+        };
+    }
+
+    buildDetails(version, profileName, ign) {
+        const parts = [];
+        if (version) parts.push(`Version: ${version}`);
+        if (profileName) parts.push(`Profile: ${profileName}`);
+        if (ign) parts.push(`IGN: ${ign}`);
+        return parts.length > 0 ? parts.join(' • ') : 'HelloWorld Launcher';
+    }
+
+    updatePresence(payload) {
         try {
-            client.updatePresence({
-                state: 'In Menu',
-                details: 'Idle',
-                startTimestamp: this.startTimestamp,
-                largeImageKey: 'logo',
-                largeImageText: 'HelloWorld Launcher',
-                instance: true,
-                buttons: [
-                    { label: 'Download Launcher', url: 'https://hwlauncher.abelosky.com' }
-                ]
-            });
+            client.updatePresence(payload);
+            this.currentState = payload;
         } catch (e) {
             console.warn('RPC Update Failed:', e);
         }
     }
 
-    setPlaying(version, ign) {
-        try {
-            client.updatePresence({
-                state: 'Playing Minecraft',
-                details: `Version: ${version} | IGN: ${ign}`,
-                startTimestamp: new Date(),
-                largeImageKey: 'logo',
-                largeImageText: 'HelloWorld Launcher',
-                smallImageKey: 'minecraft_icon',
-                smallImageText: version,
-                instance: true,
-                buttons: [
-                    { label: 'Get Launcher', url: 'https://hwlauncher.abelosky.com' }
-                ]
-            });
-        } catch (e) {
-            console.warn('RPC Update Failed:', e);
-        }
+    setLauncher() {
+        this.startTimestamp = new Date();
+        this.updatePresence({
+            ...this.basePresence(),
+            state: 'Online',
+            details: 'On Launcher'
+        });
+    }
+
+    setMenu({ version, profileName, ign } = {}) {
+        this.startTimestamp = new Date();
+        this.updatePresence({
+            ...this.basePresence(),
+            state: 'In Menu',
+            details: this.buildDetails(version, profileName, ign)
+        });
+    }
+
+    setPlaying({ version, profileName, ign, worldName } = {}) {
+        this.startTimestamp = new Date();
+        this.updatePresence({
+            ...this.basePresence(),
+            state: worldName ? `Playing ${worldName}` : 'Playing Minecraft',
+            details: this.buildDetails(version, profileName, ign),
+            smallImageKey: 'minecraft_icon',
+            smallImageText: version || 'Minecraft'
+        });
+    }
+
+    setServer({ version, profileName, ign, serverIp, privacyMode } = {}) {
+        this.startTimestamp = new Date();
+        const displayServerIp = privacyMode ? '' : serverIp;
+        this.updatePresence({
+            ...this.basePresence(),
+            state: displayServerIp ? `Playing on ${displayServerIp}` : 'Playing Multiplayer',
+            details: this.buildDetails(version, profileName, ign),
+            smallImageKey: 'minecraft_icon',
+            smallImageText: version || 'Minecraft'
+        });
     }
 }
 

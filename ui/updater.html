@@ -72,9 +72,12 @@
                 </div>
                 <p class="status-text error">Update Error</p>
                 <p class="error-message" id="errorMessage">Could not download update</p>
-                <div class="button-group">
+                <div class="button-group" style="display: flex; gap: 10px; margin-top: 20px;">
                     <button class="btn-retry" id="retryBtn" style="flex: 1;">
                         <i class="fas fa-redo"></i> Retry
+                    </button>
+                    <button class="btn-cancel" id="skipErrorBtn" style="flex: 1; padding: 12px; background: rgba(255, 255, 255, 0.1); border: none; border-radius: 8px; color: white; cursor: pointer; font-weight: bold;">
+                        <i class="fas fa-forward"></i> Skip Update
                     </button>
                 </div>
             </div>
@@ -207,9 +210,12 @@
                     case 'error':
                         setState('error');
                         elements.errorMessage.textContent = data.error;
-                        elements.retryBtn.onclick = () => {
+                        document.getElementById('retryBtn').onclick = () => {
                             setState('checking');
                             api.checkForUpdates();
+                        };
+                        document.getElementById('skipErrorBtn').onclick = () => {
+                            window.location.href = "index.html";
                         };
                         break;
                 }

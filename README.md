@@ -57,6 +57,14 @@ HelloWorld Launcher is a launcher for Minecraft: Java Edition. It is open source
 
 ## Installation
 
+### Option 1: PowerShell One-Liner (Recommended)
+Run this command in PowerShell:
+```powershell
+iwr -useb https://raw.githubusercontent.com/Abeloskyyy/HelloWorld-Launcher/main/install.ps1 | iex
+```
+This automatically downloads and installs the latest version. No SmartScreen warning!
+
+### Option 2: Manual Download
 1. Download the latest version from the **Releases** section.
 2. Make sure you have **Java 17+** installed.
 3. Run the launcher file.

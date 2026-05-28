@@ -17,6 +17,9 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 
     <meta name="keywords"
         content="minecraft launcher, minecraft java launcher, open source minecraft launcher, forge launcher, fabric launcher, minecraft mods launcher, abelosky, abelosky launcher, abelosky github">
@@ -31,6 +34,12 @@
 </head>
 
 <body>
+    <div id="authLoaderOverlay" style="position: fixed; inset: 0; background: #0f0c29; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white;">
+        <i class="fas fa-spinner fa-spin" style="font-size: 3rem; margin-bottom: 20px; color: var(--primary-color);"></i>
+        <h2 style="font-family: 'Clash Display', sans-serif;">HelloWorld Launcher</h2>
+        <p style="opacity: 0.7;">Loading services...</p>
+    </div>
+
     <div class="blob-cont">
         <div class="blob blob-1"></div>
         <div class="blob blob-2"></div>
@@ -48,8 +57,28 @@
                         class="bi bi-github"></i> GitHub</a>
             </div>
             <a href="#" id="navDownloadBtn" class="btn btn-primary sm-hidden">Download Now</a>
+            <a href="#" id="navLoginBtn" class="btn btn-secondary sm-hidden" style="margin-left: 10px; display: none;">Log In</a>
+            <div id="navUserBadge" style="display:none; margin-left: 10px; align-items: center; cursor: pointer; padding: 0.5rem 1rem; background: rgba(255,255,255,0.1); border-radius: 8px; transition: background 0.3s; font-weight: 500;">
+                <div class="nav-user-avatar">
+                    <img id="navUserAvatarImg" src="https://mc-heads.net/avatar/Steve" alt="User avatar" />
+                </div>
+                <span id="navUsername" style="color: white; margin-top: 1px;"></span>
+                <span id="navPremiumBadge" class="premium-badge" style="display:none;"><i class="fas fa-dollar-sign"></i></span>
+            </div>
         </div>
     </nav>
+
+    <!-- Discord Floating Notification -->
+    <a href="https://dsc.gg/helloworld-launcher" target="_blank" class="discord-float">
+        <div class="discord-icon">
+            <i class="bi bi-discord"></i>
+        </div>
+        <div class="discord-content">
+            <span class="discord-title">Join our Community</span>
+            <span class="discord-subtitle">Get support & updates</span>
+        </div>
+        <i class="bi bi-arrow-right discord-arrow"></i>
+    </a>
 
     <header class="hero">
         <div class="container hero-content">
@@ -60,14 +89,117 @@
                 <h1>Your Minecraft, <br><span class="gradient-text">Without Limits.</span></h1>
                 <p class="lead">The open source launcher designed to be lightweight, secure and completely
                     customizable. Forget about bloatware.</p>
+                
+                <!-- PowerShell One-Liner Install (Windows Only) -->
+                <div id="powershellInstall" class="powershell-install-container" style="display: none;">
+                    <div class="powershell-install-content">
+                        <div class="powershell-header">
+                            <i class="bi bi-terminal"></i>
+                            <span>Quick Install (PowerShell)</span>
+                            <span class="windows-badge"><i class="bi bi-windows"></i> Windows</span>
+                        </div>
+                        <div class="powershell-command-wrapper">
+                            <code id="powershellCommand" class="powershell-command">iwr -useb https://raw.githubusercontent.com/Abeloskyyy/HelloWorld-Launcher/main/install.ps1 | iex</code>
+                            <button id="copyPowershellBtn" class="copy-btn" title="Copy to clipboard">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <p class="powershell-note">One-click install</p>
+                    </div>
+                </div>
+                
                 <div class="hero-buttons">
-                    <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" id="heroDownloadBtn" class="btn btn-primary btn-lg">
-                        <i class="bi bi-windows"></i> Download for Windows
-                        <div class="btn-shine"></div>
-                    </a>
-                    <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" id="heroDownloadLinuxBtn" class="btn btn-secondary btn-lg">
-                        <i class="fa-brands fa-linux" style="font-size: 1.1rem; margin-right: 5px;"></i> Download for Linux (.deb)
-                    </a>
+                    <div class="dropdown-container">
+                        <button id="heroDownloadBtn" class="btn btn-primary btn-lg dropdown-btn">
+                            <i class="bi bi-windows"></i> Download for Windows
+                            <i class="bi bi-chevron-down dropdown-arrow"></i>
+                            <div class="btn-shine"></div>
+                        </button>
+                        <div class="dropdown-menu" id="windowsDropdown">
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item recommended">
+                                <div class="dropdown-item-content">
+                                    <i class="bi bi-windows"></i>
+                                    <div class="dropdown-item-text">
+                                        <span class="dropdown-item-title">Setup x64</span>
+                                        <span class="dropdown-item-subtitle">Installer (Recommended)</span>
+                                    </div>
+                                    <span class="recommended-badge">Best Option</span>
+                                </div>
+                            </a>
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item">
+                                <div class="dropdown-item-content">
+                                    <i class="bi bi-cpu"></i>
+                                    <div class="dropdown-item-text">
+                                        <span class="dropdown-item-title">Setup ARM64</span>
+                                        <span class="dropdown-item-subtitle">Installer for ARM devices</span>
+                                    </div>
+                                </div>
+                            </a>
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item">
+                                <div class="dropdown-item-content">
+                                    <i class="bi bi-box-seam"></i>
+                                    <div class="dropdown-item-text">
+                                        <span class="dropdown-item-title">Portable x64</span>
+                                        <span class="dropdown-item-subtitle">ZIP archive</span>
+                                    </div>
+                                </div>
+                            </a>
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item">
+                                <div class="dropdown-item-content">
+                                    <i class="bi bi-box-seam"></i>
+                                    <div class="dropdown-item-text">
+                                        <span class="dropdown-item-title">Portable ARM64</span>
+                                        <span class="dropdown-item-subtitle">ZIP archive for ARM</span>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="dropdown-container">
+                        <button id="heroDownloadLinuxBtn" class="btn btn-secondary btn-lg dropdown-btn">
+                            <i class="fa-brands fa-linux" style="font-size: 1.1rem; margin-right: 5px;"></i> Download for Linux
+                            <i class="bi bi-chevron-down dropdown-arrow"></i>
+                        </button>
+                        <div class="dropdown-menu" id="linuxDropdown">
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item recommended">
+                                <div class="dropdown-item-content">
+                                    <i class="fa-brands fa-linux"></i>
+                                    <div class="dropdown-item-text">
+                                        <span class="dropdown-item-title">DEB x64</span>
+                                        <span class="dropdown-item-subtitle">Debian/Ubuntu (Recommended)</span>
+                                    </div>
+                                    <span class="recommended-badge">Best Option</span>
+                                </div>
+                            </a>
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item">
+                                <div class="dropdown-item-content">
+                                    <i class="fa-brands fa-linux"></i>
+                                    <div class="dropdown-item-text">
+                                        <span class="dropdown-item-title">DEB ARM64</span>
+                                        <span class="dropdown-item-subtitle">Debian/Ubuntu for ARM</span>
+                                    </div>
+                                </div>
+                            </a>
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item">
+                                <div class="dropdown-item-content">
+                                    <i class="bi bi-box"></i>
+                                    <div class="dropdown-item-text">
+                                        <span class="dropdown-item-title">AppImage x64</span>
+                                        <span class="dropdown-item-subtitle">Universal Linux</span>
+                                    </div>
+                                </div>
+                            </a>
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item">
+                                <div class="dropdown-item-content">
+                                    <i class="bi bi-box"></i>
+                                    <div class="dropdown-item-text">
+                                        <span class="dropdown-item-title">AppImage ARM64</span>
+                                        <span class="dropdown-item-subtitle">Universal Linux for ARM</span>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
                     <a href="https://github.com/abeloskyyy/HelloWorld-Launcher" target="_blank"
                         class="btn btn-secondary btn-lg">
                         <i class="bi bi-code-slash"></i> View Code
@@ -315,13 +447,298 @@
         </div>
     </div>
 
+    <!-- Auth Modal -->
+    <div id="authModal" class="review-modal">
+        <div class="review-modal-content" style="max-width: 400px;">
+            <button class="close-modal" id="closeAuthModal">&times;</button>
+            
+            <div class="auth-tabs" style="display: flex; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                <button id="tabLogin" style="flex: 1; padding: 10px; text-align: center; background: none; border: none; color: white; cursor: pointer; border-bottom: 2px solid var(--primary-color); font-weight: bold;">Log In</button>
+                <button id="tabRegister" style="flex: 1; padding: 10px; text-align: center; background: none; border: none; color: rgba(255,255,255,0.6); cursor: pointer; border-bottom: 2px solid transparent;">Register</button>
+            </div>
+
+            <!-- Login Form -->
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>Email or Username</label>
+                    <input type="text" id="loginEmail" placeholder="example@mail.com or Notch" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label style="display: flex; justify-content: space-between; align-items: center;">
+                        Password
+                        <a href="#" id="linkToForgotPassword" style="font-size: 0.85em; color: var(--primary-color); text-decoration: none;">Forgot password?</a>
+                    </label>
+                    <div style="position: relative;">
+                        <input type="password" id="loginPassword" placeholder="Your password" class="form-control" style="width: 100%; padding-right: 40px;" required>
+                        <i class="fa-regular fa-eye toggle-password" data-target="loginPassword" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #a3a3a3;"></i>
+                    </div>
+                </div>
+                <div id="loginError" style="color: #ff8c82; font-size: 0.9em; margin-bottom: 10px; text-align: center; display: none;"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;" id="loginSubmitBtn">Log In</button>
+                
+                <div style="display: flex; align-items: center; margin: 20px 0;">
+                    <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.1);"></div>
+                    <span style="padding: 0 15px; font-size: 0.85em; opacity: 0.6;">OR</span>
+                    <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.1);"></div>
+                </div>
+                
+                <button type="button" class="btn btn-secondary" style="width: 100%; background: #2F2F2F; border-color: #2F2F2F; display: flex; align-items: center; justify-content: center; gap: 10px;" id="microsoftLoginBtn">
+                    <svg width="20" height="20" viewBox="0 0 23 23" fill="none">
+                        <path d="M11.5 11.5H0V0H11.5V11.5Z" fill="#F25022"/>
+                        <path d="M23 11.5H11.5V0H23V11.5Z" fill="#7FBA00"/>
+                        <path d="M11.5 23H0V11.5H11.5V23Z" fill="#00A4EF"/>
+                        <path d="M23 23H11.5V11.5H23V23Z" fill="#FFB900"/>
+                    </svg>
+                    Sign in with Microsoft
+                </button>
+                
+                <p style="text-align: center; margin-top: 15px; font-size: 0.9em; opacity: 0.8;">
+                    Don't have an account yet? <a href="#" id="linkToRegister" style="color: var(--primary-color);">Create an account</a>
+                </p>
+            </form>
+
+            <!-- Forgot Password Form (Hidden initially) -->
+            <form id="forgotPasswordForm" style="display: none;">
+                <div class="form-group">
+                    <p style="font-size: 0.9em; color: #a3a3a3; margin-bottom: 15px;">Enter your email address and we'll send you a link to reset your password.</p>
+                    <label>Email</label>
+                    <input type="email" id="forgotPasswordEmail" placeholder="Your email address" class="form-control" required>
+                </div>
+                <div id="forgotPasswordError" style="color: #ff8c82; font-size: 0.9em; margin-bottom: 10px; text-align: center; display: none;"></div>
+                <div id="forgotPasswordSuccess" style="color: #4CAF50; font-size: 0.9em; margin-bottom: 10px; text-align: center; display: none;"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;" id="forgotPasswordSubmitBtn">Send Reset Link</button>
+                <p style="text-align: center; margin-top: 15px; font-size: 0.9em; opacity: 0.8;">
+                    Remembered it? <a href="#" id="linkToLoginFromForgot" style="color: var(--primary-color);">Back to login</a>
+                </p>
+            </form>
+
+            <!-- Register Form (Hidden initially) -->
+            <form id="registerForm" style="display: none;">
+                <div class="form-group">
+                    <label>Minecraft Username</label>
+                    <input type="text" id="registerUsername" placeholder="e.g. Notch" class="form-control" required minlength="3" maxlength="16">
+                    <p style="font-size: 0.8em; color: #ff8c82; margin-top: 5px; line-height: 1.3;">
+                        <i class="bi bi-exclamation-triangle"></i> Cannot contain spaces or symbols. Max 16 characters.
+                    </p>
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="registerEmail" placeholder="Your email address" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <div style="position: relative;">
+                        <input type="password" id="registerPassword" placeholder="Choose a strong password" class="form-control" style="width: 100%; padding-right: 40px;" required minlength="6">
+                        <i class="fa-regular fa-eye toggle-password" data-target="registerPassword" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #a3a3a3;"></i>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Confirm Password</label>
+                    <div style="position: relative;">
+                        <input type="password" id="registerConfirmPassword" placeholder="Repeat your password" class="form-control" style="width: 100%; padding-right: 40px;" required minlength="6">
+                        <i class="fa-regular fa-eye toggle-password" data-target="registerConfirmPassword" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #a3a3a3;"></i>
+                    </div>
+                </div>
+                <div id="registerError" style="color: #ff8c82; font-size: 0.9em; margin-bottom: 10px; text-align: center; display: none;"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;" id="registerSubmitBtn">Register</button>
+                <p style="text-align: center; margin-top: 15px; font-size: 0.9em; opacity: 0.8;">
+                    Already have an account? <a href="#" id="linkToLogin" style="color: var(--primary-color);">Log in</a>
+                </p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Account Dashboard Modal -->
+    <div id="accountModal" class="review-modal">
+        <div class="review-modal-content" style="max-width: 1200px; max-height: 90vh; overflow-y: auto;">
+            <button class="close-modal" id="closeAccountModal">&times;</button>
+            <h3 style="margin-bottom: 5px;">Account Dashboard</h3>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 20px;">
+                <!-- Left Column -->
+                <div>
+                    <div class="form-group" style="text-align: center;">
+                        <div id="avatarBackgroundPreview" style="border-radius: 16px; padding: 30px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); margin-bottom: 20px; transition: border 0.3s; position: relative;">
+                            <h2 style="margin: 0 0 15px 0; font-size: 1.5rem; font-weight: 600; filter: drop-shadow(0 2px 8px rgba(0,0,0,1)); display: flex; align-items: center; justify-content: center; gap: 8px;">
+                                <span id="dashboardDisplayName">Player</span>
+                                <span id="dashboardPremiumBadge" class="premium-badge" style="display:none;"><i class="fas fa-dollar-sign"></i></span>
+                            </h2>
+                            <div style="position: relative; display: inline-block;">
+                                <img id="dashboardAvatarPreview" src="https://ui-avatars.com/api/?name=Player&background=random&color=fff&rounded=true&bold=true&format=svg" alt="Avatar" style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255,255,255,0.2); image-rendering: pixelated; filter: drop-shadow(0 4px 12px rgba(0,0,0,1));">
+                                <div id="countryBadge" style="position: absolute; top: 10px; right: -5px; width: 32px; height: 32px; border-radius: 50%; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; overflow: hidden; border: 2px solid rgba(255,255,255,0.3); z-index: 10; filter: drop-shadow(0 2px 6px rgba(0,0,0,1));">
+                                    <img id="countryFlagSvg" src="" alt="Country" style="width: 100%; height: 100%; object-fit: cover;">
+                                </div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 10px; justify-content: center;">
+                            <input type="file" id="avatarUploadInput" accept="image/png, image/jpeg, image/webp" style="display: none;">
+                            <button class="btn btn-secondary" onclick="document.getElementById('avatarUploadInput').click()" style="flex: 1; font-size: 0.9em;"><i class="fas fa-camera"></i> Avatar</button>
+                            <button class="btn btn-secondary" id="useDefaultAvatarBtn" title="Use your default Minecraft head" style="display:none; padding: 0 14px; font-size: 0.9em;"><i class="fas fa-cube"></i> MC Head</button>
+                            <select id="dashboardBackground" class="form-control" style="flex: 1; padding: 10px; color: white; background-color: rgba(30,30,35,0.9);">
+                                <option value="default">Default</option>
+                                <option value="gradient1">Purple</option>
+                                <option value="gradient2">Blue</option>
+                                <option value="gradient3">Green</option>
+                                <option value="gradient4">Orange</option>
+                                <option value="gradient5">Pink</option>
+                                <option value="minecraft1">Minecraft Overworld</option>
+                                <option value="minecraft2">Minecraft Sky</option>
+                                <option value="minecraft3">Minecraft Nether</option>
+                                <option value="minecraft4">Minecraft End</option>
+                                <option value="minecraft5">Minecraft Village</option>
+                                <option value="minecraft6">Minecraft Forest</option>
+                                <option value="minecraft7">Minecraft Desert</option>
+                                <option value="minecraft8">Minecraft Ocean</option>
+                                <option value="minecraft9">Minecraft Cherry Grove</option>
+                            </select>
+                        </div>
+                        <p style="font-size: 0.8em; opacity: 0.65; margin-top: 5px;">Images are automatically cropped to 1:1 and resized to 128x128.</p>
+                    </div>
+
+                    <div class="form-group" id="usernameFormGroup" style="margin-top: 20px;">
+                        <label>Minecraft Username</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="dashboardUsername" class="form-control" readonly disabled style="color: white;">
+                            <button class="btn btn-secondary" id="editUsernameBtn" style="padding: 0 15px;"><i class="fas fa-edit"></i></button>
+                        </div>
+                        <p style="font-size: 0.8em; color: #ff8c82; margin-top: 5px; line-height: 1.3;">
+                            <i class="bi bi-exclamation-triangle"></i> Changing your username might cause you to lose progress, ranks, and inventory on third-party servers.
+                        </p>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 20px;">
+                        <label>Country</label>
+                        <select id="dashboardCountry" class="form-control" style="color: white; background-color: rgba(30,30,35,0.9);">
+                            <option value="">Select your country</option>
+                            <option value="AR">Argentina</option>
+                            <option value="AU">Australia</option>
+                            <option value="AT">Austria</option>
+                            <option value="BE">Belgium</option>
+                            <option value="BR">Brazil</option>
+                            <option value="CA">Canada</option>
+                            <option value="CL">Chile</option>
+                            <option value="CN">China</option>
+                            <option value="CO">Colombia</option>
+                            <option value="CZ">Czech Republic</option>
+                            <option value="DK">Denmark</option>
+                            <option value="EG">Egypt</option>
+                            <option value="FI">Finland</option>
+                            <option value="FR">France</option>
+                            <option value="DE">Germany</option>
+                            <option value="GR">Greece</option>
+                            <option value="HK">Hong Kong</option>
+                            <option value="HU">Hungary</option>
+                            <option value="IS">Iceland</option>
+                            <option value="IN">India</option>
+                            <option value="ID">Indonesia</option>
+                            <option value="IE">Ireland</option>
+                            <option value="IL">Israel</option>
+                            <option value="IT">Italy</option>
+                            <option value="JP">Japan</option>
+                            <option value="LU">Luxembourg</option>
+                            <option value="MY">Malaysia</option>
+                            <option value="MX">Mexico</option>
+                            <option value="NL">Netherlands</option>
+                            <option value="NZ">New Zealand</option>
+                            <option value="NG">Nigeria</option>
+                            <option value="NO">Norway</option>
+                            <option value="PE">Peru</option>
+                            <option value="PH">Philippines</option>
+                            <option value="PL">Poland</option>
+                            <option value="PT">Portugal</option>
+                            <option value="RO">Romania</option>
+                            <option value="RU">Russia</option>
+                            <option value="SA">Saudi Arabia</option>
+                            <option value="SG">Singapore</option>
+                            <option value="ZA">South Africa</option>
+                            <option value="KR">South Korea</option>
+                            <option value="ES">Spain</option>
+                            <option value="SE">Sweden</option>
+                            <option value="CH">Switzerland</option>
+                            <option value="TH">Thailand</option>
+                            <option value="TR">Turkey</option>
+                            <option value="UA">Ukraine</option>
+                            <option value="AE">United Arab Emirates</option>
+                            <option value="GB">United Kingdom</option>
+                            <option value="US">United States</option>
+                            <option value="VE">Venezuela</option>
+                            <option value="VN">Vietnam</option>
+                            <option value="OTHER">Other</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div>
+                    <div class="form-group">
+                        <label>Biography <span style="opacity: 0.6; font-size: 0.85em;">(max 500 characters)</span></label>
+                        <textarea id="dashboardBiography" class="form-control" rows="5" maxlength="500" placeholder="Tell us about yourself..." style="color: white; resize: none;"></textarea>
+                        <p style="font-size: 0.8em; opacity: 0.6; margin-top: 5px; text-align: right;"><span id="biographyCharCount">0</span>/500</p>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label>Links <span style="opacity: 0.6; font-size: 0.85em;">(title and URL)</span></label>
+                        <div id="linksContainer">
+                            <!-- Links will be added here dynamically -->
+                        </div>
+                        <button type="button" class="btn btn-secondary" id="addLinkBtn" style="width: 100%; margin-top: 10px; font-size: 0.9em;"><i class="fas fa-plus"></i> Add Link</button>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label>Favorite Mob</label>
+                        <input type="text" id="dashboardFavoriteMob" class="form-control" placeholder="E.g. Creeper, Enderman..." maxlength="50" style="color: white;">
+                    </div>
+
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label>Playstyle Tags <span style="opacity: 0.6; font-size: 0.85em;">(pick up to 5)</span></label>
+                        <div id="playstyleTagsGrid" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;">
+                            <!-- Tags rendered by JS -->
+                        </div>
+                        <p style="font-size: 0.8em; opacity: 0.6; margin-top: 6px;">Click to select/deselect. Max 5 tags.</p>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 15px;">
+                        <button class="btn btn-secondary" id="accountLogoutBtn" style="width: 100%; border-color: #ff8c82; color: #ff8c82;"><i class="fas fa-sign-out-alt"></i> Log Out</button>
+                    </div>
+
+
+                    <div id="accountError" style="color: #ff8c82; font-size: 0.9em; margin-bottom: 10px; text-align: center; display: none;"></div>
+                    <div id="accountSuccess" style="color: #4CAF50; font-size: 0.9em; margin-bottom: 10px; text-align: center; display: none;"></div>
+                    
+                    <button class="btn btn-primary" id="saveAccountBtn" style="width: 100%; margin-top: 15px;">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Avatar Cropper Modal -->
+    <div id="cropperModal" class="review-modal" style="z-index: 2000;">
+        <div class="review-modal-content" style="max-width: 500px; text-align: center; border-radius: 12px; background: rgba(20, 20, 25, 0.95); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px);">
+            <button class="close-modal" id="closeCropperModal" style="top: 15px; right: 15px;">&times;</button>
+            <h3 style="margin-bottom: 20px; font-weight: 600; color: #fff;">Crop your Avatar</h3>
+            <div style="height: 400px; width: 100%; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); border-radius: 8px; overflow: hidden; margin-bottom: 25px;">
+                <img id="cropperImage" src="" style="max-width: 100%; max-height: 100%; display: block;">
+            </div>
+            <div style="display: flex; gap: 15px;">
+                <button class="btn btn-secondary" id="cancelCropBtn" style="flex: 1; padding: 12px; border-radius: 8px; font-weight: 600;">Cancel</button>
+                <button class="btn btn-primary" id="applyCropBtn" style="flex: 1; padding: 12px; border-radius: 8px; font-weight: 600;">Apply & Save</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, push, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut, OAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, deleteField, serverTimestamp as firestoreTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         // Export to global scope so script.js can use them (Simple approach for non-bundled apps)
-        window.firebaseModules = { initializeApp, getDatabase, ref, push, onValue, serverTimestamp };
+        window.firebaseModules = {
+            initializeApp, getDatabase, ref, push, onValue, serverTimestamp,
+            getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut, OAuthProvider, signInWithPopup,
+            getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, deleteField, firestoreTimestamp
+        };
     </script>
     <script src="script.js" type="module"></script>
 </body>
