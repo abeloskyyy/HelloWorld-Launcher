@@ -3632,9 +3632,7 @@
         const closeBtn = document.getElementById('closeSocialModal');
         if (closeBtn) closeBtn.addEventListener('click', closeSocialModal);
 
-        // Overlay click to close
-        const modal = document.getElementById('socialModal');
-        if (modal) modal.addEventListener('click', e => { if (e.target === modal) closeSocialModal(); });
+        // Overlay click to close removed
 
         // OS notification click → open social modal and navigate to specific chat
         window.addEventListener('navigate-to-chat', (e) => {

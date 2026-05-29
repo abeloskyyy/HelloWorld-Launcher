@@ -25,8 +25,24 @@ try {
     $ReleaseUrl = "https://api.github.com/repos/$RepoOwner/$RepoName/releases/latest"
     $ReleaseInfo = Invoke-RestMethod -Uri $ReleaseUrl -UseBasicParsing
     $Version = $ReleaseInfo.tag_name
-    $Asset = $ReleaseInfo.assets | Where-Object { $_.name -like "*.zip" -and $_.name -like "*portable*" } | Select-Object -First 1
     
+    # Determine the system architecture (default to x64 if not ARM64)
+    $Arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" }
+    
+    # First try to find a portable zip matching the architecture
+    $Asset = $ReleaseInfo.assets | Where-Object { $_.name -like "*.zip" -and $_.name -like "*portable*" -and $_.name -like "*$Arch*" } | Select-Object -First 1
+    
+    # Next try to find any zip matching the architecture
+    if (-not $Asset) {
+        $Asset = $ReleaseInfo.assets | Where-Object { $_.name -like "*.zip" -and $_.name -like "*$Arch*" } | Select-Object -First 1
+    }
+    
+    # Fallback to any portable zip
+    if (-not $Asset) {
+        $Asset = $ReleaseInfo.assets | Where-Object { $_.name -like "*.zip" -and $_.name -like "*portable*" } | Select-Object -First 1
+    }
+    
+    # Fallback to any zip
     if (-not $Asset) {
         $Asset = $ReleaseInfo.assets | Where-Object { $_.name -like "*.zip" } | Select-Object -First 1
     }

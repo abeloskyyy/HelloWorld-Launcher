@@ -171,7 +171,6 @@ async function init() {
 
     if (navLoginBtn) navLoginBtn.addEventListener('click', (e) => { e.preventDefault(); openAuthModal(false); });
     if (closeAuthModal) closeAuthModal.addEventListener('click', closeAuthModalFunc);
-    if (authModal) authModal.addEventListener('click', (e) => { if (e.target === authModal) closeAuthModalFunc(); });
     // Password Toggles
     const togglePasswords = document.querySelectorAll('.toggle-password');
     togglePasswords.forEach(toggle => {
@@ -434,9 +433,6 @@ async function init() {
         };
 
         closeBtn.addEventListener('click', closeModal);
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) closeModal();
-        });
 
         submitBtn.addEventListener('click', async () => {
             const username = input.value.trim();
@@ -850,7 +846,6 @@ async function init() {
     }
 
     if (closeAccountModal) closeAccountModal.addEventListener('click', () => accountModal.classList.remove('active'));
-    if (accountModal) accountModal.addEventListener('click', (e) => { if (e.target === accountModal) accountModal.classList.remove('active'); });
 
     // Biography character counter
     const biographyInput = document.getElementById('dashboardBiography');
@@ -1468,19 +1463,26 @@ async function init() {
             }
 
             if (heroBtn && heroLinuxBtn) {
+                const heroBtnContainer = heroBtn.closest('.dropdown-container') || heroBtn;
+                const heroLinuxBtnContainer = heroLinuxBtn.closest('.dropdown-container') || heroLinuxBtn;
+
                 // Apply OS specific ordering and styles
                 if (userOS === "Windows") {
                     heroBtn.className = "btn btn-primary btn-lg dropdown-btn";
                     heroBtn.innerHTML = `<i class="bi bi-windows"></i> Download for Windows ${tagName}<i class="bi bi-chevron-down dropdown-arrow"></i><div class="btn-shine"></div>`;
                     heroLinuxBtn.className = "btn btn-secondary btn-lg dropdown-btn";
                     heroLinuxBtn.innerHTML = `${iconLinux} Download for Linux ${tagName}<i class="bi bi-chevron-down dropdown-arrow"></i>`;
-                    heroButtonsContainer.insertBefore(heroBtn, heroLinuxBtn);
+                    if (heroBtnContainer.parentNode === heroButtonsContainer && heroLinuxBtnContainer.parentNode === heroButtonsContainer) {
+                        heroButtonsContainer.insertBefore(heroBtnContainer, heroLinuxBtnContainer);
+                    }
                 } else if (userOS === "Linux") {
                     heroLinuxBtn.className = "btn btn-primary btn-lg dropdown-btn";
                     heroLinuxBtn.innerHTML = `${iconLinux} Download for Linux ${tagName}<i class="bi bi-chevron-down dropdown-arrow"></i><div class="btn-shine"></div>`;
                     heroBtn.className = "btn btn-secondary btn-lg dropdown-btn";
                     heroBtn.innerHTML = `<i class="bi bi-windows"></i> Download for Windows ${tagName}<i class="bi bi-chevron-down dropdown-arrow"></i>`;
-                    heroButtonsContainer.insertBefore(heroLinuxBtn, heroBtn);
+                    if (heroBtnContainer.parentNode === heroButtonsContainer && heroLinuxBtnContainer.parentNode === heroButtonsContainer) {
+                        heroButtonsContainer.insertBefore(heroLinuxBtnContainer, heroBtnContainer);
+                    }
                 } else {
                     // Mobile / MacOS or unknown
                     heroBtn.className = "btn btn-secondary btn-lg dropdown-btn";
@@ -1794,13 +1796,6 @@ async function init() {
     reviewBtn.addEventListener('click', openModal);
 
     closeModal.addEventListener('click', closeModalFunc);
-
-    // Close on outside click
-    reviewModal.addEventListener('click', (e) => {
-        if (e.target === reviewModal) {
-            closeModalFunc();
-        }
-    });
 
     // Check URL Parameters for ?review=true
     if (urlParams.get('review') === 'true') {

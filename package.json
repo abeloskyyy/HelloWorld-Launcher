@@ -1,7 +1,7 @@
 {
   "name": "helloworld-launcher",
   "version": "1.1.0",
-  "description": "HelloWorld Launcher",
+  "description": "The official custom Minecraft launcher for the HelloWorld community, featuring fast updates, rich presence, and smooth performance.",
   "main": "main.js",
   "scripts": {
     "test": "electron .",

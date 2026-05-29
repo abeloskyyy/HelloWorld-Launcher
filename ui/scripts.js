@@ -3817,21 +3817,6 @@ if (closeLoginModal) {
 
 
 
-// Close login modal when clicking outside
-
-if (loginModal) {
-
-    loginModal.addEventListener('click', (e) => {
-
-        if (e.target === loginModal) {
-
-            loginModal.classList.remove('show');
-
-        }
-
-    });
-
-}
 
 
 
@@ -4283,23 +4268,7 @@ if (closeLoginModal) {
 
 
 
-// Close modal when clicking outside
 
-if (loginModal) {
-
-    loginModal.addEventListener('click', (e) => {
-
-        if (e.target === loginModal) {
-
-            loginModal.classList.remove('show');
-
-            showLoginMethodScreen();
-
-        }
-
-    });
-
-}
 
 
 
