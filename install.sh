@@ -98,9 +98,13 @@ echo -e "\nYou can now run the launcher from your application menu or terminal."
 echo -e "\e[36mNote: Make sure you have Java 17+ installed.\e[0m\n"
 
 # Ask if user wants to launch
-read -p "Launch the launcher now? (Y/N) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    "$APP_EXEC" --no-sandbox &
-    echo -e "\e[32mLauncher started!\e[0m"
+if [ -c /dev/tty ]; then
+    read -p "Launch the launcher now? (Y/N) " -n 1 -r < /dev/tty
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        "$APP_EXEC" --no-sandbox &
+        echo -e "\e[32mLauncher started!\e[0m"
+    fi
+else
+    echo -e "\n\e[33mTo start the launcher, run: $APP_EXEC\e[0m"
 fi
