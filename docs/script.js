@@ -677,10 +677,10 @@ async function init() {
                 }
 
                 // Check if username is already taken
-                const { getDocs, collection, query, where } = window.firebaseModules;
-                const q = query(collection(firestore, "users"), where("username", "==", username));
-                const querySnapshot = await getDocs(q);
-                if (!querySnapshot.empty) {
+                const usernameDoc = await window.firebaseModules.getDoc(
+                    window.firebaseModules.doc(firestore, 'usernames', username.toLowerCase())
+                );
+                if (usernameDoc.exists()) {
                     throw new Error("This username is already taken.");
                 }
 

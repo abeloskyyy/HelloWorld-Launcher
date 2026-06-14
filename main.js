@@ -1757,7 +1757,7 @@ ipcMain.handle('login-helloworld', async (e, identifier, password) => {
     // 1. Resolve Email if username was provided
     if (!identifier.includes('@')) {
       console.log(`[HelloWorld Login] Resolving username: ${identifier}`);
-      const queryUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/usernames/${encodeURIComponent(identifier.toLowerCase())}`;
+      const queryUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/usernames/${encodeURIComponent(identifier.toLowerCase())}?key=${FIREBASE_API_KEY}`;
       
       try {
         const queryRes = await axios.get(queryUrl);
@@ -1789,7 +1789,9 @@ ipcMain.handle('login-helloworld', async (e, identifier, password) => {
 
     // 3. Fetch full User Profile from Firestore to get Skin/Variant
     const docUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/${localId}`;
-    const docRes = await axios.get(docUrl);
+    const docRes = await axios.get(docUrl, {
+      headers: { Authorization: `Bearer ${idToken}` }
+    });
 
     let username = identifier.includes('@') ? (displayName || email.split('@')[0]) : identifier;
     let avatarUrl = "";
@@ -4035,10 +4037,34 @@ ipcMain.handle('stats-get-my-stats', async () => {
   try {
     const auth = await getSocialAuth();
     const stats = await fsGet(`users/${auth.uid}/stats/main`, auth.idToken);
+    
+    // Calculate effective streak for UI display without saving to DB yet
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    
+    const lastDate = stats.lastPlayed ? new Date(stats.lastPlayed).toISOString().split('T')[0] : null;
+    
+    let effectiveStreak = stats.streak || 0;
+    let streakCompletedToday = false;
+    
+    if (lastDate === todayStr) {
+      streakCompletedToday = true;
+    } else if (lastDate !== yesterdayStr && effectiveStreak > 0) {
+      // Streak lost
+      effectiveStreak = 0;
+    }
+    
+    // Override streak property for UI, and pass completion status
+    stats.streak = effectiveStreak;
+    stats.streakCompletedToday = streakCompletedToday;
+    
     return { success: true, stats };
   } catch (e) {
     if (e.message === 'NO_SOCIAL_AUTH') return { success: false, error: 'offline' };
-    return { success: true, stats: { streak: 0, totalHours: 0, totalSessions: 0, totalDaysPlayed: 0 } };
+    return { success: true, stats: { streak: 0, totalHours: 0, totalSessions: 0, totalDaysPlayed: 0, streakCompletedToday: false } };
   }
 });
 
@@ -4046,10 +4072,34 @@ ipcMain.handle('stats-get-user', async (e, targetUid) => {
   try {
     const auth = await getSocialAuth();
     const stats = await fsGet(`users/${targetUid}/stats/main`, auth.idToken);
+    
+    // Calculate effective streak for UI display without saving to DB yet
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    
+    const lastDate = stats.lastPlayed ? new Date(stats.lastPlayed).toISOString().split('T')[0] : null;
+    
+    let effectiveStreak = stats.streak || 0;
+    let streakCompletedToday = false;
+    
+    if (lastDate === todayStr) {
+      streakCompletedToday = true;
+    } else if (lastDate !== yesterdayStr && effectiveStreak > 0) {
+      // Streak lost
+      effectiveStreak = 0;
+    }
+    
+    // Override streak property for UI, and pass completion status
+    stats.streak = effectiveStreak;
+    stats.streakCompletedToday = streakCompletedToday;
+
     return { success: true, stats };
   } catch (e) {
     if (e.message === 'NO_SOCIAL_AUTH') return { success: false, error: 'offline' };
-    return { success: true, stats: { streak: 0, totalHours: 0, totalSessions: 0, totalDaysPlayed: 0 } };
+    return { success: true, stats: { streak: 0, totalHours: 0, totalSessions: 0, totalDaysPlayed: 0, streakCompletedToday: false } };
   }
 });
 

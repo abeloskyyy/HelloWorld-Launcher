@@ -777,6 +777,11 @@ async function updateUserInterface(userData) {
                     editProfileBtn.title = 'Verify your Microsoft account to edit profile';
 
                 }
+                
+                // Reload stats for Microsoft accounts
+                if (window.loadMyStats) {
+                    window.loadMyStats();
+                }
 
             } else if (userData.account_type === 'helloworld') {
 
@@ -793,12 +798,23 @@ async function updateUserInterface(userData) {
                 editProfileBtn.style.removeProperty('opacity');
 
                 editProfileBtn.title = 'Edit Profile';
+                
+                // Reload stats for HelloWorld accounts
+                if (window.loadMyStats) {
+                    window.loadMyStats();
+                }
 
             } else {
 
                 // Offline accounts cannot edit profile
 
                 editProfileBtn.style.display = 'none';
+                
+                const streakBadgeContainer = document.getElementById('streakBadgeContainer');
+                if (streakBadgeContainer) streakBadgeContainer.style.display = 'none';
+                
+                const statsBtn = document.getElementById('statsBtn');
+                if (statsBtn) statsBtn.style.display = 'none';
 
             }
 
@@ -870,6 +886,11 @@ async function updateUserInterface(userData) {
 
         if (editProfileBtn) editProfileBtn.style.display = 'none';
 
+        const streakBadgeContainer = document.getElementById('streakBadgeContainer');
+        if (streakBadgeContainer) streakBadgeContainer.style.display = 'none';
+        
+        const statsBtn = document.getElementById('statsBtn');
+        if (statsBtn) statsBtn.style.display = 'none';
     }
 
     

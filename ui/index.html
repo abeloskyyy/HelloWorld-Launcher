@@ -97,7 +97,7 @@
                 
                 <!-- Streak Badge positioned below User Badge -->
                 <div id="streakBadgeContainer" style="display: none; width: 100%; aspect-ratio: 1 / 1; position: relative; flex-direction: column; align-items: center; justify-content: center; z-index: 99; background: rgba(20, 20, 30, 0.5); backdrop-filter: blur(8px); border-radius: 12px; border: 1px solid rgba(255,170,0,0.2); box-shadow: 0 4px 15px rgba(0,0,0,0.3); overflow: hidden;">
-                    <div class="css-fire-container" style="position: absolute; bottom: 25px; left: -20px; width: 100%; height: 100%; z-index: 1; filter: url(#gooey-fire); opacity: 0.65;">
+                    <div class="css-fire-container" style="position: absolute; bottom: 25px; left: -20px; width: 100%; height: 100%; z-index: 1; filter: url(#gooey-fire); opacity: 0; transition: opacity 1s ease-in-out;">
                         <div class="flame-base" style="width: 80px; height: 50px; margin-left: 20px;"></div>
                         <div class="flame-particle p1" style="width: 55px; height: 55px;"></div>
                         <div class="flame-particle p2" style="width: 65px; height: 65px;"></div>
@@ -326,13 +326,11 @@
 
                                             <!-- Pagination Controls -->
                                             <div id="modSearchPagination" class="pagination-controls"
-                                                style="display: none; justify-content: center; gap: 10px; margin-top: 15px; align-items: center;">
-                                                <button id="btnPrevPage" class="btn-square" disabled><i
-                                                        class="fas fa-chevron-left"></i></button>
-                                                <button id="pageIndicator" class="btn-secondary"
-                                                    style="pointer-events: none; padding: 10px 15px; font-weight: bold;">1</button>
-                                                <button id="btnNextPage" class="btn-square"><i
-                                                        class="fas fa-chevron-right"></i></button>
+                                                style="display: none; justify-content: center; gap: 0px; margin-top: 15px; align-items: center;">
+                                                <button id="btnPrevPage" class="btn-square" style="border-top-right-radius: 0; border-bottom-right-radius: 0; margin: 0;" disabled><i class="fas fa-chevron-left"></i></button>
+                                                <button id="pageIndicator" class="btn-square"
+                                                    style="pointer-events: none; font-weight: bold; border-radius: 0; margin: 0; background: rgba(79, 172, 254, 0.2); color: #fff;">1</button>
+                                                <button id="btnNextPage" class="btn-square" style="border-top-left-radius: 0; border-bottom-left-radius: 0; margin: 0;"><i class="fas fa-chevron-right"></i></button>
                                             </div>
                                         </div>
 

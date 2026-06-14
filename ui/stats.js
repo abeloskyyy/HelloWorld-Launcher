@@ -68,6 +68,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                         streakCount.innerText = targetStreak;
                     }
                     
+                    const fireContainer = streakBadgeContainer.querySelector('.css-fire-container');
+                    if (fireContainer) {
+                        if (res.stats.streakCompletedToday) {
+                            fireContainer.style.opacity = '0.65';
+                        } else {
+                            fireContainer.style.opacity = '0';
+                        }
+                    }
+                    
                     statsBtn.style.display = 'inline-flex';
                     streakBadgeContainer.style.display = 'flex';
                     
@@ -80,6 +89,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.error('[Stats] Error loading my stats:', e);
         }
     }
+    
+    // Expose global function to reload stats (used by scripts.js on login)
+    window.loadMyStats = loadMyStats;
     
     // Expose global function for showing stats of any user
     window.showUserStats = async function(uid, username, avatarUrl) {
