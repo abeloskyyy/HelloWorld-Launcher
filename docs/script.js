@@ -1976,14 +1976,51 @@ async function init() {
         });
     }
 
-    // Detect Windows and show PowerShell install option
+    // Detect Windows or Linux and show appropriate install option
     if (powershellInstall) {
-        const userAgent = navigator.userAgent;
-        const isWindows = userAgent.indexOf('Win') > -1;
+        const userAgent = navigator.userAgent.toLowerCase();
+        const isWindows = userAgent.indexOf('win') > -1;
+        const isLinux = userAgent.indexOf('linux') > -1 && userAgent.indexOf('android') === -1;
         
         if (isWindows) {
             powershellInstall.style.display = 'block';
+        } else if (isLinux) {
+            const bashInstall = document.getElementById('bashInstall');
+            if (bashInstall) bashInstall.style.display = 'block';
         }
+    }
+
+    // Bash Copy Button
+    const copyBashBtn = document.getElementById('copyBashBtn');
+    const bashCommand = document.getElementById('bashCommand');
+    
+    if (copyBashBtn && bashCommand) {
+        copyBashBtn.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(bashCommand.textContent);
+                copyBashBtn.classList.add('copied');
+                copyBashBtn.innerHTML = '<i class="bi bi-check"></i>';
+                setTimeout(() => {
+                    copyBashBtn.classList.remove('copied');
+                    copyBashBtn.innerHTML = '<i class="bi bi-clipboard"></i>';
+                }, 2000);
+            } catch (err) {
+                console.error('Failed to copy:', err);
+                const textArea = document.createElement('textarea');
+                textArea.value = bashCommand.textContent;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                copyBashBtn.classList.add('copied');
+                copyBashBtn.innerHTML = '<i class="bi bi-check"></i>';
+                setTimeout(() => {
+                    copyBashBtn.classList.remove('copied');
+                    copyBashBtn.innerHTML = '<i class="bi bi-clipboard"></i>';
+                }, 2000);
+            }
+        });
     }
 }
 

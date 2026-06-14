@@ -1,6 +1,6 @@
 {
   "name": "helloworld-launcher",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "The official custom Minecraft launcher for the HelloWorld community, featuring fast updates, rich presence, and smooth performance.",
   "main": "main.js",
   "scripts": {
@@ -17,6 +17,7 @@
       "output": "dist",
       "buildResources": "build"
     },
+    "afterAllArtifactBuild": "scripts/patch-latest-linux.js",
     "win": {
       "target": [
         {
