@@ -17,7 +17,6 @@
       "output": "dist",
       "buildResources": "build"
     },
-    "afterAllArtifactBuild": "scripts/patch-latest-linux.js",
     "win": {
       "target": [
         {
