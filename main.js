@@ -1328,28 +1328,56 @@ async function pollMessages() {
   }
 }
 
+function formatNotificationBody(rawContent) {
+  if (!rawContent) return '(media)';
+  const str = String(rawContent).trim();
+  if (str.startsWith('$$PROFILE_SHARE$$')) {
+    try {
+      const payload = JSON.parse(str.substring('$$PROFILE_SHARE$$'.length));
+      if (payload && payload.profile && payload.profile.name) {
+        return `Shared an installation: ${payload.profile.name}`;
+      }
+    } catch (_) {}
+    return 'Shared an installation';
+  }
+  if (str.startsWith('$$LINK$$')) {
+    try {
+      const payload = JSON.parse(str.substring('$$LINK$$'.length));
+      if (payload && (payload.title || payload.url)) {
+        return `Shared a link: ${payload.title || payload.url}`;
+      }
+    } catch (_) {}
+    return 'Shared a link';
+  }
+  if (str.startsWith('{')) {
+    try {
+      const payload = JSON.parse(str);
+      if (payload && payload.type === 'seed' && payload.seed) {
+        return `Sent a seed: ${payload.seed}`;
+      }
+    } catch (_) {}
+  }
+  return str;
+}
+
 function buildWindowsToastXml(title, body, friendshipId) {
   const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  // Minimal valid WinRT toast XML - avoids edge-cases with launch attr
+  // Minimal valid WinRT toast XML without reply input box
   return '<toast>' +
     '<visual><binding template="ToastGeneric">' +
     '<text>' + esc(title) + '</text>' +
     '<text>' + esc(body) + '</text>' +
     '</binding></visual>' +
-    '<actions>' +
-    '<input id="r" type="text" placeHolderContent="Reply..."/>' +
-    '<action content="Send" activationType="background"' +
-    ' arguments="' + esc(friendshipId) + '" hint-inputId="r"/>' +
-    '</actions>' +
     '</toast>';
 }
 
 function showMsgNotification(msg, friendshipId) {
   if (!Notification.isSupported()) return;
   const title = msg.senderName || 'New message';
-  const body = msg.content || '';
-  console.log(`[MsgNotif] title="${title}" body="${body}" fid=${friendshipId}`);
-  if (!body && !title) return;
+  const rawBody = msg.content || '';
+  const formattedBody = formatNotificationBody(rawBody);
+  console.log(`[MsgNotif] title="${title}" body="${formattedBody}" fid=${friendshipId}`);
+  if (!formattedBody && !title) return;
 
   let iconPath;
   try {
@@ -1359,20 +1387,17 @@ function showMsgNotification(msg, friendshipId) {
 
   const notifOpts = {
     title,
-    body: body || '(media)',
+    body: formattedBody || '(media)',
     silent: false,
     ...(iconPath ? { icon: iconPath } : {})
   };
-  if (process.platform === 'darwin') {
-    notifOpts.hasReply = true;
-    notifOpts.replyPlaceholder = 'Reply…';
-  } else if (process.platform === 'win32') {
-    notifOpts.toastXml = buildWindowsToastXml(title, body || '(media)', friendshipId);
+  if (process.platform === 'win32') {
+    notifOpts.toastXml = buildWindowsToastXml(title, formattedBody || '(media)', friendshipId);
   }
 
   const notif = new Notification(notifOpts);
 
-  // Click or Windows "Open" action → focus window and navigate to chat
+  // Click → focus window and navigate to chat
   const doNavigate = () => {
     if (!mainWindow) return;
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -1385,22 +1410,6 @@ function showMsgNotification(msg, friendshipId) {
   };
 
   notif.on('click', doNavigate);
-
-  // macOS inline reply / Windows toast reply (Electron 28+ toastXml background action)
-  notif.on('reply', async (event, reply) => {
-    if (!reply || !reply.trim()) return;
-    await sendMsgFromMain(friendshipId, reply.trim(), msg);
-    // Also navigate so user sees the sent reply
-    doNavigate();
-  });
-
-  // Windows: foreground action ("Open" button) also uses click path
-  notif.on('action', (event, index) => {
-    // index 0 = Send (background), index 1 = Open (foreground)
-    // "Open" foreground action triggers click on Windows, but handle both
-    doNavigate();
-  });
-
   notif.show();
 }
 
