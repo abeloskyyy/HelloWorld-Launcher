@@ -140,9 +140,24 @@
                 cancelBtn: document.getElementById('cancelBtn')
             };
 
-            // Initial Check
-            setState('checking');
-            api.checkForUpdates();
+            // Check if opened in test mode
+            const isTestMode = window.location.search.includes('test=true');
+            if (isTestMode) {
+                setState('available');
+                setTimeout(() => {
+                    api.onUpdaterStatus({
+                        status: 'available',
+                        info: {
+                            version: '1.2.0-TEST',
+                            releaseNotes: "## What's New in v1.2.0\n\nHere is a demo of the **new markdown changelog** system:\n\n### Improvements\n- 🚀 Added scrolleable changelog container in updater.\n- 🎨 UI design improved so content doesn't get cut off on smaller resolutions.\n- ⭐ Replaced review heart icon with a yellow star.\n\n### Fixes\n- Fixed native OS notifications displaying raw JSON payloads.\n- Resolved Microsoft session persistence bug.\n\nThank you for using `HelloWorld Launcher`!"
+                        }
+                    });
+                }, 100);
+            } else {
+                // Initial Check
+                setState('checking');
+                api.checkForUpdates();
+            }
 
             // DEV/Test Helper: Triple click title to test Changelog UI
             let titleClickCount = 0;
