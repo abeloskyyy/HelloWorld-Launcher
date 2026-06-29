@@ -247,44 +247,9 @@
             // Register listener with Electron
             api.onUpdaterStatus(handleUpdaterStatus);
 
-            // Check if opened in test mode
-            const isTestMode = window.location.search.includes('test=true');
-            if (isTestMode) {
-                setTimeout(() => {
-                    handleUpdaterStatus({
-                        status: 'available',
-                        info: {
-                            version: '1.2.0-TEST',
-                            releaseNotes: "## What's New in v1.2.0\n\nHere is a demo of the **new markdown changelog** system:\n\n### Improvements\n- 🚀 Added scrolleable changelog container in updater.\n- 🎨 UI design improved so content doesn't get cut off on smaller resolutions.\n- ⭐ Replaced review heart icon with a yellow star.\n\n### Fixes\n- Fixed native OS notifications displaying raw JSON payloads.\n- Resolved Microsoft session persistence bug.\n\nThank you for using `HelloWorld Launcher`!"
-                        }
-                    });
-                }, 50);
-            } else {
-                // Initial Check
-                setState('checking');
-                api.checkForUpdates();
-            }
-
-            // DEV/Test Helper: Triple click title to test Changelog UI
-            let titleClickCount = 0;
-            const titleEl = document.querySelector('.updater-title');
-            if (titleEl) {
-                titleEl.style.cursor = 'pointer';
-                titleEl.title = "Triple click to test Updater Changelog UI";
-                titleEl.addEventListener('click', () => {
-                    titleClickCount++;
-                    if (titleClickCount >= 3) {
-                        titleClickCount = 0;
-                        handleUpdaterStatus({
-                            status: 'available',
-                            info: {
-                                version: '1.2.0-TEST',
-                                releaseNotes: "## What's New in v1.2.0\n\nHere is a demo of the **new markdown changelog** system:\n\n### Improvements\n- 🚀 Added scrolleable changelog container in updater.\n- 🎨 UI design improved so content doesn't get cut off on smaller resolutions.\n- ⭐ Replaced review heart icon with a yellow star.\n\n### Fixes\n- Fixed native OS notifications displaying raw JSON payloads.\n- Resolved Microsoft session persistence bug.\n\nThank you for using `HelloWorld Launcher`!"
-                            }
-                        });
-                    }
-                });
-            }
+            // Initial Check
+            setState('checking');
+            api.checkForUpdates();
 
             elements.cancelBtn.onclick = () => {
                 window.close();
