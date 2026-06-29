@@ -911,6 +911,11 @@
 
     <!-- Review Floating Button -->
     <button id="reviewFloatingBtn" class="review-fab" title="Leave a Review">
+        <i class="fas fa-star"></i>
+    </button>
+        
+    <!-- Donation Floating Button -->
+    <button id="donationFloatingBtn" class="donation-fab" title="Support on Ko-fi">
         <i class="fas fa-heart"></i>
     </button>
         
@@ -1989,6 +1994,40 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Donation / Ko-fi Modal -->
+    <div id="donationModal" class="modal">
+        <div class="modal-content donation-modal-content" style="max-width: 520px; text-align: center; background: linear-gradient(145deg, rgba(26, 26, 46, 0.95), rgba(22, 33, 62, 0.95)); border: 1px solid rgba(255, 117, 140, 0.4); box-shadow: 0 25px 60px rgba(0,0,0,0.7), 0 0 30px rgba(255, 117, 140, 0.2); border-radius: 20px; padding: 35px 30px;">
+            <div style="width: 80px; height: 80px; border-radius: 50%; background: rgba(255, 117, 140, 0.15); border: 2px solid #ff758c; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; animation: heartbeat 2s infinite;">
+                <i class="fas fa-heart" style="font-size: 38px; color: #ff758c;"></i>
+            </div>
+            <h2 style="font-size: 26px; font-weight: 700; color: #fff; margin-bottom: 12px;">Support HelloWorld Launcher! ❤️</h2>
+            <p style="color: #ccc; font-size: 15px; line-height: 1.6; margin-bottom: 25px; padding: 0 10px;">
+                Creating and maintaining HelloWorld Launcher takes hundreds of hours of coding, server costs, and dedication. If you enjoy using the launcher and want to help keep it alive and growing, consider supporting me on Ko-fi! Every coffee makes a huge difference. ☕✨
+            </p>
+
+            <div style="background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 15px 20px; margin-bottom: 25px; border: 1px solid rgba(255, 255, 255, 0.08); text-align: left; font-size: 14px; color: #ddd;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
+                    <i class="fas fa-check-circle" style="color: #5cb85c; font-size: 16px;"></i> <span>Help cover server & download bandwidth costs</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
+                    <i class="fas fa-check-circle" style="color: #5cb85c; font-size: 16px;"></i> <span>Support ongoing development & new features</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <i class="fas fa-check-circle" style="color: #5cb85c; font-size: 16px;"></i> <span>Show appreciation for the hard work!</span>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 15px; justify-content: center;">
+                <button id="closeDonationModalBtn" class="btn-secondary" style="flex: 1; padding: 14px; border-radius: 10px; background: rgba(255,255,255,0.1); border: none; color: #fff; font-weight: 600; cursor: pointer;">
+                    Maybe Later
+                </button>
+                <button id="openKofiBtn" class="btn-primary" style="flex: 1.5; padding: 14px; border-radius: 10px; background: linear-gradient(135deg, #ff5e62 0%, #ff9966 100%); border: none; color: #fff; font-weight: 700; cursor: pointer; box-shadow: 0 5px 15px rgba(255, 94, 98, 0.4); display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <i class="fas fa-external-link-alt"></i> Open Ko-fi
+                </button>
             </div>
         </div>
     </div>

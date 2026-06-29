@@ -8093,6 +8093,10 @@ const REVIEW_URL = "https://hwlauncher.abelosky.com/?review=true";
 // Elements
 
 const reviewFloatingBtn = document.getElementById('reviewFloatingBtn');
+const donationFloatingBtn = document.getElementById('donationFloatingBtn');
+const donationModal = document.getElementById('donationModal');
+const closeDonationModalBtn = document.getElementById('closeDonationModalBtn');
+const openKofiBtn = document.getElementById('openKofiBtn');
 
 const reviewReminderModal = document.getElementById('reviewReminderModal');
 
@@ -8143,13 +8147,28 @@ async function checkReviewReminder() {
 // Event Listeners
 
 if (reviewFloatingBtn) {
-
     reviewFloatingBtn.addEventListener('click', () => {
-
         openReviewUrl();
-
     });
+}
 
+if (donationFloatingBtn) {
+    donationFloatingBtn.addEventListener('click', () => {
+        if (donationModal) donationModal.classList.add('show');
+    });
+}
+
+if (closeDonationModalBtn) {
+    closeDonationModalBtn.addEventListener('click', () => {
+        if (donationModal) donationModal.classList.remove('show');
+    });
+}
+
+if (openKofiBtn) {
+    openKofiBtn.addEventListener('click', () => {
+        window.pywebview.api.open_url("https://ko-fi.com/abelosky");
+        if (donationModal) donationModal.classList.remove('show');
+    });
 }
 
 

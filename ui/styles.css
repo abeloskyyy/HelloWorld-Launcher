@@ -1433,11 +1433,42 @@ select:disabled {
 }
 
 
-/* Review Floating Button */
+/* Review Floating Button (Yellow Star) */
 .review-fab {
     position: fixed;
     bottom: 30px;
     right: 30px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ffc107 0%, #ff8f00 100%);
+    color: white;
+    border: none;
+    box-shadow: 0 10px 20px rgba(255, 193, 7, 0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    cursor: pointer;
+    z-index: 1000;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    animation: float 3s ease-in-out infinite;
+}
+
+.review-fab:hover {
+    transform: scale(1.1) rotate(15deg);
+    box-shadow: 0 15px 30px rgba(255, 193, 7, 0.6);
+}
+
+.review-fab i {
+    animation: pulse-icon 2s infinite ease-in-out;
+}
+
+/* Donation Floating Button (Red Heart) */
+.donation-fab {
+    position: fixed;
+    bottom: 30px;
+    right: 105px;
     width: 60px;
     height: 60px;
     border-radius: 50%;
@@ -1452,15 +1483,15 @@ select:disabled {
     cursor: pointer;
     z-index: 1000;
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    animation: float 3s ease-in-out infinite;
+    animation: float 3.5s ease-in-out infinite;
 }
 
-.review-fab:hover {
-    transform: scale(1.1) rotate(10deg);
+.donation-fab:hover {
+    transform: scale(1.1) rotate(-10deg);
     box-shadow: 0 15px 30px rgba(255, 117, 140, 0.6);
 }
 
-.review-fab i {
+.donation-fab i {
     animation: heartbeat 1.5s ease-in-out infinite;
 }
 

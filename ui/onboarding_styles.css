@@ -444,12 +444,12 @@ input:checked+.toggle-slider-large:before {
     }
 }
 
-/* FAB Positioning - Next to Review Heart */
+/* FAB Positioning - Next to Review Heart & Donation Heart */
 .settings-action-btn {
     position: fixed;
     bottom: 30px;
-    right: 120px;
-    /* 30px + 60px (heart width) + 20px gap */
+    right: 180px;
+    /* 30px + 60px + 15px + 60px + 15px gap */
     z-index: 1000;
 }
 
