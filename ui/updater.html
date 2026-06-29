@@ -140,48 +140,8 @@
                 cancelBtn: document.getElementById('cancelBtn')
             };
 
-            // Check if opened in test mode
-            const isTestMode = window.location.search.includes('test=true');
-            if (isTestMode) {
-                setState('available');
-                setTimeout(() => {
-                    api.onUpdaterStatus({
-                        status: 'available',
-                        info: {
-                            version: '1.2.0-TEST',
-                            releaseNotes: "## What's New in v1.2.0\n\nHere is a demo of the **new markdown changelog** system:\n\n### Improvements\n- 🚀 Added scrolleable changelog container in updater.\n- 🎨 UI design improved so content doesn't get cut off on smaller resolutions.\n- ⭐ Replaced review heart icon with a yellow star.\n\n### Fixes\n- Fixed native OS notifications displaying raw JSON payloads.\n- Resolved Microsoft session persistence bug.\n\nThank you for using `HelloWorld Launcher`!"
-                        }
-                    });
-                }, 100);
-            } else {
-                // Initial Check
-                setState('checking');
-                api.checkForUpdates();
-            }
-
-            // DEV/Test Helper: Triple click title to test Changelog UI
-            let titleClickCount = 0;
-            const titleEl = document.querySelector('.updater-title');
-            if (titleEl) {
-                titleEl.style.cursor = 'pointer';
-                titleEl.title = "Triple click to test Updater Changelog UI";
-                titleEl.addEventListener('click', () => {
-                    titleClickCount++;
-                    if (titleClickCount >= 3) {
-                        titleClickCount = 0;
-                        api.onUpdaterStatus({
-                            status: 'available',
-                            info: {
-                                version: '1.2.0-TEST',
-                                releaseNotes: "## What's New in v1.2.0\n\nHere is a demo of the **new markdown changelog** system:\n\n### Improvements\n- 🚀 Added scrolleable changelog container in updater.\n- 🎨 UI design improved so content doesn't get cut off on smaller resolutions.\n- ⭐ Replaced review heart icon with a yellow star.\n\n### Fixes\n- Fixed native OS notifications displaying raw JSON payloads.\n- Resolved Microsoft session persistence bug.\n\nThank you for using `HelloWorld Launcher`!"
-                            }
-                        });
-                    }
-                });
-            }
-
-            // Listen for status updates
-            api.onUpdaterStatus((data) => {
+            // Status Update Handler Function
+            const handleUpdaterStatus = (data) => {
                 console.log("[UI] Updater Status:", data);
 
                 switch (data.status) {
@@ -235,34 +195,28 @@
                         break;
 
                     case 'not-available':
-                        // No update available, proceed to main app
                         console.log("No update available. Proceeding to main app...");
-                        // We can reuse the success state briefly or just redirect
-                        // Let's just redirect immediately for speed, or show a quick "Up to date" checkmark
-
-                        // Option A: Immediate redirect
                         window.location.href = "index.html";
                         break;
 
                     case 'downloading':
                         setState('downloading');
-                        const p = data.progress;
-
-                        elements.downloadPercentage.textContent = `${Math.round(p.percent)}%`;
+                        const p = data.progress || {};
+                        elements.downloadPercentage.textContent = `${Math.round(p.percent || 0)}%`;
 
                         // Circle Logic
                         const radius = elements.downloadProgressCircle.r.baseVal.value;
                         const circumference = radius * 2 * Math.PI;
-                        const offset = circumference - (p.percent / 100) * circumference;
+                        const offset = circumference - ((p.percent || 0) / 100) * circumference;
                         elements.downloadProgressCircle.style.strokeDashoffset = offset;
 
                         // Bar Logic
-                        elements.downloadProgressBar.style.width = `${p.percent}%`;
+                        elements.downloadProgressBar.style.width = `${p.percent || 0}%`;
 
                         // Stats
-                        const speedMB = (p.bytesPerSecond / 1048576).toFixed(2);
-                        const transMB = (p.transferred / 1048576).toFixed(2);
-                        const totalMB = (p.total / 1048576).toFixed(2);
+                        const speedMB = ((p.bytesPerSecond || 0) / 1048576).toFixed(2);
+                        const transMB = ((p.transferred || 0) / 1048576).toFixed(2);
+                        const totalMB = ((p.total || 0) / 1048576).toFixed(2);
 
                         elements.downloadSpeed.textContent = `${speedMB} MB/s`;
                         elements.downloadSize.textContent = `${transMB} MB / ${totalMB} MB`;
@@ -270,7 +224,7 @@
 
                     case 'downloaded':
                         setState('success');
-                        elements.versionUpdate.textContent = `Ready to install v${data.info.version}`;
+                        elements.versionUpdate.textContent = `Ready to install v${(data.info && data.info.version) || ''}`;
                         setTimeout(() => {
                             api.quitAndInstall();
                         }, 2000);
@@ -288,11 +242,51 @@
                         };
                         break;
                 }
-            });
+            };
+
+            // Register listener with Electron
+            api.onUpdaterStatus(handleUpdaterStatus);
+
+            // Check if opened in test mode
+            const isTestMode = window.location.search.includes('test=true');
+            if (isTestMode) {
+                setTimeout(() => {
+                    handleUpdaterStatus({
+                        status: 'available',
+                        info: {
+                            version: '1.2.0-TEST',
+                            releaseNotes: "## What's New in v1.2.0\n\nHere is a demo of the **new markdown changelog** system:\n\n### Improvements\n- 🚀 Added scrolleable changelog container in updater.\n- 🎨 UI design improved so content doesn't get cut off on smaller resolutions.\n- ⭐ Replaced review heart icon with a yellow star.\n\n### Fixes\n- Fixed native OS notifications displaying raw JSON payloads.\n- Resolved Microsoft session persistence bug.\n\nThank you for using `HelloWorld Launcher`!"
+                        }
+                    });
+                }, 50);
+            } else {
+                // Initial Check
+                setState('checking');
+                api.checkForUpdates();
+            }
+
+            // DEV/Test Helper: Triple click title to test Changelog UI
+            let titleClickCount = 0;
+            const titleEl = document.querySelector('.updater-title');
+            if (titleEl) {
+                titleEl.style.cursor = 'pointer';
+                titleEl.title = "Triple click to test Updater Changelog UI";
+                titleEl.addEventListener('click', () => {
+                    titleClickCount++;
+                    if (titleClickCount >= 3) {
+                        titleClickCount = 0;
+                        handleUpdaterStatus({
+                            status: 'available',
+                            info: {
+                                version: '1.2.0-TEST',
+                                releaseNotes: "## What's New in v1.2.0\n\nHere is a demo of the **new markdown changelog** system:\n\n### Improvements\n- 🚀 Added scrolleable changelog container in updater.\n- 🎨 UI design improved so content doesn't get cut off on smaller resolutions.\n- ⭐ Replaced review heart icon with a yellow star.\n\n### Fixes\n- Fixed native OS notifications displaying raw JSON payloads.\n- Resolved Microsoft session persistence bug.\n\nThank you for using `HelloWorld Launcher`!"
+                            }
+                        });
+                    }
+                });
+            }
 
             elements.cancelBtn.onclick = () => {
-                // Determine how to cancel? quitAndInstall isn't appropriate.
-                // Maybe just close window?
                 window.close();
             };
         });
