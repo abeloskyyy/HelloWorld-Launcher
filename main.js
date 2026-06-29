@@ -1704,9 +1704,10 @@ ipcMain.handle('login-microsoft', async () => {
     console.log("Inner profile name:", profileData.name);
 
     const userData = loadUserData()
+    const previousUuid = userData.uuid || userData.last_ms_uuid;
     
     // If the user logs in with a DIFFERENT Microsoft account, clear the old social verification
-    if (userData.uuid && userData.uuid !== profileData.id) {
+    if (previousUuid && previousUuid !== profileData.id) {
         userData.firebase_ms_uid = "";
         userData.firebase_ms_refresh_token = "";
     }
@@ -1877,6 +1878,9 @@ ipcMain.handle('logout', async () => {
   const data = loadUserData()
 
   // Clear persistent auth data
+  if (data.account_type === "microsoft" && data.uuid) {
+    data.last_ms_uuid = data.uuid;
+  }
   data.username = "";
   data.account_type = "offline";
   data.uuid = "";
@@ -1888,8 +1892,6 @@ ipcMain.handle('logout', async () => {
   data.firebase_uid = "";
   data.firebase_refresh_token = "";
   data.firebase_id_token = "";
-  data.firebase_ms_uid = "";
-  data.firebase_ms_refresh_token = "";
 
   saveUserData(data)
   presenceManager.currentState = null;
@@ -2984,6 +2986,7 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       root: mcDir,
       version: { number: mcVersion, type: resolvedVersionType },
       memory: { max: '512M', min: '256M' },
+      timeout: 10000,
       overrides: { maxSockets: 4 },
       customArgs: []
     };
@@ -3828,6 +3831,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
         // Forge/Fabric specifics are handled via options.forge and options.version.custom.
         type: 'release'
       },
+      timeout: 10000,
       overrides: {
         gameDirectory: profile.directory || actualMcDir,
         maxSockets: 4
@@ -3928,6 +3932,12 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
     console.log(`[Launch] Starting Minecraft ${mcVersion} for ${auth.name}...`);
 
     launcher.launch(options).then(child => {
+      if (!child) {
+        console.error("[Launch] MCLC returned null child process (Java runtime or launch initialization failed).");
+        presenceManager.safeRun(presenceManager.onGameClosed());
+        if (mainWindow) mainWindow.webContents.send('error', "No se pudo iniciar el juego. Verifica tu instalación de Java o memoria RAM.");
+        return;
+      }
       if (isLaunchCancelled) {
         console.log("[Launch] Launch cancelled while starting, killing immediately.");
         try { process.kill(child.pid, 'SIGKILL'); } catch (e) { }

@@ -9,6 +9,7 @@ class JavaRuntimeManager {
     constructor(mcDir) {
         this.mcDir = mcDir;
         this.runtimesDir = path.join(mcDir, 'java-runtimes');
+        this.cacheFile = path.join(this.runtimesDir, 'manifest_cache.json');
         this.manifestUrl = 'https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json';
 
         fs.ensureDirSync(this.runtimesDir);
@@ -24,10 +25,32 @@ class JavaRuntimeManager {
      */
     async getJavaPath(mcVersion, onProgress) {
         console.log(`[JavaRuntime] Resolving Java for version: ${mcVersion}`);
+        const javaExe = process.platform === 'win32' ? 'javaw.exe' : 'java';
+
+        // Load cached mapping if available
+        let manifestCache = {};
+        try {
+            if (await fs.pathExists(this.cacheFile)) {
+                manifestCache = await fs.readJson(this.cacheFile);
+            }
+        } catch (e) { }
+
+        // Fast offline check: if we already cached the required component and it exists on disk, use it immediately
+        if (manifestCache[mcVersion]) {
+            const cachedComponent = manifestCache[mcVersion];
+            const cachedDir = path.join(this.runtimesDir, cachedComponent);
+            if (await fs.pathExists(cachedDir)) {
+                const existingPath = await this.findFileRecursive(cachedDir, javaExe);
+                if (existingPath) {
+                    console.log(`[JavaRuntime] Found offline cached Java runtime (${cachedComponent}): ${existingPath}`);
+                    return existingPath;
+                }
+            }
+        }
 
         try {
             // 1. Fetch version JSON to find required java component
-            const versionManifestRes = await axios.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json');
+            const versionManifestRes = await axios.get('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json', { timeout: 5000 });
             const versionManifest = versionManifestRes.data;
             const versionEntry = versionManifest.versions.find(v => v.id === mcVersion);
 
@@ -36,7 +59,7 @@ class JavaRuntimeManager {
                 return 'java';
             }
 
-            const versionJsonRes = await axios.get(versionEntry.url);
+            const versionJsonRes = await axios.get(versionEntry.url, { timeout: 5000 });
             const versionJson = versionJsonRes.data;
 
             const javaVersion = versionJson.javaVersion;
@@ -48,9 +71,12 @@ class JavaRuntimeManager {
             const component = javaVersion.component;
             console.log(`[JavaRuntime] Version ${mcVersion} requires component: ${component} (Java ${javaVersion.majorVersion})`);
 
+            // Update cache
+            manifestCache[mcVersion] = component;
+            try { await fs.writeJson(this.cacheFile, manifestCache, { spaces: 2 }); } catch (e) { }
+
             // 2. Check if already downloaded
             const componentDir = path.join(this.runtimesDir, component);
-            const javaExe = process.platform === 'win32' ? 'javaw.exe' : 'java';
 
             if (await fs.pathExists(componentDir)) {
                 const existingPath = await this.findFileRecursive(componentDir, javaExe);
@@ -72,7 +98,25 @@ class JavaRuntimeManager {
             console.log(`[JavaRuntime] Successfully installed Java runtime: ${newPath}`);
             return newPath;
         } catch (err) {
-            console.error(`[JavaRuntime] Error resolving Java path: ${err.message}`);
+            console.warn(`[JavaRuntime] Network or download failed (${err.message}). Checking offline fallback runtimes...`);
+            // Offline fallback: scan runtimesDir for any existing installed runtime (e.g. gamma, delta, alpha)
+            try {
+                if (await fs.pathExists(this.runtimesDir)) {
+                    const subdirs = await fs.readdir(this.runtimesDir);
+                    for (const subdir of subdirs) {
+                        const subdirPath = path.join(this.runtimesDir, subdir);
+                        const stat = await fs.stat(subdirPath);
+                        if (stat.isDirectory()) {
+                            const foundExe = await this.findFileRecursive(subdirPath, javaExe);
+                            if (foundExe) {
+                                console.log(`[JavaRuntime] Offline fallback using existing runtime in ${subdir}: ${foundExe}`);
+                                return foundExe;
+                            }
+                        }
+                    }
+                }
+            } catch (e) { }
+
             return 'java'; // Fallback to system java on error
         }
     }
@@ -94,7 +138,7 @@ class JavaRuntimeManager {
 
     async downloadRuntime(component, targetDir, mcVersion, onProgress) {
         const platform = this.getMojangPlatform();
-        const runtimeManifestRes = await axios.get(this.manifestUrl);
+        const runtimeManifestRes = await axios.get(this.manifestUrl, { timeout: 5000 });
         const runtimeManifest = runtimeManifestRes.data;
 
         const platformData = runtimeManifest[platform];
@@ -103,7 +147,7 @@ class JavaRuntimeManager {
         }
 
         const manifestUrl = platformData[component][0].manifest.url;
-        const fileManifestRes = await axios.get(manifestUrl);
+        const fileManifestRes = await axios.get(manifestUrl, { timeout: 5000 });
         const fileManifest = fileManifestRes.data;
 
         await fs.ensureDir(targetDir);
@@ -134,7 +178,8 @@ class JavaRuntimeManager {
                         const response = await axios({
                             method: 'get',
                             url: info.downloads.raw.url,
-                            responseType: 'arraybuffer'
+                            responseType: 'arraybuffer',
+                            timeout: 15000
                         });
 
                         await fs.writeFile(fullPath, Buffer.from(response.data));

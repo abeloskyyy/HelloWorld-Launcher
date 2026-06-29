@@ -1191,6 +1191,12 @@ async function silentMicrosoftVerify(username, uuid) {
 
             console.log('[MS Verify] Silently re-verified:', msUser.email);
 
+            if (typeof window.hideMsVerifyBanner === 'function') window.hideMsVerifyBanner(true);
+
+            const updatedData = await window.pywebview.api.get_user_json();
+
+            await updateUserInterface(updatedData);
+
             return;
 
         }
@@ -1255,11 +1261,11 @@ async function silentMicrosoftVerify(username, uuid) {
 
                 console.log('[MS Verify] Found existing verification in Firestore for:', email);
 
-                // Note: We can't restore Firebase Auth session without re-authenticating
+                if (typeof window.hideMsVerifyBanner === 'function') window.hideMsVerifyBanner(true);
 
-                // The user will need to click "Verify now" to restore the session
+                const updatedData = await window.pywebview.api.get_user_json();
 
-                console.log('[MS Verify] User needs to click "Verify now" to restore Firebase Auth session');
+                await updateUserInterface(updatedData);
 
                 return;
 
