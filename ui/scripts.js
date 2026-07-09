@@ -6,7 +6,7 @@ function showToast(message, type = 'error') {
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     
-    const icon = type === 'error' ? 'fas fa-exclamation-circle' : 'fas fa-check-circle';
+    const icon = type === 'error' ? 'fas fa-exclamation-circle' : (type === 'info' ? 'fas fa-info-circle' : 'fas fa-check-circle');
     
     toast.innerHTML = `
         <i class="${icon} toast-icon"></i>
@@ -82,7 +82,9 @@ const userDisplayName = document.getElementById('userDisplayName');
 
 const userMenuBtn = document.getElementById('userMenuBtn');
 
-const logoutBtn = document.getElementById('logoutBtn');
+// (switchAccountBtn is declared later when the account switcher section initializes)
+// Legacy: logoutBtn no longer exists in HTML — replaced by switchAccountBtn
+const logoutBtn = null; // kept for safety (referenced in window.logout but not as event listener)
 
 const loginModal = document.getElementById('loginModal');
 
@@ -164,7 +166,11 @@ const versionCache = {
 
     fabric: null,
 
-    forge: null
+    forge: null,
+
+    neoforge: null,
+
+    quilt: null
 
 };
 
@@ -405,8 +411,18 @@ const initLauncher = async () => {
 
 
 
-    // Check internet connection first
+    // Helper function to step loading progress
+    const updateLoaderProgress = (percent, text) => {
+        const bar = document.getElementById('loaderProgressBar');
+        const pct = document.getElementById('loaderPercentage');
+        const txt = document.getElementById('loaderStatusText');
+        if (bar) bar.style.width = `${percent}%`;
+        if (pct) pct.textContent = `${percent}%`;
+        if (txt && text) txt.textContent = text;
+    };
+    updateLoaderProgress(15, "Checking connection...");
 
+    // Check internet connection first
     try {
 
         window.hasInternet = await window.pywebview.api.check_internet();
@@ -421,7 +437,7 @@ const initLauncher = async () => {
 
             if (noInternetModal) {
 
-                noInternetModal.style.display = 'flex';
+                noInternetModal.classList.add('show');
 
 
 
@@ -447,7 +463,7 @@ const initLauncher = async () => {
 
                     continueAnywayBtn.addEventListener('click', () => {
 
-                        noInternetModal.style.display = 'none';
+                        noInternetModal.classList.remove('show');
 
                     });
 
@@ -470,7 +486,7 @@ const initLauncher = async () => {
     try {
 
         // Load initial user data
-
+        updateLoaderProgress(35, "Downloading account data...");
         const data = await window.pywebview.api.get_user_json();
 
         console.log('[Init] User data loaded:', data.account_type, data.username);
@@ -538,153 +554,99 @@ const initLauncher = async () => {
         }
 
 
-
-        // Update UI immediately with local state (shows name and "Steve" head as fallback)
-
+        // Update UI immediately with local state
+        updateLoaderProgress(55, "Preparing application...");
         await updateUserInterface(data);
 
         if (data.username && window.hasInternet) {
-
-            await loadSkinData(); // Try to load last known/cached skin
-
+            loadSkinData(); // non-blocking
         }
-
-
 
         // Register mod download progress listener
-
         if (window.pywebview.api.on_mod_download_progress) {
-
             window.pywebview.api.on_mod_download_progress((prog) => {
-
                 if (window.onModDownloadProgress) {
-
                     window.onModDownloadProgress(prog.projectId, prog.percentage, 'downloading');
-
                 }
-
             });
-
         }
 
-
-
-        // Session Refresh Check
-
-        // Auto-refresh session/skins for premium and helloworld accounts
-
-        const refreshUserSession = async () => {
-
-            const currentData = await window.pywebview.api.get_user_json();
-
-            if ((currentData.account_type === 'microsoft' || currentData.account_type === 'helloworld') && window.hasInternet) {
-
-                try {
-
-                    const res = await window.pywebview.api.refresh_session();
-
-                    if (res.success) {
-
-                        const refreshedData = await window.pywebview.api.get_user_json();
-
-                        await updateUserInterface(refreshedData);
-
-                        await loadSkinData();
-
-                    } else if (res.expired && currentData.account_type === 'microsoft') {
-
-                        console.warn("[Init] Session expired");
-
-                        window.pywebview.api.info("Your Microsoft session has expired. Please log in again.");
-
-                        
-
-                        const offlineData = await window.pywebview.api.save_user_json(currentData.username, currentData.mcdir, 'offline');
-
-                        await updateUserInterface(offlineData);
-
-                        await loadSkinData();
-
-                    }
-
-                } catch (err) {
-
-                    console.error("[Init] Error refreshing session:", err);
-
-                }
-
-            }
-
-        };
-
-
-
-        // Run immediately on load
-
-        await refreshUserSession();
-
-
-
-        // Run every 60 seconds in the background
-
-        setInterval(refreshUserSession, 60000);
-
-
-
-        // Load rest of the app data
-
-        await loadOptions();
-
-        await loadProfiles();
-
-        await loadVersions();
-
-        await checkReviewReminder();
-
-
+        // Load fast local app data and news concurrently
+        updateLoaderProgress(75, "Fetching latest news & app data...");
+        await Promise.all([
+            loadOptions(),
+            loadProfiles(),
+            loadVersions(),
+            checkReviewReminder(),
+            loadMinecraftNews().catch(err => console.error("Failed to load Minecraft News:", err))
+        ]);
 
         // Load launcher version
-
         try {
-
             const version = await window.pywebview.api.get_launcher_version();
-
             const vEl = document.getElementById("launcherVersion");
-
             if (vEl) vEl.textContent = version;
-
         } catch (err) { }
 
-
-
-    } catch (error) {
-
-        console.error("[Init] Error during initialization:", error);
-
-    } finally {
-
-        // Hide loader/splash
-
+        // Hide loader/splash once app data and news have finished loading
+        updateLoaderProgress(100, "Ready to play!");
+        await new Promise(r => setTimeout(r, 400));
         const loader = document.getElementById('initialLoader');
-
         if (loader) {
-
             loader.classList.add('hidden');
-
             setTimeout(() => { loader.style.display = 'none'; }, 500);
-
         }
 
-    }
-    // Load Minecraft News
-    try {
-        await loadMinecraftNews();
-    } catch(err) {
-        console.error("Failed to load Minecraft News:", err);
+        // --- BACKGROUND NON-BLOCKING TASKS ---
+        const refreshUserSession = async () => {
+            const currentData = await window.pywebview.api.get_user_json();
+            if ((currentData.account_type === 'microsoft' || currentData.account_type === 'helloworld') && window.hasInternet) {
+                try {
+                    const res = await window.pywebview.api.refresh_session();
+                    if (res.success) {
+                        const refreshedData = await window.pywebview.api.get_user_json();
+                        await updateUserInterface(refreshedData);
+                        loadSkinData();
+                    } else if (res.expired && currentData.account_type === 'microsoft') {
+                        console.warn("[Init] Session expired");
+                        window.pywebview.api.info("Your Microsoft session has expired. Please log in again.");
+                        const offlineData = await window.pywebview.api.save_user_json(currentData.username, currentData.mcdir, 'offline');
+                        await updateUserInterface(offlineData);
+                        loadSkinData();
+                    }
+                } catch (err) {
+                    console.error("[Init] Error refreshing session:", err);
+                }
+            }
+        };
+
+        // Run session refresh non-blocking in background
+        refreshUserSession();
+        setInterval(refreshUserSession, 60000);
+
+        // Listen for background auto-updates
+        if (window.hwlAPI && window.hwlAPI.onUpdaterStatus) {
+            window.hwlAPI.onUpdaterStatus((statusData) => {
+                if (statusData && statusData.status === 'available') {
+                    showToast("New update available! Redirecting...", "success");
+                    setTimeout(() => { window.location.href = "updater.html"; }, 1500);
+                }
+            });
+        }
+
+    } catch (error) {
+        console.error("[Init] Error during initialization:", error);
+        updateLoaderProgress(100, "Ready!");
+        setTimeout(() => {
+            const loader = document.getElementById('initialLoader');
+            if (loader) {
+                loader.classList.add('hidden');
+                setTimeout(() => { loader.style.display = 'none'; }, 500);
+            }
+        }, 300);
     }
 
     console.log('[Init] Initialization complete');
-
 };
 
 if (document.readyState === 'loading') {
@@ -730,11 +692,19 @@ async function updateUserInterface(userData) {
 
         if (userData.account_type === 'microsoft') {
 
-            if (skinsBtn) skinsBtn.style.display = 'flex';
+            if (skinsBtn) {
+                skinsBtn.style.display = 'flex';
+                skinsBtn.classList.remove('locked-feature');
+                skinsBtn.title = 'Skins & Capes';
+            }
 
         } else {
 
-            if (skinsBtn) skinsBtn.style.display = 'none';
+            if (skinsBtn) {
+                skinsBtn.style.display = 'flex';
+                skinsBtn.classList.add('locked-feature');
+                skinsBtn.title = 'Skins & Capes (Microsoft Account Required)';
+            }
 
         }
 
@@ -778,6 +748,17 @@ async function updateUserInterface(userData) {
 
                 }
                 
+                const statsBtn = document.getElementById('statsBtn');
+                if (statsBtn) {
+                    statsBtn.style.display = 'inline-flex';
+                    statsBtn.classList.remove('locked-feature');
+                    statsBtn.title = 'Stats';
+                }
+                const wkPublishBtn = document.getElementById('wkPublishBtn');
+                if (wkPublishBtn) {
+                    wkPublishBtn.classList.remove('locked-feature');
+                    wkPublishBtn.title = 'Create Workshop Item';
+                }
                 // Reload stats for Microsoft accounts
                 if (window.loadMyStats) {
                     window.loadMyStats();
@@ -799,6 +780,17 @@ async function updateUserInterface(userData) {
 
                 editProfileBtn.title = 'Edit Profile';
                 
+                const statsBtn = document.getElementById('statsBtn');
+                if (statsBtn) {
+                    statsBtn.style.display = 'inline-flex';
+                    statsBtn.classList.remove('locked-feature');
+                    statsBtn.title = 'Stats';
+                }
+                const wkPublishBtn = document.getElementById('wkPublishBtn');
+                if (wkPublishBtn) {
+                    wkPublishBtn.classList.remove('locked-feature');
+                    wkPublishBtn.title = 'Create Workshop Item';
+                }
                 // Reload stats for HelloWorld accounts
                 if (window.loadMyStats) {
                     window.loadMyStats();
@@ -814,7 +806,16 @@ async function updateUserInterface(userData) {
                 if (streakBadgeContainer) streakBadgeContainer.style.display = 'none';
                 
                 const statsBtn = document.getElementById('statsBtn');
-                if (statsBtn) statsBtn.style.display = 'none';
+                if (statsBtn) {
+                    statsBtn.style.display = 'inline-flex';
+                    statsBtn.classList.add('locked-feature');
+                    statsBtn.title = 'Stats (Account Required)';
+                }
+                const wkPublishBtn = document.getElementById('wkPublishBtn');
+                if (wkPublishBtn) {
+                    wkPublishBtn.classList.add('locked-feature');
+                    wkPublishBtn.title = 'Create Workshop Item (Account Required)';
+                }
 
             }
 
@@ -878,7 +879,11 @@ async function updateUserInterface(userData) {
 
         if (loginBtn) loginBtn.style.display = 'flex';
 
-        if (skinsBtn) skinsBtn.style.display = 'none';
+        if (skinsBtn) {
+            skinsBtn.style.display = 'flex';
+            skinsBtn.classList.add('locked-feature');
+            skinsBtn.title = 'Skins & Capes (Microsoft Account Required)';
+        }
 
         
 
@@ -890,7 +895,16 @@ async function updateUserInterface(userData) {
         if (streakBadgeContainer) streakBadgeContainer.style.display = 'none';
         
         const statsBtn = document.getElementById('statsBtn');
-        if (statsBtn) statsBtn.style.display = 'none';
+        if (statsBtn) {
+            statsBtn.style.display = 'inline-flex';
+            statsBtn.classList.add('locked-feature');
+            statsBtn.title = 'Stats (Account Required)';
+        }
+        const wkPublishBtn = document.getElementById('wkPublishBtn');
+        if (wkPublishBtn) {
+            wkPublishBtn.classList.add('locked-feature');
+            wkPublishBtn.title = 'Create Workshop Item (Account Required)';
+        }
     }
 
     
@@ -905,11 +919,13 @@ async function updateUserInterface(userData) {
 
             (userData.account_type === 'helloworld' || userData.account_type === 'microsoft');
 
-        socialBtnEl.style.display = showSocial ? 'flex' : 'none';
+        socialBtnEl.style.display = 'flex';
 
 
 
         if (showSocial) {
+
+            socialBtnEl.classList.remove('locked-feature');
 
             // Check if Microsoft account is verified
 
@@ -967,9 +983,20 @@ async function updateUserInterface(userData) {
 
             }
 
-        } else if (!showSocial && typeof window.onSocialLogout === 'function') {
+        } else {
 
-            window.onSocialLogout();
+            socialBtnEl.classList.add('locked-feature');
+            socialBtnEl.classList.remove('btn-disabled');
+            socialBtnEl.disabled = false;
+            socialBtnEl.style.removeProperty('cursor');
+            socialBtnEl.style.removeProperty('opacity');
+            socialBtnEl.title = 'Social (Account Required)';
+
+            if (typeof window.onSocialLogout === 'function') {
+
+                window.onSocialLogout();
+
+            }
 
         }
 
@@ -1093,7 +1120,7 @@ window.onLoginSuccess = async function () {
 
     if (selectMicrosoftBtn) {
 
-        selectMicrosoftBtn.innerHTML = '<i class="fab fa-microsoft"></i> Login with Microsoft';
+        selectMicrosoftBtn.innerHTML = '<i class="fab fa-microsoft"></i> Login with Microsoft <span class="corner-ribbon">Only Minecraft Premium</span>';
 
         selectMicrosoftBtn.disabled = false;
 
@@ -1105,7 +1132,7 @@ window.onLoginSuccess = async function () {
 
     if (loginMicrosoftBtn) {
 
-        loginMicrosoftBtn.innerHTML = '<i class="fab fa-microsoft"></i> Login with Microsoft';
+        loginMicrosoftBtn.innerHTML = '<i class="fab fa-microsoft"></i> Login with Microsoft <span class="corner-ribbon">Only Minecraft Premium</span>';
 
         loginMicrosoftBtn.disabled = false;
 
@@ -1365,7 +1392,7 @@ window.onLoginError = function (err) {
 
     if (selectMicrosoftBtn) {
 
-        selectMicrosoftBtn.innerHTML = '<i class="fab fa-microsoft"></i> Login with Microsoft';
+        selectMicrosoftBtn.innerHTML = '<i class="fab fa-microsoft"></i> Login with Microsoft <span class="corner-ribbon">Only Minecraft Premium</span>';
 
         selectMicrosoftBtn.disabled = false;
 
@@ -1379,7 +1406,7 @@ window.onLoginError = function (err) {
 
     if (loginMicrosoftBtn) {
 
-        loginMicrosoftBtn.innerHTML = '<i class="fab fa-microsoft"></i> Login with Microsoft';
+        loginMicrosoftBtn.innerHTML = '<i class="fab fa-microsoft"></i> Login with Microsoft <span class="corner-ribbon">Only Minecraft Premium</span>';
 
         loginMicrosoftBtn.disabled = false;
 
@@ -1408,7 +1435,7 @@ if (selectMicrosoftBtn) {
 
 
 window.cancelLaunch = function() {
-
+    if (window.logIdleTimer) { clearTimeout(window.logIdleTimer); window.logIdleTimer = null; }
     window.isLaunching = false;
 
     // Instantly revert state in UI
@@ -1496,15 +1523,40 @@ async function launchGame() {
         window.pywebview.api.error("You cannot play with a Microsoft account without an internet connection. Please use an Offline account to play offline.");
 
         return;
-
     }
 
+    // Check for old versions (<= 1.14) running in the default launcher directory
+    try {
+        const profilesData = await window.pywebview.api.get_profiles();
+        const profile = profilesData && profilesData.profiles ? profilesData.profiles[selectedProfile] : null;
+        if (profile) {
+            const defaultMcDir = (userData.mcdir || "").trim().replace(/\\/g, '/').toLowerCase();
+            const profDir = (profile.directory || "").trim().replace(/\\/g, '/').toLowerCase();
+            const isUsingDefaultDir = (!profDir || profDir === defaultMcDir);
 
+            let isOldVersion = false;
+            const mcVerMatch = (profile.version || "").match(/\b(?:1\.(\d+)(?:\.(\d+))?|([ab]\d+\.\d+)|\b(\d{2})w\d+[a-z]\b)/i);
+            if (mcVerMatch) {
+                if (mcVerMatch[1]) {
+                    if (parseInt(mcVerMatch[1], 10) <= 14) isOldVersion = true;
+                } else {
+                    isOldVersion = true;
+                }
+            }
+
+            if (isUsingDefaultDir && isOldVersion) {
+                const continueOld = await window.pywebview.api.confirm(
+                    "You are launching an older version of Minecraft (1.14 or older) in the main launcher directory.\n\nSharing this folder with modern versions will likely cause errors or crashes.\n\nIt is strongly recommended to edit the installation and set a custom 'Game Directory'.\n\nDo you want to launch anyway?"
+                );
+                if (!continueOld) return;
+            }
+        }
+    } catch (err) {
+        console.error("Error checking old version directory warning:", err);
+    }
 
     // Prevent double-launch
-
     if (window.isLaunching) return;
-
     window.isLaunching = true;
 
 
@@ -1539,145 +1591,102 @@ async function launchGame() {
 
 
 
+    window.logIdleTimer = null;
+    const resetLogIdleTimer = () => {
+        if (!window.isLaunching || window.isSyncing) return;
+        if (window.logIdleTimer) clearTimeout(window.logIdleTimer);
+        window.logIdleTimer = setTimeout(() => {
+            if (window.isLaunching && !window.isSyncing) {
+                console.log("[Launch] 20 seconds without logs passed, considering Minecraft ready.");
+                onMinecraftReady();
+            }
+        }, 20000);
+    };
+    window._resetLogIdleTimer = resetLogIdleTimer;
+
     // Try to launch the game
     const serverParam = window.pendingServerParam || null;
     const result = await pywebview.api.start_game(selectedProfile, nickname, false, serverParam);
     
     if (result.status !== "missing_files" && result.status !== "already_running") {
         window.pendingServerParam = null;
+        if (result.status !== "error") {
+            resetLogIdleTimer();
+        }
     }
 
     // Handle duplicate instance
-
     if (result.status === "already_running") {
-
         const confirm = await window.pywebview.api.confirm(
-
             "Minecraft is already open. Do you want to open another instance?"
-
         );
-
         if (confirm) {
-
             // Force launch
-
             const forceResult = await pywebview.api.start_game(selectedProfile, nickname, true, serverParam);
             window.pendingServerParam = null;
-
             if (forceResult.status === "error") {
-
                 window.isLaunching = false;
-
                 if (playButton) {
-
                     playButton.disabled = false;
-
                     playButton.style.cursor = 'pointer';
-
                     playButton.style.opacity = '1';
-
                     playButton.innerHTML = playButton.dataset.originalHtml || 'Play';
-
                 }
-
                 if (cancelBtn) cancelBtn.classList.remove('visible');
-
                 return;
-
+            } else {
+                resetLogIdleTimer();
             }
-
         } else {
-
             // Revert state
-
             window.isLaunching = false;
-
             if (playButton) {
-
                 playButton.disabled = false;
-
                 playButton.style.cursor = 'pointer';
-
                 playButton.style.opacity = '1';
-
                 playButton.innerHTML = playButton.dataset.originalHtml || 'Play';
-
             }
-
             if (cancelBtn) cancelBtn.classList.remove('visible');
-
             return;
-
         }
-
     } else if (result.status === "missing_files") {
-
         // Reset launching lock so sync can re-trigger launchGame() after completion
-
         window.isLaunching = false;
-
         startSynchronizationQueue(result, selectedProfile);
-
         return;
-
     } else if (result.status === "error") {
-
         // Revert state
-
         window.isLaunching = false;
-
         if (playButton) {
-
             playButton.disabled = false;
-
             playButton.style.cursor = 'pointer';
-
             playButton.style.opacity = '1';
-
             playButton.innerHTML = playButton.dataset.originalHtml || 'Play';
-
         }
-
         if (cancelBtn) cancelBtn.classList.remove('visible');
-
         return;
-
     }
-
 }
 
-
-
 // Global listener for info messages from main.js (launcher events)
-
 window.addEventListener('info-message', (e) => {
-
     const msg = String(e.detail);
-
     if (msg === "Game Closed" || msg.includes("Game Crashed") || msg.includes("has exited") || msg.includes("Game process closed")) {
-
         // Always re-enable button when game closes, regardless of sync state
-
         onMinecraftClosed();
-
-    } else if (msg.includes("Sound engine started") || msg.includes("OpenAL initialized")) {
-
-        if (!window.isSyncing) onMinecraftReady();
-
+    } else {
+        // Reset 10s idle timer on any game log while launching
+        if (window.isLaunching && !window.isSyncing && window._resetLogIdleTimer) {
+            window._resetLogIdleTimer();
+        }
     }
-
 });
 
-
-
 // Reset play button when launch fails (JVM errors, missing files, etc.)
-
 window.addEventListener('error', (e) => {
-
     const msg = String(e.detail);
-
     if (msg.includes('Launch Failed') || msg.includes('Process Error')) {
-
+        if (window.logIdleTimer) { clearTimeout(window.logIdleTimer); window.logIdleTimer = null; }
         window.isLaunching = false;
 
         const playButton = document.querySelector('.play-button');
@@ -1705,45 +1714,25 @@ window.addEventListener('error', (e) => {
 
 
 function formatVersionName(versionId) {
-
     if (!versionId) return 'Unknown Version';
-
-    if (versionId.startsWith('fabric-loader-')) {
-
-        const parts = versionId.split('-'); // ['fabric','loader',loader,...,mc,...]
-
-        if (parts.length >= 4) {
-
-            const mc = parts.slice(3).join('.');
-
-            const loader = parts[2];
-
-            return `Fabric ${mc} (${loader})`;
-
-        }
-
+    if (/^(?:Fabric|Forge|NeoForge|Quilt|Vanilla|OptiFine)\b/i.test(versionId)) {
+        return versionId;
     }
+    const lower = versionId.toLowerCase();
+    let software = 'Vanilla';
+    if (lower.includes('neoforge')) software = 'NeoForge';
+    else if (lower.includes('forge')) software = 'Forge';
+    else if (lower.includes('fabric')) software = 'Fabric';
+    else if (lower.includes('quilt')) software = 'Quilt';
+    else if (lower.includes('optifine')) software = 'OptiFine';
 
-    if (versionId.toLowerCase().startsWith('fabric-') && !versionId.startsWith('fabric-loader-')) {
+    if (software === 'Vanilla') return `Vanilla ${versionId.replace(/^vanilla\s+/i, '').trim()}`;
 
-        const parts = versionId.split('-');
+    const matches = versionId.match(/\b\d+\.\d+(?:\.\d+)?(?:-[a-zA-Z][a-zA-Z0-9\.]+)?\b/g) || [];
+    const mc = matches.find(m => m.startsWith('1.')) || matches[0] || versionId;
+    const loader = matches.find(m => m !== mc) || '';
 
-        if (parts.length >= 3) return `Fabric ${parts[1]} (${parts.slice(2).join('-')})`;
-
-    }
-
-    if (versionId.toLowerCase().includes('forge')) {
-
-        const mc = (versionId.match(/(\d+\.\d+(?:\.\d+)?)/) || [])[1] || versionId;
-
-        const fv = (versionId.match(/forge[-.](.+)/i) || [])[1];
-
-        return fv ? `Forge ${mc} (${fv})` : `Forge ${mc}`;
-
-    }
-
-    return `Vanilla ${versionId}`;
-
+    return loader ? `${software} ${mc} (${loader})` : `${software} ${mc}`;
 }
 
 
@@ -2151,8 +2140,9 @@ async function startSynchronizationQueue(syncData, profileId) {
 
 
 // Callback when Minecraft window is ready
-
 function onMinecraftReady() {
+    if (window.logIdleTimer) { clearTimeout(window.logIdleTimer); window.logIdleTimer = null; }
+    window.isLaunching = false;
 
     const playButton = document.querySelector('.play-button');
 
@@ -2177,9 +2167,8 @@ function onMinecraftReady() {
 
 
 // Callback when Minecraft closes
-
 function onMinecraftClosed() {
-
+    if (window.logIdleTimer) { clearTimeout(window.logIdleTimer); window.logIdleTimer = null; }
     window.isLaunching = false;
 
     const playButton = document.querySelector('.play-button');
@@ -2274,6 +2263,9 @@ async function loadOptions() {
 
 
 
+    const wasOpen = selectOptions && selectOptions.classList.contains('active');
+    const currentSelectedId = originalSelect ? originalSelect.value : null;
+
     if (selectOptions) selectOptions.innerHTML = '';
 
     if (originalSelect) originalSelect.innerHTML = '';
@@ -2312,9 +2304,13 @@ async function loadOptions() {
 
             let type = 'vanilla';
 
-            if (versionLower.includes('forge')) type = 'forge';
+            if (versionLower.includes('neoforge') || p.type === 'neoforge') type = 'neoforge';
 
-            else if (versionLower.includes('fabric')) type = 'fabric';
+            else if (versionLower.includes('forge') || p.type === 'forge') type = 'forge';
+
+            else if (versionLower.includes('fabric') || p.type === 'fabric') type = 'fabric';
+
+            else if (versionLower.includes('quilt') || p.type === 'quilt') type = 'quilt';
 
 
 
@@ -2482,21 +2478,29 @@ async function loadOptions() {
 
                 let type = 'vanilla';
 
-                if (versionLower.includes('forge')) type = 'forge';
+                if (versionLower.includes('neoforge') || profile.type === 'neoforge') type = 'neoforge';
 
-                else if (versionLower.includes('fabric')) type = 'fabric';
+                else if (versionLower.includes('forge') || profile.type === 'forge') type = 'forge';
+
+                else if (versionLower.includes('fabric') || profile.type === 'fabric') type = 'fabric';
+
+                else if (versionLower.includes('quilt') || profile.type === 'quilt') type = 'quilt';
 
 
 
+                const isNeoForgeActive = activeProfileFilter === 'neoforge' ? 'active' : '';
+                const isQuiltActive = activeProfileFilter === 'quilt' ? 'active' : '';
                 const isForgeActive = activeProfileFilter === 'forge' ? 'active' : '';
-
                 const isFabricActive = activeProfileFilter === 'fabric' ? 'active' : '';
-
                 const isVanillaActive = activeProfileFilter === 'vanilla' ? 'active' : '';
 
 
 
-                if (type === 'forge') tags = `<span class="option-tag forge ${isForgeActive}" onclick="filterProfiles('forge', event)">FORGE</span>`;
+                if (type === 'neoforge') tags = `<span class="option-tag neoforge ${isNeoForgeActive}" onclick="filterProfiles('neoforge', event)">NEOFORGE</span>`;
+
+                else if (type === 'quilt') tags = `<span class="option-tag quilt ${isQuiltActive}" onclick="filterProfiles('quilt', event)">QUILT</span>`;
+
+                else if (type === 'forge') tags = `<span class="option-tag forge ${isForgeActive}" onclick="filterProfiles('forge', event)">FORGE</span>`;
 
                 else if (type === 'fabric') tags = `<span class="option-tag fabric ${isFabricActive}" onclick="filterProfiles('fabric', event)">FABRIC</span>`;
 
@@ -2555,11 +2559,29 @@ async function loadOptions() {
 
 
         if (profilesArray.length > 0 && !activeProfileFilter) {
-
-            const firstProfile = profilesArray[0];
-
-            selectOption(firstProfile.id, firstProfile);
-
+            const existingProfile = currentSelectedId ? profilesArray.find(p => p.id === currentSelectedId) : null;
+            const profileToSelect = existingProfile || profilesArray[0];
+            if (profileToSelect) {
+                if (existingProfile) {
+                    if (originalSelect) originalSelect.value = profileToSelect.id;
+                    const lastPlayedText = profileToSelect.last_played ? timeAgo(profileToSelect.last_played) : 'Never';
+                    if (document.getElementById('selectedIcon')) {
+                        document.getElementById('selectedIcon').src = profileToSelect.iconUrl || profileToSelect.icon;
+                        document.getElementById('selectedIcon').style.display = 'block';
+                    }
+                    if (document.getElementById('selectedTitle')) document.getElementById('selectedTitle').textContent = profileToSelect.name;
+                    if (document.getElementById('selectedSubtitle')) document.getElementById('selectedSubtitle').textContent = `Version ${profileToSelect.version} • ${lastPlayedText}`;
+                    document.querySelectorAll('.select-option').forEach(opt => opt.classList.remove('selected'));
+                    const selectedOpt = document.querySelector(`[data-value="${profileToSelect.id}"]`);
+                    if (selectedOpt) selectedOpt.classList.add('selected');
+                    if (wasOpen) {
+                        if (selectTrigger) selectTrigger.classList.add('active');
+                        if (selectOptions) selectOptions.classList.add('active');
+                    }
+                } else {
+                    selectOption(profileToSelect.id, profileToSelect);
+                }
+            }
         }
 
     }
@@ -2701,6 +2723,8 @@ window.copyErrorLog = function () {
 function selectOption(id, profile) {
 
     if (originalSelect) originalSelect.value = id;
+    if (typeof lastUserSelectedAddonProfile !== 'undefined') lastUserSelectedAddonProfile = id;
+    if (typeof currentModsProfile !== 'undefined') currentModsProfile = id;
 
 
 
@@ -2744,9 +2768,7 @@ function selectOption(id, profile) {
 
 function toggleSelect() {
 
-    if (selectTrigger) selectTrigger.classList.toggle('active');
-
-    if (selectOptions) selectOptions.classList.toggle('active');
+    toggleCustomSelect(customSelect);
 
 }
 
@@ -2754,9 +2776,7 @@ function toggleSelect() {
 
 function closeSelect() {
 
-    if (selectTrigger) selectTrigger.classList.remove('active');
-
-    if (selectOptions) selectOptions.classList.remove('active');
+    closeAllCustomSelects();
 
 }
 
@@ -2782,7 +2802,7 @@ if (selectTrigger) {
 
         e.stopPropagation();
 
-        toggleSelect();
+        toggleCustomSelect(customSelect);
 
     });
 
@@ -2792,13 +2812,49 @@ if (selectTrigger) {
 
 document.addEventListener('click', (e) => {
 
-    if (customSelect && !customSelect.contains(e.target)) {
+    if (!e.target.closest('.custom-select')) {
 
-        closeSelect();
+        closeAllCustomSelects();
 
     }
 
 });
+
+
+
+const modsSelectTrigger = document.getElementById('modsSelectTrigger');
+
+const modsCustomSelect = document.getElementById('modsCustomSelect');
+
+if (modsSelectTrigger && modsCustomSelect) {
+
+    modsSelectTrigger.addEventListener('click', (e) => {
+
+        e.stopPropagation();
+
+        toggleCustomSelect(modsCustomSelect);
+
+    });
+
+}
+
+
+
+const worldSelectTrigger = document.getElementById('worldSelectTrigger');
+
+const worldCustomSelect = document.getElementById('worldCustomSelect');
+
+if (worldSelectTrigger && worldCustomSelect) {
+
+    worldSelectTrigger.addEventListener('click', (e) => {
+
+        e.stopPropagation();
+
+        toggleCustomSelect(worldCustomSelect);
+
+    });
+
+}
 
 
 
@@ -2965,6 +3021,14 @@ async function loadProfiles() {
 
 
 function showSection(sectionId) {
+    if (sectionId === 'skins') {
+        const skinsBtn = document.getElementById('skinsSidebarBtn');
+        if (skinsBtn && skinsBtn.classList.contains('locked-feature')) {
+            const modal = document.getElementById('featureLockedSkinsModal');
+            if (modal) modal.classList.add('show');
+            return;
+        }
+    }
 
     document.querySelectorAll('.section').forEach(section => {
 
@@ -3116,28 +3180,50 @@ async function openEditProfileModal(id, profile) {
 
     let loaderVersion = '';
 
-
-
-    if (ver.startsWith('forge-')) {
-
+    const lowerVer = ver.toLowerCase();
+    const prefixMatch = ver.match(/^(Vanilla|Fabric|Forge|NeoForge|Quilt|OptiFine)\b/i);
+    if (prefixMatch) {
+        software = prefixMatch[1].toLowerCase();
+        if (software === 'neoforge') software = 'neoforge';
+        if (software === 'optifine') software = 'optifine';
+        const parenMatch = ver.match(/^([^\s]+)\s+([^\s(]+)(?:\s+\(([^)]+)\))?/i);
+        if (parenMatch) {
+            mcVersion = parenMatch[2].trim();
+            loaderVersion = parenMatch[3] ? parenMatch[3].trim() : '';
+        }
+    } else if (lowerVer.includes('neoforge')) {
+        software = 'neoforge';
+        const parts = ver.replace(/neoforge-?/i, '').split('-');
+        mcVersion = parts[0] || '';
+        loaderVersion = parts.slice(1).join('-');
+    } else if (lowerVer.includes('forge')) {
         software = 'forge';
-
-        const parts = ver.replace('forge-', '').split('-');
-
+        const parts = ver.replace(/forge-?/i, '').split('-');
         mcVersion = parts[0] || '';
-
         loaderVersion = parts.slice(1).join('-');
-
-    } else if (ver.startsWith('fabric-')) {
-
+    } else if (lowerVer.includes('fabric')) {
         software = 'fabric';
-
-        const parts = ver.replace('fabric-', '').split('-');
-
+        if (lowerVer.startsWith('fabric-loader-')) {
+            const parts = ver.split('-');
+            if (parts.length >= 4) { loaderVersion = parts[2]; mcVersion = parts[3]; }
+        } else {
+            const parts = ver.replace(/fabric-?/i, '').split('-');
+            mcVersion = parts[0] || '';
+            loaderVersion = parts.slice(1).join('-');
+        }
+    } else if (lowerVer.includes('quilt')) {
+        software = 'quilt';
+        const parts = ver.replace(/quilt-?(?:loader-?)?/i, '').split('-');
+        if (parts.length >= 2) { loaderVersion = parts[0]; mcVersion = parts[1]; }
+        else { mcVersion = parts[0] || ''; }
+    } else if (lowerVer.includes('optifine')) {
+        software = 'optifine';
+        const parts = ver.replace(/optifine-?/i, '').split(/[-_]/);
         mcVersion = parts[0] || '';
-
-        loaderVersion = parts.slice(1).join('-');
-
+        loaderVersion = parts.slice(1).join('_');
+    } else {
+        software = 'vanilla';
+        mcVersion = ver.replace(/^vanilla\s+/i, '').trim();
     }
 
 
@@ -3285,17 +3371,19 @@ if (acceptProfileBtn) {
 
 
         // Build the version string
-
         let profileVersion = mcVersion;
-
-        if (software === 'forge' && loaderVersion) {
-
-            profileVersion = `forge-${mcVersion}-${loaderVersion}`;
-
+        if (software === 'vanilla') {
+            profileVersion = `Vanilla ${mcVersion}`;
+        } else if (software === 'forge' && loaderVersion) {
+            profileVersion = `Forge ${mcVersion} (${loaderVersion})`;
         } else if (software === 'fabric' && loaderVersion) {
-
-            profileVersion = `fabric-${mcVersion}-${loaderVersion}`;
-
+            profileVersion = `Fabric ${mcVersion} (${loaderVersion})`;
+        } else if (software === 'neoforge' && loaderVersion) {
+            profileVersion = `NeoForge ${mcVersion} (${loaderVersion})`;
+        } else if (software === 'quilt' && loaderVersion) {
+            profileVersion = `Quilt ${mcVersion} (${loaderVersion})`;
+        } else if (software === 'optifine' && loaderVersion) {
+            profileVersion = `OptiFine ${mcVersion} (${loaderVersion})`;
         }
 
 
@@ -3986,6 +4074,14 @@ async function loadProfileMcVersions(type) {
             } else if (type === 'forge') {
 
                 versions = await window.pywebview.api.get_forge_mc_versions();
+
+            } else if (type === 'neoforge') {
+
+                versions = await window.pywebview.api.get_neoforge_mc_versions();
+
+            } else if (type === 'quilt') {
+
+                versions = await window.pywebview.api.get_quilt_mc_versions();
 
             }
 
@@ -4689,14 +4785,9 @@ window.logout = async function () {
 
         
 
-        // If skins section is open, we should probably close it or refresh it
-
-        const currentSection = document.querySelector('.section.active');
-
-        if (currentSection && (currentSection.id === 'skins-section' || currentSection.id === 'mods-section')) {
-
-            showSection('home');
-
+        // Always redirect to play page when logging out
+        if (typeof showSection === 'function') {
+            showSection('play');
         }
 
 
@@ -4727,15 +4818,452 @@ window.logout = async function () {
 
 
 
-if (logoutBtn) {
+// ══════════════════════════════════════════════════════
+// Account Switcher
+// ══════════════════════════════════════════════════════
 
-    logoutBtn.addEventListener('click', async () => {
+const switchAccountBtn = document.getElementById('switchAccountBtn');
 
-        await window.logout();
-
-    });
-
+// Helper: get avatar URL for an account (for use in the switcher UI)
+function getAccountAvatarUrl(acc) {
+    if (acc.type === 'microsoft' && acc.username) {
+        return `https://mc-heads.net/avatar/${encodeURIComponent(acc.username)}/44`;
+    }
+    if (acc.type === 'helloworld' && acc.avatarUrl) {
+        return acc.avatarUrl;
+    }
+    return null;
 }
+
+// Helper: get current active account id to highlight it
+async function getCurrentAccountId() {
+    try {
+        const data = await window.pywebview.api.get_user_json();
+        if (!data || !data.username) return null;
+        if (data.account_type === 'helloworld') {
+            // Match by firebase_uid or by username
+            return data.firebase_uid || null;
+        }
+        if (data.account_type === 'microsoft') {
+            return data.uuid || null;
+        }
+        if (data.account_type === 'offline') {
+            // Generate deterministic id like backend does
+            return null; // We'll match by username+type for offline
+        }
+        return null;
+    } catch (_) { return null; }
+}
+
+// Render the account list inside the modal
+async function renderAccountSwitcherList() {
+    const listEl = document.getElementById('accountSwitcherList');
+    const emptyEl = document.getElementById('accountSwitcherEmpty');
+    if (!listEl) return;
+
+    // Show loading state
+    listEl.innerHTML = '<div style="display:flex;justify-content:center;padding:32px;"><div class="account-item-spinner"></div></div>';
+
+    let accounts = [];
+    try {
+        const res = await window.pywebview.api.get_saved_accounts();
+        accounts = (res && res.accounts) ? res.accounts : [];
+    } catch (e) {
+        console.error('[AccountSwitcher] Failed to load accounts:', e);
+    }
+
+    // Clear list
+    listEl.innerHTML = '';
+
+    if (accounts.length === 0) {
+        if (emptyEl) emptyEl.style.display = 'flex';
+        listEl.appendChild(emptyEl || document.createElement('div'));
+        return;
+    }
+
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    // Get current user to mark active
+    const currentData = await window.pywebview.api.get_user_json().catch(() => null);
+
+    let hasActive = false;
+
+    accounts.forEach(acc => {
+        // Determine if this is the active account
+        let isActive = false;
+        if (currentData && currentData.username) {
+            if (acc.type === 'helloworld' && currentData.account_type === 'helloworld') {
+                isActive = acc.id === currentData.firebase_uid;
+            } else if (acc.type === 'microsoft' && currentData.account_type === 'microsoft') {
+                isActive = acc.uuid === currentData.uuid;
+            } else if (acc.type === 'offline' && currentData.account_type === 'offline') {
+                isActive = acc.username === currentData.username;
+            }
+        }
+        if (isActive) hasActive = true;
+
+        const item = document.createElement('div');
+        item.className = `account-item${isActive ? ' active' : ''}`;
+        item.dataset.accountId = acc.id;
+
+        // Avatar
+        const avatarEl = document.createElement('div');
+        avatarEl.className = 'account-item-avatar';
+
+        const avatarUrl = getAccountAvatarUrl(acc);
+        if (avatarUrl) {
+            const img = document.createElement('img');
+            img.src = avatarUrl;
+            img.alt = acc.username;
+            img.onerror = () => {
+                img.style.display = 'none';
+                const fb = document.createElement('i');
+                fb.className = 'fas fa-user avatar-fallback';
+                avatarEl.appendChild(fb);
+            };
+            avatarEl.appendChild(img);
+        } else {
+            const fb = document.createElement('i');
+            fb.className = 'fas fa-user avatar-fallback';
+            avatarEl.appendChild(fb);
+        }
+
+        // Type dot
+        const dot = document.createElement('span');
+        dot.className = `account-type-dot dot-${acc.type}`;
+        avatarEl.appendChild(dot);
+
+        // Info
+        const infoEl = document.createElement('div');
+        infoEl.className = 'account-item-info';
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'account-item-name';
+        nameEl.textContent = acc.username;
+
+        const metaEl = document.createElement('div');
+        metaEl.className = 'account-item-meta';
+
+        const badge = document.createElement('span');
+        const typeLabel = acc.type === 'microsoft' ? 'Microsoft' : acc.type === 'helloworld' ? 'HelloWorld' : 'Offline';
+        const typeIcon = acc.type === 'microsoft' ? 'fab fa-microsoft' : acc.type === 'helloworld' ? 'fas fa-globe' : 'fas fa-user';
+        badge.className = `account-type-badge badge-${acc.type}`;
+        badge.innerHTML = `<i class="${typeIcon}"></i> ${typeLabel}`;
+        metaEl.appendChild(badge);
+
+        if (isActive) {
+            const activeBadge = document.createElement('span');
+            activeBadge.className = 'account-active-badge';
+            activeBadge.textContent = 'Active';
+            metaEl.appendChild(activeBadge);
+        }
+
+        infoEl.appendChild(nameEl);
+        infoEl.appendChild(metaEl);
+
+        // Remove button
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'account-item-remove';
+        removeBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i>';
+
+        if (isActive) {
+            removeBtn.classList.add('disabled');
+            removeBtn.style.opacity = '0.3';
+            removeBtn.style.cursor = 'not-allowed';
+            removeBtn.setAttribute('data-tooltip', 'Selecciona otra cuenta primero para cerrar esta');
+            removeBtn.addEventListener('mouseenter', () => {
+                const rect = removeBtn.getBoundingClientRect();
+                showTooltip(removeBtn, 'Selecciona otra cuenta primero para cerrar esta', rect.left + rect.width / 2, rect.top);
+            });
+            removeBtn.addEventListener('mouseleave', () => hideTooltip());
+            removeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showToast('Selecciona otra cuenta primero para cerrar esta', 'info');
+            });
+        } else {
+            removeBtn.title = 'Remove account';
+            removeBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await removeAccountFromSwitcher(acc.id, acc.username, item);
+            });
+        }
+
+        item.appendChild(avatarEl);
+        item.appendChild(infoEl);
+        item.appendChild(removeBtn);
+
+        // Click to switch (only if not already active)
+        if (!isActive) {
+            item.addEventListener('click', async () => {
+                await switchToAccountFromSwitcher(acc.id, acc.type, acc.username, acc.email || '', item);
+            });
+        }
+
+        listEl.appendChild(item);
+    });
+}
+
+// Switch to an account from the modal
+async function switchToAccountFromSwitcher(accountId, accountType, username, email, itemEl) {
+    if (!itemEl) return;
+
+    // Show spinner
+    const removeBtn = itemEl.querySelector('.account-item-remove');
+    if (removeBtn) removeBtn.style.display = 'none';
+    const spinner = document.createElement('div');
+    spinner.className = 'account-item-spinner';
+    itemEl.classList.add('switching');
+    itemEl.appendChild(spinner);
+
+    try {
+        const res = await window.pywebview.api.switch_account(accountId);
+
+        if (res && res.success && res.newData) {
+            // Close modal and refresh UI
+            const modal = document.getElementById('accountSwitcherModal');
+            if (modal) modal.classList.remove('show');
+
+            await updateUserInterface(res.newData);
+            await loadProfiles();
+            await loadVersions();
+            await loadOptions();
+
+            if (window.renderUserHead) {
+                if (res.newData.account_type === 'helloworld') {
+                    const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(res.newData.username)}&background=random&color=fff&rounded=true&bold=true&format=svg`;
+                    await window.renderUserHead(res.newData.last_avatar_url || fallbackUrl).catch(() => {});
+                } else if (res.newData.account_type === 'microsoft') {
+                    await window.renderUserHead(`https://mc-heads.net/avatar/${res.newData.username}`).catch(() => {});
+                } else {
+                    await window.renderUserHead(null).catch(() => {});
+                }
+            }
+
+            // Trigger skin reload if needed
+            if (res.newData.username && window.hasInternet) loadSkinData();
+            if (res.newData.account_type === 'microsoft') {
+                silentMicrosoftVerify(res.newData.username, res.newData.uuid).catch(() => {});
+            }
+
+            showToast(`Switched to ${username}`, 'success');
+            if (typeof showSection === 'function') {
+                showSection('play');
+            }
+        } else if (res && res.needsRelogin) {
+            // Close switcher modal
+            const modal = document.getElementById('accountSwitcherModal');
+            if (modal) modal.classList.remove('show');
+
+            if (res.type === 'helloworld') {
+                // Pre-fill HW login form and open login modal
+                const loginModal = document.getElementById('loginModal');
+                const hwEmail = document.getElementById('hwEmail');
+                const hwPassword = document.getElementById('hwPassword');
+                const hwLoginError = document.getElementById('hwLoginError');
+
+                if (hwEmail) hwEmail.value = email || username || '';
+                if (hwPassword) hwPassword.value = '';
+                if (hwLoginError) { hwLoginError.style.display = 'none'; hwLoginError.textContent = ''; }
+
+                // Navigate to HW login screen
+                const screens = document.querySelectorAll('.login-screen');
+                screens.forEach(s => s.classList.remove('active'));
+                const hwScreen = document.getElementById('loginHelloWorldScreen');
+                if (hwScreen) hwScreen.classList.add('active');
+
+                if (loginModal) {
+                    loginModal.classList.add('show');
+                    showToast('Session expired. Please log in again.', 'error');
+                }
+
+            } else if (res.type === 'microsoft') {
+                // Trigger MS login flow directly
+                showToast('Reconnecting Microsoft account...', 'success');
+                const selectMsBtnEl = document.getElementById('selectMicrosoftBtn');
+                if (selectMsBtnEl) {
+                    selectMsBtnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting...';
+                    selectMsBtnEl.disabled = true;
+                }
+                try {
+                    const msRes = await window.pywebview.api.login_microsoft();
+                    if (msRes && msRes.success && msRes.profile) {
+                        if (window.onLoginSuccess) window.onLoginSuccess();
+                    } else {
+                        showToast('Microsoft login failed.', 'error');
+                    }
+                } catch (msErr) {
+                    console.error('[AccountSwitcher] MS re-login error:', msErr);
+                    showToast('Microsoft login error.', 'error');
+                } finally {
+                    if (selectMsBtnEl) {
+                        selectMsBtnEl.innerHTML = '<i class="fab fa-microsoft"></i> Login with Microsoft <span class="corner-ribbon">Only Minecraft Premium</span>';
+                        selectMsBtnEl.disabled = false;
+                    }
+                }
+            } else {
+                showToast('Could not switch account.', 'error');
+            }
+        } else {
+            showToast(res?.error || 'Could not switch account.', 'error');
+            // Restore item
+            itemEl.classList.remove('switching');
+            spinner.remove();
+            if (removeBtn) removeBtn.style.display = '';
+        }
+    } catch (e) {
+        console.error('[AccountSwitcher] switch error:', e);
+        showToast('Error switching account.', 'error');
+        itemEl.classList.remove('switching');
+        spinner.remove();
+        if (removeBtn) removeBtn.style.display = '';
+    }
+}
+
+// Remove an account from the switcher
+async function removeAccountFromSwitcher(accountId, username, itemEl) {
+    const confirmed = await window.pywebview.api.confirm(`Remove "${username}" from saved accounts?`);
+    if (!confirmed) return;
+
+    try {
+        const res = await window.pywebview.api.remove_saved_account(accountId);
+        if (res && res.success) {
+            // Animate removal
+            if (itemEl) {
+                itemEl.style.transition = 'all 0.2s ease';
+                itemEl.style.opacity = '0';
+                itemEl.style.transform = 'translateX(20px)';
+                setTimeout(() => itemEl.remove(), 200);
+            }
+
+            if (res.sessionCleared && res.newData) {
+                const modalEl = document.getElementById('accountSwitcherModal');
+                if (modalEl) modalEl.classList.remove('show');
+                await updateUserInterface(res.newData);
+                await loadProfiles();
+                await loadVersions();
+                if (window.renderUserHead) await window.renderUserHead(null).catch(() => {});
+                if (typeof showSection === 'function') {
+                    showSection('play');
+                }
+            }
+
+            // Check if list is now empty
+            setTimeout(() => {
+                const list = document.getElementById('accountSwitcherList');
+                const emptyEl = document.getElementById('accountSwitcherEmpty');
+                if (list && list.querySelectorAll('.account-item').length === 0 && emptyEl) {
+                    emptyEl.style.display = 'flex';
+                    list.appendChild(emptyEl);
+                }
+            }, 250);
+
+        } else {
+            showToast('Could not remove account.', 'error');
+        }
+    } catch (e) {
+        console.error('[AccountSwitcher] remove error:', e);
+        showToast('Error removing account.', 'error');
+    }
+}
+
+// Open the account switcher modal
+window.openAccountSwitcher = async function () {
+    const modal = document.getElementById('accountSwitcherModal');
+    if (!modal) return;
+    // Close user dropdown
+    const userBadgeEl = document.getElementById('userBadge');
+    if (userBadgeEl) userBadgeEl.classList.remove('active');
+
+    modal.classList.add('show');
+    await renderAccountSwitcherList();
+};
+
+// Initialize listeners robustly when DOM is ready
+function initAccountSwitcherEvents() {
+    const swBtn = document.getElementById('switchAccountBtn');
+    if (swBtn && !swBtn._asInit) {
+        swBtn._asInit = true;
+        swBtn.addEventListener('click', async () => {
+            await window.openAccountSwitcher();
+        });
+    }
+
+    const closeBtn = document.getElementById('closeAccountSwitcherBtn');
+    if (closeBtn && !closeBtn._asInit) {
+        closeBtn._asInit = true;
+        closeBtn.addEventListener('click', () => {
+            const modal = document.getElementById('accountSwitcherModal');
+            if (modal) modal.classList.remove('show');
+        });
+    }
+
+    const modalEl = document.getElementById('accountSwitcherModal');
+    if (modalEl && !modalEl._asInit) {
+        modalEl._asInit = true;
+        modalEl.addEventListener('click', (e) => {
+            if (e.target === modalEl) {
+                modalEl.classList.remove('show');
+            }
+        });
+    }
+
+    const addBtn = document.getElementById('addAccountBtn');
+    if (addBtn && !addBtn._asInit) {
+        addBtn._asInit = true;
+        addBtn.addEventListener('click', () => {
+            const modal = document.getElementById('accountSwitcherModal');
+            if (modal) modal.classList.remove('show');
+            const loginModal = document.getElementById('loginModal');
+            const screens = document.querySelectorAll('.login-screen');
+            screens.forEach(s => s.classList.remove('active'));
+            const methodScreen = document.getElementById('loginMethodScreen');
+            if (methodScreen) methodScreen.classList.add('active');
+            if (loginModal) loginModal.classList.add('show');
+        });
+    }
+
+    const signOutAll = document.getElementById('signOutAllBtn');
+    if (signOutAll && !signOutAll._asInit) {
+        signOutAll._asInit = true;
+        signOutAll.addEventListener('click', async (e) => {
+            const confirmed = await window.pywebview.api.confirm('Sign out of all accounts? This will remove all saved accounts.');
+            if (!confirmed) return;
+
+            try {
+                const res = await window.pywebview.api.remove_all_accounts();
+                if (res && res.success && res.newData) {
+                    const modal = document.getElementById('accountSwitcherModal');
+                    if (modal) modal.classList.remove('show');
+
+                    await updateUserInterface(res.newData);
+                    await loadProfiles();
+                    await loadVersions();
+                    await loadOptions();
+                    if (window.renderUserHead) await window.renderUserHead(null).catch(() => {});
+                    if (typeof showSection === 'function') {
+                        showSection('play');
+                    }
+                    if (document.getElementById('nickname')) document.getElementById('nickname').value = '';
+                    showToast('Signed out of all accounts.', 'success');
+                } else {
+                    showToast('Error signing out all accounts.', 'error');
+                }
+            } catch (e) {
+                console.error('[AccountSwitcher] remove-all error:', e);
+                showToast('Error signing out.', 'error');
+            }
+        });
+    }
+}
+
+// Run immediately and also on DOMContentLoaded
+initAccountSwitcherEvents();
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAccountSwitcherEvents);
+}
+
+
+// ══════════════════════════════════════════════════════
 
 
 
@@ -5140,6 +5668,7 @@ observer.observe(document.body, {
 // Global variables for mods/content
 
 let currentModsProfile = null;
+let lastUserSelectedAddonProfile = null;
 
 let currentModTab = 'download';
 
@@ -5182,19 +5711,17 @@ const installedModsList = document.getElementById('installedModsList');
 // Toggle Sidebar Menu
 
 function toggleModsMenu() {
-
     const submenu = document.getElementById('modsSubmenu');
-
     const arrow = document.getElementById('modsMenuArrow');
+    const isVisible = submenu.classList.contains('active');
 
-    const isVisible = submenu.style.display !== 'none';
-
-
-
-    submenu.style.display = isVisible ? 'none' : 'block';
-
-    arrow.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(180deg)';
-
+    if (isVisible) {
+        submenu.classList.remove('active');
+        arrow.style.transform = 'rotate(0deg)';
+    } else {
+        submenu.classList.add('active');
+        arrow.style.transform = 'rotate(180deg)';
+    }
 }
 
 
@@ -5204,6 +5731,11 @@ function toggleModsMenu() {
 const originalShowSection = window.showSection || function () { };
 
 window.showSection = function (sectionId, contentType = null) {
+    if (sectionId === 'mods' && contentType === 'modpack') {
+        showSection('workshop');
+        if (window.switchWorkshopTab) switchWorkshopTab('modpacks');
+        return;
+    }
 
     // Hide all sections logic (assumed exists in global scope or we reimplement basic toggle)
 
@@ -5243,7 +5775,7 @@ window.showSection = function (sectionId, contentType = null) {
 
         document.getElementById('modsMenuBtn').classList.add('active');
 
-        document.getElementById('modsSubmenu').style.display = 'block'; // Ensure open
+        document.getElementById('modsSubmenu').classList.add('active'); // Ensure open
 
     } else {
 
@@ -5265,7 +5797,9 @@ window.showSection = function (sectionId, contentType = null) {
 
         updateModsSectionUI();
 
-        loadModdableProfiles(); // Reload/Refilter profiles
+        loadModdableProfiles(true); // Reload/Refilter profiles without duplicate search
+
+        loadModCategories(); // Load categories and trigger initial search for this section
 
     }
 
@@ -5276,15 +5810,11 @@ window.showSection = function (sectionId, contentType = null) {
 function updateModsSectionUI() {
 
     const titles = {
-
         'mod': 'Mods',
-
         'resourcepack': 'Resource Packs',
-
         'datapack': 'Data Packs',
-
-        'shader': 'Shaders'
-
+        'shader': 'Shaders',
+        'modpack': 'Modpacks'
     };
 
     if (modsSectionTitle) modsSectionTitle.textContent = titles[currentContentType];
@@ -5308,15 +5838,11 @@ function updateModsSectionUI() {
     if (profileHelpIcon) {
 
         const tooltips = {
-
-            'mod': 'Select an installation with Forge or Fabric to manage mods',
-
+            'mod': 'Select an installation with Forge, Fabric, NeoForge, or Quilt to manage mods',
             'resourcepack': 'Select an installation to manage resource packs',
-
             'datapack': 'Select an installation and a world to manage data packs',
-
-            'shader': 'Select an installation with shader support. Forge: requires Optifine. Fabric: requires Sodium + Iris'
-
+            'shader': 'Select an installation with shader support. Forge/NeoForge: Optifine/Oculus. Fabric/Quilt: Sodium + Iris',
+            'modpack': 'Select an installation to install Modrinth modpacks (.mrpack)'
         };
 
         profileHelpIcon.setAttribute('data-tooltip', tooltips[currentContentType] || tooltips['mod']);
@@ -5367,11 +5893,104 @@ function updateModsSectionUI() {
 
 }
 
+function toggleCustomSelect(selectEl) {
+    if (!selectEl || selectEl.classList.contains('disabled')) return;
+    const trigger = selectEl.querySelector('.select-trigger');
+    const options = selectEl.querySelector('.select-options');
+    const isActive = trigger && trigger.classList.contains('active');
+    closeAllCustomSelects();
+    if (!isActive) {
+        if (trigger) trigger.classList.add('active');
+        if (options) options.classList.add('active');
+    }
+}
 
+function closeAllCustomSelects() {
+    document.querySelectorAll('.custom-select').forEach(sel => {
+        const trigger = sel.querySelector('.select-trigger');
+        const options = sel.querySelector('.select-options');
+        if (trigger) trigger.classList.remove('active');
+        if (options) options.classList.remove('active');
+    });
+}
+
+function updateModsCustomSelectDisplay(id, profile) {
+    const modsSelectedTitle = document.getElementById('modsSelectedTitle');
+    const modsSelectedSubtitle = document.getElementById('modsSelectedSubtitle');
+    const modsSelectedIcon = document.getElementById('modsSelectedIcon');
+    const modsCustomSelect = document.getElementById('modsCustomSelect');
+
+    if (!profile || !id) {
+        if (modsSelectedTitle) modsSelectedTitle.textContent = "No installations found";
+        if (modsSelectedSubtitle) modsSelectedSubtitle.style.display = 'none';
+        if (modsSelectedIcon) modsSelectedIcon.style.display = 'none';
+        if (modsCustomSelect) modsCustomSelect.classList.add('disabled');
+        return;
+    }
+
+    if (modsCustomSelect) modsCustomSelect.classList.remove('disabled');
+    if (modsSelectedTitle) modsSelectedTitle.textContent = profile.name || id;
+    if (modsSelectedSubtitle) {
+        const lastPlayedText = profile.last_played ? (typeof timeAgo === 'function' ? timeAgo(profile.last_played) : profile.last_played) : 'Never';
+        modsSelectedSubtitle.textContent = `Version ${profile.version || 'Unknown'} • ${lastPlayedText}`;
+        modsSelectedSubtitle.style.display = 'block';
+    }
+    if (modsSelectedIcon) {
+        if (profile.iconUrl || profile.icon) {
+            modsSelectedIcon.src = profile.iconUrl || profile.icon;
+            modsSelectedIcon.style.display = 'block';
+        } else {
+            modsSelectedIcon.style.display = 'none';
+        }
+    }
+
+    document.querySelectorAll('#modsSelectOptions .select-option').forEach(opt => {
+        opt.classList.remove('selected');
+        if (opt.dataset.value === id) opt.classList.add('selected');
+    });
+}
+
+function selectModsProfileOption(id, profile) {
+    if (modsProfileSelect) modsProfileSelect.value = id;
+    if (typeof lastUserSelectedAddonProfile !== 'undefined') lastUserSelectedAddonProfile = id;
+    if (typeof currentModsProfile !== 'undefined') currentModsProfile = id;
+    updateModsCustomSelectDisplay(id, profile);
+    closeAllCustomSelects();
+    if (modsProfileSelect) modsProfileSelect.dispatchEvent(new Event('change'));
+}
+
+function updateWorldCustomSelectDisplay(worldName) {
+    const worldSelectedTitle = document.getElementById('worldSelectedTitle');
+    const worldSelectedSubtitle = document.getElementById('worldSelectedSubtitle');
+    const worldCustomSelect = document.getElementById('worldCustomSelect');
+    if (!worldName) {
+        if (worldSelectedTitle) worldSelectedTitle.textContent = "Select a world...";
+        if (worldSelectedSubtitle) worldSelectedSubtitle.style.display = 'none';
+        if (worldCustomSelect) worldCustomSelect.classList.add('disabled');
+        return;
+    }
+    if (worldCustomSelect) worldCustomSelect.classList.remove('disabled');
+    if (worldSelectedTitle) worldSelectedTitle.textContent = worldName;
+    if (worldSelectedSubtitle) {
+        worldSelectedSubtitle.textContent = 'Minecraft World';
+        worldSelectedSubtitle.style.display = 'block';
+    }
+    document.querySelectorAll('#worldSelectOptions .select-option').forEach(opt => {
+        opt.classList.remove('selected');
+        if (opt.dataset.value === worldName) opt.classList.add('selected');
+    });
+}
+
+function selectWorldOption(worldName) {
+    if (worldSelect) worldSelect.value = worldName;
+    updateWorldCustomSelectDisplay(worldName);
+    closeAllCustomSelects();
+    if (worldSelect) worldSelect.dispatchEvent(new Event('change'));
+}
 
 // Load profiles logic updated
 
-async function loadModdableProfiles() {
+async function loadModdableProfiles(skipSearch = false) {
 
     if (!modsProfileSelect) return;
 
@@ -5389,9 +6008,17 @@ async function loadModdableProfiles() {
 
         const targetProfiles = data.profiles || {};
 
+        window.currentModdableProfiles = targetProfiles;
 
+
+
+        const preferredProfile = lastUserSelectedAddonProfile || currentModsProfile || modsProfileSelect.value || (originalSelect ? originalSelect.value : null);
 
         modsProfileSelect.innerHTML = '';
+
+        const modsSelectOptions = document.getElementById('modsSelectOptions');
+
+        if (modsSelectOptions) modsSelectOptions.innerHTML = '';
 
 
 
@@ -5403,13 +6030,13 @@ async function loadModdableProfiles() {
 
             worldSelect.disabled = true;
 
+            updateWorldCustomSelectDisplay('');
+
+            const worldSelectOptions = document.getElementById('worldSelectOptions');
+
+            if (worldSelectOptions) worldSelectOptions.innerHTML = '';
+
         }
-
-
-
-        // Load Categories when Moddable Profiles are loaded (Section activation)
-
-        loadModCategories();
 
 
 
@@ -5421,6 +6048,8 @@ async function loadModdableProfiles() {
 
             modsProfileSelect.disabled = true;
 
+            updateModsCustomSelectDisplay('', null);
+
             if (noModdableProfiles) {
 
                 noModdableProfiles.style.display = 'block';
@@ -5429,9 +6058,9 @@ async function loadModdableProfiles() {
 
                 let msg = "";
 
-                if (currentContentType === 'mod') msg = "No installations with Forge or Fabric found.";
+                if (currentContentType === 'mod') msg = "No installations with Forge, Fabric, NeoForge, or Quilt found.";
 
-                else if (currentContentType === 'shader') msg = "No installations with Shaders support found. (Requires Forge with Optifine OR Fabric with Iris+Sodium installed).";
+                else if (currentContentType === 'shader') msg = "No installations with Shaders support found. (Requires Forge/NeoForge OR Fabric/Quilt installed).";
 
                 else msg = "No installations found.";
 
@@ -5442,6 +6071,7 @@ async function loadModdableProfiles() {
             }
 
             if (modsTabsContainer) modsTabsContainer.style.display = 'none';
+            if (typeof updateInstalledAddonsTotal === 'function') updateInstalledAddonsTotal(0);
 
             updateUploadButtonState();
 
@@ -5468,12 +6098,18 @@ async function loadModdableProfiles() {
 
 
             let label = profile.name;
+            const verLower = (profile.version || '').toLowerCase();
+            const typeLabel = (profile.type === 'neoforge' || verLower.includes('neoforge')) ? 'NEOFORGE' :
+                (profile.type === 'quilt' || verLower.includes('quilt')) ? 'QUILT' :
+                (profile.type === 'forge' || verLower.includes('forge')) ? 'FORGE' :
+                (profile.type === 'fabric' || verLower.includes('fabric')) ? 'FABRIC' : 'VANILLA';
 
-            const typeLabel = (profile.type === 'forge' || (profile.version && profile.version.includes('forge'))) ? 'FORGE' :
-
-                (profile.type === 'fabric' || (profile.version && profile.version.includes('fabric'))) ? 'FABRIC' : 'VANILLA';
-
-            option.textContent = `${label} (${typeLabel} - ${profile.version})`;
+            const formattedVer = window.formatVersionString ? window.formatVersionString(profile.version) : profile.version;
+            let displayVer = formattedVer;
+            if (!/^(?:Forge|Fabric|NeoForge|Quilt|Vanilla)\b/i.test(formattedVer)) {
+                displayVer = `${typeLabel} - ${formattedVer}`;
+            }
+            option.textContent = `${label} (${displayVer})`;
 
 
 
@@ -5481,7 +6117,7 @@ async function loadModdableProfiles() {
 
             if (currentContentType === 'shader') {
 
-                if (typeLabel === 'FORGE' || typeLabel === 'FABRIC') {
+                if (typeLabel === 'FORGE' || typeLabel === 'FABRIC' || typeLabel === 'NEOFORGE' || typeLabel === 'QUILT') {
 
                     option.title = "Installation ready for shaders";
 
@@ -5493,22 +6129,113 @@ async function loadModdableProfiles() {
 
             modsProfileSelect.appendChild(option);
 
+
+
+            if (modsSelectOptions) {
+
+                const optionDiv = document.createElement('div');
+
+                optionDiv.className = 'select-option compact-select-option';
+
+                optionDiv.dataset.value = id;
+
+
+
+                let tags = '';
+
+                let type = 'vanilla';
+
+                if (verLower.includes('neoforge') || profile.type === 'neoforge') type = 'neoforge';
+
+                else if (verLower.includes('forge') || profile.type === 'forge') type = 'forge';
+
+                else if (verLower.includes('fabric') || profile.type === 'fabric') type = 'fabric';
+
+                else if (verLower.includes('quilt') || profile.type === 'quilt') type = 'quilt';
+
+
+
+                if (type === 'neoforge') tags = `<span class="option-tag neoforge">NEOFORGE</span>`;
+
+                else if (type === 'quilt') tags = `<span class="option-tag quilt">QUILT</span>`;
+
+                else if (type === 'forge') tags = `<span class="option-tag forge">FORGE</span>`;
+
+                else if (type === 'fabric') tags = `<span class="option-tag fabric">FABRIC</span>`;
+
+                else tags = `<span class="option-tag">VANILLA</span>`;
+
+
+
+                if (profile.mods) tags += `<span class="option-tag">${profile.mods} MODS</span>`;
+
+
+
+                const iconUrl = await window.pywebview.api.get_profile_icon(profile.icon);
+
+                profile.iconUrl = iconUrl;
+
+
+
+                const lastPlayedText = profile.last_played ? (typeof timeAgo === 'function' ? timeAgo(profile.last_played) : profile.last_played) : 'Never';
+
+
+
+                optionDiv.innerHTML = `
+
+                    <img src="${iconUrl}" alt="" class="option-icon compact-option-icon">
+
+                    <div class="option-content">
+
+                        <div class="option-title">${profile.name}</div>
+
+                        <div class="option-subtitle">Version ${profile.version} • ${lastPlayedText}</div>
+
+                        <div class="option-tags">${tags}</div>
+
+                    </div>
+
+                `;
+
+
+
+                optionDiv.addEventListener('click', (e) => {
+
+                    e.stopPropagation();
+
+                    selectModsProfileOption(id, profile);
+
+                });
+
+                modsSelectOptions.appendChild(optionDiv);
+
+            }
+
         }
 
 
 
-        // Select first and trigger load
-
+        // Preserve selected index if possible or select first
         if (modsProfileSelect.options.length > 0) {
-
-            modsProfileSelect.selectedIndex = 0;
-
+            let targetIndex = 0;
+            let foundPreferred = false;
+            if (preferredProfile) {
+                for (let i = 0; i < modsProfileSelect.options.length; i++) {
+                    if (modsProfileSelect.options[i].value === preferredProfile) {
+                        targetIndex = i;
+                        foundPreferred = true;
+                        break;
+                    }
+                }
+            }
+            modsProfileSelect.selectedIndex = targetIndex;
             currentModsProfile = modsProfileSelect.value;
-
-            await onProfileSelected();
-
+            if (foundPreferred) {
+                lastUserSelectedAddonProfile = currentModsProfile;
+            }
+            updateModsCustomSelectDisplay(currentModsProfile, targetProfiles[currentModsProfile]);
+            await onProfileSelected(skipSearch);
             updateUploadButtonState();
-
         }
 
     } catch (error) {
@@ -5521,15 +6248,23 @@ async function loadModdableProfiles() {
 
 
 
-async function onProfileSelected() {
+async function onProfileSelected(skipSearch = false) {
 
     currentModsProfile = modsProfileSelect.value;
+    lastUserSelectedAddonProfile = currentModsProfile;
+
+    if (window.currentModdableProfiles && window.currentModdableProfiles[currentModsProfile]) {
+        updateModsCustomSelectDisplay(currentModsProfile, window.currentModdableProfiles[currentModsProfile]);
+    }
 
 
+    // Trigger fresh search for new profile context only when not skipping search
 
-    // Trigger fresh search for new profile context (keeps results visible)
+    if (!skipSearch) {
 
-    searchMods(1);
+        searchMods(1);
+
+    }
 
 
 
@@ -5543,7 +6278,7 @@ async function onProfileSelected() {
 
 
 
-    await loadInstalledAddons();
+    await loadInstalledAddons(skipSearch);
 
     updateUploadButtonState();
 
@@ -5551,9 +6286,113 @@ async function onProfileSelected() {
 
 
 
+// --- Installed Addons Cache & Button State Helpers ---
+window.installedAddonsCache = new Set();
+
+function setButtonInstalledState(btn, projectId) {
+    if (!btn) return;
+    btn.classList.add('is-installed');
+    btn.innerHTML = '<i class="fas fa-check"></i> Installed';
+    btn.style.background = '';
+    btn.style.opacity = '';
+    btn.style.cursor = '';
+    btn.disabled = false;
+    btn.setAttribute('data-installed', 'true');
+    if (projectId) btn.setAttribute('data-project-id', projectId);
+}
+
+function setButtonNormalState(btn, projectId) {
+    if (!btn) return;
+    btn.classList.remove('is-installed');
+    btn.innerHTML = '<i class="fas fa-download"></i> Download';
+    btn.style.background = '';
+    btn.style.opacity = '';
+    btn.style.cursor = '';
+    btn.disabled = false;
+    btn.removeAttribute('data-installed');
+    if (projectId) btn.setAttribute('data-project-id', projectId);
+}
+
+function restoreButtonState(projectId) {
+    const btn = document.getElementById(`btn-mod-${projectId}`);
+    const detailBtn = document.getElementById('modDetailInstallBtn');
+    const btns = [btn];
+    if (detailBtn && detailBtn.getAttribute('data-project-id') === projectId) {
+        btns.push(detailBtn);
+    }
+    btns.forEach(b => {
+        if (b) {
+            if (window.installedAddonsCache && window.installedAddonsCache.has(projectId)) {
+                setButtonInstalledState(b, projectId);
+            } else {
+                setButtonNormalState(b, projectId);
+            }
+        }
+    });
+}
+
+function updateAllVisibleModButtons() {
+    document.querySelectorAll('[id^="btn-mod-"]').forEach(btn => {
+        const projectId = btn.getAttribute('data-project-id') || btn.id.replace('btn-mod-', '');
+        if (window.installedAddonsCache && window.installedAddonsCache.has(projectId)) {
+            setButtonInstalledState(btn, projectId);
+        } else {
+            setButtonNormalState(btn, projectId);
+        }
+    });
+    const detailBtn = document.getElementById('modDetailInstallBtn');
+    if (detailBtn) {
+        const projectId = detailBtn.getAttribute('data-project-id');
+        if (projectId) {
+            if (window.installedAddonsCache && window.installedAddonsCache.has(projectId)) {
+                setButtonInstalledState(detailBtn, projectId);
+            } else {
+                setButtonNormalState(detailBtn, projectId);
+            }
+        }
+    }
+}
+
+async function refreshInstalledAddonsCache() {
+    if (!currentModsProfile) {
+        window.installedAddonsCache = new Set();
+        return window.installedAddonsCache;
+    }
+    let worldName = null;
+    if (currentContentType === 'datapack') {
+        if (!worldSelect || !worldSelect.value) {
+            window.installedAddonsCache = new Set();
+            return window.installedAddonsCache;
+        }
+        worldName = worldSelect.value;
+    }
+    try {
+        const result = await window.pywebview.api.get_installed_addons(currentModsProfile, currentContentType, worldName);
+        const cache = new Set();
+        if (result && result.success && result.mods) {
+            result.mods.forEach(m => {
+                if (m.project_id) cache.add(m.project_id);
+            });
+        }
+        window.installedAddonsCache = cache;
+        return cache;
+    } catch (e) {
+        console.error('Error refreshing installed addons cache:', e);
+        window.installedAddonsCache = new Set();
+        return window.installedAddonsCache;
+    }
+}
+
 // Renamed from loadInstalledMods
 
-async function loadInstalledAddons() {
+function updateInstalledAddonsTotal(count) {
+    const label = document.getElementById('installedAddonsTotalLabel');
+    if (label) {
+        label.textContent = `Total: ${count !== undefined && count !== null ? count : 0}`;
+    }
+}
+
+async function loadInstalledAddons(silent = false) {
 
     if (!installedModsList) return;
 
@@ -5561,9 +6400,13 @@ async function loadInstalledAddons() {
 
 
 
-    // Show loading
+    const hasExistingItems = installedModsList.querySelector('.mod-list-item');
 
-    installedModsList.innerHTML = '<div style="text-align:center; padding: 20px;"><div class="spinner"></div></div>';
+    if (!silent && !hasExistingItems) {
+
+        installedModsList.innerHTML = '<div style="text-align:center; padding: 20px;"><div class="spinner"></div></div>';
+
+    }
 
 
 
@@ -5580,8 +6423,9 @@ async function loadInstalledAddons() {
                     <i class="fas fa-globe"></i>
 
                     <p>Select a world to view Data Packs</p>
-
                 </div>`;
+
+            updateInstalledAddonsTotal(0);
 
             return;
 
@@ -5601,8 +6445,17 @@ async function loadInstalledAddons() {
 
         if (seq !== loadAddonsSeq) return; // Abort if a newer call started
 
+        window.installedAddonsCache = new Set();
+        if (result && result.success && result.mods) {
+            result.mods.forEach(m => {
+                if (m.project_id) window.installedAddonsCache.add(m.project_id);
+            });
+        }
+        updateAllVisibleModButtons();
 
 
+
+        const savedScrollTop = installedModsList.scrollTop;
         installedModsList.innerHTML = '';
 
 
@@ -5616,14 +6469,17 @@ async function loadInstalledAddons() {
                     <i class="fas fa-box-open"></i>
 
                     <p>No ${currentContentType}s installed</p>
-
                 </div>`;
+
+            updateInstalledAddonsTotal(0);
 
             return;
 
         }
 
 
+
+        updateInstalledAddonsTotal(result.mods.length);
 
         result.mods.forEach(mod => {
 
@@ -5633,6 +6489,8 @@ async function loadInstalledAddons() {
 
         });
 
+        installedModsList.scrollTop = savedScrollTop;
+
 
 
     } catch (error) {
@@ -5640,6 +6498,8 @@ async function loadInstalledAddons() {
         console.error('Error loading installed addons:', error);
 
         installedModsList.innerHTML = '<p style="color:red; text-align:center;">Error loading items</p>';
+
+        updateInstalledAddonsTotal(0);
 
     }
 
@@ -5723,7 +6583,7 @@ async function importLocalAddonFile() {
 
             window.pywebview.api.info("Addon imported successfully!");
 
-            await loadInstalledAddons(); // Refresh list
+            await loadInstalledAddons(true); // Refresh list silently
 
         } else if (result.error) {
 
@@ -5766,12 +6626,10 @@ function createInstalledItem(itemData) {
     // Icon (generic or specific)
 
     let iconClass = 'fas fa-cube';
-
     if (currentContentType === 'resourcepack') iconClass = 'fas fa-palette';
-
     else if (currentContentType === 'shader') iconClass = 'fas fa-sun';
-
     else if (currentContentType === 'datapack') iconClass = 'fas fa-code';
+    else if (currentContentType === 'modpack') iconClass = 'fas fa-boxes';
 
     if (itemData.missing) iconClass = 'fas fa-exclamation-triangle';
 
@@ -5784,51 +6642,33 @@ function createInstalledItem(itemData) {
     
 
     // Size or missing indicator
-
-    const sizeDisplay = itemData.missing ? 'Missing file' : `${itemData.size_mb} MB`;
-
-    
-
-    // Disable actions for missing files
-
     const actionsDisabled = itemData.missing ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : '';
-
     const toggleDisabled = itemData.missing ? 'disabled' : '';
 
+    let detailsDisplay = itemData.missing ? 'Missing file' : `${itemData.size_mb} MB • ${itemData.enabled ? 'Enabled' : 'Disabled'} • ${typeLabel}`;
+    let actionsHtml = `
+        <div class="mod-list-actions">
+            <button class="mod-delete-btn" ${actionsDisabled} onclick="deleteAddon('${itemData.filename}')"><i class="fas fa-trash"></i> Delete</button>
+            <div class="mod-toggle ${itemData.enabled ? 'active' : ''}" ${toggleDisabled} onclick="window.toggleAddon('${itemData.filename}', ${!itemData.enabled})">
+                <div class="mod-toggle-slider"></div>
+            </div>
+        </div>
+    `;
 
+    if (itemData.type === 'modpack') {
+        detailsDisplay = 'Modpack';
+        actionsHtml = `<div class="mod-list-actions"></div>`;
+    }
 
     div.innerHTML = `
-
         <div class="mod-list-icon">
-
             <i class="${iconClass}"></i>
-
         </div>
-
         <div class="mod-list-info">
-
             <div class="mod-list-name">${itemData.display_name}</div>
-
-            <div class="mod-list-details">${sizeDisplay} • ${itemData.enabled ? 'Enabled' : 'Disabled'} • ${typeLabel}</div>
-
+            <div class="mod-list-details">${detailsDisplay}</div>
         </div>
-
-        <div class="mod-list-actions">
-
-            <!-- Delete -->
-
-            <button class="mod-delete-btn" ${actionsDisabled} onclick="deleteAddon('${itemData.filename}')"><i class="fas fa-trash"></i> Delete</button>
-
-            <!-- Toggle -->
-
-            <div class="mod-toggle ${itemData.enabled ? 'active' : ''}" ${toggleDisabled} onclick="window.toggleAddon('${itemData.filename}', ${!itemData.enabled})">
-
-                <div class="mod-toggle-slider"></div>
-
-            </div>
-
-        </div>
-
+        ${actionsHtml}
     `;
 
 
@@ -5941,7 +6781,7 @@ window.deleteAddon = async function (filename) {
 
         if (res.success) {
 
-            await loadInstalledAddons();
+            await loadInstalledAddons(true);
 
         } else {
 
@@ -5981,7 +6821,7 @@ window.toggleAddon = async function (filename, enabled) {
 
         if (res.success) {
 
-            await loadInstalledAddons();
+            await loadInstalledAddons(true);
 
         } else {
 
@@ -6007,6 +6847,12 @@ async function loadWorlds(profileId) {
 
     worldSelect.disabled = true;
 
+    updateWorldCustomSelectDisplay('');
+
+    const worldSelectOptions = document.getElementById('worldSelectOptions');
+
+    if (worldSelectOptions) worldSelectOptions.innerHTML = '';
+
 
 
     try {
@@ -6031,7 +6877,53 @@ async function loadWorlds(profileId) {
 
                 worldSelect.appendChild(opt);
 
+
+
+                if (worldSelectOptions) {
+
+                    const optionDiv = document.createElement('div');
+
+                    optionDiv.className = 'select-option compact-select-option';
+
+                    optionDiv.dataset.value = w.name;
+
+                    optionDiv.innerHTML = `
+
+                        <div class="option-icon compact-option-icon" style="display:flex;align-items:center;justify-content:center;color:#4facfe;background:rgba(79,172,254,0.15);font-size:16px;width:32px;height:32px;border-radius:6px;flex-shrink:0;"><i class="fas fa-globe-americas"></i></div>
+
+                        <div class="option-content">
+
+                            <div class="option-title">${w.name}</div>
+
+                            <div class="option-subtitle">Minecraft World</div>
+
+                        </div>
+
+                    `;
+
+                    optionDiv.addEventListener('click', (e) => {
+
+                        e.stopPropagation();
+
+                        selectWorldOption(w.name);
+
+                    });
+
+                    worldSelectOptions.appendChild(optionDiv);
+
+                }
+
             });
+
+
+
+            if (worldSelect.options.length > 0) {
+
+                worldSelect.selectedIndex = 0;
+
+                updateWorldCustomSelectDisplay(worldSelect.value);
+
+            }
 
         } else {
 
@@ -6041,6 +6933,12 @@ async function loadWorlds(profileId) {
 
             worldSelect.appendChild(opt);
 
+            updateWorldCustomSelectDisplay('');
+
+            const worldSelectedTitle = document.getElementById('worldSelectedTitle');
+
+            if (worldSelectedTitle) worldSelectedTitle.textContent = "No worlds found";
+
         }
 
     } catch (e) {
@@ -6048,6 +6946,12 @@ async function loadWorlds(profileId) {
         console.error("Error loading worlds", e);
 
         worldSelect.innerHTML = '<option value="">Error loading worlds</option>';
+
+        updateWorldCustomSelectDisplay('');
+
+        const worldSelectedTitle = document.getElementById('worldSelectedTitle');
+
+        if (worldSelectedTitle) worldSelectedTitle.textContent = "Error loading worlds";
 
     }
 
@@ -6151,7 +7055,7 @@ function switchModTab(tabName) {
 
             if (currentModTab === 'installed') {
 
-                loadInstalledAddons();
+                loadInstalledAddons(true);
 
             }
 
@@ -6208,12 +7112,10 @@ async function loadModCategories() {
         // Typical project types to match currentContentType
 
         let categoryTypeFilter = currentContentType;
-
         if (currentContentType === 'mod' || currentContentType === 'datapack') categoryTypeFilter = 'mod';
-
         else if (currentContentType === 'resourcepack') categoryTypeFilter = 'resourcepack';
-
         else if (currentContentType === 'shader') categoryTypeFilter = 'shader';
+        else if (currentContentType === 'modpack') categoryTypeFilter = 'modpack';
 
 
 
@@ -6507,6 +7409,12 @@ if (modSearchInput) {
 
         worldSelect.addEventListener('change', () => {
 
+            if (typeof updateWorldCustomSelectDisplay === 'function') {
+
+                updateWorldCustomSelectDisplay(worldSelect.value);
+
+            }
+
             loadInstalledAddons(); // Reload list for new world
 
             updateUploadButtonState();
@@ -6624,6 +7532,8 @@ async function searchMods(page = 1) {
 
 
         modSearchLoading.style.display = 'none';
+
+        await refreshInstalledAddonsCache();
 
 
 
@@ -6777,7 +7687,9 @@ async function searchMods(page = 1) {
 
 
 
-function createModCard(mod) {
+function createModCard(mod, forcedType) {
+    if (forcedType) mod.project_type = forcedType;
+    const effectiveType = mod.project_type || currentContentType;
 
     const card = document.createElement('div');
 
@@ -6813,11 +7725,19 @@ function createModCard(mod) {
 
 
 
-    card.onclick = () => openModDetails(mod.project_id);
+    card.onclick = () => {
+        if (effectiveType) currentContentType = effectiveType;
+        else if (mod.project_id && document.getElementById('wkModrinthGrid')?.contains(card)) currentContentType = 'modpack';
+        openModDetails(mod.project_id);
+    };
 
     // Use project_id because Modrinth search returns project_id, not id
 
     const modId = mod.project_id;
+    const isInstalled = window.installedAddonsCache && window.installedAddonsCache.has(modId);
+    const btnClass = isInstalled ? 'btn-primary is-installed' : 'btn-primary';
+    const btnText = isInstalled ? '<i class="fas fa-check"></i> Installed' : '<i class="fas fa-download"></i> Download';
+    const dataInstalled = isInstalled ? 'data-installed="true"' : '';
 
 
 
@@ -6859,9 +7779,9 @@ function createModCard(mod) {
 
         <div class="mod-card-actions">
 
-            <button id="btn-mod-${modId}" class="btn-primary" onclick="event.stopPropagation(); downloadModFromCard('${modId}', '${mod.slug}')">
+            <button id="btn-mod-${modId}" class="${btnClass}" ${dataInstalled} data-project-id="${modId}" onclick="event.stopPropagation(); downloadModFromCard('${modId}', '${mod.slug}', '${effectiveType}', '${(mod.title || '').replace(/'/g, "\\'")}', '${(mod.icon_url || '').replace(/'/g, "\\'")}')">
 
-                <i class="fas fa-download"></i> Download
+                ${btnText}
 
             </button>
 
@@ -6932,6 +7852,7 @@ window.openModDetails = async function (projectId) {
 
 
         const details = result.details;
+        if (details.project_type) currentContentType = details.project_type;
 
 
 
@@ -7042,12 +7963,18 @@ window.openModDetails = async function (projectId) {
         // Update install button
 
         const installBtn = document.getElementById('modDetailInstallBtn');
+        const targetProjectId = details.id || projectId;
+        await refreshInstalledAddonsCache();
+        const isInstalled = window.installedAddonsCache && window.installedAddonsCache.has(targetProjectId);
+        if (isInstalled) {
+            setButtonInstalledState(installBtn, targetProjectId);
+        } else {
+            setButtonNormalState(installBtn, targetProjectId);
+        }
 
         installBtn.onclick = () => {
 
-            closeModDetails();
-
-            downloadModFromCard(details.id, details.slug);
+            downloadModFromCard(targetProjectId, details.slug, details.project_type || currentContentType, details.title, details.icon_url, true);
 
         };
 
@@ -7084,38 +8011,26 @@ window.closeModDetails = function () {
 window.onModDownloadProgress = function (projectId, percentage, status) {
 
     const btn = document.getElementById(`btn-mod-${projectId}`);
-
-    if (btn) {
-
-        // Change text
-
-        const originalText = btn.getAttribute('data-original-text') || 'Download';
-
-        if (!btn.getAttribute('data-original-text')) {
-
-            btn.setAttribute('data-original-text', originalText);
-
-        }
-
-
-
-        btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${percentage}%`;
-
-        btn.disabled = true;
-
-        btn.style.cursor = 'wait';
-
-
-
-        // Progress background effect (Grey to Green)
-
-        // Background starts grey (#95a5a6) and fills with Green (#2ecc71)
-
-        btn.style.background = `linear-gradient(to right, #2ecc71 ${percentage}%, #95a5a6 ${percentage}%)`;
-
-        btn.style.borderColor = 'transparent';
-
+    const detailBtn = document.getElementById('modDetailInstallBtn');
+    const btns = [btn];
+    if (detailBtn && detailBtn.getAttribute('data-project-id') === projectId) {
+        btns.push(detailBtn);
     }
+    btns.forEach(b => {
+        if (b) {
+            b.classList.remove('is-installed');
+            const originalText = b.getAttribute('data-original-text') || 'Download';
+            if (!b.getAttribute('data-original-text')) {
+                b.setAttribute('data-original-text', originalText);
+            }
+            b.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${percentage}%`;
+            b.disabled = true;
+            b.style.cursor = 'wait';
+            b.style.background = `linear-gradient(to right, #2ecc71 ${percentage}%, #95a5a6 ${percentage}%)`;
+            b.style.borderColor = 'transparent';
+            b.style.opacity = '1';
+        }
+    });
 
 };
 
@@ -7123,37 +8038,24 @@ window.onModDownloadProgress = function (projectId, percentage, status) {
 
 window.onModDownloadComplete = function (projectId, filename) {
 
+    if (!window.installedAddonsCache) window.installedAddonsCache = new Set();
+    window.installedAddonsCache.add(projectId);
+
     const btn = document.getElementById(`btn-mod-${projectId}`);
-
-    if (btn) {
-
-        btn.innerHTML = `<i class="fas fa-check"></i> Installed`;
-
-        btn.style.background = '#2ecc71'; // Solid green
-
-        btn.disabled = true;
-
-        btn.style.cursor = 'default';
-
-
-
-        // Reset after 3 seconds
-
-        setTimeout(() => {
-
-            const originalText = '<i class="fas fa-download"></i> Download';
-
-            btn.innerHTML = originalText;
-
-            btn.style.background = ''; // Reset to CSS default
-
-            btn.disabled = false;
-
-            btn.style.cursor = 'pointer';
-
-        }, 3000);
-
+    const detailBtn = document.getElementById('modDetailInstallBtn');
+    const btns = [btn];
+    if (detailBtn && detailBtn.getAttribute('data-project-id') === projectId) {
+        btns.push(detailBtn);
     }
+    btns.forEach(b => {
+        if (b) {
+            b.style.background = '';
+            b.style.borderColor = '';
+            b.style.opacity = '';
+            b.style.cursor = '';
+            setButtonInstalledState(b, projectId);
+        }
+    });
 
 
 
@@ -7161,8 +8063,18 @@ window.onModDownloadComplete = function (projectId, filename) {
 
     if (currentModTab === 'installed') {
 
-        loadInstalledAddons(); // Changed from loadInstalledMods
+        loadInstalledAddons(true); // Changed from loadInstalledMods
 
+    }
+    if (currentContentType === 'modpack') {
+        if (typeof loadProfiles === 'function') loadProfiles();
+        if (typeof loadModdableProfiles === 'function') loadModdableProfiles(true);
+        if (typeof showWkToast === 'function') {
+            showWkToast('Modpack instalado correctamente');
+        }
+    } else {
+        // Silently refresh installed addons for current profile without resetting mod search or redrawing profile lists
+        if (typeof loadInstalledAddons === 'function') loadInstalledAddons(true);
     }
 
 };
@@ -7172,32 +8084,28 @@ window.onModDownloadComplete = function (projectId, filename) {
 window.onModDownloadError = function (projectId, errorMsg) {
 
     const btn = document.getElementById(`btn-mod-${projectId}`);
-
-    if (btn) {
-
-        btn.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Error`;
-
-        btn.style.background = '#e74c3c'; // Red
-
-
-
-        // Reset after 3 seconds
-
-        setTimeout(() => {
-
-            const originalText = '<i class="fas fa-download"></i> Download';
-
-            btn.innerHTML = originalText;
-
-            btn.style.background = ''; // Reset
-
-            btn.disabled = false;
-
-            btn.style.cursor = 'pointer';
-
-        }, 3000);
-
+    const detailBtn = document.getElementById('modDetailInstallBtn');
+    const btns = [btn];
+    if (detailBtn && detailBtn.getAttribute('data-project-id') === projectId) {
+        btns.push(detailBtn);
     }
+    btns.forEach(b => {
+        if (b) {
+            b.classList.remove('is-installed');
+            b.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Error`;
+            b.style.background = '#e74c3c'; // Red
+            b.style.opacity = '1';
+            setTimeout(() => {
+                b.style.background = '';
+                b.style.opacity = '';
+                if (window.installedAddonsCache && window.installedAddonsCache.has(projectId)) {
+                    setButtonInstalledState(b, projectId);
+                } else {
+                    setButtonNormalState(b, projectId);
+                }
+            }, 3000);
+        }
+    });
 
     window.pywebview.api.error(`Error: ${errorMsg}`);
 
@@ -7205,36 +8113,102 @@ window.onModDownloadError = function (projectId, errorMsg) {
 
 
 
-window.downloadModFromCard = async function (projectId, slug) {
-
-    if (!currentModsProfile) {
-
-        window.pywebview.api.error('Select an installation first');
-
-        return;
-
+window.downloadModFromCard = async function (projectId, slug, forcedType, modTitle, modIconUrl, closeModalOnProceed = false) {
+    if (forcedType) currentContentType = forcedType;
+    if (!forcedType && document.getElementById(`btn-mod-${projectId}`) && document.getElementById('wkModrinthGrid')?.contains(document.getElementById(`btn-mod-${projectId}`))) {
+        currentContentType = 'modpack';
     }
 
-
-
-    // Check if button exists and already disabled (redundant check)
-
     const btn = document.getElementById(`btn-mod-${projectId}`);
+    const detailBtn = document.getElementById('modDetailInstallBtn');
+    const activeBtn = (detailBtn && detailBtn.getAttribute('data-project-id') === projectId) ? detailBtn : btn;
 
     if (btn && btn.disabled) return;
+    if (activeBtn && activeBtn.disabled) return;
 
+    await refreshInstalledAddonsCache();
+    const isAlreadyInstalled = (window.installedAddonsCache && window.installedAddonsCache.has(projectId)) || 
+                               (btn && btn.getAttribute('data-installed') === 'true') ||
+                               (detailBtn && detailBtn.getAttribute('data-installed') === 'true' && detailBtn.getAttribute('data-project-id') === projectId);
 
+    if (isAlreadyInstalled) {
+        const confirmed = await window.pywebview.api.confirm("This addon is already installed in the current profile. Do you want to reinstall it?");
+        if (!confirmed) {
+            return;
+        }
+    }
+
+    if (closeModalOnProceed) {
+        if (typeof closeModDetails === 'function') closeModDetails();
+    }
 
     try {
+        const btnsToLoad = [btn];
+        if (detailBtn && detailBtn.getAttribute('data-project-id') === projectId && !closeModalOnProceed) {
+            btnsToLoad.push(detailBtn);
+        }
+        btnsToLoad.forEach(b => {
+            if (b) {
+                b.classList.remove('is-installed');
+                b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting...';
+                b.disabled = true;
+            }
+        });
 
-        // Set initial loading state
+        if (currentContentType === 'modpack') {
+            const versionsResult = await window.pywebview.api.get_mod_versions(projectId, null, null);
+            let version = null;
+            if (versionsResult && versionsResult.success && versionsResult.versions) {
+                const list = versionsResult.versions;
+                version = list.find(v => v.version_type === 'release' && v.featured)
+                    || list.find(v => v.version_type === 'release')
+                    || list.find(v => v.featured)
+                    || list.find(v => v.version_type === 'beta')
+                    || list[0]
+                    || null;
+            }
 
-        if (btn) {
+            if (!version || !version.id) {
+                window.pywebview.api.error('No downloadable versions found for this modpack');
+                if (btn) {
+                    btn.innerHTML = '<i class="fas fa-download"></i> Download';
+                    btn.disabled = false;
+                }
+                return;
+            }
 
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting...';
+            let modName = modTitle || document.getElementById('modDetailTitle')?.textContent;
+            let iconUrl = modIconUrl || document.getElementById('modDetailIcon')?.src;
+            if (!modName || modName === 'Loading...' || modName === 'Modrinth Modpack' || !iconUrl || iconUrl === window.location.href || iconUrl.includes('placeholder')) {
+                try {
+                    const resDetails = await window.pywebview.api.get_mod_details(projectId);
+                    if (resDetails?.success && resDetails?.details) {
+                        if (resDetails.details.title) modName = resDetails.details.title;
+                        if (resDetails.details.icon_url) iconUrl = resDetails.details.icon_url;
+                    }
+                } catch(e) {}
+            }
+            modName = modName || 'Modrinth Modpack';
+            iconUrl = (iconUrl && iconUrl !== window.location.href && !iconUrl.includes('placeholder')) ? iconUrl : null;
 
-            btn.disabled = true;
+            if (window.openModrinthModpackInstallModal) {
+                window.openModrinthModpackInstallModal(projectId, version, modName, iconUrl, null);
+                const modDetailsModal = document.getElementById('modDetailsModal');
+                if (modDetailsModal) modDetailsModal.classList.remove('show');
+            } else {
+                console.error("openModrinthModpackInstallModal is not defined");
+            }
+            if (btn) {
+                btn.innerHTML = '<i class="fas fa-download"></i> Download';
+                btn.disabled = false;
+            }
+            return;
+        }
 
+        if (!currentModsProfile) {
+            window.pywebview.api.error('Select an installation first');
+            restoreButtonState(projectId);
+            return;
         }
 
 
@@ -7255,7 +8229,7 @@ window.downloadModFromCard = async function (projectId, slug) {
 
             window.pywebview.api.error('Installation not found');
 
-            if (btn) btn.disabled = false;
+            restoreButtonState(projectId);
 
             return;
 
@@ -7270,76 +8244,15 @@ window.downloadModFromCard = async function (projectId, slug) {
         // while our internal ID is "forge-1.20.1-47.4.10". Both must be detected as Forge.
 
         const versionStr = (profile.version || '').toLowerCase();
+        const isNeoForgeProfile = profile.type === 'neoforge' || versionStr.includes('neoforge');
+        const isQuiltProfile = !isNeoForgeProfile && (profile.type === 'quilt' || versionStr.includes('quilt'));
+        const isForgeProfile = !isNeoForgeProfile && !isQuiltProfile && (profile.type === 'forge' || versionStr.includes('forge'));
+        const isFabricProfile = !isForgeProfile && !isNeoForgeProfile && !isQuiltProfile && (profile.type === 'fabric' || versionStr.includes('fabric'));
 
-        const isForgeProfile = profile.type === 'forge' ||
+        const loader = isFabricProfile ? 'fabric' : isNeoForgeProfile ? 'neoforge' : isQuiltProfile ? 'quilt' : isForgeProfile ? 'forge' : 'fabric';
 
-            versionStr.startsWith('forge-') ||
-
-            versionStr.includes('-forge-') ||
-
-            versionStr.includes('forge');
-
-        const isFabricProfile = !isForgeProfile && (
-
-            profile.type === 'fabric' ||
-
-            versionStr.startsWith('fabric-') ||
-
-            versionStr.includes('fabric-loader')
-
-        );
-
-        const loader = isForgeProfile ? 'forge' : isFabricProfile ? 'fabric' : 'forge';
-
-
-
-        // Extract game version from profile version
-
-        let gameVersion = profile.version;
-
-
-
-        // For Fabric: handle formats like "fabric-loader-0.17.3-1.21.1" or "fabric-1.21.1"
-
-        // For Forge: handle formats like "forge-1.20.1-47.1.0" or "1.20.1-forge-47.1.0"
-
-
-
-        // Remove loader prefix if present
-
-        gameVersion = gameVersion.replace(/^(forge-|fabric-)/i, '');
-
-
-
-        // For Fabric loader format: "loader-X.X.X-MC_VERSION"
-
-        // Extract the part after the last hyphen which is the MC version
-
-        if (gameVersion.startsWith('loader-')) {
-
-            const parts = gameVersion.split('-');
-
-            // Last part should be the MC version
-
-            if (parts.length >= 3) {
-
-                gameVersion = parts[parts.length - 1];
-
-            }
-
-        } else {
-
-            // For other formats, extract just the MC version (e.g., "1.20.1" from "1.20.1-47.1.0")
-
-            const versionMatch = gameVersion.match(/^(\d+\.\d+(?:\.\d+)?)/);
-
-            if (versionMatch) {
-
-                gameVersion = versionMatch[1];
-
-            }
-
-        }
+        const matches = String(profile.version || '').match(/\b\d+\.\d+(?:\.\d+)?\b/g) || [];
+        let gameVersion = matches.find(m => m.startsWith('1.')) || matches[0] || profile.version;
 
 
 
@@ -7358,18 +8271,15 @@ window.downloadModFromCard = async function (projectId, slug) {
         // Loader logic
 
         let searchLoader = loader;
-
-        if (currentContentType === 'resourcepack' || currentContentType === 'datapack') {
-
+        if (currentContentType === 'resourcepack' || currentContentType === 'datapack' || currentContentType === 'modpack') {
             searchLoader = null;
-
         } else if (currentContentType === 'shader') {
 
             // For shaders, Modrinth usually expects 'iris' or 'optifine'
 
-            if (loader === 'fabric') searchLoader = 'iris';
+            if (loader === 'fabric' || loader === 'quilt') searchLoader = 'iris';
 
-            else if (loader === 'forge') searchLoader = 'optifine';
+            else if (loader === 'forge' || loader === 'neoforge') searchLoader = 'optifine';
 
             else searchLoader = null; // Fallback
 
@@ -7382,6 +8292,15 @@ window.downloadModFromCard = async function (projectId, slug) {
         const versionsResult = await window.pywebview.api.get_mod_versions(projectId, gameVersion, searchLoader);
 
         let version = null;
+
+        const selectBestVersion = (list) => {
+            if (!list || list.length === 0) return null;
+            return list.find(v => v.version_type === 'release' && v.featured)
+                || list.find(v => v.version_type === 'release')
+                || list.find(v => v.featured)
+                || list.find(v => v.version_type === 'beta')
+                || list[0];
+        };
 
 
 
@@ -7398,10 +8317,7 @@ window.downloadModFromCard = async function (projectId, slug) {
                 const confirmed = await window.pywebview.api.confirm(confirmMsg);
 
                 if (!confirmed) {
-                    if (btn) {
-                        btn.innerHTML = '<i class="fas fa-download"></i> Download';
-                        btn.disabled = false;
-                    }
+                    restoreButtonState(projectId);
                     return;
                 }
 
@@ -7410,33 +8326,24 @@ window.downloadModFromCard = async function (projectId, slug) {
 
                 if (!allVersionsResult.success || allVersionsResult.versions.length === 0) {
                     window.pywebview.api.error('No versions available for this project');
-                    if (btn) {
-                        btn.innerHTML = '<i class="fas fa-download"></i> Download';
-                        btn.disabled = false;
-                    }
+                    restoreButtonState(projectId);
                     return;
                 }
 
-                // Use the latest version
-                version = allVersionsResult.versions[0];
+                // Use the recommended stable/featured version
+                version = selectBestVersion(allVersionsResult.versions);
 
             } else if (currentContentType === 'shader') {
 
                 // Mention mapped loader
 
-                const shaderLoader = loader === 'fabric' ? 'Iris' : 'Optifine';
+                const shaderLoader = (loader === 'fabric' || loader === 'quilt') ? 'Iris' : 'Optifine';
 
                 msg = `No compatible versions for ${shaderLoader} on Minecraft ${gameVersion}`;
 
                 window.pywebview.api.error(msg);
 
-                if (btn) {
-
-                    btn.innerHTML = '<i class="fas fa-download"></i> Download';
-
-                    btn.disabled = false;
-
-                }
+                restoreButtonState(projectId);
 
                 return;
 
@@ -7448,13 +8355,7 @@ window.downloadModFromCard = async function (projectId, slug) {
 
                 window.pywebview.api.error(msg);
 
-                if (btn) {
-
-                    btn.innerHTML = '<i class="fas fa-download"></i> Download';
-
-                    btn.disabled = false;
-
-                }
+                restoreButtonState(projectId);
 
                 return;
 
@@ -7462,9 +8363,8 @@ window.downloadModFromCard = async function (projectId, slug) {
 
         } else {
 
-            // Use the first (latest) compatible version
-
-            version = versionsResult.versions[0];
+            // Use the recommended stable/featured compatible version
+            version = selectBestVersion(versionsResult.versions);
 
         }
 
@@ -7482,13 +8382,7 @@ window.downloadModFromCard = async function (projectId, slug) {
 
                 window.pywebview.api.error('Please select a world first');
 
-                if (btn) {
-
-                    btn.innerHTML = '<i class="fas fa-download"></i> Download';
-
-                    btn.disabled = false;
-
-                }
+                restoreButtonState(projectId);
 
                 return;
 
@@ -7499,25 +8393,15 @@ window.downloadModFromCard = async function (projectId, slug) {
 
 
         // Start Download (Now Async) - New "install_project" method
-
-        const downloadResult = await window.pywebview.api.install_project(projectId, version.id, currentModsProfile, currentContentType, worldName);
-
-
+        const downloadResult = await window.pywebview.api.install_project(projectId, version.id, currentModsProfile, currentContentType, worldName, isAlreadyInstalled);
 
         // If immediate error
-
         if (!downloadResult.success) {
-
             window.onModDownloadError(projectId, downloadResult.error);
-
         } else {
-
             // Success
-
             console.log("Download finished for", projectId);
-
             window.onModDownloadComplete(projectId, version.filename);
-
         }
 
 
@@ -7536,88 +8420,8 @@ window.downloadModFromCard = async function (projectId, slug) {
 
 // Load installed mods
 
-async function loadInstalledMods() {
-
-    if (!currentModsProfile || !installedModsList) return;
-
-
-
-    try {
-
-        const result = await window.pywebview.api.get_installed_mods(currentModsProfile);
-
-
-
-        if (!result.success) {
-
-            installedModsList.innerHTML = `
-
-                <div class="no-mods-message">
-
-                    <i class="fas fa-exclamation-triangle"></i>
-
-                    <p>Error loading mods: ${result.error}</p>
-
-                </div>
-
-            `;
-
-            return;
-
-        }
-
-
-
-        if (result.mods.length === 0) {
-
-            installedModsList.innerHTML = `
-
-                <div class="no-mods-message">
-
-                    <i class="fas fa-cube"></i>
-
-                    <p>No mods installed in this profile</p>
-
-                </div>
-
-            `;
-
-            return;
-
-        }
-
-
-
-        // Display mods
-
-        installedModsList.innerHTML = '';
-
-        result.mods.forEach(mod => {
-
-            const item = createModListItem(mod);
-
-            installedModsList.appendChild(item);
-
-        });
-
-    } catch (error) {
-
-        console.error('Error loading installed mods:', error);
-
-        installedModsList.innerHTML = `
-
-            <div class="no-mods-message">
-
-                <i class="fas fa-exclamation-triangle"></i>
-
-                <p>Error loading mods</p>
-
-            </div>
-
-        `;
-
-    }
-
+async function loadInstalledMods(silent = false) {
+    await loadInstalledAddons(silent);
 }
 
 
@@ -7862,9 +8666,13 @@ document.addEventListener('click', function (e) {
 
         const url = target.href;
 
-        // Check if it's an external link (http/https)
+        // Check if it's an external link (http/https) and NOT local/localhost
 
-        if (url.startsWith('http://') || url.startsWith('https://')) {
+        const rawHref = target.getAttribute('href') || '';
+
+        if (rawHref === '#' || rawHref.startsWith('#') || rawHref.startsWith('javascript:')) return;
+
+        if ((url.startsWith('http://') || url.startsWith('https://')) && !url.includes('localhost:') && !url.includes('127.0.0.1:')) {
 
             e.preventDefault();
 
@@ -8601,7 +9409,7 @@ async function loadMinecraftNews() {
     }
 
     try {
-        const response = await fetch('https://launchercontent.mojang.com/v2/news.json');
+        const response = await fetch('https://launchercontent.mojang.com/v2/news.json', { signal: AbortSignal.timeout(4000) });
         if (!response.ok) throw new Error('News fetch failed');
         const data = await response.json();
         
@@ -8635,8 +9443,128 @@ async function loadMinecraftNews() {
 
         container.innerHTML = html;
 
+        // Wait up to 1.5s for visible news images to load so they don't pop in after loader hides
+        const newsImgs = Array.from(container.querySelectorAll('img')).slice(0, 6);
+        await Promise.all(newsImgs.map(img => new Promise(resolve => {
+            if (img.complete) resolve();
+            else {
+                const timer = setTimeout(resolve, 1500);
+                img.onload = () => { clearTimeout(timer); resolve(); };
+                img.onerror = () => { clearTimeout(timer); resolve(); };
+            }
+        })));
+
     } catch (err) {
         console.error("Error loading news:", err);
         container.innerHTML = '<p style="color: #666; font-size: 12px; text-align: center;">Failed to load latest news.</p>';
     }
 }
+
+// Global UI Transition Interceptor
+function initTransitionInterceptors() {
+    const attachToElements = () => {
+        const selector = '.modal, .social-modal-overlay, .onboarding-overlay, .full-screen-overlay, .select-options, .sidebar-submenu, .global-download-popup, #in-app-notification, .user-badge, .toast';
+        document.querySelectorAll(selector).forEach(el => {
+            if (el._hasTransitionInterceptor) return;
+            el._hasTransitionInterceptor = true;
+
+            const origRemove = el.classList.remove.bind(el.classList);
+            const origToggle = el.classList.toggle.bind(el.classList);
+            const origAdd = el.classList.add.bind(el.classList);
+
+            el.classList.add = function(...tokens) {
+                if (el._closingTimeout) {
+                    clearTimeout(el._closingTimeout);
+                    el._closingTimeout = null;
+                    origRemove('closing');
+                }
+                return origAdd(...tokens);
+            };
+
+            el.classList.remove = function(...tokens) {
+                if (document.body.classList.contains('disable-transitions')) {
+                    return origRemove(...tokens);
+                }
+                const transitionClasses = ['show', 'active', 'visible'];
+                const targetClass = tokens.find(t => transitionClasses.includes(t));
+                if (targetClass && el.classList.contains(targetClass)) {
+                    el.classList.add('closing');
+                    el._closingTimeout = setTimeout(() => {
+                        origRemove(...tokens);
+                        origRemove('closing');
+                        el._closingTimeout = null;
+                    }, 240);
+                    return;
+                }
+                return origRemove(...tokens);
+            };
+
+            el.classList.toggle = function(token, force) {
+                const shouldAdd = force !== undefined ? force : !el.classList.contains(token);
+                if (shouldAdd) {
+                    el.classList.add(token);
+                    return true;
+                } else {
+                    el.classList.remove(token);
+                    return false;
+                }
+            };
+        });
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', attachToElements);
+    } else {
+        attachToElements();
+    }
+    // Periodic check to attach to dynamically created elements
+    setInterval(attachToElements, 2000);
+}
+initTransitionInterceptors();
+
+// --- Locked Feature Handlers ---
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('#socialBtn, #statsBtn, #skinsSidebarBtn, #wkPublishBtn');
+    if (btn && btn.classList.contains('locked-feature')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (btn.id === 'skinsSidebarBtn') {
+            const modal = document.getElementById('featureLockedSkinsModal');
+            if (modal) modal.classList.add('show');
+        } else {
+            const modal = document.getElementById('featureLockedHWModal');
+            if (modal) modal.classList.add('show');
+        }
+    }
+}, true);
+
+function initLockedFeatureListeners() {
+    const openRegisterWebBtn = document.getElementById('openRegisterWebBtn');
+    if (openRegisterWebBtn) {
+        openRegisterWebBtn.addEventListener('click', async () => {
+            const url = "https://abeloskyyy.github.io/HelloWorld-Launcher/?register=true";
+            if (window.electronAPI && window.electronAPI.openUrl) {
+                await window.electronAPI.openUrl(url);
+            } else if (window.pywebview && window.pywebview.api && window.pywebview.api.open_url) {
+                await window.pywebview.api.open_url(url);
+            } else {
+                window.open(url, '_blank');
+            }
+            const modal = document.getElementById('featureLockedHWModal');
+            if (modal) modal.classList.remove('show');
+        });
+    }
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initLockedFeatureListeners);
+} else {
+    initLockedFeatureListeners();
+}
+
+// Fix Electron/Chromium input focus bug in overlay modals
+document.addEventListener('mousedown', (e) => {
+    const input = e.target.closest('input:not([type="file"]):not([type="checkbox"]):not([type="radio"]), textarea');
+    if (input && !input.disabled && !input.readOnly) {
+        setTimeout(() => input.focus(), 10);
+    }
+}, true);

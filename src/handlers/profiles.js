@@ -1,9 +1,11 @@
 const fs = require('fs-extra');
 const path = require('path');
-const { app } = require('electron');
+const { app, nativeImage } = require('electron');
 const uuid = require('uuid');
+const axios = require('axios');
 
 const paths = require('../utils/paths');
+const versionUtils = require('../utils/version');
 
 class ProfileManager {
     constructor() {
@@ -35,7 +37,7 @@ class ProfileManager {
         fs.writeJsonSync(profilesFile, data, { spaces: 4 });
     }
 
-    addProfile(name, version, icon, directory, jvmArgs, javaPath, isInternal = false) {
+    async addProfile(name, version, icon, directory, jvmArgs, javaPath, isInternal = false) {
         if (!isInternal && this.isReservedName(name)) {
             return { success: false, error: "Cannot create a profile with a reserved name." };
         }
@@ -46,15 +48,25 @@ class ProfileManager {
 
         if (icon && typeof icon === 'object' && icon.base64) {
             iconFilename = this.saveIcon(id, icon.base64);
+        } else if (icon && typeof icon === 'object' && icon.url) {
+            iconFilename = await this.saveIconFromUrl(id, icon.url);
+        } else if (typeof icon === 'string' && icon.startsWith('data:')) {
+            iconFilename = this.saveIcon(id, icon);
+        } else if (typeof icon === 'string' && (icon.startsWith('http://') || icon.startsWith('https://'))) {
+            iconFilename = await this.saveIconFromUrl(id, icon);
         } else if (typeof icon === 'string' && icon) {
             iconFilename = icon;
         }
 
         if (!profiles.profiles) profiles.profiles = {}; // Safety check
 
+        let normVersion = version;
+        const info = versionUtils.parseVersionString(version);
+        if (info) normVersion = info.normalizedId;
+
         profiles.profiles[id] = {
             name,
-            version,
+            version: normVersion,
             icon: iconFilename,
             directory: directory || "",
             jvm_args: jvmArgs || "",
@@ -65,7 +77,7 @@ class ProfileManager {
         return { success: true, profile_id: id };
     }
 
-    editProfile(id, data) {
+    async editProfile(id, data) {
         const profiles = this.loadProfiles();
         if (!profiles.profiles || !profiles.profiles[id]) return { success: false, error: "Profile not found" };
 
@@ -80,6 +92,16 @@ class ProfileManager {
 
         if (data.icon && typeof data.icon === 'object' && data.icon.base64) {
             data.icon = this.saveIcon(id, data.icon.base64);
+        } else if (data.icon && typeof data.icon === 'object' && data.icon.url) {
+            data.icon = await this.saveIconFromUrl(id, data.icon.url);
+        } else if (typeof data.icon === 'string' && data.icon.startsWith('data:')) {
+            data.icon = this.saveIcon(id, data.icon);
+        } else if (typeof data.icon === 'string' && (data.icon.startsWith('http://') || data.icon.startsWith('https://'))) {
+            data.icon = await this.saveIconFromUrl(id, data.icon);
+        }
+        if (data.version) {
+            const info = versionUtils.parseVersionString(data.version);
+            if (info) data.version = info.normalizedId;
         }
 
         profiles.profiles[id] = { ...profiles.profiles[id], ...data };
@@ -88,12 +110,22 @@ class ProfileManager {
     }
 
     // Bypass protections for internal launcher updates
-    forceEditProfile(id, data) {
+    async forceEditProfile(id, data) {
         const profiles = this.loadProfiles();
         if (!profiles.profiles || !profiles.profiles[id]) return { success: false, error: "Profile not found" };
 
         if (data.icon && typeof data.icon === 'object' && data.icon.base64) {
             data.icon = this.saveIcon(id, data.icon.base64);
+        } else if (data.icon && typeof data.icon === 'object' && data.icon.url) {
+            data.icon = await this.saveIconFromUrl(id, data.icon.url);
+        } else if (typeof data.icon === 'string' && data.icon.startsWith('data:')) {
+            data.icon = this.saveIcon(id, data.icon);
+        } else if (typeof data.icon === 'string' && (data.icon.startsWith('http://') || data.icon.startsWith('https://'))) {
+            data.icon = await this.saveIconFromUrl(id, data.icon);
+        }
+        if (data.version) {
+            const info = versionUtils.parseVersionString(data.version);
+            if (info) data.version = info.normalizedId;
         }
 
         profiles.profiles[id] = { ...profiles.profiles[id], ...data };
@@ -142,6 +174,41 @@ class ProfileManager {
         }
     }
 
+    async saveIconFromUrl(id, url) {
+        try {
+            console.log(`[ProfileManager] Downloading icon from ${url} for profile ${id}...`);
+            const res = await axios.get(url, { responseType: 'arraybuffer' });
+            const buffer = Buffer.from(res.data);
+            
+            let img = nativeImage.createFromBuffer(buffer);
+            let size = img.getSize();
+            if (size.width === 0 || size.height === 0) return "default.png";
+
+            const minSide = Math.min(size.width, size.height);
+            if (size.width !== size.height) {
+                const x = Math.floor((size.width - minSide) / 2);
+                const y = Math.floor((size.height - minSide) / 2);
+                img = img.crop({ x, y, width: minSide, height: minSide });
+            }
+
+            if (minSide > 128) {
+                img = img.resize({ width: 128, height: 128, quality: 'good' });
+            }
+
+            const pngBuffer = img.toPNG();
+            const filename = `${id}.png`;
+            const imgDir = paths.getProfilesImgDir();
+            fs.ensureDirSync(imgDir);
+            const filepath = path.join(imgDir, filename);
+            fs.writeFileSync(filepath, pngBuffer);
+            console.log(`[ProfileManager] Successfully saved icon to ${filename}`);
+            return filename;
+        } catch (e) {
+            console.error(`[ProfileManager] Error saving icon from URL ${url}:`, e.message);
+            return "default.png";
+        }
+    }
+
     getProfileIconAsBase64(filename) {
         try {
             const imgDir = paths.getProfilesImgDir();
@@ -182,7 +249,7 @@ class ProfileManager {
     // --- Helper for Mod Check ---
     isProfileModdable(profile) {
         const version = (profile.version || "").toLowerCase();
-        if (version.includes('forge') || version.includes('fabric')) return true;
+        if (version.includes('forge') || version.includes('fabric') || version.includes('quilt') || version.includes('neoforge') || version.includes('optifine')) return true;
         // Check local folder?
         return false;
     }

@@ -67,6 +67,7 @@ const rpc = require('./src/utils/rpc')
 const paths = require('./src/utils/paths')
 const profileManager = require('./src/handlers/profiles')
 const modManager = require('./src/handlers/mods')
+const versionUtils = require('./src/utils/version')
 
 // Hardware Acceleration Check before App Ready
 try {
@@ -175,6 +176,12 @@ const loadUserData = () => {
   // Merge: Defaults -> Disk Data
   userDataCache = { ...DEFAULT_USER_DATA, ...diskData };
 
+  // Auto-fix: if username ended up as an object (due to a previous bug), extract a string
+  if (userDataCache.username && typeof userDataCache.username === 'object') {
+    userDataCache.username = userDataCache.username.name || userDataCache.username.username || userDataCache.username.displayName || 'Player';
+    console.warn('[loadUserData] username was an object on disk, sanitized to:', userDataCache.username);
+  }
+
   // Ensure mcdir is valid
   if (!userDataCache.mcdir || userDataCache.mcdir.trim() === "") {
     userDataCache.mcdir = paths.getMcDir();
@@ -241,10 +248,198 @@ const saveUserData = (data) => {
 
 const normalizeUuid = (uuid) => (uuid || '').replace(/-/g, '').toLowerCase();
 
-// --- Firebase / Social Constants ---
-const FIREBASE_API_KEY = "AIzaSyACXEDO5R48HrlxVCyz8fBGimEIVkY2QSM";
-const FIREBASE_PROJECT_ID = "helloworld-launcher";
+// ─── Saved Accounts ───────────────────────────────────────────────────────────
+// Each account stored in saved_accounts.json has this shape:
+// {
+//   id: <string>,            unique identifier (firebase_uid for HW, uuid for MS/offline)
+//   type: 'offline' | 'microsoft' | 'helloworld',
+//   username: <string>,
+//   uuid: <string>,
+//   email: <string>,         // helloworld only (email / username identifier used to re-login)
+//   msEmail: <string>,       // microsoft only  (for display)
+//   avatarUrl: <string>,     // cached avatar url
+//   addedAt: <ISO string>,
+//   lastUsed: <ISO string>,
+//   encrypted_tokens: <hex>, // safeStorage encrypted JSON with sensitive fields
+// }
+// Sensitive fields (inside encrypted_tokens):
+//   mc_token, msmc_auth, firebase_refresh_token, firebase_ms_refresh_token, firebase_uid, firebase_ms_uid
+
+const SAVED_ACCOUNTS_SENSITIVE_KEYS = [
+  'mc_token', 'msmc_auth',
+  'firebase_uid', 'firebase_refresh_token', 'firebase_id_token',
+  'firebase_ms_uid', 'firebase_ms_refresh_token'
+];
+
+function loadSavedAccounts() {
+  const filePath = paths.getSavedAccountsFilePath();
+  let accounts = [];
+  try {
+    if (fs.existsSync(filePath)) {
+      accounts = fs.readJsonSync(filePath) || [];
+    }
+  } catch (e) {
+    console.error('[SavedAccounts] Error loading:', e);
+    return [];
+  }
+  // Decrypt tokens for each account
+  for (const acc of accounts) {
+    if (acc.encrypted_tokens && safeStorage.isEncryptionAvailable()) {
+      try {
+        const decrypted = safeStorage.decryptString(Buffer.from(acc.encrypted_tokens, 'hex'));
+        const sensitive = JSON.parse(decrypted);
+        Object.assign(acc, sensitive);
+      } catch (e) {
+        console.warn('[SavedAccounts] Could not decrypt tokens for account:', acc.id);
+      }
+    }
+  }
+  return accounts;
+}
+
+function saveSavedAccounts(accounts) {
+  const filePath = paths.getSavedAccountsFilePath();
+  // Encrypt tokens for each account before writing
+  const toWrite = accounts.map(acc => {
+    const sensitive = {};
+    for (const key of SAVED_ACCOUNTS_SENSITIVE_KEYS) {
+      if (acc[key]) sensitive[key] = acc[key];
+    }
+    const clean = { ...acc };
+    for (const key of SAVED_ACCOUNTS_SENSITIVE_KEYS) delete clean[key];
+    delete clean.encrypted_tokens;
+
+    const hasSensitive = SAVED_ACCOUNTS_SENSITIVE_KEYS.some(k => acc[k]);
+    if (hasSensitive && safeStorage.isEncryptionAvailable()) {
+      try {
+        clean.encrypted_tokens = safeStorage.encryptString(JSON.stringify(sensitive)).toString('hex');
+      } catch (e) {
+        console.error('[SavedAccounts] Encryption failed:', e);
+        Object.assign(clean, sensitive); // fallback: store plain (should not happen)
+      }
+    } else {
+      Object.assign(clean, sensitive);
+    }
+    return clean;
+  });
+
+  try {
+    fs.ensureDirSync(path.dirname(filePath));
+    fs.writeJsonSync(filePath, toWrite, { spaces: 2 });
+  } catch (e) {
+    console.error('[SavedAccounts] Error saving:', e);
+  }
+}
+
+// Build a public-safe (no tokens) view of an account for the UI
+function safeAccountView(acc) {
+  const view = { ...acc };
+  for (const key of SAVED_ACCOUNTS_SENSITIVE_KEYS) delete view[key];
+  delete view.encrypted_tokens;
+  return view;
+}
+
+// Add or update the current userData into the saved accounts list
+function addOrUpdateSavedAccount(userData) {
+  if (!userData || !userData.username) return; // don't save empty sessions
+  const accounts = loadSavedAccounts();
+
+  // Determine a stable unique ID for this account
+  let accountId;
+  if (userData.account_type === 'helloworld') {
+    accountId = userData.firebase_uid || buildDeterministicUuid(`helloworld:${userData.username}`);
+  } else if (userData.account_type === 'microsoft') {
+    accountId = userData.uuid || userData.last_ms_uuid || buildDeterministicUuid(`microsoft:${userData.username}`);
+  } else {
+    // offline: use a deterministic ID based on username
+    accountId = buildDeterministicUuid(`offline:${userData.username}`);
+  }
+
+  const now = new Date().toISOString();
+  const existingIndex = accounts.findIndex(a => a.id === accountId);
+
+  const entry = {
+    id: accountId,
+    type: userData.account_type || 'offline',
+    username: userData.username,
+    uuid: userData.uuid || '',
+    email: userData.account_type === 'helloworld' ? (userData._loginEmail || '') : '',
+    msEmail: userData.account_type === 'microsoft' ? (userData._msEmail || '') : '',
+    avatarUrl: userData.last_avatar_url || '',
+    addedAt: existingIndex >= 0 ? (accounts[existingIndex].addedAt || now) : now,
+    lastUsed: now,
+    // sensitive (will be encrypted by saveSavedAccounts)
+    mc_token: userData.mc_token || '',
+    msmc_auth: userData.msmc_auth || '',
+    firebase_uid: userData.firebase_uid || '',
+    firebase_refresh_token: userData.firebase_refresh_token || '',
+    firebase_id_token: userData.firebase_id_token || '',
+    firebase_ms_uid: userData.firebase_ms_uid || '',
+    firebase_ms_refresh_token: userData.firebase_ms_refresh_token || ''
+  };
+
+  if (existingIndex >= 0) {
+    accounts[existingIndex] = entry;
+  } else {
+    accounts.push(entry);
+  }
+
+  saveSavedAccounts(accounts);
+  return accountId;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+// --- Secrets & External Configuration Loader ---
+function loadSecrets() {
+  const defaults = {
+    FIREBASE_API_KEY: "", // Loaded from secrets.json
+    FIREBASE_PROJECT_ID: "helloworld-launcher",
+    WORKSHOP_DISCORD_WEBHOOK: "",
+    WORKSHOP_ADMIN_UID: "",
+    WORKSHOP_MODERATOR_UIDS: []
+  };
+  const candidates = [
+    path.join(__dirname, 'secrets.json'),
+    path.join(paths.getLauncherDir(), 'secrets.json')
+  ];
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) {
+        const parsed = fs.readJsonSync(p);
+        return { ...defaults, ...parsed };
+      }
+    } catch (e) {
+      console.error('[Secrets] Error reading', p, e.message);
+    }
+  }
+  return defaults;
+}
+
+const APP_SECRETS = loadSecrets();
+const FIREBASE_API_KEY = APP_SECRETS.FIREBASE_API_KEY;
+const FIREBASE_PROJECT_ID = APP_SECRETS.FIREBASE_PROJECT_ID || "helloworld-launcher";
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
+
+// --- Account Switcher Utility Functions ---
+
+/**
+ * Refresh a Firebase ID token using a stored refresh_token.
+ * @returns { uid, idToken, refreshToken }
+ */
+async function refreshFirebaseToken(refreshToken) {
+  const url = `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`;
+  const res = await axios.post(url, {
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken
+  });
+  const { user_id, id_token, refresh_token: newRefreshToken } = res.data;
+  if (!user_id || !id_token) throw new Error('INVALID_REFRESH_TOKEN');
+  return { uid: user_id, idToken: id_token, refreshToken: newRefreshToken || refreshToken };
+}
+
+
+
 
 // --- Social Helper: Parse Firestore doc fields ---
 function parseFirestoreFields(fields) {
@@ -257,6 +452,7 @@ function parseFirestoreFields(fields) {
     else if (v.booleanValue !== undefined) out[k] = v.booleanValue;
     else if (v.timestampValue !== undefined) out[k] = v.timestampValue;
     else if (v.nullValue !== undefined) out[k] = null;
+    else if (v.mapValue !== undefined) out[k] = parseFirestoreFields(v.mapValue.fields || {});
     else if (v.arrayValue !== undefined) {
       out[k] = (v.arrayValue.values || []).map(item => {
         if (item.stringValue !== undefined) return item.stringValue;
@@ -286,7 +482,8 @@ function buildFSFields(obj) {
 
 // --- Social Helper: Firestore REST calls ---
 async function fsGet(docPath, idToken) {
-  const res = await axios.get(`${FIRESTORE_BASE}/${docPath}`, { headers: { Authorization: `Bearer ${idToken}` } });
+  const headers = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+  const res = await axios.get(`${FIRESTORE_BASE}/${docPath}`, { headers });
   return { id: docPath.split('/').pop(), ...parseFirestoreFields(res.data.fields) };
 }
 async function fsSet(docPath, obj, idToken, mask) {
@@ -306,9 +503,9 @@ async function fsUpdate(docPath, data, idToken) {
 }
 async function fsQuery(collectionId, filters, idToken, orderBy, limit = 50) {
   const makeFilter = (f) => ({ fieldFilter: { field: { fieldPath: f.field }, op: f.op, value: f.value } });
-  const where = filters.length === 1 ? makeFilter(filters[0])
-    : { compositeFilter: { op: 'AND', filters: filters.map(makeFilter) } };
-  const body = { structuredQuery: { from: [{ collectionId }], where, limit } };
+  const body = { structuredQuery: { from: [{ collectionId }], limit } };
+  if (filters.length === 1) body.structuredQuery.where = makeFilter(filters[0]);
+  else if (filters.length > 1) body.structuredQuery.where = { compositeFilter: { op: 'AND', filters: filters.map(makeFilter) } };
   if (orderBy) body.structuredQuery.orderBy = [{ field: { fieldPath: orderBy }, direction: 'DESCENDING' }];
   const res = await axios.post(`${FIRESTORE_BASE}:runQuery`, body,
     idToken ? { headers: { Authorization: `Bearer ${idToken}` } } : {});
@@ -346,6 +543,20 @@ async function refreshFirebaseToken(refreshToken) {
   }
 }
 
+let hasSyncedVersionThisSession = false;
+async function syncClientVersionToUsersDoc(auth, force = false) {
+  if (!auth || !auth.uid || !auth.idToken) return;
+  if (hasSyncedVersionThisSession && !force) return;
+  try {
+    const curVer = app.getVersion();
+    await fsUpdate(`users/${auth.uid}`, { clientVersion: curVer, updatedAt: new Date().toISOString() }, auth.idToken);
+    hasSyncedVersionThisSession = true;
+    console.log(`[VersionSync] Successfully synced users/${auth.uid} clientVersion to v${curVer}`);
+  } catch (err) {
+    // silently ignore if offline
+  }
+}
+
 // --- Social Helper: Get valid social auth credentials for current user ---
 async function getSocialAuth() {
   const userData = loadUserData();
@@ -356,7 +567,9 @@ async function getSocialAuth() {
       userData.firebase_id_token = refreshed.idToken;
       userData.firebase_refresh_token = refreshed.refreshToken;
       saveUserData(userData);
-      return { uid: userData.firebase_uid, idToken: refreshed.idToken, accountType: 'helloworld', username: userData.username };
+      const authObj = { uid: userData.firebase_uid, idToken: refreshed.idToken, accountType: 'helloworld', username: userData.username };
+      syncClientVersionToUsersDoc(authObj);
+      return authObj;
     } catch (err) {
       if (err.message === 'INVALID_REFRESH_TOKEN') {
         userData.firebase_uid = "";
@@ -373,7 +586,9 @@ async function getSocialAuth() {
       const refreshed = await refreshFirebaseToken(userData.firebase_ms_refresh_token);
       userData.firebase_ms_refresh_token = refreshed.refreshToken;
       saveUserData(userData);
-      return { uid: userData.firebase_ms_uid, idToken: refreshed.idToken, accountType: 'microsoft', username: userData.username };
+      const authObj = { uid: userData.firebase_ms_uid, idToken: refreshed.idToken, accountType: 'microsoft', username: userData.username };
+      syncClientVersionToUsersDoc(authObj);
+      return authObj;
     } catch (err) {
       if (err.message === 'INVALID_REFRESH_TOKEN') {
         userData.firebase_ms_uid = "";
@@ -419,27 +634,10 @@ const PRESENCE_STALE_THRESHOLD_MS = 90 * 1000;
 
 function formatPresenceVersionLabel(version, fallbackMcVersion) {
   if (!version) return fallbackMcVersion || '';
-  const lower = version.toLowerCase();
-  if (lower.startsWith('fabric-loader-')) {
-    const parts = version.split('-');
-    if (parts.length >= 4) {
-      const mc = parts[3];
-      return `Fabric ${mc}`;
-    }
-  }
-  if (lower.startsWith('fabric-')) {
-    const parts = version.split('-');
-    if (parts.length >= 2) {
-      return `Fabric ${parts[1]}`;
-    }
-  }
-  if (lower.startsWith('forge-')) {
-    const parts = version.split('-');
-    if (parts.length >= 2) {
-      return `Forge ${parts[1]}`;
-    }
-  }
-  return fallbackMcVersion || version;
+  const info = versionUtils.parseVersionString(version);
+  if (!info) return fallbackMcVersion || version;
+  if (info.type === 'vanilla') return info.mcVersion || fallbackMcVersion || version;
+  return `${info.software} ${info.mcVersion}`;
 }
 
 function presenceStatusLabel(status, serverIp, worldName) {
@@ -556,6 +754,7 @@ class PresenceManager {
       serverIp: serverIpToWrite,
       worldName: state.worldName || '',
       playerName: state.ign || '',
+      clientVersion: app.getVersion(),
       updatedAt: now
     };
     const wrote = await this.withAuth(async (auth) => {
@@ -699,6 +898,8 @@ class PresenceManager {
     });
     if (!wrote) {
       console.warn('[Presence] Failed to mark launcher online. Presence will not update until authentication succeeds.');
+    } else {
+      this.withAuth(async (auth) => { await syncClientVersionToUsersDoc(auth); }).catch(()=>{});
     }
   }
 
@@ -974,6 +1175,7 @@ function buildPresenceResponse(rawDoc) {
       mcVersion: '',
       instanceName: '',
       serverIp: '',
+      clientVersion: '',
       updatedAt: null,
       lastSeenAt: null
     };
@@ -990,25 +1192,23 @@ function buildPresenceResponse(rawDoc) {
     serverIp: rawDoc.serverIp || '',
     playerName: rawDoc.playerName || '',
     worldName: rawDoc.worldName || '',
+    clientVersion: rawDoc.clientVersion || '',
     updatedAt,
     lastSeenAt: lastSeenAt || updatedAt || null
   };
 }
 
-async function fetchPresenceForUser(uid, auth) {
+async function fetchPresenceForUser(uid, auth, fsDocId = null) {
   if (!uid || !auth) return buildPresenceResponse(null);
   try {
     const doc = await fsGet(`presence/${uid}`, auth.idToken);
     return buildPresenceResponse(doc);
   } catch (e) {
-    if (e?.response?.status === 404) {
+    if (e?.response?.status === 404 || e?.response?.status === 403) {
+      // 404: presence doc not created yet. 403: restricted by Firestore rules (e.g. not friends).
       return buildPresenceResponse(null);
     }
-    if (e?.response?.status === 403) {
-      console.warn('[Presence] fetchPresenceForUser unauthorized (403). Check Firestore rules allow read on presence/* for friends.');
-    } else {
-      console.warn('[Presence] fetchPresenceForUser failed:', e.message || e);
-    }
+    console.warn('[Presence] fetchPresenceForUser failed:', e.message || e);
     return buildPresenceResponse(null);
   }
 }
@@ -1033,6 +1233,7 @@ async function updateStreakAndSessions() {
     
     let streak = stats.streak || 0;
     let totalDaysPlayed = stats.totalDaysPlayed || 0;
+    let maxStreak = stats.maxStreak || stats.streak || 0;
     
     if (lastDate !== todayStr) {
       const yesterday = new Date(now);
@@ -1045,10 +1246,12 @@ async function updateStreakAndSessions() {
         streak = 1;
       }
       totalDaysPlayed += 1;
+      if (streak > maxStreak) maxStreak = streak;
     }
     
     const updates = {
       streak,
+      maxStreak,
       lastPlayed: now.getTime(),
       totalSessions: (stats.totalSessions || 0) + 1,
       totalDaysPlayed
@@ -1134,20 +1337,20 @@ function shouldNotifyPresence(prev, next) {
 
   if (next.state === 'server') {
     if (prevState !== 'server' || prev?.serverIp !== next.serverIp) {
-      const serverLabel = next.serverIp ? next.serverIp : 'un servidor';
-      return `está jugando en ${serverLabel}`;
+      const serverLabel = next.serverIp ? next.serverIp : 'a server';
+      return `is playing on ${serverLabel}`;
     }
     return null;
   }
 
   if (next.state === 'online' && prevState !== 'online') {
-    return 'se ha conectado';
+    return 'is now online';
   }
 
   const playingStates = new Set(['menu', 'playing']);
   const wasPlaying = playingStates.has(prevState) || prevState === 'server';
   if (playingStates.has(next.state) && !wasPlaying) {
-    return 'ha empezado a jugar Minecraft';
+    return 'started playing Minecraft';
   }
 
   return null;
@@ -1191,7 +1394,7 @@ async function pollPresence(initPass = false) {
         }
       }
 
-      const presence = await fetchPresenceForUser(friendUid, auth);
+      const presence = await fetchPresenceForUser(friendUid, auth, fsDoc.id);
       const prev = lastPresenceStates.get(friendUid);
       lastPresenceStates.set(friendUid, presence);
 
@@ -1267,7 +1470,7 @@ function startMessagePolling() {
   } else {
     console.log('[MsgPoll] Restarting interval (already initialized)');
   }
-  msgPollingInterval = setInterval(pollMessages, 15000);
+  msgPollingInterval = setInterval(pollMessages, 5000);
   startPresencePolling();
 }
 
@@ -1462,11 +1665,17 @@ function startLocalServer() {
       '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg',
       '.ico': 'image/x-icon', '.svg': 'image/svg+xml',
       '.ttf': 'font/ttf', '.woff': 'font/woff', '.woff2': 'font/woff2',
-      '.mp4': 'video/mp4'
+      '.mp4': 'video/mp4', '.txt': 'text/plain; charset=utf-8', '.json': 'application/json'
     };
     const srv = http.createServer((req, res) => {
       const cleanUrl = req.url.split('?')[0].split('#')[0];
-      let filePath = path.join(__dirname, 'ui', cleanUrl === '/' ? '/index.html' : cleanUrl);
+      let filePath;
+      if (cleanUrl === '/tips.txt') {
+        const rootTips = path.join(__dirname, 'tips.txt');
+        filePath = fs.existsSync(rootTips) ? rootTips : path.join(__dirname, 'ui', 'tips.txt');
+      } else {
+        filePath = path.join(__dirname, 'ui', cleanUrl === '/' ? '/index.html' : cleanUrl);
+      }
       const ext = path.extname(filePath);
       fs.readFile(filePath, (err, data) => {
         if (err) { res.writeHead(404); res.end('Not found'); return; }
@@ -1494,21 +1703,27 @@ const createWindow = async () => {
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true, // Enable webSecurity for production safety
-      allowRunningInsecureContent: false
+      allowRunningInsecureContent: false,
+      backgroundThrottling: false
     },
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#0f2027',
     show: false,
     frame: true,
     minWidth: 1000,
     minHeight: 650
   })
 
-  win.maximize()
+  win.maximize();
   Menu.setApplicationMenu(null);
 
-  // Start with Updater (Splash) — served from localhost for Firebase Auth compatibility
+  // Force repaint when window gains focus or is restored from background
+  win.on('focus', () => {
+    try { win.webContents.invalidate(); } catch (_) {}
+  });
+
+  // Start directly with index.html for instant launch
   if (!localPort) await startLocalServer();
-  win.loadURL(`http://localhost:${localPort}/updater.html`)
+  win.loadURL(`http://localhost:${localPort}/index.html`)
 
   win.once('ready-to-show', () => {
     win.show();
@@ -1524,6 +1739,12 @@ const createWindow = async () => {
     win.webContents.send('sys-ready');
     // Start background checks
     checkLatestVersionsAndInstall();
+    // Start background update check after 3 seconds without blocking UI
+    setTimeout(() => {
+      if (app.isPackaged) {
+        autoUpdater.checkForUpdatesAndNotify();
+      }
+    }, 3000);
     // Start message polling (no-op if not logged in with social account)
     setTimeout(startMessagePolling, 2000);
   });
@@ -1616,9 +1837,9 @@ async function checkLatestVersionsAndInstall() {
           console.log(`[Background Update] Updating profile "${profileName}" to version ${version}.`);
           versionChanged = true;
           if (typeof profileManager.forceEditProfile === 'function') {
-            profileManager.forceEditProfile(existingProfileId, { version: version, icon: 'default.png', directory: mcDir });
+            await profileManager.forceEditProfile(existingProfileId, { version: version, icon: 'default.png', directory: mcDir });
           } else {
-            profileManager.editProfile(existingProfileId, { version: version, icon: 'default.png', directory: mcDir });
+            await profileManager.editProfile(existingProfileId, { version: version, icon: 'default.png', directory: mcDir });
           }
           if (mainWindow) mainWindow.webContents.send('reload-profiles');
         }
@@ -1626,21 +1847,21 @@ async function checkLatestVersionsAndInstall() {
         // Create new
         console.log(`[Background Update] Creating profile "${profileName}" for version ${version}.`);
         versionChanged = true;
-        profileManager.addProfile(profileName, version, 'default.png', mcDir, '', null, true);
+        await profileManager.addProfile(profileName, version, 'default.png', mcDir, '', null, true);
         if (mainWindow) mainWindow.webContents.send('reload-profiles');
       }
 
       if (versionChanged) {
         console.log(`[Background Update] Version ${version} is now available. Sending notification...`);
         new Notification({
-          title: 'Nueva versión de Minecraft',
-          body: `La versión ${version} (${profileName}) ya está disponible para jugar.`
+          title: 'New Minecraft Version',
+          body: `Version ${version} (${profileName}) is now available to play.`
         }).show();
         
         if (mainWindow) {
           mainWindow.webContents.send('show-in-app-notification', {
-            title: 'Nueva versión de Minecraft',
-            message: `La versión ${version} (${profileName}) ya está disponible para jugar.`,
+            title: 'New Minecraft Version',
+            message: `Version ${version} (${profileName}) is now available to play.`,
             duration: 10000
           });
         }
@@ -1673,9 +1894,19 @@ ipcMain.handle('save-user-json', async (e, data) => {
   // Strip undefined values from data so they don't overwrite existing values with undefined
   const cleanedData = Object.fromEntries(Object.entries(data).filter(([_, v]) => v !== undefined));
   const newData = { ...current, ...cleanedData };
+  // Auto-fix: if username ended up as an object (due to a previous bug), extract a string
+  if (newData.username && typeof newData.username === 'object') {
+    newData.username = newData.username.name || newData.username.username || newData.username.displayName || 'Player';
+    console.warn('[save-user-json] username was an object, sanitized to:', newData.username);
+  }
   saveUserData(newData);
+  // Persist offline account into saved accounts list when a username is set
+  if (newData.username && newData.account_type === 'offline') {
+    try { addOrUpdateSavedAccount(newData); } catch (_) {}
+  }
   return newData;
 })
+
 
 ipcMain.handle('login-microsoft', async () => {
   console.log("IPC: login-microsoft (msmc v5 refactor)");
@@ -1716,8 +1947,13 @@ ipcMain.handle('login-microsoft', async () => {
     const userData = loadUserData()
     const previousUuid = userData.uuid || userData.last_ms_uuid;
     
-    // If the user logs in with a DIFFERENT Microsoft account, clear the old social verification
-    if (previousUuid && previousUuid !== profileData.id) {
+    // Restore existing social verification tokens if this MS account was verified previously
+    const savedAccs = loadSavedAccounts();
+    const existingMs = savedAccs.find(a => a.uuid === profileData.id || a.last_ms_uuid === profileData.id);
+    if (existingMs && existingMs.firebase_ms_uid && existingMs.firebase_ms_refresh_token) {
+        userData.firebase_ms_uid = existingMs.firebase_ms_uid;
+        userData.firebase_ms_refresh_token = existingMs.firebase_ms_refresh_token;
+    } else if (previousUuid && previousUuid !== profileData.id) {
         userData.firebase_ms_uid = "";
         userData.firebase_ms_refresh_token = "";
     }
@@ -1729,6 +1965,14 @@ ipcMain.handle('login-microsoft', async () => {
     userData.msmc_auth = result.save() // Save token string ONLY
 
     saveUserData(userData)
+
+    // Persist this account into saved accounts list
+    try {
+      // Attempt to get email from the msmc token for display purposes
+      let msEmail = '';
+      try { msEmail = decodeMsJwtEmail(mcObj.mcToken) || ''; } catch (_) {}
+      addOrUpdateSavedAccount({ ...userData, _msEmail: msEmail });
+    } catch (saErr) { console.warn('[SavedAccounts] Could not persist MS account:', saErr.message); }
 
     // Social auth will be set up after silentMicrosoftVerify runs in the renderer
 
@@ -1836,10 +2080,16 @@ ipcMain.handle('login-helloworld', async (e, identifier, password) => {
 
     saveUserData(userData);
 
+    // Persist this account into saved accounts list
+    try {
+      addOrUpdateSavedAccount({ ...userData, _loginEmail: identifier });
+    } catch (saErr) { console.warn('[SavedAccounts] Could not persist HW account:', saErr.message); }
+
     // 5. Update users doc with social-searchable fields (merge: only update these fields)
     try {
       await fsUpdate(`users/${localId}`, {
         accountType: 'helloworld', username, mcUuid: uuid,
+        clientVersion: app.getVersion(),
         usernameLower: usernameLower(username), updatedAt: new Date().toISOString()
       }, idToken);
     } catch (spErr) {
@@ -1887,7 +2137,9 @@ ipcMain.handle('logout', async () => {
   presenceManager.safeRun(presenceManager.setOffline());
   const data = loadUserData()
 
-  // Clear persistent auth data
+  // NOTE: We do NOT remove the account from saved_accounts.json here.
+  // The account remains in the list so the user can switch back to it later.
+  // Clear only the active session from user.json.
   if (data.account_type === "microsoft" && data.uuid) {
     data.last_ms_uuid = data.uuid;
   }
@@ -1910,6 +2162,267 @@ ipcMain.handle('logout', async () => {
   return data
 })
 
+// ─── Account Switcher IPC Handlers ───────────────────────────────────────────
+
+ipcMain.handle('get-saved-accounts', async () => {
+  try {
+    const accounts = loadSavedAccounts();
+    // Return safe views (no tokens) sorted by lastUsed desc
+    const sorted = [...accounts].sort((a, b) => (b.lastUsed || '').localeCompare(a.lastUsed || ''));
+    return { success: true, accounts: sorted.map(safeAccountView) };
+  } catch (e) {
+    console.error('[SavedAccounts] get-saved-accounts error:', e);
+    return { success: false, accounts: [] };
+  }
+})
+
+ipcMain.handle('remove-saved-account', async (e, accountId) => {
+  try {
+    let accounts = loadSavedAccounts();
+    const wasActive = (() => {
+      const current = loadUserData();
+      // Find the account by id and check if it matches the active session
+      const acc = accounts.find(a => a.id === accountId);
+      if (!acc) return false;
+      if (current.account_type === 'helloworld') return acc.firebase_uid === current.firebase_uid;
+      if (current.account_type === 'microsoft') return acc.uuid === current.uuid;
+      if (current.account_type === 'offline') return acc.username === current.username && acc.type === 'offline';
+      return false;
+    })();
+
+    accounts = accounts.filter(a => a.id !== accountId);
+    saveSavedAccounts(accounts);
+
+    // If this was the active account, also clear the active session
+    if (wasActive) {
+      stopMessagePolling();
+      stopPresencePolling();
+      presenceManager.safeRun(presenceManager.setOffline());
+      const data = loadUserData();
+      if (data.account_type === 'microsoft' && data.uuid) data.last_ms_uuid = data.uuid;
+      data.username = ''; data.account_type = 'offline'; data.uuid = '';
+      data.mc_token = ''; data.msmc_auth = '';
+      data.last_skin_url = ''; data.last_skin_variant = 'classic'; data.last_cape_url = '';
+      data.firebase_uid = ''; data.firebase_refresh_token = '';
+      data.firebase_id_token = '';
+      saveUserData(data);
+      presenceManager.currentState = null;
+      presenceManager.gameContext = null;
+      presenceManager.stopHeartbeat();
+      return { success: true, sessionCleared: true, newData: data };
+    }
+    return { success: true, sessionCleared: false };
+  } catch (e) {
+    console.error('[SavedAccounts] remove-saved-account error:', e);
+    return { success: false, error: e.message };
+  }
+})
+
+ipcMain.handle('remove-all-accounts', async () => {
+  try {
+    saveSavedAccounts([]);
+    stopMessagePolling();
+    stopPresencePolling();
+    presenceManager.safeRun(presenceManager.setOffline());
+    const data = loadUserData();
+    if (data.account_type === 'microsoft' && data.uuid) data.last_ms_uuid = data.uuid;
+    data.username = ''; data.account_type = 'offline'; data.uuid = '';
+    data.mc_token = ''; data.msmc_auth = '';
+    data.last_skin_url = ''; data.last_skin_variant = 'classic'; data.last_cape_url = '';
+    data.firebase_uid = ''; data.firebase_refresh_token = '';
+    data.firebase_id_token = '';
+    saveUserData(data);
+    presenceManager.currentState = null;
+    presenceManager.gameContext = null;
+    presenceManager.stopHeartbeat();
+    return { success: true, newData: data };
+  } catch (e) {
+    console.error('[SavedAccounts] remove-all-accounts error:', e);
+    return { success: false, error: e.message };
+  }
+})
+
+ipcMain.handle('switch-account', async (e, accountId) => {
+  try {
+    const accounts = loadSavedAccounts();
+    const acc = accounts.find(a => a.id === accountId);
+    if (!acc) return { success: false, error: 'Account not found' };
+
+    stopMessagePolling();
+    stopPresencePolling();
+    presenceManager.safeRun(presenceManager.setOffline());
+    presenceManager.currentState = null;
+    presenceManager.gameContext = null;
+    presenceManager.stopHeartbeat();
+
+    const currentData = loadUserData();
+
+    if (acc.type === 'offline') {
+      // ─ Offline: just set username and uuid
+      currentData.account_type = 'offline';
+      currentData.username = acc.username;
+      currentData.uuid = acc.uuid || buildDeterministicUuid(`offline:${acc.username}`);
+      currentData.mc_token = '';
+      currentData.msmc_auth = '';
+      currentData.firebase_uid = '';
+      currentData.firebase_refresh_token = '';
+      currentData.firebase_id_token = '';
+      currentData.firebase_ms_uid = '';
+      currentData.firebase_ms_refresh_token = '';
+      currentData.last_skin_url = '';
+      currentData.last_skin_variant = 'classic';
+      currentData.last_cape_url = '';
+      saveUserData(currentData);
+
+      // Update lastUsed
+      const idx = accounts.findIndex(a => a.id === accountId);
+      if (idx >= 0) { accounts[idx].lastUsed = new Date().toISOString(); saveSavedAccounts(accounts); }
+
+      return { success: true, newData: currentData };
+    }
+
+    if (acc.type === 'helloworld') {
+      // ─ HelloWorld: try to refresh Firebase token
+      if (!acc.firebase_refresh_token) {
+        return { success: false, needsRelogin: true, type: 'helloworld', username: acc.username, email: acc.email };
+      }
+      try {
+        const refreshed = await refreshFirebaseToken(acc.firebase_refresh_token);
+
+        // Load full profile from Firestore
+        let username = acc.username;
+        let uuid = acc.uuid;
+        let avatarUrl = acc.avatarUrl || '';
+        try {
+          const docUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/users/${refreshed.uid}`;
+          const docRes = await axios.get(docUrl, { headers: { Authorization: `Bearer ${refreshed.idToken}` } });
+          if (docRes.data && docRes.data.fields) {
+            const f = docRes.data.fields;
+            if (f.username) username = f.username.stringValue;
+            if (f.uuid) uuid = f.uuid.stringValue;
+            if (f.avatarBase64) avatarUrl = f.avatarBase64.stringValue || '';
+          }
+        } catch (_) {}
+
+        currentData.account_type = 'helloworld';
+        currentData.username = username;
+        currentData.uuid = ensureHelloWorldUuid(username, uuid);
+        currentData.firebase_uid = refreshed.uid;
+        currentData.firebase_refresh_token = refreshed.refreshToken;
+        currentData.firebase_id_token = refreshed.idToken;
+        currentData.last_avatar_url = avatarUrl;
+        currentData.mc_token = acc.mc_token || '';
+        currentData.msmc_auth = '';
+        currentData.firebase_ms_uid = '';
+        currentData.firebase_ms_refresh_token = '';
+        currentData.last_skin_url = '';
+        currentData.last_skin_variant = 'classic';
+        currentData.last_cape_url = '';
+        saveUserData(currentData);
+
+        // Update saved account with refreshed token
+        const idx = accounts.findIndex(a => a.id === accountId);
+        if (idx >= 0) {
+          accounts[idx].firebase_refresh_token = refreshed.refreshToken;
+          accounts[idx].firebase_id_token = refreshed.idToken;
+          accounts[idx].avatarUrl = avatarUrl;
+          accounts[idx].lastUsed = new Date().toISOString();
+          saveSavedAccounts(accounts);
+        }
+
+        startMessagePolling();
+        presenceManager.safeRun(presenceManager.setLauncherOnline());
+        startPresencePolling();
+
+        return { success: true, newData: currentData };
+      } catch (err) {
+        if (err.message === 'INVALID_REFRESH_TOKEN') {
+          // Token expired — need re-login
+          return { success: false, needsRelogin: true, type: 'helloworld', username: acc.username, email: acc.email };
+        }
+        throw err;
+      }
+    }
+
+    if (acc.type === 'microsoft') {
+      // ─ Microsoft: try to refresh session via the saved msmc refresh_token
+      // In msmc v5: result.save() returns the MS refresh_token string.
+      // To restore: create a new Auth, call auth.refresh(refreshTokenString).
+      if (!acc.msmc_auth) {
+        return { success: false, needsRelogin: true, type: 'microsoft' };
+      }
+      try {
+        const authManager = new msmc.Auth("select_account");
+
+        // acc.msmc_auth is the refresh_token string saved by result.save()
+        const xboxSession = await authManager.refresh(acc.msmc_auth);
+        if (!xboxSession) throw new Error('Could not refresh MSMC session');
+
+        const getProfilePromise = xboxSession.getMinecraft();
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('getMinecraft timed out after 30s')), 30000)
+        );
+        const mcObj = await Promise.race([getProfilePromise, timeoutPromise]);
+
+        if (!mcObj || !mcObj.profile) throw new Error('Invalid Minecraft Profile Data');
+
+        const profileData = mcObj.profile;
+        const previousUuid = currentData.uuid || currentData.last_ms_uuid;
+        if (previousUuid && previousUuid !== profileData.id) {
+          currentData.firebase_ms_uid = '';
+          currentData.firebase_ms_refresh_token = '';
+        }
+
+        currentData.account_type = 'microsoft';
+        currentData.username = profileData.name;
+        currentData.uuid = profileData.id;
+        currentData.mc_token = mcObj.mcToken;
+        currentData.msmc_auth = xboxSession.save(); // updated refresh token
+        currentData.firebase_uid = '';
+        currentData.firebase_refresh_token = '';
+        currentData.firebase_id_token = '';
+        // Preserve MS social verification tokens from saved account
+        currentData.firebase_ms_uid = acc.firebase_ms_uid || currentData.firebase_ms_uid || '';
+        currentData.firebase_ms_refresh_token = acc.firebase_ms_refresh_token || currentData.firebase_ms_refresh_token || '';
+        currentData.last_skin_url = '';
+        currentData.last_skin_variant = 'classic';
+        currentData.last_cape_url = '';
+        saveUserData(currentData);
+
+        // Update saved account with new refresh token
+        const idx = accounts.findIndex(a => a.id === accountId);
+        if (idx >= 0) {
+          accounts[idx].msmc_auth = xboxSession.save();
+          accounts[idx].mc_token = mcObj.mcToken;
+          accounts[idx].uuid = profileData.id;
+          accounts[idx].username = profileData.name;
+          accounts[idx].lastUsed = new Date().toISOString();
+          saveSavedAccounts(accounts);
+        }
+
+        const safeProfile = { name: profileData.name, id: profileData.id, skin: profileData.skins || [] };
+        if (mainWindow) mainWindow.webContents.send('login-success', safeProfile);
+
+        startMessagePolling();
+        presenceManager.safeRun(presenceManager.setLauncherOnline());
+        startPresencePolling();
+
+        return { success: true, newData: currentData };
+      } catch (err) {
+        console.warn('[SwitchAccount] MS session refresh failed:', err.message);
+        // Token expired or invalid — need fresh login via MS popup
+        return { success: false, needsRelogin: true, type: 'microsoft' };
+      }
+    }
+
+    return { success: false, error: 'Unknown account type' };
+  } catch (e) {
+    console.error('[SavedAccounts] switch-account error:', e);
+    return { success: false, error: e.message };
+  }
+})
+// ─────────────────────────────────────────────────────────────────────────────
+
 // 2. Profiles
 ipcMain.handle('get-profiles', async () => profileManager.loadProfiles())
 ipcMain.handle('get-profiles-for-addon', async (e, type) => {
@@ -1921,7 +2434,7 @@ ipcMain.handle('get-profiles-for-addon', async (e, type) => {
   for (const [id, profile] of Object.entries(profiles)) {
     const version = (profile.version || '').toLowerCase();
 
-    if (type === 'resourcepack' || type === 'datapack') {
+    if (type === 'resourcepack' || type === 'datapack' || type === 'modpack') {
       filtered[id] = profile;
       continue;
     }
@@ -1930,7 +2443,7 @@ ipcMain.handle('get-profiles-for-addon', async (e, type) => {
       // Validate strictly if shader support mods are installed
       const profileDir = profile.directory || mcDir;
       const modsDir = path.join(profileDir, 'mods');
-      const support = await modManager.validateShaderSupport(modsDir);
+      const support = await modManager.validateShaderSupport(modsDir, profile.addons);
 
       if (support.supported) {
         filtered[id] = profile;
@@ -1938,7 +2451,7 @@ ipcMain.handle('get-profiles-for-addon', async (e, type) => {
       continue;
     }
 
-    if (version.includes('forge') || version.includes('fabric') || version.includes('quilt')) {
+    if (version.includes('forge') || version.includes('fabric') || version.includes('quilt') || version.includes('neoforge') || version.includes('optifine')) {
       filtered[id] = profile;
     }
   }
@@ -1947,19 +2460,32 @@ ipcMain.handle('get-profiles-for-addon', async (e, type) => {
 
 ipcMain.handle('add-profile', async (e, name, version, icon, directory, jvm_args, java_path) => {
   // Map frontend positional args to profileManager.addProfile
-  return profileManager.addProfile(name, version, icon, directory, jvm_args, java_path);
+  const info = versionUtils.parseVersionString(version);
+  const normVer = info ? info.normalizedId : version;
+  return await profileManager.addProfile(name, normVer, icon, directory, jvm_args, java_path);
 })
 
-ipcMain.handle('edit-profile', async (e, profile_id, name, version, loader, icon, ram_min, ram_max, jvm_args, width, height, java_path) => {
+ipcMain.handle('edit-profile', async (e, profile_id, name, version, loader, icon, ram_min, ram_max, jvm_args, width, height, java_path, enable_custom_skins, addons) => {
+  let ver = version || loader;
+  const info = versionUtils.parseVersionString(ver);
+  if (info) ver = info.normalizedId;
   const data = {
     name,
-    version: version || loader,
+    version: ver,
     icon,
     jvm_args: jvm_args || '',
     java_path: java_path || ''
   };
-
-  return profileManager.editProfile(profile_id, data);
+  if (enable_custom_skins !== undefined && enable_custom_skins !== null && typeof enable_custom_skins === 'boolean') {
+    data.enable_custom_skins = enable_custom_skins;
+  }
+  if (Array.isArray(enable_custom_skins)) {
+    data.addons = enable_custom_skins;
+  }
+  if (addons !== undefined && addons !== null) {
+    data.addons = addons;
+  }
+  return await profileManager.editProfile(profile_id, data);
 })
 
 ipcMain.handle('delete-profile', async (e, id) => profileManager.deleteProfile(id))
@@ -2021,9 +2547,52 @@ ipcMain.handle('install-addon', async (e, args) => {
         targetDir = path.join(profileDir, 'saves', args.world_name, 'datapacks');
       }
 
+      if (type === 'modpack') {
+        console.log('[install-addon] Installing Modpack:', filename);
+        const result = await modManager.installModpack(url, filename, profileDir, (percentage) => {
+          if (args.project_id) {
+            e.sender.send('mod-download-progress', { projectId: args.project_id, percentage });
+          }
+        });
+        if (result.success) {
+          const deps = result.dependencies || {};
+          const mcVer = deps.minecraft;
+          if (mcVer) {
+            let loaderStr = `Vanilla ${mcVer}`;
+            if (deps['fabric-loader']) loaderStr = `Fabric ${mcVer} (${deps['fabric-loader']})`;
+            else if (deps['forge']) loaderStr = `Forge ${mcVer} (${deps['forge']})`;
+            else if (deps['neoforge']) loaderStr = `NeoForge ${mcVer} (${deps['neoforge']})`;
+            else if (deps['quilt-loader']) loaderStr = `Quilt ${mcVer} (${deps['quilt-loader']})`;
+            if (!profile.version || profile.version === 'Vanilla' || profile.version.startsWith('Vanilla')) {
+              profile.version = loaderStr;
+            }
+          }
+          profile.addons = profile.addons || [];
+          if (project_id && version_id) {
+            profile.addons = profile.addons.filter(a => a.project_id !== project_id);
+            profile.addons.push({ project_id, version_id, filename, type: 'modpack', state: 'enabled' });
+          }
+          if (result.installedAddons && Array.isArray(result.installedAddons)) {
+            for (const item of result.installedAddons) {
+              if (!profile.addons.some(a => a.filename === item.filename)) {
+                profile.addons.push({
+                  project_id: item.project_id,
+                  version_id: item.version_id,
+                  filename: item.filename,
+                  type: item.type,
+                  state: 'enabled'
+                });
+              }
+            }
+          }
+          profileManager.saveProfiles(profilesData);
+        }
+        return result;
+      }
+
       if (type === 'shader') {
         console.log('[install-addon] Validating shader support...');
-        const check = await modManager.validateShaderSupport(path.join(profileDir, 'mods'));
+        const check = await modManager.validateShaderSupport(path.join(profileDir, 'mods'), profile.addons);
         if (!check.supported) {
           console.error('[install-addon] Shader support validation failed:', check.reason);
           return { success: false, error: check.reason };
@@ -2031,7 +2600,7 @@ ipcMain.handle('install-addon', async (e, args) => {
       }
 
       const targetFile = path.join(targetDir, filename);
-      if (fs.existsSync(targetFile)) {
+      if (fs.existsSync(targetFile) && !args.force_reinstall) {
         console.log('[install-addon] File already exists, skipping download:', filename);
 
         // Update profile JSON addons metadata anyway to ensure it's tracked
@@ -2090,6 +2659,27 @@ ipcMain.handle('get-installed-addons', async (e, { profile_id, type, world_name 
   const profile = profiles[profile_id];
   if (!profile) return { success: false };
 
+  if (type === 'modpack') {
+    const modpackMods = [];
+    if (profile.addons) {
+      profile.addons.forEach(addon => {
+        if (addon.type === 'modpack') {
+          modpackMods.push({
+            filename: addon.filename,
+            display_name: addon.filename ? addon.filename.replace(/\.mrpack$/i, '') : 'Modpack',
+            enabled: true,
+            type: 'modpack',
+            size_mb: '',
+            project_id: addon.project_id,
+            version_id: addon.version_id,
+            missing: false
+          });
+        }
+      });
+    }
+    return { success: true, mods: modpackMods };
+  }
+
   const mcDir = paths.getMcDir();
   const profileDir = profile.directory || mcDir;
 
@@ -2119,18 +2709,19 @@ ipcMain.handle('get-installed-addons', async (e, { profile_id, type, world_name 
       if (addon.type !== type) return;
 
       const existingMod = existingFilesMap.get(addon.filename);
+      const isEnabled = addon.state ? (addon.state !== 'disabled') : (addon.enabled !== false);
       if (existingMod) {
         // File exists, merge metadata
         existingMod.project_id = addon.project_id;
         existingMod.version_id = addon.version_id;
         // Use state from metadata if available, otherwise infer from filename
-        existingMod.enabled = addon.state === 'enabled';
+        existingMod.enabled = isEnabled;
       } else {
         // File is missing, add it with missing flag
         finalMods.push({
           filename: addon.filename,
           display_name: addon.filename,
-          enabled: addon.state === 'enabled',
+          enabled: isEnabled,
           type: 'file',
           size_mb: 'Missing file',
           project_id: addon.project_id,
@@ -2531,8 +3122,8 @@ ipcMain.handle('start-download-update', () => {
 })
 
 ipcMain.handle('quit-and-install', () => {
-  console.log("IPC: quit-and-install");
-  autoUpdater.quitAndInstall();
+  console.log("IPC: quit-and-install (silent=true, forceRunAfter=true)");
+  autoUpdater.quitAndInstall(true, true);
 })
 
 // AutoUpdater Events
@@ -2621,6 +3212,86 @@ ipcMain.handle('get-forge-mc-versions', async () => {
   }
 })
 
+function getMcVersionFromNeoForge(nfVersion) {
+  if (nfVersion.startsWith('1.')) {
+    return nfVersion.split('-')[0];
+  }
+  const parts = nfVersion.split('.');
+  if (parts.length >= 2) {
+    const major = parts[0];
+    const minor = parts[1];
+    const majorNum = parseInt(major, 10);
+
+    if (major === '0') {
+      // For snapshot / special versions like 0.25w14craftmine.3-beta
+      return minor.split('-')[0];
+    }
+
+    if (majorNum >= 26) {
+      // A partir de la versión 1.21.11, Minecraft oficial cambió su esquema de versiones a año.drop.patch (ej. 26.1, 26.1.2, 26.2).
+      // El formato de NeoForge es año.drop.patch.build (ej. 26.1.2.78 o 26.2.0.8-beta)
+      const patch = parts[2] || '0';
+      return patch === '0' ? `${major}.${minor}` : `${major}.${minor}.${patch}`;
+    } else {
+      // Para versiones anteriores (1.20.x y 1.21.x hasta 1.21.11) donde Minecraft mantenía el prefijo "1." y NeoForge no (20.x, 21.x)
+      return minor === '0' ? `1.${major}` : `1.${major}.${minor}`;
+    }
+  }
+  return null;
+}
+
+async function getNeoForgeAllVersions() {
+  try {
+    const res = await axios.get('https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge', { timeout: 5000 });
+    if (res.data && Array.isArray(res.data.versions)) {
+      return res.data.versions;
+    }
+  } catch (e) {}
+  try {
+    const resXml = await axios.get('https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml', { timeout: 5000 });
+    const matches = [...resXml.data.matchAll(/<version>(.*?)<\/version>/g)].map(m => m[1]);
+    return matches;
+  } catch (e) {
+    console.error('Error fetching NeoForge versions:', e.message);
+    return [];
+  }
+}
+
+ipcMain.handle('get-quilt-mc-versions', async () => {
+  try {
+    const response = await axios.get('https://meta.quiltmc.org/v3/versions/game', { timeout: 5000 });
+    const data = response.data;
+    const versions = data.filter(v => v.stable).map(v => v.version);
+    return versions;
+  } catch (err) {
+    console.error('Error fetching quilt versions:', err);
+    return [];
+  }
+});
+
+ipcMain.handle('get-neoforge-mc-versions', async () => {
+  try {
+    const allVersions = await getNeoForgeAllVersions();
+    const mcVersions = allVersions
+      .map(v => getMcVersionFromNeoForge(v))
+      .filter((v, i, arr) => v && arr.indexOf(v) === i)
+      .sort((a, b) => {
+        const aParts = a.split('.').map(Number);
+        const bParts = b.split('.').map(Number);
+        for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+          const aVal = aParts[i] || 0;
+          const bVal = bParts[i] || 0;
+          if (aVal !== bVal) return bVal - aVal;
+        }
+        return 0;
+      });
+    return mcVersions;
+  } catch (err) {
+    console.error('Error fetching neoforge versions:', err);
+    return [];
+  }
+});
+
 ipcMain.handle('get-fabric-mc-versions', async () => {
   try {
     const response = await axios.get('https://meta.fabricmc.net/v2/versions/game', { timeout: 5000 });
@@ -2674,6 +3345,24 @@ ipcMain.handle('get-loader-versions', async (e, { type, mc_version }) => {
       });
 
       return versions;
+    } else if (type === 'quilt') {
+      const response = await axios.get(`https://meta.quiltmc.org/v3/versions/loader/${mc_version}`, { timeout: 5000 });
+      const data = response.data;
+      return data.map(v => v.loader.version);
+    } else if (type === 'neoforge') {
+      const allVersions = await getNeoForgeAllVersions();
+      const versions = allVersions.filter(v => getMcVersionFromNeoForge(v) === mc_version);
+      versions.sort((a, b) => {
+        const aParts = a.split(/[-.]/).map(x => parseInt(x, 10) || 0);
+        const bParts = b.split(/[-.]/).map(x => parseInt(x, 10) || 0);
+        for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+          const aVal = aParts[i] || 0;
+          const bVal = bParts[i] || 0;
+          if (aVal !== bVal) return bVal - aVal;
+        }
+        return 0;
+      });
+      return versions;
     }
     return [];
   } catch (err) {
@@ -2702,7 +3391,48 @@ function buildMavenUrl(baseUrl, group, artifact, version, fileName) {
   return `${baseUrl}${group.replace(/\./g, '/')}/${artifact}/${version}/${fileName}`;
 }
 
+function upgradeAsmInVersionJson(mcDir, versionName) {
+  if (!versionName) return;
+  const jsonPath = path.join(mcDir, 'versions', versionName, `${versionName}.json`);
+  if (!fs.existsSync(jsonPath)) return;
+  try {
+    const profileJson = fs.readJsonSync(jsonPath);
+    let modified = false;
+    if (profileJson.libraries && Array.isArray(profileJson.libraries)) {
+      for (const lib of profileJson.libraries) {
+        if (lib.name && lib.name.startsWith('org.ow2.asm:')) {
+          const parts = lib.name.split(':');
+          // Upgrade ASM to 9.10.1 to support Java 25 / Class file major version 69
+          if (parts[2] && parts[2] !== '9.10.1') {
+            console.log(`[AsmFix] Upgrading ASM library in ${versionName} from ${lib.name} to 9.10.1 for Java 25 / MC 26.x support`);
+            parts[2] = '9.10.1';
+            lib.name = parts.join(':');
+            lib.url = 'https://maven.fabricmc.net/';
+            modified = true;
+          }
+        } else if (lib.name && lib.name.startsWith('net.fabricmc:sponge-mixin:')) {
+          const parts = lib.name.split(':');
+          // Upgrade sponge-mixin to 0.17.3+mixin.0.8.7 to fix LaunchClassLoader NoClassDefFoundError on Java 25
+          if (parts[2] && parts[2] !== '0.17.3+mixin.0.8.7') {
+            console.log(`[MixinFix] Upgrading sponge-mixin in ${versionName} from ${lib.name} to 0.17.3+mixin.0.8.7 for Java 25 support`);
+            parts[2] = '0.17.3+mixin.0.8.7';
+            lib.name = parts.join(':');
+            lib.url = 'https://maven.fabricmc.net/';
+            modified = true;
+          }
+        }
+      }
+    }
+    if (modified) {
+      fs.writeJsonSync(jsonPath, profileJson, { spaces: 2 });
+    }
+  } catch (err) {
+    console.warn(`[AsmFix] Failed to check/upgrade ASM in ${versionName}:`, err.message);
+  }
+}
+
 function verifyFabricLibraries(mcDir, fabricVersionName) {
+  upgradeAsmInVersionJson(mcDir, fabricVersionName);
   const fabricJsonPath = path.join(mcDir, 'versions', fabricVersionName, `${fabricVersionName}.json`);
   if (!fs.existsSync(fabricJsonPath)) return { ok: false, missing: [], error: 'Fabric profile JSON not found' };
 
@@ -2824,42 +3554,15 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       total: 100
     });
 
-    // Determine version type and components
-    const versionLower = version_id.toLowerCase();
-    let versionType = 'release';
-    let mcVersion = version_id;
-    let loaderVersion = null;
+    // Determine version type and components using universal versionUtils
+    const verInfo = versionUtils.parseVersionString(version_id) || { type: 'vanilla', mcVersion: version_id, loaderVersion: null };
+    let versionType = verInfo.type === 'vanilla' ? 'release' : verInfo.type;
+    let mcVersion = verInfo.mcVersion;
+    let loaderVersion = verInfo.loaderVersion;
     let customVersionId = version_id;
 
-    if (versionLower.startsWith('forge-')) {
-      versionType = 'forge';
-      const parts = version_id.split('-'); // e.g. ["forge", "1.20.1", "47.2.0"]
-      if (parts.length >= 3) {
-        mcVersion = parts[1];
-        loaderVersion = parts.slice(2).join('-');
-      } else {
-        mcVersion = parts[1];
-      }
-    } else if (versionLower.startsWith('fabric-loader-')) {
-      // Format: fabric-loader-LOADER-MCVERSION (e.g. fabric-loader-0.19.1-26.1)
-      versionType = 'fabric';
-      const parts = version_id.split('-');
-      if (parts.length >= 4) {
-        loaderVersion = parts[2]; // "0.19.1"
-        mcVersion = parts[3]; // "26.1"
-      }
-    } else if (versionLower.startsWith('fabric-')) {
-      // Format: fabric-MCVERSION-LOADER (e.g. fabric-1.21.7-0.15.6)
-      versionType = 'fabric';
-      const parts = version_id.split('-');
-      if (parts.length >= 3) {
-        mcVersion = parts[1];
-        loaderVersion = parts.slice(2).join('-');
-      } else {
-        mcVersion = parts[1];
-      }
-    } else {
-      // Vanilla: Detect type properly (Default is release)
+    if (verInfo.type === 'vanilla') {
+      const versionLower = mcVersion.toLowerCase();
       if (versionLower.includes('snapshot') || versionLower.includes('pre') || versionLower.includes('rc') || /^\d+w\d+[a-z]$/.test(versionLower)) {
         versionType = 'snapshot';
       } else if (versionLower.includes('alpha') || versionLower.startsWith('a')) {
@@ -2867,6 +3570,7 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       } else if (versionLower.includes('beta') || versionLower.startsWith('b')) {
         versionType = 'old_beta';
       }
+      customVersionId = mcVersion;
     }
 
     console.log(`[installVersionLogic] Type: ${versionType}, MC Version: ${mcVersion}, Loader: ${loaderVersion}, Full ID: ${version_id}`);
@@ -2902,11 +3606,40 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       }
     }
 
+    if (versionType === 'quilt' && loaderVersion) {
+      // Quilt: Download the profile JSON to the versions folder
+      const quiltVersionName = `quilt-loader-${loaderVersion}-${mcVersion}`;
+      const quiltDir = path.join(mcDir, 'versions', quiltVersionName);
+      const quiltJsonPath = path.join(quiltDir, `${quiltVersionName}.json`);
+
+      if (!fs.existsSync(quiltJsonPath)) {
+        if (onProgress) onProgress({
+          type: 'version-install', task: 'Downloading Quilt installation...', version: version_id, current: 5, total: 100
+        });
+
+        try {
+          const res = await fetch(`https://meta.quiltmc.org/v3/versions/loader/${mcVersion}/${loaderVersion}/profile/json`).catch(() => {
+            throw new Error('Network error or no internet connection');
+          });
+          if (!res.ok) throw new Error(`Quilt API returned ${res.status}`);
+          const profileJson = await res.json();
+          fs.ensureDirSync(quiltDir);
+          fs.writeJsonSync(quiltJsonPath, profileJson, { spaces: 2 });
+          console.log(`[installVersionLogic] Saved Quilt profile JSON: ${quiltJsonPath}`);
+          customVersionId = quiltVersionName;
+        } catch (err) {
+          throw new Error(`Failed to download Quilt profile: ${err.message}`);
+        }
+      } else {
+        customVersionId = quiltVersionName;
+      }
+    }
+
     let forgeInstallerPath = null;
     if (versionType === 'forge' && loaderVersion) {
       // Forge: Download the installer JAR to the .HWLauncher/temp location
       // MCLC requires the installer JAR for *every* launch for modern Forge.
-      const forgeFileName = `${version_id}-installer.jar`;
+      const forgeFileName = `forge-${mcVersion}-${loaderVersion}-installer.jar`;
       const tempForgeDir = path.join(mcDir, '.HWLauncher', 'temp');
       fs.ensureDirSync(tempForgeDir);
       forgeInstallerPath = path.join(tempForgeDir, forgeFileName);
@@ -2929,6 +3662,35 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
           console.log(`[installVersionLogic] Saved Forge installer: ${forgeInstallerPath}`);
         } catch (err) {
           throw new Error(`Failed to download Forge installer: ${err.message}`);
+        }
+      }
+    }
+
+    let neoforgeInstallerPath = null;
+    if (versionType === 'neoforge' && loaderVersion) {
+      // NeoForge: Download the installer JAR to the .HWLauncher/temp location
+      const neoforgeFileName = `neoforge-${loaderVersion}-installer.jar`;
+      const tempNeoForgeDir = path.join(mcDir, '.HWLauncher', 'temp');
+      fs.ensureDirSync(tempNeoForgeDir);
+      neoforgeInstallerPath = path.join(tempNeoForgeDir, neoforgeFileName);
+
+      if (!fs.existsSync(neoforgeInstallerPath)) {
+        if (onProgress) onProgress({
+          type: 'version-install', task: 'Downloading NeoForge installer...', version: version_id, current: 5, total: 100
+        });
+
+        try {
+          const neoforgeUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${loaderVersion}/neoforge-${loaderVersion}-installer.jar`;
+          console.log(`[installVersionLogic] Downloading NeoForge from: ${neoforgeUrl}`);
+          const res = await fetch(neoforgeUrl).catch(() => {
+            throw new Error('Network error or no internet connection');
+          });
+          if (!res.ok) throw new Error(`NeoForge Maven returned ${res.status}`);
+          const buffer = await res.arrayBuffer();
+          fs.writeFileSync(neoforgeInstallerPath, Buffer.from(buffer));
+          console.log(`[installVersionLogic] Saved NeoForge installer: ${neoforgeInstallerPath}`);
+        } catch (err) {
+          throw new Error(`Failed to download NeoForge installer: ${err.message}`);
         }
       }
     }
@@ -2989,7 +3751,7 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
     }
 
     // Set the version type correctly. MCLC needs 'release' for the base vanilla assets part!
-    const resolvedVersionType = (versionType === 'forge' || versionType === 'fabric') ? 'release' : versionType;
+    const resolvedVersionType = (versionType === 'forge' || versionType === 'fabric' || versionType === 'neoforge' || versionType === 'quilt' || versionType === 'optifine') ? 'release' : versionType;
 
     const launchOptions = {
       authorization: { access_token: 'null', client_token: 'null', uuid: 'null', name: 'Installer', user_properties: {} },
@@ -3001,9 +3763,9 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       customArgs: []
     };
 
-    if (versionType === 'fabric') {
+    if (versionType === 'fabric' || versionType === 'quilt') {
       launchOptions.version.custom = customVersionId;
-      if (fabricJsonPathVar) launchOptions.overrides = { ...launchOptions.overrides, versionJson: fabricJsonPathVar };
+      if (typeof fabricJsonPathVar !== 'undefined' && fabricJsonPathVar) launchOptions.overrides = { ...launchOptions.overrides, versionJson: fabricJsonPathVar };
     }
 
     // We only use MCLC to download the base vanilla assets/libraries.
@@ -3120,16 +3882,63 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       });
     }
 
-    // ─── Fabric: Verify & repair libraries after MCLC download ───────────────
-    if (versionType === 'fabric' && loaderVersion && !downloadInfo.cancelled) {
-      const fabricVersionName = `fabric-loader-${loaderVersion}-${mcVersion}`;
+    if (versionType === 'neoforge' && neoforgeInstallerPath) {
+      console.log('[installVersionLogic] NeoForge Phase 2: Running NeoForge installer permanently...');
       if (onProgress) onProgress({
-        type: 'version-install', task: 'Verifying Fabric libraries...',
+        type: 'version-install', task: 'Running NeoForge installer (this creates the versions/ folder)...',
+        version: version_id, current: 50, total: 100, percentage: 50
+      });
+
+      const jPath = launchOptions.javaPath || 'java';
+
+      await new Promise((resolve, reject) => {
+        const { spawn } = require('child_process');
+        const installerProcess = spawn(jPath, [
+          '-jar', neoforgeInstallerPath,
+          '--installClient'
+        ], { cwd: mcDir, stdio: ['ignore', 'pipe', 'pipe'] });
+
+        downloadInfo.gameProcess = installerProcess;
+
+        installerProcess.stdout?.on('data', (data) => {
+          const msg = data.toString().trim();
+          if (msg) console.log('[NeoForge Installer]', msg);
+        });
+        installerProcess.stderr?.on('data', (data) => {
+          const msg = data.toString().trim();
+          if (msg) console.log('[NeoForge Installer ERR]', msg);
+        });
+
+        installerProcess.on('close', (code) => {
+          console.log(`[NeoForge Installer] Exited with code ${code}`);
+          if (downloadInfo.cancelled) { resolve(); return; }
+          if (code === 0) {
+            try { fs.removeSync(path.dirname(neoforgeInstallerPath)); } catch (e) { }
+            resolve();
+          } else {
+            reject(new Error(`NeoForge installer failed with exit code ${code}`));
+          }
+        });
+
+        installerProcess.on('error', (err) => {
+          console.error('[NeoForge Installer] Spawn error:', err);
+          reject(new Error(`Could not run NeoForge installer: ${err.message}`));
+        });
+      });
+    }
+
+    // ─── Fabric & Quilt: Verify & repair libraries after MCLC download ───────────────
+    if ((versionType === 'fabric' || versionType === 'quilt') && loaderVersion && !downloadInfo.cancelled) {
+      const loaderVersionName = versionType === 'fabric'
+        ? `fabric-loader-${loaderVersion}-${mcVersion}`
+        : `quilt-loader-${loaderVersion}-${mcVersion}`;
+      if (onProgress) onProgress({
+        type: 'version-install', task: `Verifying ${versionType === 'fabric' ? 'Fabric' : 'Quilt'} libraries...`,
         version: version_id, current: 95, total: 100, percentage: 95
       });
-      const libsOk = await downloadMissingFabricLibraries(mcDir, fabricVersionName, onProgress);
+      const libsOk = await downloadMissingFabricLibraries(mcDir, loaderVersionName, onProgress);
       if (!libsOk && onMessage) {
-        onMessage('Warning: Some Fabric libraries could not be downloaded. The game may fail to start.');
+        onMessage(`Warning: Some ${versionType === 'fabric' ? 'Fabric' : 'Quilt'} libraries could not be downloaded. The game may fail to start.`);
       }
     }
 
@@ -3568,6 +4377,9 @@ ipcMain.handle('ms-write-verified', async (e, emailKey, email, username, uuid, f
     userData.firebase_ms_uid = firebaseUid;
     userData.firebase_ms_refresh_token = firebaseRefreshToken;
     saveUserData(userData);
+    try {
+      addOrUpdateSavedAccount(userData);
+    } catch (saErr) { console.warn('[SavedAccounts] Could not persist MS verification:', saErr.message); }
 
     // Get a fresh idToken to write to Firestore
     const refreshed = await refreshFirebaseToken(firebaseRefreshToken);
@@ -3582,6 +4394,7 @@ ipcMain.handle('ms-write-verified', async (e, emailKey, email, username, uuid, f
     await fsUpdate(`users/${firebaseUid}`, {
       accountType: 'microsoft', username, uuid,
       mcUuid: uuid, usernameLower: usernameLower(username),
+      clientVersion: app.getVersion(),
       microsoftVerified: true,
       updatedAt: new Date().toISOString()
     }, refreshed.idToken);
@@ -3597,7 +4410,7 @@ ipcMain.handle('ms-write-verified', async (e, emailKey, email, username, uuid, f
 /**
  * Helper to refresh Microsoft Session and return valid auth tokens
  */
-async function refreshMicrosoftSession(userData) {
+async function refreshMicrosoftSession(userData, force = false) {
   if (userData.account_type !== 'microsoft' || !userData.msmc_auth) {
     return {
       success: false,
@@ -3605,6 +4418,18 @@ async function refreshMicrosoftSession(userData) {
       client_token: "null",
       uuid: "null",
       name: userData.username || "Steve"
+    };
+  }
+
+  // Use cached token if refreshed within the last 1 hour (3600000 ms) to speed up game launch
+  if (!force && userData.mc_token && userData.uuid && userData.last_refresh_time && (Date.now() - userData.last_refresh_time < 3600000)) {
+    console.log("[Auth] Using cached Microsoft session (fast launch)");
+    return {
+      success: true,
+      access_token: userData.mc_token,
+      client_token: userData.uuid,
+      uuid: userData.uuid,
+      name: userData.username
     };
   }
 
@@ -3619,6 +4444,7 @@ async function refreshMicrosoftSession(userData) {
       userData.uuid = mcObj.profile.id;
       userData.mc_token = mcObj.mcToken;
       userData.msmc_auth = xboxManager.save();
+      userData.last_refresh_time = Date.now();
 
       // Save skin URL if available
       if (mcObj.profile.skins && mcObj.profile.skins.length > 0) {
@@ -3627,6 +4453,9 @@ async function refreshMicrosoftSession(userData) {
       }
 
       saveUserData(userData);
+      try {
+        addOrUpdateSavedAccount(userData);
+      } catch (saErr) {}
       console.log("[Auth] Token successfully refreshed!");
 
       return {
@@ -3695,6 +4524,7 @@ async function refreshMicrosoftSession(userData) {
 }
 
 let currentGameProcess = null;
+let activeGameProcesses = new Set();
 let isLaunchCancelled = false;
 
 // Lock to prevent race conditions when updating profile metadata
@@ -3702,42 +4532,45 @@ const profileUpdateLocks = new Map();
 
 ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverIp }) => {
   console.log(`[Launch] launch-profile called with profileId: ${profileId}, force: ${force}, serverIp: ${serverIp || 'none'}`);
+  if (activeGameProcesses.size > 0 && !force) {
+    console.log("[Launch] Minecraft is already running and force is false.");
+    return { status: 'already_running' };
+  }
   try {
     isLaunchCancelled = false;
     const profiles = profileManager.loadProfiles().profiles;
     const profile = profiles[profileId];
     if (!profile) return { status: 'error', error: "Profile not found" };
 
-    const isForge = profile.version.toLowerCase().includes('forge');
-    const isFabric = profile.version.toLowerCase().includes('fabric');
+    const verInfo = versionUtils.parseVersionString(profile.version) || { type: 'vanilla', mcVersion: profile.version, loaderVersion: null };
+    const isForge = verInfo.type === 'forge';
+    const isFabric = verInfo.type === 'fabric';
+    const isNeoForge = verInfo.type === 'neoforge';
+    const isQuilt = verInfo.type === 'quilt';
+    const isOptiFine = verInfo.type === 'optifine';
+    const isModded = isForge || isFabric || isNeoForge || isQuilt || isOptiFine;
 
-    // Robust version extraction
-    let mcVersion = profile.version;
-    if (isFabric && profile.version.startsWith('fabric-loader-')) {
-      const parts = profile.version.split('-');
-      // Fabric format: fabric-loader-LOADER-MCVERSION
-      if (parts.length >= 4) mcVersion = parts[3];
-    } else if (isForge || isFabric) {
-      const versionMatch = profile.version.match(/(\d+\.\d+(\.\d+)?)/);
-      if (versionMatch) mcVersion = versionMatch[0];
-    }
-
+    let mcVersion = verInfo.mcVersion;
     const actualMcDir = paths.getMcDir();
 
     // 0. Synchronization Check (Version + Addons)
     let isMissingVersion = false;
     let expectedVersionDirName = profile.version;
 
-    // For Fabric, ensure we have the correct directory name format
-    if (isFabric) {
-      if (profile.version.startsWith('fabric-') && !profile.version.startsWith('fabric-loader-')) {
-        // Format: fabric-MCVERSION-LOADER -> transform to fabric-loader-LOADER-MCVERSION
-        const parts = profile.version.split('-');
-        if (parts.length >= 3) {
-          expectedVersionDirName = `fabric-loader-${parts.slice(2).join('-')}-${parts[1]}`;
-        }
+    // Check which directory actually exists in versions/
+    const possibleDirs = versionUtils.getPossibleDirNames(profile.version);
+    const versionsFolderPath = path.join(actualMcDir, 'versions');
+    let foundDir = null;
+    for (const dirName of possibleDirs) {
+      if (fs.existsSync(path.join(versionsFolderPath, dirName))) {
+        foundDir = dirName;
+        break;
       }
-      // fabric-loader-LOADER-MCVERSION format is already correct
+    }
+    if (foundDir) {
+      expectedVersionDirName = foundDir;
+    } else if (possibleDirs.length > 0) {
+      expectedVersionDirName = possibleDirs[0];
     }
 
     const versionPath = path.join(actualMcDir, 'versions', expectedVersionDirName);
@@ -3754,8 +4587,9 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       const profileDir = profile.directory || actualMcDir;
       for (const addon of profile.addons) {
         // Skip disabled addons — they are intentionally off
-        if (addon.state === 'disabled') continue;
+        if (addon.state === 'disabled' || (addon.state !== 'enabled' && addon.enabled === false)) continue;
         if (addon.type === 'datapack') continue; // Skip datapacks since they require world
+        if (addon.type === 'modpack') continue; // Skip modpacks since their contents were already unpacked
 
         let targetDir = path.join(profileDir, 'mods'); // default
         if (addon.type === 'resourcepack') targetDir = path.join(profileDir, 'resourcepacks');
@@ -3844,7 +4678,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       timeout: 10000,
       overrides: {
         gameDirectory: profile.directory || actualMcDir,
-        maxSockets: 4
+        maxSockets: 16
       },
       memory: {
         max: "4G",
@@ -3852,24 +4686,110 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       }
     };
 
-    if (isForge) {
-      options.version.custom = profile.version;
-    }
-    if (isFabric) {
+    if (isModded && expectedVersionDirName !== mcVersion) {
       options.version.custom = expectedVersionDirName;
     }
 
-    // 2.1. Fabric: Verify & repair libraries before launch
-    if (isFabric && profile.version) {
+    // 2.0.5. Custom Loader JVM Arguments (NeoForge, Forge, Fabric, Quilt, OptiFine)
+    // MCLC ignores arguments.jvm from custom version JSONs, which causes modern loaders like NeoForge
+    // to crash on startup with "The installation is corrupted!" due to missing -DlibraryDirectory=${library_directory} etc.
+    const customVersionName = options.version.custom || (isModded ? expectedVersionDirName : null);
+    if (customVersionName) {
+      upgradeAsmInVersionJson(actualMcDir, customVersionName);
+      const customJsonPath = path.join(actualMcDir, 'versions', customVersionName, `${customVersionName}.json`);
+      if (fs.existsSync(customJsonPath)) {
+        try {
+          const customJson = fs.readJsonSync(customJsonPath);
+          if (customJson.arguments && Array.isArray(customJson.arguments.jvm)) {
+            if (!options.customArgs) options.customArgs = [];
+            const fields = {
+              '${library_directory}': path.resolve(path.join(actualMcDir, 'libraries')),
+              '${classpath_separator}': process.platform === 'win32' ? ';' : ':',
+              '${version_name}': customVersionName,
+              '${game_directory}': actualMcDir,
+              '${assets_root}': path.resolve(path.join(actualMcDir, 'assets')),
+              '${assets_index_name}': customJson.assets || mcVersion,
+              '${auth_uuid}': auth.uuid,
+              '${auth_access_token}': auth.access_token,
+              '${clientid}': auth.access_token,
+              '${auth_xuid}': auth.access_token,
+              '${version_type}': 'release',
+              '${resolution_width}': '856',
+              '${resolution_height}': '482'
+            };
+
+            const processJvmArg = (argVal) => {
+              let strVal = typeof argVal === 'string' ? argVal : String(argVal);
+              for (const [key, val] of Object.entries(fields)) {
+                if (strVal.includes(key)) {
+                  strVal = strVal.split(key).join(val);
+                }
+              }
+              // Avoid duplicating arguments already in customArgs
+              if (!options.customArgs.includes(strVal)) {
+                options.customArgs.push(strVal);
+              }
+            };
+
+            for (const item of customJson.arguments.jvm) {
+              if (typeof item === 'string') {
+                processJvmArg(item);
+              } else if (typeof item === 'object' && item !== null) {
+                let allowed = true;
+                if (Array.isArray(item.rules)) {
+                  for (const rule of item.rules) {
+                    if (rule.action === 'allow' && rule.os && rule.os.name) {
+                      const currentOs = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
+                      if (rule.os.name !== currentOs) allowed = false;
+                    }
+                    if (rule.action === 'disallow' && rule.os && rule.os.name) {
+                      const currentOs = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
+                      if (rule.os.name === currentOs) allowed = false;
+                    }
+                  }
+                }
+                if (allowed && item.value) {
+                  if (Array.isArray(item.value)) {
+                    item.value.forEach(processJvmArg);
+                  } else {
+                    processJvmArg(item.value);
+                  }
+                }
+              }
+            }
+            console.log('[Launch] Added custom JVM arguments from profile JSON:', options.customArgs);
+          }
+        } catch (err) {
+          console.warn('[Launch] Failed to parse custom JVM arguments:', err.message);
+        }
+      }
+      // Fix Mixin ServiceLoader crash on Java 25 by explicitly specifying the Mixin service class
+      if (!options.customArgs) options.customArgs = [];
+      if (customVersionName.toLowerCase().includes('quilt')) {
+        if (!options.customArgs.includes('-Dmixin.service=org.quiltmc.loader.impl.launch.knot.MixinServiceKnot')) {
+          options.customArgs.push('-Dmixin.service=org.quiltmc.loader.impl.launch.knot.MixinServiceKnot');
+          console.log('[Launch] Added explicit Quilt Mixin service property for Java 25 support');
+        }
+      } else if (customVersionName.toLowerCase().includes('fabric')) {
+        if (!options.customArgs.includes('-Dmixin.service=net.fabricmc.loader.impl.launch.knot.MixinServiceKnot')) {
+          options.customArgs.push('-Dmixin.service=net.fabricmc.loader.impl.launch.knot.MixinServiceKnot');
+          console.log('[Launch] Added explicit Fabric Mixin service property for Java 25 support');
+        }
+      }
+    }
+
+    // 2.1. Fabric & Quilt: Verify & repair libraries before launch
+    if ((isFabric || isQuilt) && profile.version) {
       try {
-        if (mainWindow) mainWindow.webContents.send('info-message', 'Verifying Fabric libraries...');
-        const libsOk = await downloadMissingFabricLibraries(actualMcDir, profile.version, null);
+        const loaderLabel = isFabric ? 'Fabric' : 'Quilt';
+        if (mainWindow) mainWindow.webContents.send('info-message', `Verifying ${loaderLabel} libraries...`);
+        const libsOk = await downloadMissingFabricLibraries(actualMcDir, expectedVersionDirName, null);
         if (!libsOk) {
-          console.warn('[Launch] Some Fabric libraries are still missing after repair attempt.');
-          if (mainWindow) mainWindow.webContents.send('info-message', 'Warning: Some Fabric libraries may be missing.');
+          console.warn(`[Launch] Some ${loaderLabel} libraries are still missing after repair attempt.`);
+          if (mainWindow) mainWindow.webContents.send('info-message', `Warning: Some ${loaderLabel} libraries may be missing.`);
         }
       } catch (verifyErr) {
-        console.warn('[Launch] Fabric library verification failed:', verifyErr.message);
+        console.warn(`[Launch] ${isFabric ? 'Fabric' : 'Quilt'} library verification failed:`, verifyErr.message);
       }
     }
 
@@ -3945,7 +4865,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       if (!child) {
         console.error("[Launch] MCLC returned null child process (Java runtime or launch initialization failed).");
         presenceManager.safeRun(presenceManager.onGameClosed());
-        if (mainWindow) mainWindow.webContents.send('error', "No se pudo iniciar el juego. Verifica tu instalación de Java o memoria RAM.");
+        if (mainWindow) mainWindow.webContents.send('error', "Could not start the game. Please verify your Java installation and RAM allocation.");
         return;
       }
       if (isLaunchCancelled) {
@@ -3958,6 +4878,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       updateStreakAndSessions();
 
       currentGameProcess = child;
+      activeGameProcesses.add(child);
 
       // Update Presence / RPC state with PID
       presenceManager.safeRun(presenceManager.onGameLaunch({
@@ -3985,14 +4906,21 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
 
       child.on('close', () => {
         console.log("[Launch] Game process closed");
-        currentGameProcess = null;
-        presenceManager.safeRun(presenceManager.onGameClosed());
-        if (mainWindow) mainWindow.webContents.send('info-message', "Game Closed");
+        activeGameProcesses.delete(child);
+        if (activeGameProcesses.size === 0) {
+          currentGameProcess = null;
+          presenceManager.safeRun(presenceManager.onGameClosed());
+          if (mainWindow) mainWindow.webContents.send('info-message', "Game Closed");
+        }
       });
 
       child.on('error', (err) => {
         console.error("[Launch] Process Error:", err);
-        presenceManager.safeRun(presenceManager.onGameClosed());
+        activeGameProcesses.delete(child);
+        if (activeGameProcesses.size === 0) {
+          currentGameProcess = null;
+          presenceManager.safeRun(presenceManager.onGameClosed());
+        }
         if (mainWindow) mainWindow.webContents.send('error', "Process Error: " + err.message);
       });
     }).catch(err => {
@@ -4020,7 +4948,10 @@ ipcMain.handle('cancel-launch', async () => {
     if (currentGameProcess && currentGameProcess.pid) {
       process.kill(currentGameProcess.pid, 'SIGKILL');
       console.log('[cancel-launch] Killed game process');
-      currentGameProcess = null;
+      activeGameProcesses.delete(currentGameProcess);
+      if (activeGameProcesses.size === 0) {
+        currentGameProcess = null;
+      }
       return { success: true };
     }
     return { success: true, message: 'Launch marked as cancelled (pending process kill)' };
@@ -4044,6 +4975,7 @@ ipcMain.handle('open-folder-dialog', async () => {
 ipcMain.handle('social-get-auth', async () => {
   try {
     const auth = await getSocialAuth();
+    syncClientVersionToUsersDoc(auth);
     presenceManager.safeRun(presenceManager.setLauncherOnline());
     startPresencePolling();
     return { success: true, uid: auth.uid, accountType: auth.accountType, username: auth.username };
@@ -4069,6 +5001,8 @@ ipcMain.handle('stats-get-my-stats', async () => {
     
     let effectiveStreak = stats.streak || 0;
     let streakCompletedToday = false;
+    const dbMaxStreak = stats.maxStreak || 0; // Save original DB value BEFORE any modifications
+    const dbStreak = stats.streak || 0;       // Save original DB streak BEFORE overwrite
     
     if (lastDate === todayStr) {
       streakCompletedToday = true;
@@ -4077,9 +5011,26 @@ ipcMain.handle('stats-get-my-stats', async () => {
       effectiveStreak = 0;
     }
     
+    // Preserve the real maxStreak from DB BEFORE overwriting stats.streak
+    // This is critical: if the streak was just broken, stats.streak should still
+    // count toward maxStreak since it was valid until yesterday
+    const realMaxStreak = Math.max(dbMaxStreak, dbStreak);
+    
     // Override streak property for UI, and pass completion status
     stats.streak = effectiveStreak;
+    stats.maxStreak = realMaxStreak;
     stats.streakCompletedToday = streakCompletedToday;
+    
+    // If maxStreak in DB is lower than what we just computed, update it
+    // (this repairs users who had a streak but maxStreak was never properly saved)
+    if (realMaxStreak > dbMaxStreak) {
+      try {
+        const auth2 = await getSocialAuth().catch(() => null);
+        if (auth2) {
+          await fsUpdate(`users/${auth2.uid}/stats/main`, { maxStreak: realMaxStreak }, auth2.idToken);
+        }
+      } catch (e2) { /* non-critical */ }
+    }
     
     return { success: true, stats };
   } catch (e) {
@@ -4112,8 +5063,12 @@ ipcMain.handle('stats-get-user', async (e, targetUid) => {
       effectiveStreak = 0;
     }
     
+    // Preserve the real maxStreak from DB BEFORE overwriting stats.streak
+    const realMaxStreak = Math.max(stats.maxStreak || 0, stats.streak || 0);
+    
     // Override streak property for UI, and pass completion status
     stats.streak = effectiveStreak;
+    stats.maxStreak = realMaxStreak;
     stats.streakCompletedToday = streakCompletedToday;
 
     return { success: true, stats };
@@ -4131,17 +5086,62 @@ ipcMain.handle('social-search-user', async (e, query) => {
     const results = [];
     const seenUids = new Set([auth.uid]);
 
-    // Prefix range search on usernameLower (e.g. "abe" matches "abelosky")
     const token = q.toLowerCase();
-    const allResults = await fsQuery('users', [
-      { field: 'usernameLower', op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: token } },
-      { field: 'usernameLower', op: 'LESS_THAN', value: { stringValue: token + '\uf8ff' } }
-    ], auth.idToken, null, 20);
-    for (const u of allResults) {
-      if (!seenUids.has(u.id)) {
-        seenUids.add(u.id);
-        results.push({ uid: u.id, username: u.username, mcUuid: u.mcUuid || u.uuid, accountType: u.accountType || 'helloworld', avatarBase64: u.avatarBase64 || '' });
+
+    // Helper to process and push a user doc
+    const processUserDoc = (u, uid) => {
+      if (!u || seenUids.has(uid)) return;
+      seenUids.add(uid);
+      results.push({
+        uid: uid,
+        username: u.username || q,
+        mcUuid: u.mcUuid || u.uuid || '',
+        accountType: u.accountType || 'helloworld',
+        avatarBase64: u.avatarBase64 || ''
+      });
+      // Self-heal usernameLower if missing
+      if (!u.usernameLower && u.username) {
+        fsUpdate(`users/${uid}`, { usernameLower: u.username.toLowerCase() }, auth.idToken).catch(() => {});
       }
+    };
+
+    // 1. Direct check in 'usernames' index (exact lowercase username lookup)
+    try {
+      const unameDoc = await fsGet(`usernames/${token}`, auth.idToken);
+      if (unameDoc && unameDoc.uid) {
+        try {
+          const u = await fsGet(`users/${unameDoc.uid}`, auth.idToken);
+          processUserDoc(u, unameDoc.uid);
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    // 2. Prefix range search on usernameLower (standard search)
+    try {
+      const allResults = await fsQuery('users', [
+        { field: 'usernameLower', op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: token } },
+        { field: 'usernameLower', op: 'LESS_THAN', value: { stringValue: token + '\uf8ff' } }
+      ], auth.idToken, null, 20);
+      for (const u of allResults) {
+        processUserDoc(u, u.id);
+      }
+    } catch (_) {}
+
+    // 3. Fallback: Prefix search on exact 'username' field (handles users without usernameLower)
+    const queriesToTry = [q];
+    const cap = q.charAt(0).toUpperCase() + q.slice(1);
+    if (cap !== q) queriesToTry.push(cap);
+
+    for (const variant of queriesToTry) {
+      try {
+        const exactResults = await fsQuery('users', [
+          { field: 'username', op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: variant } },
+          { field: 'username', op: 'LESS_THAN', value: { stringValue: variant + '\uf8ff' } }
+        ], auth.idToken, null, 20);
+        for (const u of exactResults) {
+          processUserDoc(u, u.id);
+        }
+      } catch (_) {}
     }
 
     return { success: true, results };
@@ -4277,10 +5277,25 @@ ipcMain.handle('social-get-friends', async () => {
       } catch (_) { }
 
       if (fs.isGroup) {
+        const memberVersions = {};
+        for (const mUid of (fs.users || [])) {
+          if (mUid === auth.uid) continue;
+          try {
+            const mDoc = await fsGet(`users/${mUid}`, auth.idToken);
+            let mVer = (mDoc && mDoc.clientVersion) || '';
+            if (!mVer) {
+              try {
+                const mPres = await fetchPresenceForUser(mUid, auth, fs.id);
+                if (mPres && mPres.clientVersion) mVer = mPres.clientVersion;
+              } catch(_) {}
+            }
+            if (mVer || mDoc) memberVersions[mUid] = { username: (mDoc && mDoc.username) || 'Member', version: mVer };
+          } catch (_) {}
+        }
         return {
           friendshipId: fs.id,
           isGroup: true,
-          groupData: { name: fs.name, description: fs.description, imageBase64: fs.imageBase64, members: fs.users, admin: fs.admin, admins: fs.admins || [fs.admin] },
+          groupData: { name: fs.name, description: fs.description, imageBase64: fs.imageBase64, members: fs.users, admin: fs.admin, admins: fs.admins || [fs.admin], memberVersions },
           lastMsg, unread, lastMessageAt: fs.lastMessageAt
         };
       }
@@ -4290,11 +5305,12 @@ ipcMain.handle('social-get-friends', async () => {
       let profile = { uid: friendUid, username: 'Unknown', accountType: 'helloworld' };
       try { profile = await fsGet(`users/${friendUid}`, auth.idToken); } catch (_) { }
 
-      const presence = await fetchPresenceForUser(friendUid, auth);
+      const presence = await fetchPresenceForUser(friendUid, auth, fs.id);
+      const friendClientVersion = profile.clientVersion || (presence && presence.clientVersion) || '';
 
       return {
         friendshipId: fs.id,
-        profile: { ...profile, uid: friendUid },
+        profile: { ...profile, uid: friendUid, clientVersion: friendClientVersion },
         presence,
         lastMsg,
         unread,
@@ -4757,6 +5773,407 @@ ipcMain.handle('social-get-group-details', async (e, groupId) => {
   }
 });
 
+
+// ============================================================
+// WORKSHOP SYSTEM - IPC Handlers
+// ============================================================
+
+function _wkDec(str) {
+  if (!str) return '';
+  if (typeof str !== 'string') return String(str);
+  if (str.startsWith('http://') || str.startsWith('https://')) return str;
+  try {
+    const decoded = Buffer.from(str, 'base64').toString('utf8');
+    if (/^[\x20-\x7E]+$/.test(decoded)) return decoded;
+  } catch(e) {}
+  return str;
+}
+
+async function _wkAdminCheck(idToken) {
+  try {
+    const parts = idToken.split('.');
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+    const uid = payload.user_id || payload.sub || '';
+    const currentSecrets = loadSecrets();
+    const rawAdmin = currentSecrets.WORKSHOP_ADMIN_UID || APP_SECRETS.WORKSHOP_ADMIN_UID || '';
+    const adminUid = _wkDec(rawAdmin) || rawAdmin;
+    return uid === rawAdmin || uid === adminUid;
+  } catch(e) { return false; }
+}
+
+async function _wkModCheck(idToken) {
+  try {
+    if (await _wkAdminCheck(idToken)) return true;
+    const parts = idToken.split('.');
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+    const uid = payload.user_id || payload.sub || '';
+    const currentSecrets = loadSecrets();
+    let mods = currentSecrets.WORKSHOP_MODERATOR_UIDS || APP_SECRETS.WORKSHOP_MODERATOR_UIDS || [];
+    if (typeof mods === 'string') {
+      mods = mods.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    if (!Array.isArray(mods)) return false;
+    for (const m of mods) {
+      const decM = _wkDec(m) || m;
+      if (uid === m || uid === decM) return true;
+    }
+    return false;
+  } catch(e) { return false; }
+}
+
+async function _wkNotifyAdmin(item, authorName) {
+  const currentSecrets = loadSecrets();
+  const rawWebhook = currentSecrets.WORKSHOP_DISCORD_WEBHOOK || APP_SECRETS.WORKSHOP_DISCORD_WEBHOOK || '';
+  const webhookUrl = _wkDec(rawWebhook) || rawWebhook;
+  if (webhookUrl) {
+    try {
+      await axios.post(webhookUrl, {
+        username: "HelloWorld Workshop Notification",
+        embeds: [
+          {
+            title: "🛠️ **New Workshop Submission!**",
+            color: 0x00aa00,
+            fields: [
+              {
+                name: "**Type**",
+                value: String(item.type || 'Unknown').toUpperCase(),
+                inline: true
+              },
+              {
+                name: "**Author**",
+                value: String(authorName || 'Unknown'),
+                inline: true
+              },
+              {
+                name: "**Title**",
+                value: String(item.title || 'Untitled'),
+                inline: false
+              },
+              {
+                name: "**Description**",
+                value: String(item.desc || 'No description provided').slice(0, 1000),
+                inline: false
+              },
+              {
+                name: "**Item ID**",
+                value: `\`${item._id || ''}\``,
+                inline: false
+              }
+            ],
+            timestamp: new Date().toISOString()
+          }
+        ]
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'HelloWorldLauncher/1.0'
+        }
+      });
+      console.log('[Workshop] Successfully sent Discord notification to webhook.');
+    } catch(e) {
+      console.error('[Workshop] Discord notify failed:', e.response ? `${e.response.status} ${JSON.stringify(e.response.data)}` : e.message);
+    }
+  } else {
+    console.warn('[Workshop] No Discord webhook URL configured.');
+  }
+}
+
+// GET items (pub = approved public items)
+function wkParseItem(item) {
+  if (!item) return item;
+  if (item.snap && typeof item.snap.addonsJson === 'string') {
+    try { item.snap.addons = JSON.parse(item.snap.addonsJson); } catch(_) { item.snap.addons = []; }
+    delete item.snap.addonsJson;
+  }
+  return item;
+}
+
+ipcMain.handle('workshop-get-items', async (e, type, xst) => {
+  try {
+    let idToken = null;
+    try {
+      const auth = await getSocialAuth();
+      if (auth && auth.idToken) idToken = auth.idToken;
+    } catch (_) {}
+
+    const filters = [
+      { field: 'type', op: 'EQUAL', value: { stringValue: type || 'modpack' } },
+      { field: 'xst', op: 'EQUAL', value: { stringValue: xst || 'pub' } }
+    ];
+    // Pass null for orderBy to avoid composite index 403 errors in Firestore
+    const items = await fsQuery('workshop', filters, idToken, null, 100);
+    const parsed = items.map(wkParseItem);
+    parsed.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+    return { success: true, items: parsed };
+  } catch(e) {
+    console.error('[workshop-get-items]', e.message);
+    return { success: false, items: [], error: e.message };
+  }
+});
+
+// GET single item by id
+ipcMain.handle('workshop-get-item', async (e, id) => {
+  try {
+    let idToken = null;
+    try {
+      const auth = await getSocialAuth();
+      if (auth && auth.idToken) idToken = auth.idToken;
+    } catch (_) {}
+    const item = await fsGet(`workshop/${id}`, idToken);
+    return { success: true, item: wkParseItem({ ...item, id }) };
+  } catch(e) {
+    console.error('[workshop-get-item]', e.message);
+    return { success: false, error: e.message };
+  }
+});
+
+// GET my own items (any status)
+ipcMain.handle('workshop-get-my-items', async () => {
+  try {
+    const auth = await getSocialAuth();
+    const filters = [
+      { field: 'uid', op: 'EQUAL', value: { stringValue: auth.uid } }
+    ];
+    // Pass null for orderBy to avoid composite index 403 errors
+    const items = await fsQuery('workshop', filters, auth.idToken, null, 50);
+    const parsed = items.map(wkParseItem);
+    parsed.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+    return { success: true, items: parsed };
+  } catch(e) {
+    console.error('[workshop-get-my-items]', e.message);
+    return { success: false, items: [], error: e.message };
+  }
+});
+
+// SUBMIT new workshop item (status: pending = 'pnd')
+ipcMain.handle('workshop-submit-item', async (e, data) => {
+  try {
+    const auth = await getSocialAuth();
+    // Get author name from user profile
+    let authorName = auth.uid;
+    try {
+      const userDoc = await fsGet(`users/${auth.uid}`, auth.idToken);
+      authorName = userDoc.username || userDoc.displayName || auth.uid;
+    } catch(_) {}
+
+    const now = new Date().toISOString();
+    const docData = {
+      type: data.type || 'modpack',
+      xst: 'pnd',             // pending
+      uid: auth.uid,
+      authorName,
+      title: (data.title || '').slice(0, 30),
+      desc: (data.desc || '').slice(0, 200),
+      icon: data.icon || '',
+      isOfficial: false,
+      ts: now,
+      likes: 0,
+      likedBy: [],
+      downloads: 0,
+      dlUsers: [],
+      views: 0
+    };
+
+    // Add icon base64 if custom
+    if (data.iconB64) docData.iconB64 = data.iconB64;
+
+    // Add snapshot (can't use buildFSFields for nested, use REST directly)
+    const snapFields = {};
+    const snap = data.snap || {};
+    if (snap.version) snapFields.version = { stringValue: snap.version };
+    if (snap.jvmArgs) snapFields.jvmArgs = { stringValue: snap.jvmArgs };
+    // Addons as JSON string (Firestore array of maps is complex)
+    if (snap.addons && snap.addons.length > 0) {
+      snapFields.addonsJson = { stringValue: JSON.stringify(snap.addons) };
+    }
+
+    const fields = buildFSFields(docData);
+    fields.snap = { mapValue: { fields: snapFields } };
+
+    const url = `${FIRESTORE_BASE}/workshop`;
+    const res = await axios.post(url, { fields }, { headers: { Authorization: `Bearer ${auth.idToken}` } });
+    const docId = res.data.name ? res.data.name.split('/').pop() : 'unknown';
+
+    // Notify admin
+    await _wkNotifyAdmin({ ...docData, _id: docId }, authorName).catch(()=>{});
+
+    return { success: true, id: docId };
+  } catch(e) {
+    console.error('[workshop-submit-item]', e.message);
+    return { success: false, error: e.message };
+  }
+});
+
+// --- Workshop Stats IPC Handlers ---
+ipcMain.handle('workshop-record-view', async (e, id) => {
+  try {
+    let uid = null;
+    let idToken = null;
+    try {
+      const auth = await getSocialAuth();
+      if (auth && auth.uid) { uid = auth.uid; idToken = auth.idToken; }
+    } catch(_) {}
+    const item = await fsGet(`workshop/${id}`, idToken);
+    if (!item) return { success: false };
+    if (uid && item.uid === uid) return { success: false, reason: 'author' };
+    
+    let viewUsers = Array.isArray(item.viewUsers) ? item.viewUsers : (Array.isArray(item.vwUsers) ? item.vwUsers : []);
+    if (uid) {
+      if (viewUsers.includes(uid)) {
+        return { success: false, reason: 'already_viewed', views: item.views || viewUsers.length || 0 };
+      }
+      viewUsers.push(uid);
+    } else {
+      return { success: false, reason: 'not_logged_in', views: item.views || viewUsers.length || 0 };
+    }
+    const viewsCount = Math.max(viewUsers.length, (parseInt(item.views) || 0) + 1);
+    await fsUpdate(`workshop/${id}`, { viewUsers, views: viewsCount }, idToken);
+    return { success: true, views: viewsCount, viewUsers };
+  } catch(err) {
+    console.error('[workshop-record-view]', err.message);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('workshop-toggle-like', async (e, id) => {
+  try {
+    const auth = await getSocialAuth();
+    if (!auth || !auth.uid || !auth.idToken) {
+      return { success: false, error: 'You must be logged in to like items.' };
+    }
+    const item = await fsGet(`workshop/${id}`, auth.idToken);
+    if (!item) return { success: false, error: 'Modpack not found.' };
+    if (item.uid === auth.uid) {
+      return { success: false, error: 'You cannot like your own modpack.' };
+    }
+    let likedBy = Array.isArray(item.likedBy) ? item.likedBy : [];
+    const idx = likedBy.indexOf(auth.uid);
+    let isLiked = false;
+    if (idx !== -1) {
+      likedBy.splice(idx, 1);
+      isLiked = false;
+    } else {
+      likedBy.push(auth.uid);
+      isLiked = true;
+    }
+    const likesCount = likedBy.length;
+    await fsUpdate(`workshop/${id}`, { likedBy, likes: likesCount }, auth.idToken);
+    return { success: true, isLiked, likes: likesCount, likedBy };
+  } catch(err) {
+    console.error('[workshop-toggle-like]', err.message);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('workshop-record-download', async (e, id) => {
+  try {
+    let uid = null;
+    let idToken = null;
+    try {
+      const auth = await getSocialAuth();
+      if (auth && auth.uid) { uid = auth.uid; idToken = auth.idToken; }
+    } catch(_) {}
+    const item = await fsGet(`workshop/${id}`, idToken);
+    if (!item) return { success: false };
+    if (uid && item.uid === uid) return { success: false, reason: 'author' };
+    let dlUsers = Array.isArray(item.dlUsers) ? item.dlUsers : [];
+    if (uid) {
+      if (dlUsers.includes(uid)) {
+        return { success: false, reason: 'already_downloaded', downloads: dlUsers.length || item.downloads || 0 };
+      }
+      dlUsers.push(uid);
+    }
+    const downloadsCount = dlUsers.length;
+    await fsUpdate(`workshop/${id}`, { dlUsers, downloads: downloadsCount }, idToken);
+    return { success: true, downloads: downloadsCount, dlUsers };
+  } catch(err) {
+    console.error('[workshop-record-download]', err.message);
+    return { success: false, error: err.message };
+  }
+});
+
+// --- Workshop Admin IPC Handlers ---
+ipcMain.handle('workshop-check-admin', async () => {
+  try {
+    const auth = await getSocialAuth();
+    if (!auth || !auth.idToken) return { success: true, isAdmin: false, isMod: false };
+    const isAdmin = await _wkAdminCheck(auth.idToken);
+    const isMod = await _wkModCheck(auth.idToken);
+    return { success: true, isAdmin, isMod };
+  } catch(e) {
+    return { success: true, isAdmin: false, isMod: false };
+  }
+});
+
+ipcMain.handle('workshop-admin-get-items', async (e, statusFilter) => {
+  try {
+    const auth = await getSocialAuth();
+    if (!auth || !auth.idToken || !await _wkModCheck(auth.idToken)) {
+      return { success: false, items: [], error: 'Unauthorized: Admin or Moderator access required.' };
+    }
+    const filters = [];
+    if (statusFilter && statusFilter !== 'all') {
+      filters.push({ field: 'xst', op: 'EQUAL', value: { stringValue: statusFilter } });
+    }
+    const items = await fsQuery('workshop', filters, auth.idToken, null, 100);
+    const parsed = items.map(wkParseItem);
+    parsed.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+    return { success: true, items: parsed };
+  } catch(e) {
+    console.error('[workshop-admin-get-items]', e.message);
+    return { success: false, items: [], error: e.message };
+  }
+});
+
+ipcMain.handle('workshop-moderate-item', async (e, id, newStatus, note, isOfficial) => {
+  try {
+    const auth = await getSocialAuth();
+    if (!auth || !auth.idToken) {
+      return { success: false, error: 'Unauthorized: Access required.' };
+    }
+    const isAdmin = await _wkAdminCheck(auth.idToken);
+    const isMod = await _wkModCheck(auth.idToken);
+    if (!isMod) {
+      return { success: false, error: 'Unauthorized: Moderator or Admin access required.' };
+    }
+    const updateData = {};
+    if (newStatus) updateData.xst = newStatus;
+    if (typeof note === 'string') updateData.note = note;
+    if (typeof isOfficial === 'boolean') {
+      if (!isAdmin) {
+        return { success: false, error: 'Unauthorized: Only Admins can make items official.' };
+      }
+      updateData.isOfficial = isOfficial;
+    }
+    
+    await fsUpdate(`workshop/${id}`, updateData, auth.idToken);
+    return { success: true };
+  } catch(e) {
+    console.error('[workshop-moderate-item]', e.message);
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('workshop-delete-item', async (e, id) => {
+  try {
+    const auth = await getSocialAuth();
+    if (!auth || !auth.idToken) {
+      return { success: false, error: 'Unauthorized: You must be logged in.' };
+    }
+    const isAdmin = await _wkAdminCheck(auth.idToken);
+    if (!isAdmin) {
+      const item = await fsGet(`workshop/${id}`, auth.idToken);
+      if (!item || item.uid !== auth.uid) {
+        return { success: false, error: 'Unauthorized: You can only delete your own items.' };
+      }
+    }
+    await fsDel(`workshop/${id}`, auth.idToken);
+    return { success: true };
+  } catch(e) {
+    console.error('[workshop-delete-item]', e.message);
+    return { success: false, error: e.message };
+  }
+});
 // Required for Windows toast notifications - must be before app.whenReady()
 if (process.platform === 'win32') app.setAppUserModelId('com.abelosky.helloworldlauncher');
 

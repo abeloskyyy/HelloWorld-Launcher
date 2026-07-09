@@ -46,6 +46,7 @@ module.exports = {
     getLauncherDir: () => currentLauncherDir,
     getUserFilePath: () => path.join(currentLauncherDir, USER_FILE),
     getProfilesFilePath: () => path.join(currentLauncherDir, PROFILES_FILE),
+    getSavedAccountsFilePath: () => path.join(currentLauncherDir, 'saved_accounts.json'),
     getProfilesImgDir: () => path.join(currentLauncherDir, 'profiles-img'),
     getSkinsDir: () => path.join(currentLauncherDir, 'skin_packs'),
     refresh: reloadPaths // Call this after saving user.json if mcdir changes

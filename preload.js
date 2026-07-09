@@ -7,6 +7,12 @@ contextBridge.exposeInMainWorld('hwlAPI', {
     saveUserJson: (data) => ipcRenderer.invoke('save-user-json', data),
     loginMicrosoft: () => ipcRenderer.invoke('login-microsoft'),
     logout: () => ipcRenderer.invoke('logout'),
+    // Account Switcher
+    getSavedAccounts: () => ipcRenderer.invoke('get-saved-accounts'),
+    switchAccount: (accountId) => ipcRenderer.invoke('switch-account', accountId),
+    removeSavedAccount: (accountId) => ipcRenderer.invoke('remove-saved-account', accountId),
+    removeAllAccounts: () => ipcRenderer.invoke('remove-all-accounts'),
+
 
     // Profiles
     getProfiles: () => ipcRenderer.invoke('get-profiles'),
@@ -56,12 +62,19 @@ const pywebviewAPI = {
     // Auth & User
     get_user_json: () => ipcRenderer.invoke('get-user-json'),
     save_user_json: (username, mcdir, account_type) => ipcRenderer.invoke('save-user-json', { username, mcdir, account_type }),
+    save_user_settings: (data) => ipcRenderer.invoke('save-user-json', data),
     login_microsoft: () => ipcRenderer.invoke('login-microsoft'),
     login_helloworld: (email, password) => ipcRenderer.invoke('login-helloworld', email, password),
     logout_user: () => ipcRenderer.invoke('logout'),
     refresh_session: () => ipcRenderer.invoke('refresh-session'),
     check_internet: () => ipcRenderer.invoke('check-internet'),
     close_app: () => ipcRenderer.invoke('close-app'),
+    // Account Switcher
+    get_saved_accounts: () => ipcRenderer.invoke('get-saved-accounts'),
+    switch_account: (accountId) => ipcRenderer.invoke('switch-account', accountId),
+    remove_saved_account: (accountId) => ipcRenderer.invoke('remove-saved-account', accountId),
+    remove_all_accounts: () => ipcRenderer.invoke('remove-all-accounts'),
+
 
     // Profiles
     get_profiles: () => ipcRenderer.invoke('get-profiles'),
@@ -70,8 +83,8 @@ const pywebviewAPI = {
     get_profiles_for_addon: (type) => ipcRenderer.invoke('get-profiles-for-addon', type),
     add_profile: (name, version, icon, directory, jvm_args, java_path, enable_custom_skins) =>
         ipcRenderer.invoke('add-profile', name, version, icon, directory, jvm_args, java_path, enable_custom_skins),
-    edit_profile: (profile_id, name, version, loader, icon, ram_min, ram_max, jvm_args, width, height, java_path, enable_custom_skins) =>
-        ipcRenderer.invoke('edit-profile', profile_id, name, version, loader, icon, ram_min, ram_max, jvm_args, width, height, java_path, enable_custom_skins),
+    edit_profile: (profile_id, name, version, loader, icon, ram_min, ram_max, jvm_args, width, height, java_path, enable_custom_skins, addons) =>
+        ipcRenderer.invoke('edit-profile', profile_id, name, version, loader, icon, ram_min, ram_max, jvm_args, width, height, java_path, enable_custom_skins, addons),
     delete_profile: (profile_id) => ipcRenderer.invoke('delete-profile', profile_id),
     get_worlds: (profile_id) => ipcRenderer.invoke('get-worlds', profile_id),
 
@@ -80,6 +93,8 @@ const pywebviewAPI = {
     get_vanilla_versions: () => ipcRenderer.invoke('get-vanilla-versions'),
     get_forge_mc_versions: () => ipcRenderer.invoke('get-forge-mc-versions'),
     get_fabric_mc_versions: () => ipcRenderer.invoke('get-fabric-mc-versions'),
+    get_neoforge_mc_versions: () => ipcRenderer.invoke('get-neoforge-mc-versions'),
+    get_quilt_mc_versions: () => ipcRenderer.invoke('get-quilt-mc-versions'),
     get_loader_versions: (type, mc_version) => ipcRenderer.invoke('get-loader-versions', { type, mc_version }),
     install_version: (version_id) => ipcRenderer.invoke('install-version', version_id),
     get_launcher_version: () => ipcRenderer.invoke('get-version'),
@@ -117,9 +132,9 @@ const pywebviewAPI = {
     },
     get_mod_details: (project_id) => ipcRenderer.invoke('get-mod-details', project_id),
     get_mod_versions: (project_id, game_version, loader) => ipcRenderer.invoke('get-mod-versions', { project_id, game_version, loader }),
-    install_project: (project_id, version_id, profile_id, type, world_name) =>
+    install_project: (project_id, version_id, profile_id, type, world_name, force_reinstall) =>
         ipcRenderer.invoke('install-addon', {
-            project_id, version_id, profile_id, type, world_name
+            project_id, version_id, profile_id, type, world_name, force_reinstall
         }),
     on_mod_download_progress: (callback) => ipcRenderer.on('mod-download-progress', (_event, data) => callback(data)),
     toggle_mod: (arg1, arg2, arg3, arg4, arg5) => {
@@ -201,7 +216,22 @@ const pywebviewAPI = {
     social_demote_admin: (groupId, adminUid) => ipcRenderer.invoke('social-demote-admin', groupId, adminUid),
     social_get_group_details: (groupId) => ipcRenderer.invoke('social-get-group-details', groupId),
     get_user_profile: (uid) => ipcRenderer.invoke('get-user-profile', uid),
-    add_profile_link: (uid, url, title, type) => ipcRenderer.invoke('add-profile-link', uid, url, title, type)
+    add_profile_link: (uid, url, title, type) => ipcRenderer.invoke('add-profile-link', uid, url, title, type),
+
+    // Workshop
+    workshop_get_items: (type, xst) => ipcRenderer.invoke('workshop-get-items', type, xst),
+    workshop_get_item: (id) => ipcRenderer.invoke('workshop-get-item', id),
+    workshop_get_my_items: () => ipcRenderer.invoke('workshop-get-my-items'),
+    workshop_submit_item: (data) => ipcRenderer.invoke('workshop-submit-item', data),
+    workshop_record_view: (id) => ipcRenderer.invoke('workshop-record-view', id),
+    workshop_toggle_like: (id) => ipcRenderer.invoke('workshop-toggle-like', id),
+    workshop_record_download: (id) => ipcRenderer.invoke('workshop-record-download', id),
+
+    // Workshop Admin
+    workshop_check_admin: () => ipcRenderer.invoke('workshop-check-admin'),
+    workshop_admin_get_items: (status) => ipcRenderer.invoke('workshop-admin-get-items', status),
+    workshop_moderate_item: (id, status, note, isOfficial) => ipcRenderer.invoke('workshop-moderate-item', id, status, note, isOfficial),
+    workshop_delete_item: (id) => ipcRenderer.invoke('workshop-delete-item', id)
 };
 
 contextBridge.exposeInMainWorld('pywebview', {

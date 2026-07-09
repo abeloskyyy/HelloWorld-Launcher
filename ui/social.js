@@ -79,10 +79,18 @@
         return window.pywebview && window.pywebview.api;
     }
 
+    function formatVersionString(version) {
+        if (window.formatVersionString) return window.formatVersionString(version);
+        return version || 'Unknown Version';
+    }
+
     // --- Init ---
     window.initSocial = async function () {
         if (socialInitialized || socialInitializing) return;
         socialInitializing = true;
+        if (!window.APP_VERSION && api().get_launcher_version) {
+            try { window.APP_VERSION = await api().get_launcher_version(); } catch(e){}
+        }
         try {
             const res = await api().social_get_auth();
             if (res && res.success) {
@@ -311,7 +319,7 @@
                 p = { username: f.groupData.name, avatarBase64: f.groupData.imageBase64, accountType: 'helloworld' };
                 avatarHtml = f.groupData.imageBase64 ? `<img src="${f.groupData.imageBase64}" style="width:100%;height:100%;object-fit:cover">` : `<span class="avatar-letter">${f.groupData.name.charAt(0).toUpperCase()}</span>`;
                 nameHtml = `<i class="fas fa-users" style="margin-right:5px;color:#888;"></i>${escapeHtml(f.groupData.name)}`;
-                profileJson = escapeHtml(JSON.stringify({ ...p, isGroup: true, members: f.groupData.members, admin: f.groupData.admin, admins: f.groupData.admins || [f.groupData.admin], description: f.groupData.description || '' }));
+                profileJson = escapeHtml(JSON.stringify({ ...p, isGroup: true, members: f.groupData.members, admin: f.groupData.admin, admins: f.groupData.admins || [f.groupData.admin], memberVersions: f.groupData.memberVersions || {}, description: f.groupData.description || '' }));
                 actionHtml = `
                     ${unread}
                     <button class="social-action-btn social-btn-chat" title="Chat" onclick='socialOpenChat("${fidSafe}", ${profileJson})'><i class="fas fa-comment"></i></button>
@@ -363,7 +371,8 @@
                     </div>
                 `;
                 nameHtml = `${escapeHtml(p.username)} ${pb}<div style="margin-top:6px;">${presenceInline}</div>`;
-                profileJson = escapeHtml(JSON.stringify(p));
+                const pWithVer = Object.assign({}, p, { clientVersion: p.clientVersion || (presence && presence.clientVersion) || '' });
+                profileJson = escapeHtml(JSON.stringify(pWithVer));
                 const uidSafe = escapeHtml(p.uid);
                 const nameSafe = escapeHtml(p.username);
                 actionHtml = `
@@ -444,7 +453,7 @@
         const profileIds = Object.keys(profiles);
 
         if (profileIds.length === 0) {
-            container.innerHTML = '<div style="color: #888; text-align: center; padding: 20px;">No profiles available. Create one first.</div>';
+            container.innerHTML = '<div style="color: #888; text-align: center; padding: 20px;">No installations available. Create one first.</div>';
             return;
         }
 
@@ -467,7 +476,7 @@
         
         // Close the profile modal
         const profileModal = document.getElementById('userProfileModal');
-        if (profileModal) profileModal.style.display = 'none';
+        if (profileModal) profileModal.classList.remove('show');
         
         // Clear profile refresh interval
         if (profileRefreshInterval) {
@@ -779,7 +788,7 @@
         }
         
         // Show loading state
-        modal.style.display = 'flex';
+        modal.classList.add('show');
         
         // Show loading spinner
         const loadingSpinner = document.getElementById('profileLoadingSpinner');
@@ -865,7 +874,7 @@
         
         // Start 5-second refresh interval for presence
         profileRefreshInterval = setInterval(() => {
-            if (currentProfileUid && modal.style.display === 'flex') {
+            if (currentProfileUid && modal.classList.contains('show')) {
                 refreshProfilePresence(currentProfileUid, username);
             }
         }, 5000);
@@ -1207,7 +1216,7 @@
     if (closeProfileModalBtn) {
         closeProfileModalBtn.addEventListener('click', () => {
             const modal = document.getElementById('userProfileModal');
-            if (modal) modal.style.display = 'none';
+            if (modal) modal.classList.remove('show');
             // Clear profile refresh interval
             if (profileRefreshInterval) {
                 clearInterval(profileRefreshInterval);
@@ -1298,7 +1307,7 @@
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
         
-        const icon = type === 'error' ? 'fas fa-exclamation-circle' : 'fas fa-check-circle';
+        const icon = type === 'error' ? 'fas fa-exclamation-circle' : (type === 'info' ? 'fas fa-info-circle' : 'fas fa-check-circle');
         
         toast.innerHTML = `
             <i class="${icon} toast-icon"></i>
@@ -1832,6 +1841,67 @@
     };
 
     // --- Chat ---
+    function checkLauncherVersionCompatibility(profile) {
+        let myVer = window.APP_VERSION;
+        if (!myVer && window.pywebview && window.pywebview.api && window.pywebview.api.get_launcher_version) {
+            try { window.pywebview.api.get_launcher_version().then(v => { if (v) window.APP_VERSION = v; }); } catch(e){}
+        }
+        myVer = window.APP_VERSION || '2.0.0';
+        if (!profile) return { compatible: true };
+        if (profile.isGroup) {
+            const members = profile.memberVersions || {};
+            const memberKeys = Object.keys(members);
+            for (const uid of memberKeys) {
+                const m = members[uid];
+                if (m && m.version && m.version !== myVer) {
+                    return { compatible: false, message: `Cannot send message: ${m.username || 'Member'} is using launcher v${m.version} (you are on v${myVer}). Update required to prevent version bugs.` };
+                } else if (!m || !m.version) {
+                    return { compatible: false, message: `Cannot send message: ${m?.username || 'A member'} is using an older launcher version (pre-v2.0.0). Update required.` };
+                }
+            }
+            return { compatible: true };
+        } else {
+            const theirVer = profile.clientVersion || (activeChatFriendship && activeChatFriendship.profile && activeChatFriendship.profile.clientVersion) || '';
+            if (theirVer && theirVer !== myVer) {
+                return { compatible: false, message: `Cannot send message: ${profile.username || 'User'} is using launcher v${theirVer} (you are on v${myVer}). Update required to prevent version bugs.` };
+            } else if (!theirVer) {
+                return { compatible: false, message: `Cannot send message: ${profile.username || 'User'} is using an older launcher version (pre-v2.0.0). Update required to prevent version bugs.` };
+            }
+            return { compatible: true };
+        }
+    }
+
+    function updateChatInputVersionState(profile) {
+        const compat = checkLauncherVersionCompatibility(profile);
+        const input = document.getElementById('chatInput');
+        const sendBtn = document.getElementById('chatSendBtn');
+        if (!compat.compatible) {
+            if (input) {
+                input.disabled = true;
+                input.placeholder = compat.message;
+                input.style.opacity = '0.6';
+                input.style.cursor = 'not-allowed';
+            }
+            if (sendBtn) {
+                sendBtn.disabled = true;
+                sendBtn.style.opacity = '0.4';
+                sendBtn.style.cursor = 'not-allowed';
+            }
+        } else {
+            if (input) {
+                input.disabled = false;
+                input.placeholder = 'Type a message...';
+                input.style.opacity = '1';
+                input.style.cursor = 'text';
+            }
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.style.opacity = '1';
+                sendBtn.style.cursor = 'pointer';
+            }
+        }
+    }
+
     function openChat(fid, profile) {
         activeChatFriendship = { id: fid, profile };
         const panel = document.getElementById('socialPanelChat');
@@ -1850,6 +1920,17 @@
         chatEarliestTimestamp = null;
         lastMessageIds.clear();
         
+        // Check version compatibility immediately and after async version resolve
+        updateChatInputVersionState(profile);
+        if (api().get_launcher_version) {
+            api().get_launcher_version().then(ver => {
+                if (ver) {
+                    window.APP_VERSION = ver;
+                    updateChatInputVersionState(profile);
+                }
+            }).catch(()=>{});
+        }
+        
         // Clear message container immediately to prevent mixing
         const container = document.getElementById('chatMessages');
         if (container) container.innerHTML = '';
@@ -1859,9 +1940,9 @@
         try { api().social_mark_read(fid); updateBadge(); } catch (e) {}
         // Load reply state from Firestore
         loadReplyState();
-        // Start chat polling (smart scroll)
+        // Start chat polling (smart scroll) every 2.5s for fast real-time chat
         if (chatInterval) clearInterval(chatInterval);
-        chatInterval = setInterval(() => loadChatMessages(false), 15000);
+        chatInterval = setInterval(() => loadChatMessages(false), 2500);
     }
 
     function closeChat() {
@@ -2068,7 +2149,7 @@
                                     </div>
                                 </div>
                                 <div class="chat-profile-card-actions">
-                                    <button class="chat-profile-card-btn chat-profile-btn-view" onclick="viewSharedProfile('${escapeHtml(msg.content)}')">View Profile</button>
+                                    <button class="chat-profile-card-btn chat-profile-btn-view" onclick="viewSharedProfile('${escapeHtml(msg.content)}')">View Installation</button>
                                     <button class="chat-profile-card-btn chat-profile-btn-install" onclick="installSharedProfile('${escapeHtml(msg.content)}')">Install</button>
                                 </div>
                             </div>
@@ -2280,13 +2361,15 @@
         const existing = document.getElementById('chatContextMenu');
         if (existing) existing.remove();
         
+        if (!isMine) return;
+        
         const menu = document.createElement('div');
         menu.id = 'chatContextMenu';
         menu.className = 'chat-context-menu';
         
         let menuHtml = '';
         if (isMine) {
-            menuHtml += `<button class="context-menu-item context-menu-danger" data-action="delete">🗑 Delete</button>`;
+            menuHtml += `<button class="context-menu-item context-menu-danger" data-action="delete"><i class="fas fa-trash"></i> Delete</button>`;
         }
         
         menu.innerHTML = menuHtml;
@@ -2382,6 +2465,13 @@
     async function sendChatMessage() {
         const input = document.getElementById('chatInput');
         if (!input || !activeChatFriendship) return;
+        if (activeChatFriendship.profile) {
+            const compat = checkLauncherVersionCompatibility(activeChatFriendship.profile);
+            if (!compat.compatible) {
+                showToast(compat.message, 'warning');
+                return;
+            }
+        }
         const content = input.value.trim();
         if (!content) return;
         
@@ -2464,7 +2554,7 @@
                                 </div>
                             </div>
                             <div class="chat-profile-card-actions">
-                                <button class="chat-profile-card-btn chat-profile-btn-view" onclick="viewSharedProfile('${escapeHtml(content)}')">View Profile</button>
+                                <button class="chat-profile-card-btn chat-profile-btn-view" onclick="viewSharedProfile('${escapeHtml(content)}')">View Installation</button>
                                 <button class="chat-profile-card-btn chat-profile-btn-install" onclick="installSharedProfile('${escapeHtml(content)}')">Install</button>
                             </div>
                         </div>
@@ -2976,7 +3066,7 @@
                     const profilesArray = Object.entries(res.profiles).map(([id, p]) => ({ id, ...p }));
                     
                     if (profilesArray.length === 0) {
-                        list.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">You have no profiles to share.</div>';
+                        list.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">You have no installations to share.</div>';
                     } else {
                         list.innerHTML = '';
                         for (const profile of profilesArray) {
@@ -3008,8 +3098,18 @@
                                 <button class="social-btn-primary" style="padding: 6px 12px; font-size: 12px; background: rgba(79,172,254,0.2); color: #4facfe; border: 1px solid rgba(79,172,254,0.3); border-radius: 4px; cursor: pointer;">Share</button>
                             `;
                             
-                            div.onclick = () => {
+                            div.onclick = async () => {
                                 closeShareProfileModal();
+                                try {
+                                    const resMods = await api().get_installed_addons(profile.id, 'mod');
+                                    const resRp = await api().get_installed_addons(profile.id, 'resourcepack');
+                                    const resSh = await api().get_installed_addons(profile.id, 'shader');
+                                    let combined = [];
+                                    if (resMods && resMods.success && resMods.mods) combined = combined.concat(resMods.mods.filter(m => m.project_id && m.version_id).map(m => ({...m, type: 'mod'})));
+                                    if (resRp && resRp.success && resRp.mods) combined = combined.concat(resRp.mods.filter(m => m.project_id && m.version_id).map(m => ({...m, type: 'resourcepack'})));
+                                    if (resSh && resSh.success && resSh.mods) combined = combined.concat(resSh.mods.filter(m => m.project_id && m.version_id).map(m => ({...m, type: 'shader'})));
+                                    if (combined.length > 0) profile.addons = combined;
+                                } catch(err) {}
                                 shareProfileToChat(profile, iconSrc);
                             };
                             list.appendChild(div);
@@ -3017,13 +3117,13 @@
                         
                         // Show message if no shareable profiles
                         if (list.children.length === 0) {
-                            list.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">No shareable profiles found. Profiles with "latest snapshot" or "latest release" cannot be shared.</div>';
+                            list.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">No shareable installations found. Installations with "latest snapshot" or "latest release" cannot be shared.</div>';
                         }
                     }
                 }
             } catch (e) {
                 console.error("Error loading profiles:", e);
-                list.innerHTML = '<div style="text-align:center; padding:20px; color:#e74c3c;">Error loading profiles.</div>';
+                list.innerHTML = '<div style="text-align:center; padding:20px; color:#e74c3c;">Error loading installations.</div>';
             }
         }
         
@@ -3098,6 +3198,7 @@
     async function loadSeedProfiles() {
         const select = document.getElementById('seedProfileSelect');
         if (!select) return;
+        const currentVal = select.value;
         
         try {
             const res = await api().get_profiles();
@@ -3116,6 +3217,9 @@
                     option.value = profile.id;
                     option.textContent = `${profile.name} (${formatVersionString(profile.version)})`;
                     select.appendChild(option);
+                }
+                if (currentVal && Array.from(select.options).some(o => o.value === currentVal)) {
+                    select.value = currentVal;
                 }
             }
         } catch (e) {
@@ -3242,6 +3346,13 @@
 
     async function shareProfileToChat(profile, iconSrc) {
         if (!activeChatFriendship) return;
+        if (activeChatFriendship.profile) {
+            const compat = checkLauncherVersionCompatibility(activeChatFriendship.profile);
+            if (!compat.compatible) {
+                showToast(compat.message, 'warning');
+                return;
+            }
+        }
         
         const payload = {
             type: 'profile_share',
@@ -3273,7 +3384,7 @@
                     </div>
                 </div>
                 <div class="chat-profile-card-actions">
-                    <button class="chat-profile-card-btn chat-profile-btn-view" onclick="viewSharedProfile('${escapeHtml(contentStr)}')">View Profile</button>
+                    <button class="chat-profile-card-btn chat-profile-btn-view" onclick="viewSharedProfile('${escapeHtml(contentStr)}')">View Installation</button>
                     <button class="chat-profile-card-btn chat-profile-btn-install" onclick="installSharedProfile('${escapeHtml(contentStr)}')">Install</button>
                 </div>
             </div>
@@ -3318,7 +3429,7 @@
             const modal = document.getElementById('viewProfileModal');
             if (!modal) return;
             
-            document.getElementById('vpName').textContent = p.name || 'Unknown Profile';
+            document.getElementById('vpName').textContent = p.name || 'Unknown Installation';
             document.getElementById('vpVersion').textContent = formatVersionString(p.version) || 'Unknown Version';
             
             // Icon
@@ -3340,103 +3451,95 @@
             if (versionLower.includes('forge')) {
                 loaderEl.textContent = 'Forge';
                 loaderEl.style.display = 'block';
-                modsTab.style.display = 'block';
                 isModded = true;
             } else if (versionLower.includes('fabric')) {
                 loaderEl.textContent = 'Fabric';
                 loaderEl.style.display = 'block';
-                modsTab.style.display = 'block';
                 isModded = true;
             } else {
                 loaderEl.style.display = 'none';
-                modsTab.style.display = 'none';
             }
-            
+            const rpTab = document.getElementById('vpTabResourcePacks');
+            const shTab = document.getElementById('vpTabShaders');
+            if (rpTab) rpTab.style.display = 'none';
+            if (shTab) shTab.style.display = 'none';
+
+            const addons = p.addons || [];
+            const mods = addons.filter(function(a) { return a && (a.type === 'mod' || a.type === 'file' || (!a.type && (a.filename && a.filename.endsWith('.jar'))) || (!a.type && a.project_id)); });
+            const resourcepacks = addons.filter(function(a) { return a && (a.type === 'resourcepack' || (!a.type && a.filename && a.filename.endsWith('.zip'))); });
+            const shaders = addons.filter(function(a) { return a && a.type === 'shader'; });
+
+            if (mods.length > 0 || isModded) modsTab.style.display = 'block';
+            else modsTab.style.display = 'none';
+            if (rpTab && resourcepacks.length > 0) rpTab.style.display = 'block';
+            if (shTab && shaders.length > 0) shTab.style.display = 'block';
+
             // Reset to General tab
             document.querySelectorAll('#viewProfileModal .group-tab-btn').forEach(t => t.classList.remove('active'));
             document.querySelector('#viewProfileModal .group-tab-btn[data-vp-tab="general"]').classList.add('active');
-            document.getElementById('vpTabContentGeneral').style.display = 'block';
-            document.getElementById('vpTabContentMods').style.display = 'none';
+            ['General', 'Mods', 'ResourcePacks', 'Shaders'].forEach(t => {
+                const el = document.getElementById('vpTabContent' + t);
+                if (el) el.style.display = (t === 'General') ? 'block' : 'none';
+            });
             
-            // Load mods if applicable
-            const modsList = document.getElementById('vpModsList');
-            modsList.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">Loading mods...</div>';
-            
-            if (isModded) {
-                if (p.addons && p.addons.length > 0) {
-                    (async () => {
-                        const htmls = [];
-                        for (const addon of p.addons) {
-                            if (addon.type !== 'mod') continue;
-                            if (addon.project_id) {
-                                try {
-                                    const details = await api().get_mod_details(addon.project_id);
-                                    if (details && details.success && details.details) {
-                                        const mod = details.details;
-                                        htmls.push(`
-                                            <div class="social-user-item" style="padding: 10px; border-radius: 8px;">
-                                                <div class="social-item-avatar" style="width:32px; height:32px; border-radius:6px; background: rgba(0,0,0,0.3);">
-                                                    <img src="${mod.icon_url || 'ui/img/icon.png'}" style="width:100%; height:100%; object-fit:cover; border-radius:6px;">
-                                                </div>
-                                                <div class="social-item-info">
-                                                    <div class="social-item-name">${escapeHtml(mod.title)}</div>
-                                                    <div class="social-item-status" style="font-size:11px; opacity:0.7;">${escapeHtml(addon.filename)}</div>
-                                                </div>
-                                            </div>
-                                        `);
-                                        continue;
-                                    }
-                                } catch(e) { }
-                            }
-                            
-                            // Fallback if no project_id or modrinth lookup failed
-                            htmls.push(`
-                                <div class="social-user-item" style="padding: 10px; border-radius: 8px;">
-                                    <div class="social-item-avatar" style="width:32px; height:32px; border-radius:6px; background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
-                                        <i class="fas fa-cube" style="color:#aaa;"></i>
-                                    </div>
-                                    <div class="social-item-info">
-                                        <div class="social-item-name">${escapeHtml(addon.filename)}</div>
-                                    </div>
-                                </div>
-                            `);
-                        }
-                        modsList.innerHTML = htmls.length > 0 ? htmls.join('') : '<div style="text-align:center; padding:20px; color:#aaa;">No mods configured for this profile.</div>';
-                    })();
-                } else {
-                    modsList.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa; font-style:italic;">This profile has no mods configured.</div>';
+            const loadVpList = async (listId, items, emptyMsg, iconClass) => {
+                const listEl = document.getElementById(listId);
+                if (!listEl) return;
+                if (!items || items.length === 0) {
+                    listEl.innerHTML = `<div style="text-align:center; padding:20px; color:#aaa; font-style:italic;">${emptyMsg}</div>`;
+                    return;
                 }
-            }
+                const htmls = [];
+                for (const addon of items) {
+                    if (addon.project_id) {
+                        try {
+                            const details = await api().get_mod_details(addon.project_id);
+                            if (details && details.success && details.details) {
+                                const mod = details.details;
+                                htmls.push(`
+                                    <div class="social-user-item" style="padding: 10px; border-radius: 8px;">
+                                        <div class="social-item-avatar" style="width:32px; height:32px; border-radius:6px; background: rgba(0,0,0,0.3);">
+                                            <img src="${mod.icon_url || 'ui/img/icon.png'}" style="width:100%; height:100%; object-fit:cover; border-radius:6px;">
+                                        </div>
+                                        <div class="social-item-info">
+                                            <div class="social-item-name">${escapeHtml(mod.title)}</div>
+                                            <div class="social-item-status" style="font-size:11px; opacity:0.7;">${escapeHtml(addon.filename || '')}</div>
+                                        </div>
+                                    </div>
+                                `);
+                                continue;
+                            }
+                        } catch(e) {}
+                    }
+                    htmls.push(`
+                        <div class="social-user-item" style="padding: 10px; border-radius: 8px;">
+                            <div class="social-item-avatar" style="width:32px; height:32px; border-radius:6px; background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
+                                <i class="fas ${iconClass}" style="color:#4facfe;"></i>
+                            </div>
+                            <div class="social-item-info">
+                                <div class="social-item-name">${escapeHtml(addon.display_name || addon.filename || 'Unknown item')}</div>
+                            </div>
+                        </div>
+                    `);
+                }
+                listEl.innerHTML = htmls.join('');
+            };
+
+            loadVpList('vpModsList', mods, 'No mods configured.', 'fa-cube');
+            loadVpList('vpResourcePacksList', resourcepacks, 'No resource packs configured.', 'fa-palette');
+            loadVpList('vpShadersList', shaders, 'No shaders configured.', 'fa-magic');
             
             // Tab switching logic
             document.querySelectorAll('#viewProfileModal .group-tab-btn').forEach(tab => {
                 tab.onclick = () => {
                     document.querySelectorAll('#viewProfileModal .group-tab-btn').forEach(t => t.classList.remove('active'));
                     tab.classList.add('active');
-                    
-                    const generalTab = document.getElementById('vpTabContentGeneral');
-                    const modsTab = document.getElementById('vpTabContentMods');
                     const tabName = tab.dataset.vpTab;
-                    
-                    if (tabName === 'general') {
-                        modsTab.style.opacity = '0';
-                        setTimeout(() => {
-                            modsTab.style.display = 'none';
-                            generalTab.style.display = 'block';
-                            setTimeout(() => {
-                                generalTab.style.opacity = '1';
-                            }, 10);
-                        }, 200);
-                    } else if (tabName === 'mods') {
-                        generalTab.style.opacity = '0';
-                        setTimeout(() => {
-                            generalTab.style.display = 'none';
-                            modsTab.style.display = 'block';
-                            setTimeout(() => {
-                                modsTab.style.opacity = '1';
-                            }, 10);
-                        }, 200);
-                    }
+                    const mapName = tabName === 'general' ? 'General' : (tabName === 'mods' ? 'Mods' : (tabName === 'resourcepacks' ? 'ResourcePacks' : 'Shaders'));
+                    ['General', 'Mods', 'ResourcePacks', 'Shaders'].forEach(t => {
+                        const el = document.getElementById('vpTabContent' + t);
+                        if (el) el.style.display = (t === mapName) ? 'block' : 'none';
+                    });
                 };
             });
             
@@ -3467,9 +3570,13 @@
             if (!modal) return;
             
             // Populate fields with shared profile data
+            const defaultJVMArgs = '-Xmx4G -Xms1G -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M';
             document.getElementById('ipNameInput').value = p.name || '';
-            document.getElementById('ipJavaInput').value = '';
-            document.getElementById('ipJvmInput').value = p.jvm_args || '';
+            document.getElementById('ipJavaInput').value = p.java_path || '';
+            document.getElementById('ipJvmInput').value = p.jvm_args || defaultJVMArgs;
+            
+            const modrinthRow = document.getElementById('ipModrinthVersionRow');
+            if (modrinthRow) modrinthRow.style.display = 'none';
             
             // Auto-fill game directory with user's configured Minecraft directory
             try {
@@ -3486,6 +3593,174 @@
         }
     };
     
+    window.openModrinthModpackInstallModal = async function(projectId, versionObj, defaultName, iconUrl, worldName) {
+        window.sharedProfileData = {
+            isModrinthModpack: true,
+            projectId: projectId,
+            versionObj: versionObj,
+            name: defaultName || 'Modrinth Modpack',
+            iconUrl: iconUrl,
+            worldName: worldName || null
+        };
+        
+        const modal = document.getElementById('installProfileModal');
+        if (!modal) return;
+        
+        const defaultJVMArgs = '-Xmx4G -Xms1G -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M';
+        document.getElementById('ipNameInput').value = defaultName || 'Modrinth Modpack';
+        document.getElementById('ipJavaInput').value = '';
+        document.getElementById('ipJvmInput').value = defaultJVMArgs;
+        
+        const modrinthRow = document.getElementById('ipModrinthVersionRow');
+        if (modrinthRow) modrinthRow.style.display = 'flex';
+        
+        try {
+            const userData = await api().get_user_json();
+            document.getElementById('ipDirInput').value = userData.mcdir || '';
+        } catch(e) {
+            console.error('[Social] Error fetching user mcdir:', e.message);
+            document.getElementById('ipDirInput').value = '';
+        }
+        
+        // Fetch all modpack versions from Modrinth to populate dropdowns
+        let allVersions = [];
+        try {
+            const resVersions = await api().get_mod_versions(projectId, null, null);
+            if (resVersions && resVersions.success && resVersions.versions && resVersions.versions.length > 0) {
+                allVersions = resVersions.versions;
+            }
+        } catch (e) {
+            console.error('[Social] Error fetching modpack versions:', e);
+        }
+        if (allVersions.length === 0 && versionObj) {
+            allVersions = [versionObj];
+        }
+        window.sharedProfileData.allVersions = allVersions;
+        
+        const swSelect = document.getElementById('ipSoftwareSelect');
+        const mcSelect = document.getElementById('ipMcVersionSelect');
+        const loaderSelect = document.getElementById('ipLoaderVersionSelect');
+        
+        if (swSelect && mcSelect && loaderSelect) {
+            swSelect.innerHTML = '';
+            
+            const loadersSet = new Set();
+            allVersions.forEach(v => {
+                if (v.loaders && Array.isArray(v.loaders)) {
+                    v.loaders.forEach(l => loadersSet.add(l.toLowerCase()));
+                }
+            });
+            
+            const formatSw = (s) => {
+                if (s === 'fabric') return 'Fabric';
+                if (s === 'forge') return 'Forge';
+                if (s === 'neoforge') return 'NeoForge';
+                if (s === 'quilt') return 'Quilt';
+                if (s === 'vanilla') return 'Vanilla';
+                return s.charAt(0).toUpperCase() + s.slice(1);
+            };
+            
+            const order = ['fabric', 'forge', 'neoforge', 'quilt', 'vanilla'];
+            const sortedLoaders = Array.from(loadersSet).sort((a, b) => {
+                const ia = order.indexOf(a);
+                const ib = order.indexOf(b);
+                if (ia !== -1 && ib !== -1) return ia - ib;
+                if (ia !== -1) return -1;
+                if (ib !== -1) return 1;
+                return a.localeCompare(b);
+            });
+            
+            if (sortedLoaders.length === 0) sortedLoaders.push('fabric');
+            
+            sortedLoaders.forEach(l => {
+                const opt = document.createElement('option');
+                opt.value = l;
+                opt.textContent = formatSw(l);
+                swSelect.appendChild(opt);
+            });
+            
+            let defaultLoader = versionObj && versionObj.loaders && versionObj.loaders[0] ? versionObj.loaders[0].toLowerCase() : sortedLoaders[0];
+            if (!sortedLoaders.includes(defaultLoader)) defaultLoader = sortedLoaders[0];
+            swSelect.value = defaultLoader;
+            
+            const updateLoaderVersions = async (selectedSw, selectedMc) => {
+                if (!selectedMc || selectedSw === 'vanilla') {
+                    loaderSelect.innerHTML = '<option value="">Select a loader...</option>';
+                    loaderSelect.disabled = true;
+                    return;
+                }
+                loaderSelect.innerHTML = '<option value="">Loading...</option>';
+                loaderSelect.disabled = true;
+                try {
+                    const loaders = await api().get_loader_versions(selectedSw, selectedMc);
+                    loaderSelect.innerHTML = '';
+                    if (!loaders || loaders.length === 0) {
+                        loaderSelect.innerHTML = '<option value="">No loaders available</option>';
+                    } else {
+                        loaders.forEach(l => {
+                            const opt = document.createElement('option');
+                            opt.value = l;
+                            opt.textContent = l;
+                            loaderSelect.appendChild(opt);
+                        });
+                        loaderSelect.disabled = false;
+                    }
+                } catch (e) {
+                    console.error('[Social] Error loading loader versions:', e);
+                    loaderSelect.innerHTML = '<option value="">Error loading</option>';
+                }
+            };
+            
+            const updateMcVersions = async (selectedSw, targetMcVer = null) => {
+                mcSelect.innerHTML = '<option value="">Loading...</option>';
+                mcSelect.disabled = true;
+                
+                const mcSet = new Set();
+                allVersions.forEach(v => {
+                    if (v.loaders && Array.isArray(v.loaders) && v.loaders.some(l => l.toLowerCase() === selectedSw)) {
+                        if (v.game_versions && Array.isArray(v.game_versions)) {
+                            v.game_versions.forEach(mc => mcSet.add(mc));
+                        }
+                    }
+                });
+                
+                mcSelect.innerHTML = '';
+                if (mcSet.size === 0) {
+                    mcSelect.innerHTML = '<option value="">No versions found</option>';
+                } else {
+                    Array.from(mcSet).forEach(mc => {
+                        const opt = document.createElement('option');
+                        opt.value = mc;
+                        opt.textContent = mc;
+                        mcSelect.appendChild(opt);
+                    });
+                }
+                mcSelect.disabled = false;
+                
+                let mcToSelect = targetMcVer;
+                if (!mcToSelect || !mcSet.has(mcToSelect)) {
+                    mcToSelect = mcSelect.options.length > 0 ? mcSelect.options[0].value : '';
+                }
+                if (mcToSelect) mcSelect.value = mcToSelect;
+                
+                await updateLoaderVersions(selectedSw, mcToSelect);
+            };
+            
+            swSelect.onchange = async () => {
+                await updateMcVersions(swSelect.value, null);
+            };
+            
+            mcSelect.onchange = async () => {
+                await updateLoaderVersions(swSelect.value, mcSelect.value);
+            };
+            
+            let defaultMc = versionObj && versionObj.game_versions && versionObj.game_versions[0] ? versionObj.game_versions[0] : null;
+            await updateMcVersions(defaultLoader, defaultMc);
+        }
+        
+        modal.classList.add('show');
+    };
+
     window.closeInstallProfileModal = function() {
         const modal = document.getElementById('installProfileModal');
         if (modal) modal.classList.remove('show');
@@ -3502,12 +3777,91 @@
         const jvmArgs = document.getElementById('ipJvmInput').value.trim() || p.jvm_args || null;
         
         if (!name) {
-            showToast('Please enter a profile name');
+            showToast('Please enter an installation name');
             return;
         }
         
         if (!dir) {
             showToast('Please enter a game directory');
+            return;
+        }
+        
+        if (p.isModrinthModpack) {
+            try {
+                const swSelect = document.getElementById('ipSoftwareSelect');
+                const mcSelect = document.getElementById('ipMcVersionSelect');
+                const loaderSelect = document.getElementById('ipLoaderVersionSelect');
+                
+                const software = swSelect ? swSelect.value : 'fabric';
+                const mcVersion = mcSelect ? mcSelect.value : '';
+                const loaderVersion = loaderSelect && !loaderSelect.disabled ? loaderSelect.value : '';
+                
+                let profileVersion = mcVersion || 'Vanilla';
+                if (software === 'vanilla') {
+                    profileVersion = `Vanilla ${mcVersion}`;
+                } else if (software === 'forge' && loaderVersion) {
+                    profileVersion = `Forge ${mcVersion} (${loaderVersion})`;
+                } else if (software === 'fabric' && loaderVersion) {
+                    profileVersion = `Fabric ${mcVersion} (${loaderVersion})`;
+                } else if (software === 'neoforge' && loaderVersion) {
+                    profileVersion = `NeoForge ${mcVersion} (${loaderVersion})`;
+                } else if (software === 'quilt' && loaderVersion) {
+                    profileVersion = `Quilt ${mcVersion} (${loaderVersion})`;
+                } else if (software === 'optifine' && loaderVersion) {
+                    profileVersion = `OptiFine ${mcVersion} (${loaderVersion})`;
+                }
+                
+                // 1) Pass Modrinth icon URL directly to backend
+                let iconArg = p.iconUrl || 'default.png';
+                
+                // 2) Create profile with chosen version
+                const resCreate = await api().add_profile(name, profileVersion, iconArg, dir || null, jvmArgs, javaPath);
+                
+                if (resCreate && resCreate.success) {
+                    const newProfileId = resCreate.profile_id || resCreate.id;
+                    closeInstallProfileModal();
+                    showToast('Installing modpack ' + name + '...', 'info');
+                    
+                    // 3) Find matching mrpack version from Modrinth
+                    let chosenVersionObj = p.versionObj;
+                    if (p.allVersions && Array.isArray(p.allVersions)) {
+                        const match = p.allVersions.find(v => 
+                            v.loaders && v.loaders.some(l => l.toLowerCase() === software) &&
+                            v.game_versions && v.game_versions.includes(mcVersion) &&
+                            v.version_type === 'release' && v.featured
+                        ) || p.allVersions.find(v => 
+                            v.loaders && v.loaders.some(l => l.toLowerCase() === software) &&
+                            v.game_versions && v.game_versions.includes(mcVersion) &&
+                            v.version_type === 'release'
+                        ) || p.allVersions.find(v => 
+                            v.loaders && v.loaders.some(l => l.toLowerCase() === software) &&
+                            v.game_versions && v.game_versions.includes(mcVersion)
+                        );
+                        if (match) chosenVersionObj = match;
+                    }
+                    const versionId = chosenVersionObj ? chosenVersionObj.id : null;
+                    
+                    // 4) Download and install modpack (.mrpack) into the new profile
+                    const downloadResult = await api().install_project(p.projectId, versionId, newProfileId, 'modpack', p.worldName);
+                    
+                    if (!downloadResult || !downloadResult.success) {
+                        if (window.onModDownloadError) window.onModDownloadError(p.projectId, downloadResult ? downloadResult.error : 'Unknown error');
+                        else showToast('Failed to download modpack: ' + (downloadResult ? downloadResult.error : 'Unknown error'));
+                    } else {
+                        if (window.onModDownloadComplete) window.onModDownloadComplete(p.projectId, chosenVersionObj ? chosenVersionObj.filename : 'modpack.mrpack');
+                        else showToast('Modpack ' + name + ' installed successfully!', 'success');
+                    }
+                    
+                    if (window.loadProfiles) await window.loadProfiles();
+                    if (window.loadOptions) await window.loadOptions();
+                    if (window.loadModdableProfiles) await window.loadModdableProfiles();
+                } else {
+                    showToast('Failed to create installation: ' + (resCreate ? resCreate.error : 'Unknown error'));
+                }
+            } catch(e) {
+                console.error('[Social] Modrinth modpack install error:', e.message);
+                showToast('Error installing modpack: ' + e.message);
+            }
             return;
         }
         
@@ -3525,6 +3879,17 @@
                 // If the profile has addons, save them
                 if (p.addons && p.addons.length > 0) {
                     try {
+                        const normAddons = p.addons.filter(a => a.project_id && a.version_id).map(function(a){
+                            const isEn = (a.enabled !== false && a.state !== 'disabled');
+                            return {
+                                project_id: a.project_id,
+                                version_id: a.version_id,
+                                filename: a.filename || `${a.project_id}.jar`,
+                                type: a.type || 'mod',
+                                state: isEn ? 'enabled' : 'disabled',
+                                enabled: isEn
+                            };
+                        });
                         await api().edit_profile(
                             result.profile_id, 
                             name, 
@@ -3537,7 +3902,8 @@
                             null, 
                             null, 
                             null, 
-                            p.addons
+                            null, 
+                            normAddons
                         );
                     } catch(err) {
                         console.error("Error syncing addons to profile", err);
@@ -3545,6 +3911,7 @@
                 }
                 
                 closeInstallProfileModal();
+                showToast('Profile ' + name + ' installed successfully!', 'success');
                 // Refresh UI lists
                 if (window.loadProfiles) await window.loadProfiles();
                 if (window.loadOptions) await window.loadOptions();

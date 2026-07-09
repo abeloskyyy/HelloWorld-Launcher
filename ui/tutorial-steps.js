@@ -191,7 +191,10 @@
                     badge.style.display = 'none';
                     badge.classList.remove('active');
                 }
-                if (skinsBtn) skinsBtn.style.display = 'none';
+                if (skinsBtn) {
+                    skinsBtn.style.display = 'flex';
+                    skinsBtn.classList.add('locked-feature');
+                }
                 await new Promise(r => setTimeout(r, 300));
             }
         } catch (e) {

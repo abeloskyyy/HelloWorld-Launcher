@@ -1,6 +1,8 @@
 const axios = require('axios');
 const fs = require('fs-extra');
 const path = require('path');
+const AdmZip = require('adm-zip');
+const versionUtils = require('../utils/version');
 
 class ModManager {
 
@@ -19,7 +21,9 @@ class ModManager {
                 filters.excludeCategories.forEach(c => facets.push([`categories!=${c}`]));
             }
             if (filters.game_version && typeof filters.game_version === 'string') {
-                facets.push([`versions:${filters.game_version}`]);
+                const info = versionUtils.parseVersionString(filters.game_version);
+                const mcVer = info ? info.mcVersion : filters.game_version;
+                facets.push([`versions:${mcVer}`]);
             }
 
             // Allow frontend to specify sort index, fallback to default behavior
@@ -58,7 +62,11 @@ class ModManager {
     async getModVersions(projectId, gameVersion, loader) {
         try {
             const params = {};
-            if (gameVersion) params.game_versions = JSON.stringify([gameVersion]);
+            if (gameVersion) {
+                const info = versionUtils.parseVersionString(gameVersion);
+                const mcVer = info ? info.mcVersion : gameVersion;
+                params.game_versions = JSON.stringify([mcVer]);
+            }
             if (loader) params.loaders = JSON.stringify([loader]);
 
             const res = await axios.get(`https://api.modrinth.com/v2/project/${projectId}/version`, { params });
@@ -202,18 +210,184 @@ class ModManager {
         }
     }
 
-    // --- Shader Validation (Basic) ---
-    async validateShaderSupport(modsDir) {
-        if (!fs.existsSync(modsDir)) return { supported: false, reason: "No mods folder" };
-        const files = await fs.readdir(modsDir);
-        const hasLoader = files.some(f => {
-            const lower = f.toLowerCase();
-            return (lower.includes('iris') || lower.includes('optifine') || lower.includes('oculus')) && !lower.endsWith('.disabled');
-        });
+    // --- Shader Validation ---
+    async validateShaderSupport(modsDir, profileAddons = []) {
+        let hasLoader = false;
+
+        if (Array.isArray(profileAddons) && profileAddons.length > 0) {
+            hasLoader = profileAddons.some(a => {
+                if (!a) return false;
+                if (a.state === 'disabled' || (a.filename && String(a.filename).endsWith('.disabled'))) return false;
+                const nameStr = `${a.filename || ''} ${a.display_name || ''} ${a.title || ''} ${a.project_id || ''}`.toLowerCase();
+                return nameStr.includes('iris') || nameStr.includes('optifine') || nameStr.includes('oculus') || nameStr.includes('sodium') || nameStr.includes('embeddium');
+            });
+        }
+
+        if (!hasLoader && fs.existsSync(modsDir)) {
+            const files = await fs.readdir(modsDir);
+            hasLoader = files.some(f => {
+                const lower = f.toLowerCase();
+                return (lower.includes('iris') || lower.includes('optifine') || lower.includes('oculus') || lower.includes('sodium') || lower.includes('embeddium')) && !lower.endsWith('.disabled');
+            });
+        }
 
         return hasLoader
             ? { supported: true }
-            : { supported: false, reason: "Requires Iris or Optifine installed in mods" };
+            : { supported: false, reason: "Requires Iris, Optifine, or Sodium/Oculus installed in mods" };
+    }
+
+    async installModpack(url, filename, profileDir, onProgress) {
+        const tempDir = path.join(profileDir, '.modpacks_temp');
+        const tempFilePath = path.join(tempDir, filename);
+        try {
+            await fs.ensureDir(tempDir);
+            console.log(`[installModpack] Downloading .mrpack archive from ${url}...`);
+
+            // Download .mrpack file (first 10% of progress)
+            await this.installProject(url, filename, tempDir, (perc) => {
+                if (onProgress) onProgress(Math.round(perc * 0.1));
+            });
+
+            console.log(`[installModpack] Extracting ${filename}...`);
+            const zip = new AdmZip(tempFilePath);
+            const indexEntry = zip.getEntry('modrinth.index.json');
+            if (!indexEntry) {
+                throw new Error("Invalid Modrinth modpack: modrinth.index.json not found inside archive.");
+            }
+
+            const indexJson = JSON.parse(indexEntry.getData().toString('utf8'));
+            const filesList = (indexJson.files || []).filter(f => {
+                if (!f.downloads || f.downloads.length === 0) return false;
+                if (f.env && f.env.client === 'unsupported') return false;
+                return true;
+            });
+
+            // Extract overrides
+            console.log(`[installModpack] Extracting overrides...`);
+            const entries = zip.getEntries();
+            for (const entry of entries) {
+                let relPath = null;
+                if (entry.entryName.startsWith('overrides/')) {
+                    relPath = entry.entryName.substring('overrides/'.length);
+                } else if (entry.entryName.startsWith('client-overrides/')) {
+                    relPath = entry.entryName.substring('client-overrides/'.length);
+                }
+                if (relPath && relPath !== '') {
+                    const destPath = path.join(profileDir, relPath);
+                    if (entry.isDirectory || relPath.endsWith('/')) {
+                        await fs.ensureDir(destPath);
+                    } else {
+                        await fs.ensureDir(path.dirname(destPath));
+                        await fs.writeFile(destPath, entry.getData());
+                    }
+                }
+            }
+
+            // Download all required mods/files in batches (remaining 90% of progress)
+            console.log(`[installModpack] Downloading ${filesList.length} files...`);
+            let completedCount = 0;
+            const updateProgress = () => {
+                completedCount++;
+                if (onProgress) {
+                    const perc = 10 + Math.round((completedCount / (filesList.length || 1)) * 90);
+                    onProgress(Math.min(100, perc));
+                }
+            };
+
+            const downloadSingleFile = async (fInfo) => {
+                const destPath = path.join(profileDir, fInfo.path);
+                await fs.ensureDir(path.dirname(destPath));
+
+                // Check if file already exists with matching size
+                if (fs.existsSync(destPath)) {
+                    try {
+                        const stat = await fs.stat(destPath);
+                        if (fInfo.fileSize && stat.size === fInfo.fileSize) {
+                            updateProgress();
+                            return;
+                        }
+                    } catch (e) {}
+                }
+
+                const fileUrl = fInfo.downloads[0];
+                const response = await axios({ url: fileUrl, method: 'GET', responseType: 'stream' });
+                const writer = fs.createWriteStream(destPath);
+                response.data.pipe(writer);
+
+                await new Promise((resolve, reject) => {
+                    writer.on('finish', resolve);
+                    writer.on('error', reject);
+                });
+                updateProgress();
+            };
+
+            // Concurrent execution in batches of 6
+            const batchSize = 6;
+            for (let i = 0; i < filesList.length; i += batchSize) {
+                const batch = filesList.slice(i, i + batchSize);
+                await Promise.all(batch.map(f => downloadSingleFile(f).catch(err => {
+                    console.error(`[installModpack] Error downloading file ${f.path}:`, err.message);
+                    updateProgress();
+                })));
+            }
+
+            // Propagate datapacks to saves if any exist
+            const globalDatapacksDir = path.join(profileDir, 'datapacks');
+            const savesDir = path.join(profileDir, 'saves');
+            if (fs.existsSync(globalDatapacksDir) && fs.existsSync(savesDir)) {
+                try {
+                    const worlds = await fs.readdir(savesDir);
+                    for (const w of worlds) {
+                        const worldDpDir = path.join(savesDir, w, 'datapacks');
+                        if (fs.existsSync(path.join(savesDir, w, 'level.dat'))) {
+                            await fs.copy(globalDatapacksDir, worldDpDir, { overwrite: false });
+                        }
+                    }
+                } catch (e) {
+                    console.error("[installModpack] Error propagating datapacks:", e.message);
+                }
+            }
+
+            // Cleanup temp
+            await fs.remove(tempDir).catch(() => {});
+
+            const installedAddons = [];
+            for (const f of filesList) {
+                const fname = path.basename(f.path);
+                let type = 'mod';
+                if (f.path.startsWith('resourcepacks/')) type = 'resourcepack';
+                else if (f.path.startsWith('shaderpacks/')) type = 'shader';
+                else if (f.path.startsWith('datapacks/')) type = 'datapack';
+
+                let project_id = null;
+                let version_id = null;
+                if (f.downloads && f.downloads[0]) {
+                    const match = f.downloads[0].match(/cdn\.modrinth\.com\/data\/([^\/]+)\/versions\/([^\/]+)/i);
+                    if (match) {
+                        project_id = match[1];
+                        version_id = match[2];
+                    }
+                }
+                installedAddons.push({
+                    filename: fname,
+                    type,
+                    project_id,
+                    version_id
+                });
+            }
+
+            return {
+                success: true,
+                modpackName: indexJson.name || filename,
+                dependencies: indexJson.dependencies || {},
+                installedAddons
+            };
+
+        } catch (e) {
+            await fs.remove(tempDir).catch(() => {});
+            console.error("[installModpack] Error:", e);
+            return { success: false, error: e.message };
+        }
     }
 }
 

@@ -117,6 +117,6 @@ window.addEventListener('reload-profiles', (event) => {
         loadOptions();
     }
     if (typeof loadModdableProfiles === 'function') {
-        loadModdableProfiles();
+        loadModdableProfiles(true);
     }
 });

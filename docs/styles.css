@@ -1200,6 +1200,45 @@ h4,
     }
 }
 
+/* Ko-fi Floating Button (Red Heart) */
+.kofi-float-btn {
+    position: fixed;
+    bottom: 30px;
+    right: 105px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%);
+    color: white;
+    text-decoration: none;
+    font-size: 1.5rem;
+    box-shadow: 0 10px 20px rgba(255, 117, 140, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    transition: var(--transition);
+    animation: float 3.5s ease-in-out infinite;
+}
+
+.kofi-float-btn:hover {
+    transform: scale(1.1) rotate(-10deg);
+    box-shadow: 0 15px 30px rgba(255, 117, 140, 0.6);
+    color: white;
+}
+
+.kofi-float-btn i {
+    animation: kofiHeartbeat 1.5s ease-in-out infinite;
+}
+
+@keyframes kofiHeartbeat {
+    0% { transform: scale(1); }
+    14% { transform: scale(1.3); }
+    28% { transform: scale(1); }
+    42% { transform: scale(1.3); }
+    70% { transform: scale(1); }
+}
+
 /* Review System */
 .review-float-btn {
     position: fixed;
@@ -1362,6 +1401,20 @@ h4,
 @media (max-width: 480px) {
     .review-modal-content {
         padding: 1.5rem;
+    }
+    .review-float-btn {
+        bottom: 20px;
+        right: 20px;
+        width: 50px;
+        height: 50px;
+        font-size: 1.3rem;
+    }
+    .kofi-float-btn {
+        bottom: 20px;
+        right: 80px;
+        width: 50px;
+        height: 50px;
+        font-size: 1.3rem;
     }
 }
 

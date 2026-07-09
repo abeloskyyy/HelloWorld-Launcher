@@ -7,5 +7,6 @@ dist
 build-linux.sh
 firebase-backend/functions/keys.json
 firebase-backend/functions/node_modules/
-firebase-backend/.firebase/
 scripts/
+secrets.json
+*.secrets.json

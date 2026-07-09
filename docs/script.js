@@ -474,6 +474,7 @@ async function init() {
                     window.firebaseModules.doc(firestore, "users", user.uid),
                     {
                         username: verifiedData.username,
+                        usernameLower: verifiedData.username.toLowerCase(),
                         uuid: verifiedData.uuid,
                         accountType: 'microsoft',
                         minecraftUuid: verifiedData.uuid,
@@ -694,6 +695,7 @@ async function init() {
                 const uuid = generateUuid(username);
                 await window.firebaseModules.setDoc(window.firebaseModules.doc(firestore, "users", user.uid), {
                     username: username,
+                    usernameLower: username.toLowerCase(),
                     email: email,
                     uuid: uuid,
                     createdAt: window.firebaseModules.firestoreTimestamp()
@@ -1276,7 +1278,9 @@ async function init() {
                 } else {
                     updates.playstyleTags = window.firebaseModules.deleteField();
                 }
-
+                if (updates.username) {
+                    updates.usernameLower = updates.username.toLowerCase();
+                }
                 await window.firebaseModules.updateDoc(window.firebaseModules.doc(firestore, "users", currentUser.uid), updates);
 
                 // Keep usernames index in sync when username changes
