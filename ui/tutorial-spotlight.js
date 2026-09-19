@@ -23,6 +23,7 @@
     let progressContainer = null;
     let skipButton = null;
     let currentResizeObserver = null;
+    let currentMutationObserver = null;
 
     /**
      * Initialize the tutorial DOM elements
@@ -131,10 +132,14 @@
 
         isActive = false;
 
-        // Cleanup observer
+        // Cleanup observers
         if (currentResizeObserver) {
             currentResizeObserver.disconnect();
             currentResizeObserver = null;
+        }
+        if (currentMutationObserver) {
+            currentMutationObserver.disconnect();
+            currentMutationObserver = null;
         }
 
         // Remove target class from any element
@@ -146,9 +151,11 @@
             currentTarget.removeEventListener('blur', handleTargetClick, { capture: true });
         }
 
-        // Reset any elevated modals
-        document.querySelectorAll('.tutorial-elevated-modal').forEach(m => {
+        // Reset any elevated modals and ancestors
+        document.querySelectorAll('.tutorial-elevated-modal, .tutorial-elevated-sidebar, .tutorial-elevated-ancestor').forEach(m => {
             m.classList.remove('tutorial-elevated-modal');
+            m.classList.remove('tutorial-elevated-sidebar');
+            m.classList.remove('tutorial-elevated-ancestor');
         });
 
         // Add closing classes for animation
@@ -217,6 +224,14 @@
             return;
         }
 
+        // Also verify the element is actually visible (not display:none)
+        const rect = targetEl.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) {
+            console.warn(`Tutorial: Target for step ${index} is not visible (display:none or zero-size):`, step.target);
+            await showStep(index + 1);
+            return;
+        }
+
         // Remove previous target styling and modal elevation
         const prevTarget = document.querySelector('.tutorial-target');
         if (prevTarget && prevTarget !== targetEl) {
@@ -227,9 +242,10 @@
         }
 
         // Reset any previously elevated containers
-        document.querySelectorAll('.tutorial-elevated-modal, .tutorial-elevated-sidebar, .skin-pack-card.tutorial-elevated-modal').forEach(m => {
+        document.querySelectorAll('.tutorial-elevated-modal, .tutorial-elevated-sidebar, .tutorial-elevated-ancestor').forEach(m => {
             m.classList.remove('tutorial-elevated-modal');
             m.classList.remove('tutorial-elevated-sidebar');
+            m.classList.remove('tutorial-elevated-ancestor');
         });
 
         // Check if target is inside a modal and elevate it
@@ -250,6 +266,21 @@
             parentSidebar.classList.add('tutorial-elevated-sidebar');
         }
 
+        // Elevate ancestor elements so no intermediate stacking context blocks
+        // the target's z-index. Stop at position:fixed elements (modals/sidebars)
+        // to avoid elevating broad page containers that contain everything.
+        let ancestor = targetEl.parentElement;
+        while (ancestor && ancestor !== document.body) {
+            const pos = window.getComputedStyle(ancestor).position;
+            if (pos === 'fixed' || pos === 'absolute') break; // Don't cross fixed containers
+
+            if (!ancestor.classList.contains('tutorial-elevated-modal') &&
+                !ancestor.classList.contains('tutorial-elevated-sidebar')) {
+                ancestor.classList.add('tutorial-elevated-ancestor');
+            }
+            ancestor = ancestor.parentElement;
+        }
+
         // Position spotlight over target
         positionSpotlight(targetEl);
 
@@ -258,7 +289,7 @@
 
         // Observe target for resizing
         let rafId = null;
-        currentResizeObserver = new ResizeObserver(() => {
+        const updateSpotlight = () => {
             if (isActive && targetEl.classList.contains('tutorial-target')) {
                 if (rafId) cancelAnimationFrame(rafId);
                 rafId = requestAnimationFrame(() => {
@@ -266,8 +297,14 @@
                     positionTooltip(targetEl, step.position || 'bottom');
                 });
             }
-        });
+        };
+
+        currentResizeObserver = new ResizeObserver(updateSpotlight);
         currentResizeObserver.observe(targetEl);
+
+        // Also observe class mutations (for custom selects that don't trigger resize when dropdown opens due to absolute positioning)
+        currentMutationObserver = new MutationObserver(updateSpotlight);
+        currentMutationObserver.observe(targetEl, { subtree: true, attributes: true, attributeFilter: ['class'] });
 
         // Use 'change' for select, 'blur' for input/textarea, 'click' for everything else
         if (step.advanceOn !== 'manual') {
@@ -343,12 +380,29 @@
         el.scrollIntoView({ block: 'center' });
 
         const rect = el.getBoundingClientRect();
+        let height = rect.height;
+
+        // If it's a custom select, check if it's open (trigger has .active)
+        if (el.classList.contains('custom-select')) {
+            const trigger = el.querySelector('.select-trigger');
+            if (trigger && trigger.classList.contains('active')) {
+                const options = el.querySelector('.select-options');
+                if (options) {
+                    const optionsRect = options.getBoundingClientRect();
+                    // Expand height to include the dropdown options
+                    if (optionsRect.height > 0) {
+                        height += optionsRect.height;
+                    }
+                }
+            }
+        }
+
         const padding = 8;
 
         spotlight.style.top = (rect.top - padding) + 'px';
         spotlight.style.left = (rect.left - padding) + 'px';
         spotlight.style.width = (rect.width + padding * 2) + 'px';
-        spotlight.style.height = (rect.height + padding * 2) + 'px';
+        spotlight.style.height = (height + padding * 2) + 'px';
     }
 
     /**

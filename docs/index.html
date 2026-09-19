@@ -48,22 +48,64 @@
 
     <nav class="navbar">
         <div class="container nav-container">
-            <a href="#" class="logo">HelloWorld <span class="accent">Launcher</span></a>
-            <div class="nav-links">
-                <a href="#features">Features</a>
-                <a href="#screenshots">Gallery</a>
-                <a href="#faq">FAQ</a>
+            <a href="#" class="logo">
+                <img src="https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/title.png"
+                    alt="HelloWorld Launcher" class="nav-logo-img">
+            </a>
+            <div class="nav-right-group">
                 <a href="https://github.com/abeloskyyy/HelloWorld-Launcher" target="_blank" class="github-link"><i
                         class="bi bi-github"></i> GitHub</a>
-            </div>
-            <a href="#" id="navDownloadBtn" class="btn btn-primary sm-hidden">Download Now</a>
-            <a href="#" id="navLoginBtn" class="btn btn-secondary sm-hidden" style="margin-left: 10px; display: none;">Log In</a>
-            <div id="navUserBadge" style="display:none; margin-left: 10px; align-items: center; cursor: pointer; padding: 0.5rem 1rem; background: rgba(255,255,255,0.1); border-radius: 8px; transition: background 0.3s; font-weight: 500;">
-                <div class="nav-user-avatar">
-                    <img id="navUserAvatarImg" src="https://mc-heads.net/avatar/Steve" alt="User avatar" />
+                <a href="#" id="navDownloadBtn" class="btn btn-primary sm-hidden" data-i18n="nav.download">Download Now</a>
+                <a href="#" id="navLoginBtn" class="btn btn-secondary sm-hidden" style="display: none;" data-i18n="nav.login">Log In</a>
+                
+                <!-- User badge - dropdown trigger -->
+                <div id="navUserBadge" class="nav-user-badge-wrapper" style="display:none;">
+                    <div class="nav-user-inner" id="navUserInner">
+                        <div class="nav-user-avatar">
+                            <img id="navUserAvatarImg" src="https://mc-heads.net/avatar/Steve" alt="User avatar" />
+                        </div>
+                        <span id="navUsername" class="nav-username"></span>
+                        <span id="navBadgesRow" class="hw-badges-row"></span>
+                        <i class="fas fa-chevron-down nav-user-chevron" id="navUserChevron"></i>
+                    </div>
+                    <!-- Dropdown -->
+                    <div class="nav-user-dropdown" id="navUserDropdown">
+                        <a href="settings/" class="nav-dropdown-item" id="navEditProfileBtn">
+                            <i class="fas fa-user-edit"></i>
+                            <span data-i18n="nav.edit_profile">Edit Profile</span>
+                        </a>
+                    </div>
                 </div>
-                <span id="navUsername" style="color: white; margin-top: 1px;"></span>
-                <span id="navPremiumBadge" class="premium-badge" style="display:none;"><i class="fas fa-dollar-sign"></i></span>
+
+                <!-- Settings Gear Button -->
+                <a href="settings/" class="nav-settings-btn" id="navSettingsBtn" title="Settings" aria-label="Settings">
+                    <i class="fas fa-cog"></i>
+                </a>
+
+                <!-- Language Selector with flags -->
+                <div class="lang-select-wrapper" id="langSelectorWrapper">
+                    <button class="lang-btn" id="langBtn" aria-label="Select Language">
+                        <img class="lang-flag" id="langFlagImg" src="https://flagcdn.com/gb.svg" alt="EN" width="20" height="15">
+                        <span class="lang-code" id="langCode">EN</span>
+                        <i class="fas fa-chevron-down lang-chevron" id="langChevron"></i>
+                    </button>
+                    <div class="lang-dropdown" id="langDropdown">
+                        <button class="lang-option" data-lang="en"><img src="https://flagcdn.com/gb.svg" width="20" height="15" alt=""> EN</button>
+                        <button class="lang-option" data-lang="es"><img src="https://flagcdn.com/es.svg" width="20" height="15" alt=""> ES</button>
+                        <button class="lang-option" data-lang="fr"><img src="https://flagcdn.com/fr.svg" width="20" height="15" alt=""> FR</button>
+                        <button class="lang-option" data-lang="de"><img src="https://flagcdn.com/de.svg" width="20" height="15" alt=""> DE</button>
+                        <button class="lang-option" data-lang="pt"><img src="https://flagcdn.com/br.svg" width="20" height="15" alt=""> PT</button>
+                        <button class="lang-option" data-lang="it"><img src="https://flagcdn.com/it.svg" width="20" height="15" alt=""> IT</button>
+                        <button class="lang-option" data-lang="ru"><img src="https://flagcdn.com/ru.svg" width="20" height="15" alt=""> RU</button>
+                        <button class="lang-option" data-lang="ja"><img src="https://flagcdn.com/jp.svg" width="20" height="15" alt=""> JA</button>
+                        <button class="lang-option" data-lang="zh"><img src="https://flagcdn.com/cn.svg" width="20" height="15" alt=""> ZH</button>
+                        <button class="lang-option" data-lang="ko"><img src="https://flagcdn.com/kr.svg" width="20" height="15" alt=""> KO</button>
+                        <button class="lang-option" data-lang="pl"><img src="https://flagcdn.com/pl.svg" width="20" height="15" alt=""> PL</button>
+                        <button class="lang-option" data-lang="nl"><img src="https://flagcdn.com/nl.svg" width="20" height="15" alt=""> NL</button>
+                        <button class="lang-option" data-lang="tr"><img src="https://flagcdn.com/tr.svg" width="20" height="15" alt=""> TR</button>
+                        <button class="lang-option" data-lang="ar"><img src="https://flagcdn.com/sa.svg" width="20" height="15" alt=""> AR</button>
+                    </div>
+                </div>
             </div>
         </div>
     </nav>
@@ -74,20 +116,45 @@
             <i class="bi bi-discord"></i>
         </div>
         <div class="discord-content">
-            <span class="discord-title">Join our Community</span>
-            <span class="discord-subtitle">Get support & updates</span>
+            <span class="discord-title" data-i18n="discord.title">Join our Community</span>
+            <span class="discord-subtitle" data-i18n="discord.subtitle">Get support & updates</span>
         </div>
         <i class="bi bi-arrow-right discord-arrow"></i>
     </a>
 
+    <!-- Apex Sponsor Floating Notification -->
+    <div id="sponsorFloat" class="sponsor-float" style="display: none;">
+        <div class="sponsor-float-icon">
+            <svg viewBox="97 0 60 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M126.797 0.0546875L97.5 16.9688V50.7969L126.797 67.7109L156.094 50.7969V16.9688L126.797 0.0546875ZM148.094 46.1797L126.797 58.4766L105.5 46.1797V21.5859L126.797 9.28906L148.094 21.5859V46.1797Z" fill="#C0FF1E"/>
+                <path d="M126.797 18.5156L113.484 26.1953V41.5703L126.797 49.25L140.109 41.5703V26.1953L126.797 18.5156Z" fill="#C0FF1E"/>
+            </svg>
+        </div>
+        <div class="sponsor-float-content">
+            <div class="sponsor-float-header">
+                <span class="sponsor-float-title">Apex Hosting</span>
+                <span class="sponsor-float-badge" id="sponsorFloatBadge">25% OFF</span>
+            </div>
+            <span class="sponsor-float-subtitle" id="sponsorFloatSubtitle">Create your server with 25% off</span>
+        </div>
+        <div class="sponsor-float-actions">
+            <button type="button" class="sponsor-float-btn" id="sponsorFloatCopyBtn" title="Copy promo code" aria-label="Copy promo code">
+                <i class="bi bi-clipboard"></i>
+            </button>
+            <a href="https://billing.apexminecrafthosting.com/aff.php?aff=17119" target="_blank" rel="noopener noreferrer" class="sponsor-float-btn" id="sponsorFloatOpenBtn" title="Visit Apex Hosting" aria-label="Visit Apex Hosting">
+                <i class="bi bi-box-arrow-up-right"></i>
+            </a>
+        </div>
+    </div>
+
     <header class="hero">
         <div class="container hero-content">
             <div class="hero-text">
-                <span class="badge">Download Now Available</span>
+                <span class="badge" data-i18n="hero.badge">Download Now Available</span>
                 <img src="https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/title.png"
                     alt="HelloWorld Launcher Title" class="hero-title-img">
-                <h1>Your Minecraft, <br><span class="gradient-text">Without Limits.</span></h1>
-                <p class="lead">The open source launcher designed to be lightweight, secure and completely
+                <h1 data-i18n="hero.title">Your Minecraft, <br><span class="gradient-text">Without Limits.</span></h1>
+                <p class="lead" data-i18n="hero.subtitle">The open source launcher designed to be lightweight, secure and completely
                     customizable. Forget about bloatware.</p>
                 
                 <!-- PowerShell One-Liner Install (Windows Only) -->
@@ -95,7 +162,7 @@
                     <div class="powershell-install-content">
                         <div class="powershell-header">
                             <i class="bi bi-terminal"></i>
-                            <span>Quick Install (PowerShell)</span>
+                            <span data-i18n="hero.install_ps">Quick Install (PowerShell)</span>
                             <span class="windows-badge"><i class="bi bi-windows"></i> Windows</span>
                         </div>
                         <div class="powershell-command-wrapper">
@@ -104,7 +171,7 @@
                                 <i class="bi bi-clipboard"></i>
                             </button>
                         </div>
-                        <p class="powershell-note">One-click install</p>
+                        <p class="powershell-note" data-i18n="hero.install_note">One-click install</p>
                     </div>
                 </div>
 
@@ -113,7 +180,7 @@
                     <div class="powershell-install-content">
                         <div class="powershell-header">
                             <i class="bi bi-terminal"></i>
-                            <span>Quick Install (Bash)</span>
+                            <span data-i18n="hero.install_bash">Quick Install (Bash)</span>
                             <span class="windows-badge" style="background: rgba(255, 184, 108, 0.2); color: #ffb86c; border: 1px solid rgba(255, 184, 108, 0.3);"><i class="fa-brands fa-linux"></i> Linux</span>
                         </div>
                         <div class="powershell-command-wrapper">
@@ -122,114 +189,110 @@
                                 <i class="bi bi-clipboard"></i>
                             </button>
                         </div>
-                        <p class="powershell-note">One-click install</p>
+                        <p class="powershell-note" data-i18n="hero.install_note">One-click install</p>
                     </div>
                 </div>
                 
                 <div class="hero-buttons">
                     <div class="dropdown-container">
-                        <button id="heroDownloadBtn" class="btn btn-primary btn-lg dropdown-btn">
+                        <button id="heroDownloadBtn" class="btn btn-primary btn-lg dropdown-btn" data-i18n="hero.download_win_btn">
                             <i class="bi bi-windows"></i> Download for Windows
                             <i class="bi bi-chevron-down dropdown-arrow"></i>
                             <div class="btn-shine"></div>
                         </button>
                         <div class="dropdown-menu" id="windowsDropdown">
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item recommended">
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item recommended" data-target="win-setup-x64">
                                 <div class="dropdown-item-content">
                                     <i class="bi bi-windows"></i>
                                     <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title">Setup x64</span>
-                                        <span class="dropdown-item-subtitle">Installer (Recommended)</span>
+                                        <span class="dropdown-item-title" data-i18n="hero.win_setup_title">Setup x64</span>
+                                        <span class="dropdown-item-subtitle" data-i18n="hero.win_setup_sub">Installer (Recommended)</span>
                                     </div>
-                                    <span class="recommended-badge">Best Option</span>
+                                    <span class="recommended-badge" data-i18n="hero.best_option">Best Option</span>
                                 </div>
                             </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item">
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="win-setup-arm64">
                                 <div class="dropdown-item-content">
                                     <i class="bi bi-cpu"></i>
                                     <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title">Setup ARM64</span>
-                                        <span class="dropdown-item-subtitle">Installer for ARM devices</span>
+                                        <span class="dropdown-item-title" data-i18n="hero.win_setup_arm_title">Setup ARM64</span>
+                                        <span class="dropdown-item-subtitle" data-i18n="hero.win_setup_arm_sub">Installer for ARM devices</span>
                                     </div>
                                 </div>
                             </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item">
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="win-portable-x64">
                                 <div class="dropdown-item-content">
                                     <i class="bi bi-box-seam"></i>
                                     <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title">Portable x64</span>
-                                        <span class="dropdown-item-subtitle">ZIP archive</span>
+                                        <span class="dropdown-item-title" data-i18n="hero.win_port_title">Portable x64</span>
+                                        <span class="dropdown-item-subtitle" data-i18n="hero.win_port_sub">ZIP archive</span>
                                     </div>
                                 </div>
                             </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item">
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="win-portable-arm64">
                                 <div class="dropdown-item-content">
                                     <i class="bi bi-box-seam"></i>
                                     <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title">Portable ARM64</span>
-                                        <span class="dropdown-item-subtitle">ZIP archive for ARM</span>
+                                        <span class="dropdown-item-title" data-i18n="hero.win_port_arm_title">Portable ARM64</span>
+                                        <span class="dropdown-item-subtitle" data-i18n="hero.win_port_arm_sub">ZIP archive for ARM</span>
                                     </div>
                                 </div>
                             </a>
                         </div>
                     </div>
                     <div class="dropdown-container">
-                        <button id="heroDownloadLinuxBtn" class="btn btn-secondary btn-lg dropdown-btn">
+                        <button id="heroDownloadLinuxBtn" class="btn btn-secondary btn-lg dropdown-btn" data-i18n="hero.download_linux_btn">
                             <i class="fa-brands fa-linux" style="font-size: 1.1rem; margin-right: 5px;"></i> Download for Linux
                             <i class="bi bi-chevron-down dropdown-arrow"></i>
                         </button>
                         <div class="dropdown-menu" id="linuxDropdown">
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item recommended">
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item recommended" data-target="linux-deb-x64">
                                 <div class="dropdown-item-content">
                                     <i class="fa-brands fa-linux"></i>
                                     <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title">DEB x64</span>
-                                        <span class="dropdown-item-subtitle">Debian/Ubuntu (Recommended)</span>
+                                        <span class="dropdown-item-title" data-i18n="hero.lin_deb_title">DEB x64</span>
+                                        <span class="dropdown-item-subtitle" data-i18n="hero.lin_deb_sub">Debian/Ubuntu (Recommended)</span>
                                     </div>
-                                    <span class="recommended-badge">Best Option</span>
+                                    <span class="recommended-badge" data-i18n="hero.best_option">Best Option</span>
                                 </div>
                             </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item">
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="linux-deb-arm64">
                                 <div class="dropdown-item-content">
                                     <i class="fa-brands fa-linux"></i>
                                     <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title">DEB ARM64</span>
-                                        <span class="dropdown-item-subtitle">Debian/Ubuntu for ARM</span>
+                                        <span class="dropdown-item-title" data-i18n="hero.lin_deb_arm_title">DEB ARM64</span>
+                                        <span class="dropdown-item-subtitle" data-i18n="hero.lin_deb_arm_sub">Debian/Ubuntu for ARM</span>
                                     </div>
                                 </div>
                             </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item">
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="linux-appimage-x64">
                                 <div class="dropdown-item-content">
                                     <i class="bi bi-box"></i>
                                     <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title">AppImage x64</span>
-                                        <span class="dropdown-item-subtitle">Universal Linux</span>
+                                        <span class="dropdown-item-title" data-i18n="hero.lin_app_title">AppImage x64</span>
+                                        <span class="dropdown-item-subtitle" data-i18n="hero.lin_app_sub">Universal Linux</span>
                                     </div>
                                 </div>
                             </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item">
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="linux-appimage-arm64">
                                 <div class="dropdown-item-content">
                                     <i class="bi bi-box"></i>
                                     <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title">AppImage ARM64</span>
-                                        <span class="dropdown-item-subtitle">Universal Linux for ARM</span>
+                                        <span class="dropdown-item-title" data-i18n="hero.lin_app_arm_title">AppImage ARM64</span>
+                                        <span class="dropdown-item-subtitle" data-i18n="hero.lin_app_arm_sub">Universal Linux for ARM</span>
                                     </div>
                                 </div>
                             </a>
                         </div>
                     </div>
-                    <a href="https://github.com/abeloskyyy/HelloWorld-Launcher" target="_blank"
-                        class="btn btn-secondary btn-lg">
-                        <i class="bi bi-code-slash"></i> View Code
-                    </a>
                 </div>
-                <div id="osWarningContainer" style="display:none; margin-top: 15px; background: rgba(255, 59, 48, 0.15); border: 1px solid rgba(255, 59, 48, 0.3); border-radius: 8px; padding: 10px 15px; color: #ff8c82; font-weight: 500; font-size: 14px;">
-                    <i class="bi bi-info-circle" style="margin-right: 5px;"></i> Estás navegando desde <strong><span id="detectedOSName">OS</span></strong>. Los siguientes instaladores podrían no ser compatibles.
+                <div id="osWarningContainer" style="display:none; margin-top: 15px; background: rgba(255, 59, 48, 0.15); border: 1px solid rgba(255, 59, 48, 0.3); border-radius: 8px; padding: 10px 15px; color: #ff8c82; font-weight: 500; font-size: 14px;" data-i18n="hero.os_warning">
+                    <i class="bi bi-info-circle" style="margin-right: 5px;"></i> You are browsing from <strong><span id="detectedOSName">OS</span></strong>. The following installers may not be compatible.
                 </div>
                 <div class="hero-stats">
                     <div class="stat">
                         <span class="stat-value" id="downloadCount">0+</span>
-                        <span class="stat-label">Downloads</span>
+                        <span class="stat-label" data-i18n="hero.stats_downloads">Downloads</span>
                     </div>
                     <div class="stat">
                         <span class="stat-value"><i class="bi bi-star-fill"
@@ -241,15 +304,15 @@
                     </div>
                     <div class="stat">
                         <span class="stat-value">100%</span>
-                        <span class="stat-label">Open Source</span>
+                        <span class="stat-label" data-i18n="hero.stats_opensource">Open Source</span>
                     </div>
                     <div class="stat">
                         <span class="stat-value">0%</span>
-                        <span class="stat-label">Telemetry</span>
+                        <span class="stat-label" data-i18n="hero.stats_telemetry">Telemetry</span>
                     </div>
                     <div class="stat">
-                        <span class="stat-value">High</span>
-                        <span class="stat-label">Performance</span>
+                        <span class="stat-value" data-i18n="hero.stats_perf_val">High</span>
+                        <span class="stat-label" data-i18n="hero.stats_perf">Performance</span>
                     </div>
                 </div>
             </div>
@@ -271,39 +334,39 @@
     <section id="features" class="features">
         <div class="container">
             <div class="section-header text-center">
-                <h2>Why HelloWorld?</h2>
-                <p>Designed with performance and privacy in mind.</p>
+                <h2 data-i18n="features.title">Why HelloWorld?</h2>
+                <p data-i18n="features.subtitle">Designed with performance and privacy in mind.</p>
             </div>
             <div class="grid-3">
                 <div class="feature-card">
                     <div class="icon-box"><i class="bi bi-shield-check"></i></div>
-                    <h3>Privacy First</h3>
-                    <p>No telemetry or trackers. Your activity is yours alone. 100% auditable code on GitHub.</p>
+                    <h3 data-i18n="features.f1_title">Privacy First</h3>
+                    <p data-i18n="features.f1_desc">No telemetry or trackers. Your activity is yours alone. 100% auditable code on GitHub.</p>
                 </div>
                 <div class="feature-card">
                     <div class="icon-box"><i class="bi bi-lightning-charge"></i></div>
-                    <h3>Fast Startup</h3>
-                    <p>Optimized to start in seconds. Perfect for old or low-end PCs.</p>
+                    <h3 data-i18n="features.f2_title">Fast Startup</h3>
+                    <p data-i18n="features.f2_desc">Optimized to start in seconds. Perfect for old or low-end PCs.</p>
                 </div>
                 <div class="feature-card">
                     <div class="icon-box"><i class="bi bi-box-seam"></i></div>
-                    <h3>Mod Management</h3>
-                    <p>Install Forge, Fabric and mods directly from the launcher without external tools.</p>
+                    <h3 data-i18n="features.f3_title">Mod Management</h3>
+                    <p data-i18n="features.f3_desc">Install Forge, Fabric and mods directly from the launcher without external tools.</p>
                 </div>
                 <div class="feature-card">
                     <div class="icon-box"><i class="bi bi-people"></i></div>
-                    <h3>Smart Installations</h3>
-                    <p>Every installation has its own configuration. Keep your versions and mods organized.</p>
+                    <h3 data-i18n="features.f4_title">Smart Installations</h3>
+                    <p data-i18n="features.f4_desc">Every installation has its own configuration. Keep your versions and mods organized.</p>
                 </div>
                 <div class="feature-card">
                     <div class="icon-box"><i class="bi bi-wifi-off"></i></div>
-                    <h3>Offline Mode</h3>
-                    <p>No internet? No problem. Play your installed versions anywhere.</p>
+                    <h3 data-i18n="features.f5_title">Offline Mode</h3>
+                    <p data-i18n="features.f5_desc">No internet? No problem. Play your installed versions anywhere.</p>
                 </div>
                 <div class="feature-card">
                     <div class="icon-box"><i class="bi bi-terminal"></i></div>
-                    <h3>Open Source</h3>
-                    <p>Total transparency. No hidden installers or added software.</p>
+                    <h3 data-i18n="features.f6_title">Open Source</h3>
+                    <p data-i18n="features.f6_desc">Total transparency. No hidden installers or added software.</p>
                 </div>
             </div>
         </div>
@@ -312,8 +375,8 @@
     <section id="screenshots" class="screenshots">
         <div class="container">
             <div class="section-header">
-                <h2>Gallery</h2>
-                <p>Take a look at the simple and powerful interface.</p>
+                <h2 data-i18n="gallery.title">Gallery</h2>
+                <p data-i18n="gallery.subtitle">Take a look at the simple and powerful interface.</p>
             </div>
 
             <div class="carousel-container">
@@ -370,30 +433,30 @@
     <section id="faq" class="faq-section">
         <div class="container">
             <div class="section-header text-center">
-                <h2>Frequently Asked Questions</h2>
-                <p>Everything you need to know.</p>
+                <h2 data-i18n="faq.title">Frequently Asked Questions</h2>
+                <p data-i18n="faq.subtitle">Everything you need to know.</p>
             </div>
             <div class="faq-grid">
                 <div class="faq-item">
-                    <h4>Why does it say it has a virus?</h4>
-                    <p>Because the app is not signed (certificates cost money). It's a common false positive in open
+                    <h4 data-i18n="faq.q1">Why does it say it has a virus?</h4>
+                    <p data-i18n="faq.a1">Because the app is not signed (certificates cost money). It's a common false positive in open
                         source apps.</p>
                 </div>
                 <div class="faq-item">
-                    <h4>Is it legal?</h4>
-                    <p>Yes. The launcher uses a legal copy of the game according to Mojang/Microsoft terms.</p>
+                    <h4 data-i18n="faq.q2">Is it legal?</h4>
+                    <p data-i18n="faq.a2">Yes. The launcher uses a legal copy of the game according to Mojang/Microsoft terms.</p>
                 </div>
                 <div class="faq-item">
-                    <h4>Does it support large mods?</h4>
-                    <p>Yes, it supports heavy modpacks as long as your PC has enough resources.</p>
+                    <h4 data-i18n="faq.q3">Does it support large mods?</h4>
+                    <p data-i18n="faq.a3">Yes, it supports heavy modpacks as long as your PC has enough resources.</p>
                 </div>
                 <div class="faq-item">
-                    <h4>Does it work without internet?</h4>
-                    <p>Yes, you can use Offline Mode to play versions already downloaded.</p>
+                    <h4 data-i18n="faq.q4">Does it work without internet?</h4>
+                    <p data-i18n="faq.a4">Yes, you can use Offline Mode to play versions already downloaded.</p>
                 </div>
                 <div class="faq-item">
-                    <h4>Does it support Fabric and Forge?</h4>
-                    <p>Absolutely. You can create independent installations for each.</p>
+                    <h4 data-i18n="faq.q5">Does it support Fabric and Forge?</h4>
+                    <p data-i18n="faq.a5">Absolutely. You can create independent installations for each.</p>
                 </div>
             </div>
         </div>
@@ -404,20 +467,20 @@
             <div class="footer-content">
                 <div class="footer-brand">
                     <h3>HelloWorld<span class="accent">Launcher</span></h3>
-                    <p>The Minecraft launcher made by the community, for the community.</p>
+                    <p data-i18n="footer.desc">The Minecraft launcher made by the community, for the community.</p>
                 </div>
                 <div class="footer-links">
-                    <h4>Links</h4>
-                    <a href="https://github.com/abeloskyyy/HelloWorld-Launcher" target="_blank">Repository</a>
-                    <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/issues" target="_blank">Report
+                    <h4 data-i18n="footer.links">Links</h4>
+                    <a href="https://github.com/abeloskyyy/HelloWorld-Launcher" target="_blank" data-i18n="footer.repo">Repository</a>
+                    <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/issues" target="_blank" data-i18n="footer.report">Report
                         Error</a>
-                    <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases" target="_blank">Previous
+                    <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases" target="_blank" data-i18n="footer.prev">Previous
                         Versions</a>
                 </div>
             </div>
             <div class="footer-bottom">
-                <p>&copy; 2026 HelloWorld Launcher. Not affiliated with Mojang or Microsoft.</p>
-                <p style="margin-top: 5px; font-size: 0.9em; opacity: 0.8;">
+                <p data-i18n="footer.copy">&copy; 2026 HelloWorld Launcher. Not affiliated with Mojang or Microsoft.</p>
+                <p style="margin-top: 5px; font-size: 0.9em; opacity: 0.8;" data-i18n="footer.signpath">
                     This project uses the <a href="https://signpath.org/" target="_blank" rel="noopener noreferrer">SignPath Foundation</a> for code signing. 
                     | <a href="https://github.com/Abeloskyyy/HelloWorld-Launcher/blob/main/PRIVACY.md" target="_blank">Privacy Policy</a>
                 </p>
@@ -431,19 +494,19 @@
     </a>
 
     <!-- Review System -->
-    <button id="reviewBtn" class="review-float-btn" title="Leave a Review">
+    <button id="reviewBtn" class="review-float-btn" title="Leave a Review" data-i18n-title="review.btn_title">
         <i class="bi bi-chat-heart-fill"></i>
     </button>
 
     <div id="reviewModal" class="review-modal">
         <div class="review-modal-content">
             <button class="close-modal">&times;</button>
-            <h3>Leave a Review</h3>
-            <p>Tell us what you think about HelloWorld Launcher!</p>
+            <h3 data-i18n="review.title">Leave a Review</h3>
+            <p data-i18n="review.subtitle">Tell us what you think about HelloWorld Launcher!</p>
 
             <form id="reviewForm">
                 <div class="form-group">
-                    <label>Rating</label>
+                    <label data-i18n="review.rating">Rating</label>
                     <div class="star-rating">
                         <i class="bi bi-star-fill" data-rating="1"></i>
                         <i class="bi bi-star-fill" data-rating="2"></i>
@@ -455,17 +518,17 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="reviewerName">Name</label>
-                    <input type="text" id="reviewerName" placeholder="Your name (optional)" class="form-control">
+                    <label for="reviewerName" data-i18n="review.name">Name</label>
+                    <input type="text" id="reviewerName" placeholder="Your name (optional)" data-i18n-placeholder="review.name_placeholder" class="form-control">
                 </div>
 
                 <div class="form-group">
-                    <label for="reviewComment">Comment</label>
-                    <textarea id="reviewComment" rows="4" placeholder="Share your experience..." class="form-control"
+                    <label for="reviewComment" data-i18n="review.comment">Comment</label>
+                    <textarea id="reviewComment" rows="4" placeholder="Share your experience..." data-i18n-placeholder="review.comment_placeholder" class="form-control"
                         required></textarea>
                 </div>
 
-                <button type="submit" class="btn btn-primary">Submit Review</button>
+                <button type="submit" class="btn btn-primary" data-i18n="review.submit">Submit Review</button>
             </form>
         </div>
     </div>
@@ -571,168 +634,7 @@
         </div>
     </div>
 
-    <!-- Account Dashboard Modal -->
-    <div id="accountModal" class="review-modal">
-        <div class="review-modal-content" style="max-width: 1200px; max-height: 90vh; overflow-y: auto;">
-            <button class="close-modal" id="closeAccountModal">&times;</button>
-            <h3 style="margin-bottom: 5px;">Account Dashboard</h3>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 20px;">
-                <!-- Left Column -->
-                <div>
-                    <div class="form-group" style="text-align: center;">
-                        <div id="avatarBackgroundPreview" style="border-radius: 16px; padding: 30px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); margin-bottom: 20px; transition: border 0.3s; position: relative;">
-                            <h2 style="margin: 0 0 15px 0; font-size: 1.5rem; font-weight: 600; filter: drop-shadow(0 2px 8px rgba(0,0,0,1)); display: flex; align-items: center; justify-content: center; gap: 8px;">
-                                <span id="dashboardDisplayName">Player</span>
-                                <span id="dashboardPremiumBadge" class="premium-badge" style="display:none;"><i class="fas fa-dollar-sign"></i></span>
-                            </h2>
-                            <div style="position: relative; display: inline-block;">
-                                <img id="dashboardAvatarPreview" src="https://ui-avatars.com/api/?name=Player&background=random&color=fff&rounded=true&bold=true&format=svg" alt="Avatar" style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255,255,255,0.2); image-rendering: pixelated; filter: drop-shadow(0 4px 12px rgba(0,0,0,1));">
-                                <div id="countryBadge" style="position: absolute; top: 10px; right: -5px; width: 32px; height: 32px; border-radius: 50%; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; overflow: hidden; border: 2px solid rgba(255,255,255,0.3); z-index: 10; filter: drop-shadow(0 2px 6px rgba(0,0,0,1));">
-                                    <img id="countryFlagSvg" src="" alt="Country" style="width: 100%; height: 100%; object-fit: cover;">
-                                </div>
-                            </div>
-                        </div>
-                        <div style="display: flex; gap: 10px; justify-content: center;">
-                            <input type="file" id="avatarUploadInput" accept="image/png, image/jpeg, image/webp" style="display: none;">
-                            <button class="btn btn-secondary" onclick="document.getElementById('avatarUploadInput').click()" style="flex: 1; font-size: 0.9em;"><i class="fas fa-camera"></i> Avatar</button>
-                            <button class="btn btn-secondary" id="useDefaultAvatarBtn" title="Use your default Minecraft head" style="display:none; padding: 0 14px; font-size: 0.9em;"><i class="fas fa-cube"></i> MC Head</button>
-                            <select id="dashboardBackground" class="form-control" style="flex: 1; padding: 10px; color: white; background-color: rgba(30,30,35,0.9);">
-                                <option value="default">Default</option>
-                                <option value="gradient1">Purple</option>
-                                <option value="gradient2">Blue</option>
-                                <option value="gradient3">Green</option>
-                                <option value="gradient4">Orange</option>
-                                <option value="gradient5">Pink</option>
-                                <option value="minecraft1">Minecraft Overworld</option>
-                                <option value="minecraft2">Minecraft Sky</option>
-                                <option value="minecraft3">Minecraft Nether</option>
-                                <option value="minecraft4">Minecraft End</option>
-                                <option value="minecraft5">Minecraft Village</option>
-                                <option value="minecraft6">Minecraft Forest</option>
-                                <option value="minecraft7">Minecraft Desert</option>
-                                <option value="minecraft8">Minecraft Ocean</option>
-                                <option value="minecraft9">Minecraft Cherry Grove</option>
-                            </select>
-                        </div>
-                        <p style="font-size: 0.8em; opacity: 0.65; margin-top: 5px;">Images are automatically cropped to 1:1 and resized to 128x128.</p>
-                    </div>
-
-                    <div class="form-group" id="usernameFormGroup" style="margin-top: 20px;">
-                        <label>Minecraft Username</label>
-                        <div style="display: flex; gap: 10px;">
-                            <input type="text" id="dashboardUsername" class="form-control" readonly disabled style="color: white;">
-                            <button class="btn btn-secondary" id="editUsernameBtn" style="padding: 0 15px;"><i class="fas fa-edit"></i></button>
-                        </div>
-                        <p style="font-size: 0.8em; color: #ff8c82; margin-top: 5px; line-height: 1.3;">
-                            <i class="bi bi-exclamation-triangle"></i> Changing your username might cause you to lose progress, ranks, and inventory on third-party servers.
-                        </p>
-                    </div>
-
-                    <div class="form-group" style="margin-top: 20px;">
-                        <label>Country</label>
-                        <select id="dashboardCountry" class="form-control" style="color: white; background-color: rgba(30,30,35,0.9);">
-                            <option value="">Select your country</option>
-                            <option value="AR">Argentina</option>
-                            <option value="AU">Australia</option>
-                            <option value="AT">Austria</option>
-                            <option value="BE">Belgium</option>
-                            <option value="BR">Brazil</option>
-                            <option value="CA">Canada</option>
-                            <option value="CL">Chile</option>
-                            <option value="CN">China</option>
-                            <option value="CO">Colombia</option>
-                            <option value="CZ">Czech Republic</option>
-                            <option value="DK">Denmark</option>
-                            <option value="EG">Egypt</option>
-                            <option value="FI">Finland</option>
-                            <option value="FR">France</option>
-                            <option value="DE">Germany</option>
-                            <option value="GR">Greece</option>
-                            <option value="HK">Hong Kong</option>
-                            <option value="HU">Hungary</option>
-                            <option value="IS">Iceland</option>
-                            <option value="IN">India</option>
-                            <option value="ID">Indonesia</option>
-                            <option value="IE">Ireland</option>
-                            <option value="IL">Israel</option>
-                            <option value="IT">Italy</option>
-                            <option value="JP">Japan</option>
-                            <option value="LU">Luxembourg</option>
-                            <option value="MY">Malaysia</option>
-                            <option value="MX">Mexico</option>
-                            <option value="NL">Netherlands</option>
-                            <option value="NZ">New Zealand</option>
-                            <option value="NG">Nigeria</option>
-                            <option value="NO">Norway</option>
-                            <option value="PE">Peru</option>
-                            <option value="PH">Philippines</option>
-                            <option value="PL">Poland</option>
-                            <option value="PT">Portugal</option>
-                            <option value="RO">Romania</option>
-                            <option value="RU">Russia</option>
-                            <option value="SA">Saudi Arabia</option>
-                            <option value="SG">Singapore</option>
-                            <option value="ZA">South Africa</option>
-                            <option value="KR">South Korea</option>
-                            <option value="ES">Spain</option>
-                            <option value="SE">Sweden</option>
-                            <option value="CH">Switzerland</option>
-                            <option value="TH">Thailand</option>
-                            <option value="TR">Turkey</option>
-                            <option value="UA">Ukraine</option>
-                            <option value="AE">United Arab Emirates</option>
-                            <option value="GB">United Kingdom</option>
-                            <option value="US">United States</option>
-                            <option value="VE">Venezuela</option>
-                            <option value="VN">Vietnam</option>
-                            <option value="OTHER">Other</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Right Column -->
-                <div>
-                    <div class="form-group">
-                        <label>Biography <span style="opacity: 0.6; font-size: 0.85em;">(max 500 characters)</span></label>
-                        <textarea id="dashboardBiography" class="form-control" rows="5" maxlength="500" placeholder="Tell us about yourself..." style="color: white; resize: none;"></textarea>
-                        <p style="font-size: 0.8em; opacity: 0.6; margin-top: 5px; text-align: right;"><span id="biographyCharCount">0</span>/500</p>
-                    </div>
-
-                    <div class="form-group" style="margin-top: 15px;">
-                        <label>Links <span style="opacity: 0.6; font-size: 0.85em;">(title and URL)</span></label>
-                        <div id="linksContainer">
-                            <!-- Links will be added here dynamically -->
-                        </div>
-                        <button type="button" class="btn btn-secondary" id="addLinkBtn" style="width: 100%; margin-top: 10px; font-size: 0.9em;"><i class="fas fa-plus"></i> Add Link</button>
-                    </div>
-
-                    <div class="form-group" style="margin-top: 15px;">
-                        <label>Favorite Mob</label>
-                        <input type="text" id="dashboardFavoriteMob" class="form-control" placeholder="E.g. Creeper, Enderman..." maxlength="50" style="color: white;">
-                    </div>
-
-                    <div class="form-group" style="margin-top: 15px;">
-                        <label>Playstyle Tags <span style="opacity: 0.6; font-size: 0.85em;">(pick up to 5)</span></label>
-                        <div id="playstyleTagsGrid" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;">
-                            <!-- Tags rendered by JS -->
-                        </div>
-                        <p style="font-size: 0.8em; opacity: 0.6; margin-top: 6px;">Click to select/deselect. Max 5 tags.</p>
-                    </div>
-
-                    <div class="form-group" style="margin-top: 15px;">
-                        <button class="btn btn-secondary" id="accountLogoutBtn" style="width: 100%; border-color: #ff8c82; color: #ff8c82;"><i class="fas fa-sign-out-alt"></i> Log Out</button>
-                    </div>
-
-
-                    <div id="accountError" style="color: #ff8c82; font-size: 0.9em; margin-bottom: 10px; text-align: center; display: none;"></div>
-                    <div id="accountSuccess" style="color: #4CAF50; font-size: 0.9em; margin-bottom: 10px; text-align: center; display: none;"></div>
-                    
-                    <button class="btn btn-primary" id="saveAccountBtn" style="width: 100%; margin-top: 15px;">Save Changes</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Avatar Cropper Modal -->
     <div id="cropperModal" class="review-modal" style="z-index: 2000;">

@@ -103,6 +103,15 @@
     pointer-events: all !important;
 }
 
+/* Elevate ALL ancestor elements of the target so the target's z-index
+   is evaluated relative to a stacking context that is above the overlay.
+   Without this, an ancestor with a transform/animation creates a stacking
+   context that keeps the target below the overlay regardless of z-index. */
+.tutorial-elevated-ancestor {
+    z-index: 20001 !important;
+    position: relative !important;
+}
+
 /* Skip Tutorial Button */
 .tutorial-skip-btn {
     position: fixed;

@@ -17,11 +17,9 @@ jobs:
           URL: ${{ github.event.release.html_url }}
           BODY: ${{ github.event.release.body }}
         run: |
-          curl -H "Content-Type: application/json" -X POST $WEBHOOK_URL -d "{
-            \"embeds\": [{
-              \"title\": \"🚀 New Release: $TITLE\",
-              \"description\": \"**Version:** $VERSION\\n\\n$BODY\",
-              \"url\": \"$URL\",
-              \"color\": 5814783
-            }]
-          }"
+          PAYLOAD=$(jq -n \
+            --arg title "🚀 New Release: $TITLE" \
+            --arg desc "**Version:** $VERSION\n\n$BODY" \
+            --arg url "$URL" \
+            '{embeds: [{title: $title, description: $desc, url: $url, color: 5814783}]}')
+          curl -H "Content-Type: application/json" -X POST -d "$PAYLOAD" $WEBHOOK_URL

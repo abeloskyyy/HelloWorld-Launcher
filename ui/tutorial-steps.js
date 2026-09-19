@@ -9,35 +9,16 @@
 
     let tutorialPhase = 'idle';
 
+    // Shorthand helper — called at runtime so language is always current
+    const t = (key, vars) => window.t ? window.t(key, vars) : key;
+
     /**
      * Start the first tutorial (Create Installation)
      */
     window.startTutorialStep1 = async function () {
         window.currentActiveTutorialStep = 1;
         tutorialPhase = 'profile';
-
-        // Check if user is on Play section
-        const playSection = document.getElementById('play');
-        const isOnPlay = playSection && playSection.classList.contains('active');
-
-        if (!isOnPlay) {
-            await startSpotlightTutorial([
-                {
-                    target: '#playNavBtn',
-                    title: 'Go to Play',
-                    text: 'First, go to the Play section to start.',
-                    hint: 'Click here',
-                    position: 'right',
-                    onComplete: async () => {
-                        await new Promise(r => setTimeout(r, 500));
-                    }
-                }
-            ], () => {
-                setTimeout(() => startProfileTutorial(), 600);
-            });
-        } else {
-            startProfileTutorial();
-        }
+        startProfileTutorial();
     };
 
     /**
@@ -57,39 +38,36 @@
         const createBtn = document.getElementById('acceptProfileBtn');
 
         const updateProfileTooltip = (e) => {
-            let title = 'Configure Installation';
-            let text = 'Fill in the details for your new installation.';
+            let title = t('tutorial_spotlight.step1.tooltip_default_title');
+            let text  = t('tutorial_spotlight.step1.tooltip_default_text');
 
             if (e && e.target) {
                 if (e.target.id === 'profileName') {
-                    title = 'Installation Name';
-                    text = 'Give your installation a unique name (e.g., "Survival World"). Min 3 characters.';
+                    title = t('tutorial_spotlight.step1.tooltip_name_title');
+                    text  = t('tutorial_spotlight.step1.tooltip_name_text');
                 } else if (e.target.id === 'profileSoftwareSelect') {
-                    title = 'Software Type';
-                    text = 'Choose Vanilla for standard gameplay, or Forge/Fabric if you want to use mods.';
+                    title = t('tutorial_spotlight.step1.tooltip_software_title');
+                    text  = t('tutorial_spotlight.step1.tooltip_software_text');
                 } else if (e.target.id === 'profileMcVersionSelect') {
-                    title = 'Minecraft Version';
-                    text = 'Select the Minecraft version this installation will use.';
+                    title = t('tutorial_spotlight.step1.tooltip_mc_title');
+                    text  = t('tutorial_spotlight.step1.tooltip_mc_text');
                 } else if (e.target.id === 'profileLoaderVersionSelect') {
-                    title = 'Loader Version';
-                    text = 'Select the version of the mod loader. Only shown for Forge/Fabric.';
+                    title = t('tutorial_spotlight.step1.tooltip_loader_title');
+                    text  = t('tutorial_spotlight.step1.tooltip_loader_text');
                 } else if (e.target.id === 'profileDir' || e.target.id === 'selectFolderBtn') {
-                    title = 'Installation Directory';
-                    text = 'Folder where this installation\'s data will be saved (worlds, mods, settings). Useful for keeping modpacks separate.';
+                    title = t('tutorial_spotlight.step1.tooltip_dir_title');
+                    text  = t('tutorial_spotlight.step1.tooltip_dir_text');
                 } else if (e.target.id === 'profileJavaPath') {
-                    title = 'Java Path (Advanced)';
-                    text = 'Optional: Specify a custom Java executable. Leave empty to use the bundled Java.';
+                    title = t('tutorial_spotlight.step1.tooltip_java_title');
+                    text  = t('tutorial_spotlight.step1.tooltip_java_text');
                 } else if (e.target.id === 'profileJVMArgs') {
-                    title = 'JVM Arguments (Advanced)';
-                    text = 'Optional: Customize RAM allocation (e.g., -Xmx4G). The default is usually fine.';
+                    title = t('tutorial_spotlight.step1.tooltip_jvm_title');
+                    text  = t('tutorial_spotlight.step1.tooltip_jvm_text');
                 }
-            } else {
-                title = 'Configure & Create';
-                text = 'Customize your installation details: choose Software, Minecraft Version, and optionally a Loader Version.';
             }
 
             if (window.updateSpotlightContent) {
-                window.updateSpotlightContent(title, text, 'Click "Create" when done');
+                window.updateSpotlightContent(title, text, t('tutorial_spotlight.step1.configure_click_create'));
             }
         };
 
@@ -105,26 +83,26 @@
         await startSpotlightTutorial([
             {
                 target: '#profilesNavBtn',
-                title: 'Go to Installations',
-                text: 'Navigate to the Installations section.',
-                hint: 'Click "Installations"',
+                title: t('tutorial_spotlight.step1.go_installations_title'),
+                text: t('tutorial_spotlight.step1.go_installations_text'),
+                hint: t('tutorial_spotlight.step1.go_installations_hint'),
                 position: 'right',
                 onComplete: async () => { await new Promise(r => setTimeout(r, 400)); }
             },
             {
                 target: '#createProfileBtn',
-                title: 'Create New Installation',
-                text: 'Click here to create a new installation.',
-                hint: 'Click "Create new installation"',
+                title: t('tutorial_spotlight.step1.create_title'),
+                text: t('tutorial_spotlight.step1.create_text'),
+                hint: t('tutorial_spotlight.step1.create_hint'),
                 position: 'bottom',
                 onComplete: async () => { await new Promise(r => setTimeout(r, 400)); }
             },
             // Main Config Step
             {
                 target: '#modal .modal-content',
-                title: 'Configure Installation',
-                text: 'Customize your installation. Choose Software, Minecraft Version, and optionally a Loader.',
-                hint: 'Click "Create" when done',
+                title: t('tutorial_spotlight.step1.configure_title'),
+                text: t('tutorial_spotlight.step1.configure_text'),
+                hint: t('tutorial_spotlight.step1.configure_hint'),
                 position: 'right',
                 advanceOn: 'manual',
                 beforeShow: () => {
@@ -186,15 +164,21 @@
                 const loginBtn = document.getElementById('loginButton');
                 const badge = document.getElementById('userBadge');
                 const skinsBtn = document.getElementById('skinsSidebarBtn');
+                const statsBtn = document.getElementById('statsBtn');
+                const socialBtn = document.getElementById('socialBtn');
+                const streakContainer = document.getElementById('streakBadgeContainer');
+                const pcBar = document.getElementById('profileCompletionBar');
+                const badgeWrapper = document.getElementById('userBadgeWrapper');
+
                 if (loginBtn) loginBtn.style.display = 'flex';
-                if (badge) {
-                    badge.style.display = 'none';
-                    badge.classList.remove('active');
-                }
-                if (skinsBtn) {
-                    skinsBtn.style.display = 'flex';
-                    skinsBtn.classList.add('locked-feature');
-                }
+                if (badge) { badge.style.display = 'none'; badge.classList.remove('active'); }
+                if (skinsBtn) { skinsBtn.style.display = 'none'; skinsBtn.classList.add('locked-feature'); }
+                if (statsBtn) statsBtn.style.display = 'none';
+                if (socialBtn) socialBtn.style.display = 'none';
+                if (streakContainer) streakContainer.style.display = 'none';
+                if (pcBar) pcBar.style.display = 'none';
+                if (badgeWrapper) badgeWrapper.style.display = 'none';
+
                 await new Promise(r => setTimeout(r, 300));
             }
         } catch (e) {
@@ -241,9 +225,9 @@
         await startSpotlightTutorial([
             {
                 target: '#loginButton',
-                title: 'Log In',
-                text: 'Click here to log in. You can use a Microsoft, HelloWorld, or Offline account.',
-                hint: 'Click "Login"',
+                title: t('tutorial_spotlight.step2.login_title'),
+                text: t('tutorial_spotlight.step2.login_text'),
+                hint: t('tutorial_spotlight.step2.login_hint'),
                 position: 'bottom',
                 advanceOn: 'click',
                 onComplete: async () => {
@@ -257,9 +241,9 @@
             },
             {
                 target: '#loginModal .modal-content',
-                title: 'Select Login Method',
-                text: 'Choose your preferred method. Microsoft and HelloWorld accounts allow skins and online play.',
-                hint: 'Select an option',
+                title: t('tutorial_spotlight.step2.method_title'),
+                text: t('tutorial_spotlight.step2.method_text'),
+                hint: t('tutorial_spotlight.step2.method_hint'),
                 position: 'right',
                 advanceOn: 'manual',
                 beforeShow: async () => {
@@ -286,9 +270,9 @@
                         hwBtn.addEventListener('click', () => {
                             if (window.updateSpotlightContent) {
                                 window.updateSpotlightContent(
-                                    'HelloWorld Account',
-                                    'If you don\'t have a HelloWorld account, you must create one on the website first, then log in here.',
-                                    'Log in to continue'
+                                    t('tutorial_spotlight.step2.hw_account_title'),
+                                    t('tutorial_spotlight.step2.hw_account_text'),
+                                    t('tutorial_spotlight.step2.hw_account_hint')
                                 );
                             }
                         });
@@ -299,9 +283,9 @@
                         hwBackBtn.addEventListener('click', () => {
                             if (window.updateSpotlightContent) {
                                 window.updateSpotlightContent(
-                                    'Select Login Method',
-                                    'Choose your preferred method. Microsoft and HelloWorld accounts allow skins and online play.',
-                                    'Select an option'
+                                    t('tutorial_spotlight.step2.method_title'),
+                                    t('tutorial_spotlight.step2.method_text'),
+                                    t('tutorial_spotlight.step2.method_hint')
                                 );
                             }
                         });
@@ -310,9 +294,17 @@
                     // Hook into login success — preserve original behavior
                     const originalOnLoginSuccess = window.onLoginSuccess;
                     window.onLoginSuccess = async function () {
+                        // IMMEDIATELY restore to prevent re-triggering (e.g., from Firestore/skin updates)
+                        window.onLoginSuccess = originalOnLoginSuccess;
+
                         if (originalOnLoginSuccess) {
                             await originalOnLoginSuccess();
                         }
+
+                        // Restore userBadgeWrapper — it was hidden during tutorial logout
+                        // but originalOnLoginSuccess only shows userBadge, not its wrapper
+                        const badgeWrapper = document.getElementById('userBadgeWrapper');
+                        if (badgeWrapper) badgeWrapper.style.display = '';
 
                         // Restore modal behavior
                         restoreModalBehavior();
@@ -382,25 +374,25 @@
             await startSpotlightTutorial([
                 {
                     target: '#skinsSidebarBtn',
-                    title: 'Skins & Capes',
-                    text: 'Microsoft accounts can manage Skins and Capes here.',
-                    hint: 'Click "Skins & Capes"',
+                    title: t('tutorial_spotlight.step2.skins_capes_title'),
+                    text: t('tutorial_spotlight.step2.skins_capes_text'),
+                    hint: t('tutorial_spotlight.step2.skins_capes_hint'),
                     position: 'right',
                     onComplete: async () => { await new Promise(r => setTimeout(r, 500)); }
                 },
                 {
                     target: '#createSkinPackBtn',
-                    title: 'Create Skin Pack',
-                    text: 'Organize your skins into packs.',
-                    hint: 'Click "Create New Skin Pack"',
+                    title: t('tutorial_spotlight.step2.create_skin_pack_title'),
+                    text: t('tutorial_spotlight.step2.create_skin_pack_text'),
+                    hint: t('tutorial_spotlight.step2.create_skin_pack_hint'),
                     position: 'bottom',
                     onComplete: async () => { await new Promise(r => setTimeout(r, 400)); }
                 },
                 {
                     target: '#skinPackModal .modal-content',
-                    title: 'New Skin Pack',
-                    text: 'Fill in the details and create your pack.',
-                    hint: 'Click "Create"',
+                    title: t('tutorial_spotlight.step2.new_skin_pack_title'),
+                    text: t('tutorial_spotlight.step2.new_skin_pack_text'),
+                    hint: t('tutorial_spotlight.step2.new_skin_pack_hint'),
                     position: 'right',
                     advanceOn: 'manual',
                     beforeShow: () => {
@@ -422,17 +414,17 @@
                 {
                     // Spotlight the "Use" button of any available skin card
                     target: () => {
-                        return document.querySelector('.skin-pack-card .btn-blue');
+                        return document.querySelector('.skin-pack-card .btn-skin-use, .skin-pack-card .btn-blue');
                     },
-                    title: 'Select Skin',
-                    text: 'Click "Use" to apply this skin.',
-                    hint: 'Click "Use"',
+                    title: t('tutorial_spotlight.step2.select_skin_title'),
+                    text: t('tutorial_spotlight.step2.select_skin_text'),
+                    hint: t('tutorial_spotlight.step2.select_skin_hint'),
                     position: 'bottom',
                     // Wait a bit for list to render if needed
                     beforeShow: async () => {
                         await new Promise(r => setTimeout(r, 500));
                         // Determine if we have a target
-                        if (!document.querySelector('.skin-pack-card .btn-blue')) {
+                        if (!document.querySelector('.skin-pack-card .btn-skin-use, .skin-pack-card .btn-blue')) {
                             console.warn("No skin card found, skipping step");
                             window.advanceSpotlightTutorial();
                         }
@@ -441,9 +433,9 @@
                 },
                 {
                     target: '.large-skin-preview-sticky',
-                    title: 'Skin Applied!',
-                    text: 'Your character now uses the selected skin. You are ready to play!<button id="tutorialFinishBtn" class="btn-primary" style="margin-top:15px; width:100%;" onclick="if(window.onTutorialStep2Complete) window.onTutorialStep2Complete(); window.advanceSpotlightTutorial();">Finish</button>',
-                    hint: 'Click Finish above',
+                    title: t('tutorial_spotlight.step2.skin_applied_title'),
+                    text: `${t('tutorial_spotlight.step2.skin_applied_text')}<button id="tutorialFinishBtn" class="btn-primary" style="margin-top:15px; width:100%;" onclick="window.advanceSpotlightTutorial(); setTimeout(function(){ if(window.onTutorialStep2Complete) window.onTutorialStep2Complete(); }, 350);">${t('tutorial_spotlight.step2.finish')}</button>`,
+                    hint: t('tutorial_spotlight.step2.skin_applied_hint'),
                     position: 'left',
                     advanceOn: 'manual'
                 }
@@ -458,9 +450,9 @@
             await startSpotlightTutorial([
                 {
                     target: '#userBadge',
-                    title: 'Login Successful',
-                    text: 'You are now logged in. Remember that in Offline mode, you cannot change skins or play on online-mode servers.<button id="tutorialFinishBtnOffline" class="btn-primary" style="margin-top:15px; width:100%;" onclick="if(window.onTutorialStep2Complete) window.onTutorialStep2Complete(); window.advanceSpotlightTutorial();">Finish</button>',
-                    hint: 'Click Finish above',
+                    title: t('tutorial_spotlight.step2.offline_success_title'),
+                    text: `${t('tutorial_spotlight.step2.offline_success_text')}<button id="tutorialFinishBtnOffline" class="btn-primary" style="margin-top:15px; width:100%;" onclick="window.advanceSpotlightTutorial(); setTimeout(function(){ if(window.onTutorialStep2Complete) window.onTutorialStep2Complete(); }, 350);">${t('tutorial_spotlight.step2.finish')}</button>`,
+                    hint: t('tutorial_spotlight.step2.offline_success_hint'),
                     position: 'bottom',
                     advanceOn: 'manual'
                 }
@@ -475,9 +467,9 @@
             await startSpotlightTutorial([
                 {
                     target: '#userBadge',
-                    title: 'Login Successful',
-                    text: 'You are now logged in with HelloWorld. You can manage your skins and capes directly from the website dashboard.<button id="tutorialFinishBtnHW" class="btn-primary" style="margin-top:15px; width:100%;" onclick="if(window.onTutorialStep2Complete) window.onTutorialStep2Complete(); window.advanceSpotlightTutorial();">Finish</button>',
-                    hint: 'Click Finish above',
+                    title: t('tutorial_spotlight.step2.hw_success_title'),
+                    text: `${t('tutorial_spotlight.step2.hw_success_text')}<button id="tutorialFinishBtnHW" class="btn-primary" style="margin-top:15px; width:100%;" onclick="window.advanceSpotlightTutorial(); setTimeout(function(){ if(window.onTutorialStep2Complete) window.onTutorialStep2Complete(); }, 350);">${t('tutorial_spotlight.step2.finish')}</button>`,
+                    hint: t('tutorial_spotlight.step2.hw_success_hint'),
                     position: 'bottom',
                     advanceOn: 'manual'
                 }
@@ -500,7 +492,11 @@
             if (originalOnModDownloadProgress) originalOnModDownloadProgress(projectId, percentage, status);
             if (downloadingProjectId === projectId) {
                 if (window.updateSpotlightContent) {
-                    window.updateSpotlightContent('Downloading...', `Please wait while the mod downloads. Progress: ${percentage}%...`, 'Installing...');
+                    window.updateSpotlightContent(
+                        t('tutorial_spotlight.step3.downloading_title'),
+                        t('tutorial_spotlight.step3.downloading_text', { percentage }),
+                        t('tutorial_spotlight.step3.downloading_hint')
+                    );
                 }
             }
         };
@@ -511,9 +507,9 @@
             if (downloadingProjectId === projectId) {
                 if (window.updateSpotlightContent) {
                     window.updateSpotlightContent(
-                        'Installation Complete!',
-                        'Your mod has been installed successfully! You can manage it anytime in the "Installed" tab.<button id="tutorialFinishBtnStep3" class="btn-primary" style="margin-top:15px; width:100%;" onclick="if(window.onTutorialStep3Complete) window.onTutorialStep3Complete(); if(window.advanceSpotlightTutorial) window.advanceSpotlightTutorial();">Finish</button>',
-                        'Click Finish above'
+                        t('tutorial_spotlight.step3.complete_title'),
+                        `${t('tutorial_spotlight.step3.complete_text')}<button id="tutorialFinishBtnStep3" class="btn-primary" style="margin-top:15px; width:100%;" onclick="if(window.advanceSpotlightTutorial) window.advanceSpotlightTutorial(); setTimeout(function(){ if(window.onTutorialStep3Complete) window.onTutorialStep3Complete(); }, 350);">${t('tutorial_spotlight.step3.finish')}</button>`,
+                        t('tutorial_spotlight.step3.complete_hint')
                     );
                 }
             }
@@ -524,7 +520,11 @@
             if (originalOnModDownloadError) originalOnModDownloadError(projectId, errorMsg);
             if (downloadingProjectId === projectId) {
                 if (window.updateSpotlightContent) {
-                    window.updateSpotlightContent('Error', `Installation failed: ${errorMsg}`, 'Please try again later.');
+                    window.updateSpotlightContent(
+                        t('tutorial_spotlight.step3.error_title'),
+                        t('tutorial_spotlight.step3.error_text', { errorMsg }),
+                        t('tutorial_spotlight.step3.error_hint')
+                    );
                 }
                 setTimeout(() => {
                     if (window.endSpotlightTutorial) window.endSpotlightTutorial();
@@ -549,9 +549,9 @@
             await startSpotlightTutorial([
                 {
                     target: '#modsMenuBtn',
-                    title: 'Add-ons Menu',
-                    text: 'Expand the Add-ons menu to access Mods, Resource Packs, Data Packs, and Shaders.',
-                    hint: 'Click "Add-ons"',
+                    title: t('tutorial_spotlight.step3.addons_menu_title'),
+                    text: t('tutorial_spotlight.step3.addons_menu_text'),
+                    hint: t('tutorial_spotlight.step3.addons_menu_hint'),
                     position: 'right',
                     advanceOn: 'click',
                     onComplete: async () => {
@@ -560,26 +560,13 @@
                 },
                 {
                     target: '#modsSubmenu .submenu-item',
-                    title: 'Manage Mods',
-                    text: 'Click here to explore and install mods.',
-                    hint: 'Click "Mods"',
+                    title: t('tutorial_spotlight.step3.no_loader_title'),
+                    text: t('tutorial_spotlight.step3.no_loader_text'),
+                    hint: t('tutorial_spotlight.step3.no_loader_hint'),
                     position: 'right',
                     advanceOn: 'click',
                     onComplete: async () => {
                         await new Promise(r => setTimeout(r, 500));
-                    }
-                },
-                {
-                    target: '#noModdableProfiles',
-                    title: 'Mod Loader Required',
-                    text: 'You need an installation with Forge or Fabric to use mods. Let\'s create one now.',
-                    hint: 'Click to continue',
-                    position: 'bottom',
-                    advanceOn: 'manual',
-                    beforeShow: async () => {
-                        // Wait a moment for the section to render
-                        await new Promise(r => setTimeout(r, 300));
-                        if (window.advanceSpotlightTutorial) window.advanceSpotlightTutorial();
                     }
                 }
             ], async () => {
@@ -608,9 +595,9 @@
         await startSpotlightTutorial([
             {
                 target: '#modsMenuBtn',
-                title: 'Add-ons Menu',
-                text: 'Expand the Add-ons menu to access Mods, Resource Packs, Data Packs, and Shaders.',
-                hint: 'Click "Add-ons"',
+                title: t('tutorial_spotlight.step3.addons_menu_title'),
+                text: t('tutorial_spotlight.step3.addons_menu_text'),
+                hint: t('tutorial_spotlight.step3.addons_menu_hint'),
                 position: 'right',
                 advanceOn: 'click',
                 onComplete: async () => {
@@ -619,9 +606,9 @@
             },
             {
                 target: '#modsSubmenu .submenu-item',
-                title: 'Manage Mods',
-                text: 'Click here to explore and install mods.',
-                hint: 'Click "Mods"',
+                title: t('tutorial_spotlight.step3.manage_mods_title'),
+                text: t('tutorial_spotlight.step3.manage_mods_text'),
+                hint: t('tutorial_spotlight.step3.manage_mods_hint'),
                 position: 'right',
                 advanceOn: 'click',
                 onComplete: async () => {
@@ -629,24 +616,35 @@
                 }
             },
             {
-                target: '#modsProfileSelect',
-                title: 'Select Installation',
-                text: 'Choose an installation with Forge or Fabric. This determines which mods are compatible.',
-                hint: 'Click the dropdown',
+                target: '#modsCustomSelect',
+                title: t('tutorial_spotlight.step3.select_install_title'),
+                text: t('tutorial_spotlight.step3.select_install_text'),
+                hint: t('tutorial_spotlight.step3.select_install_hint'),
                 position: 'bottom',
-                advanceOn: 'click',
-                onComplete: async () => {
-                    await new Promise(r => setTimeout(r, 600));
+                advanceOn: 'manual',
+                beforeShow: () => {
+                    // Instead of hiding UI, we wait for a real selection via the change event.
+                    // The custom select dispatches a 'change' on the native select underneath.
+                    const profileSelect = document.getElementById('modsProfileSelect');
+                    if (profileSelect) {
+                        const handler = () => {
+                            profileSelect.removeEventListener('change', handler);
+                            if (window.advanceSpotlightTutorial) window.advanceSpotlightTutorial();
+                        };
+                        profileSelect.addEventListener('change', handler);
+                    }
                 }
             },
             {
                 target: '.mods-download-flex',
-                title: 'Search, Filter & Install Mods',
-                text: 'Search mods above, use the filters on the right to sort and pick categories, and navigate pages with the arrows. When you find a mod you like, click its "Download" button to install it.',
-                hint: 'Click "Download" on a mod',
+                title: t('tutorial_spotlight.step3.search_title'),
+                text: t('tutorial_spotlight.step3.search_text'),
+                hint: t('tutorial_spotlight.step3.search_hint'),
                 position: 'left',
                 advanceOn: 'manual',
-                beforeShow: () => {
+                beforeShow: async () => {
+                    // Small delay to let the mods list render after installation selection
+                    await new Promise(r => setTimeout(r, 800));
                     document.body.classList.add('tutorial-step-search');
                     const container = document.getElementById('modSearchResults');
 
@@ -671,7 +669,11 @@
                                 container.removeEventListener('click', onCardClick, true);
                                 downloadingProjectId = btn.id.replace('btn-mod-', '');
                                 if (window.updateSpotlightContent) {
-                                    window.updateSpotlightContent('Downloading...', 'Please wait while the mod downloads. Progress: 0%', 'Installing...');
+                                    window.updateSpotlightContent(
+                                        t('tutorial_spotlight.step3.downloading_title'),
+                                        t('tutorial_spotlight.step3.downloading_start_text'),
+                                        t('tutorial_spotlight.step3.downloading_hint')
+                                    );
                                 }
                                 if (originalOnclick) originalOnclick(event);
                             };

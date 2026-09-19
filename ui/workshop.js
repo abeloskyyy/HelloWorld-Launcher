@@ -35,14 +35,13 @@
     window.formatVersionString = function(version) {
         if (!version) return 'Unknown Version';
         const raw = String(version).trim();
-        if (/^(?:Fabric|Forge|NeoForge|Quilt|Vanilla)\s+1\.\d+/i.test(raw) && (raw.includes('(') || /^Vanilla\s+/i.test(raw))) return raw;
+        if (/^(?:Fabric|Forge|NeoForge|Vanilla)\s+1\.\d+/i.test(raw) && (raw.includes('(') || /^Vanilla\s+/i.test(raw))) return raw;
 
         const lower = raw.toLowerCase();
         let loaderName = null;
         if (lower.includes('neoforge')) loaderName = 'NeoForge';
         else if (lower.includes('forge')) loaderName = 'Forge';
         else if (lower.includes('fabric')) loaderName = 'Fabric';
-        else if (lower.includes('quilt')) loaderName = 'Quilt';
         else if (lower.includes('optifine')) loaderName = 'OptiFine';
 
         const matches = raw.match(/\b\d+\.\d+(?:\.\d+)?(?:-[a-zA-Z0-9\.]+)?\b/g) || [];
@@ -66,18 +65,17 @@
         const v = (version || '').toLowerCase();
         if (v.includes('forge')) return 'Forge';
         if (v.includes('fabric')) return 'Fabric';
-        if (v.includes('quilt')) return 'Quilt';
         if (v.includes('neoforge')) return 'NeoForge';
         return null;
     }
 
     async function resolveIcon(iconName, iconBase64) {
         if (iconBase64) return iconBase64;
-        if (!iconName) return 'ui/img/icon.png';
+        if (!iconName) return 'img/icon.png';
         try {
             const raw = await api().get_profile_icon(iconName);
             return window.resolveImageSource ? window.resolveImageSource(raw) : raw;
-        } catch (e) { return 'ui/img/icon.png'; }
+        } catch (e) { return 'img/icon.png'; }
     }
 
     function showWkLoadingScreen() {
@@ -232,6 +230,7 @@
             isWkMod = false;
         }
     }
+    window.checkWkAdminAccess = checkAdminAccess;
 
     let wkModrinthCurrentPage = 1;
     let wkModrinthCurrentQuery = '';
@@ -297,14 +296,14 @@
                 limit: limit,
                 offset: (page - 1) * limit
             };
-            const result = await window.pywebview.api.search_modrinth_mods(wkModrinthCurrentQuery, queryOptions, 'modpack');
+            const result = await api().search_modrinth_mods(wkModrinthCurrentQuery, queryOptions, 'modpack');
             
             if (loading) loading.style.display = 'none';
             if (moreLoading) moreLoading.style.display = 'none';
 
             if (!result || !result.success) {
                 if (!append) {
-                    grid.innerHTML = '<div class="wk-empty" style="grid-column: 1/-1;"><i class="fas fa-exclamation-triangle"></i><p>Error searching Modrinth modpacks.</p></div>';
+                    grid.innerHTML = '<div class="wk-empty" style="grid-column: 1/-1;"><i class="fas fa-exclamation-triangle"></i><p>' + (window.t('toasts.err_search_modrinth') || 'Error searching Modrinth modpacks.') + '</p></div>';
                 }
                 wkModrinthIsLoading = false;
                 return;
@@ -345,7 +344,7 @@
             if (loading) loading.style.display = 'none';
             if (moreLoading) moreLoading.style.display = 'none';
             if (!append) {
-                grid.innerHTML = '<div class="wk-empty" style="grid-column: 1/-1;"><i class="fas fa-exclamation-triangle"></i><p>Error loading Modrinth.</p></div>';
+                grid.innerHTML = '<div class="wk-empty" style="grid-column: 1/-1;"><i class="fas fa-exclamation-triangle"></i><p>' + (window.t('toasts.err_load_modrinth') || 'Error loading Modrinth.') + '</p></div>';
             }
             wkModrinthIsLoading = false;
         }
@@ -534,30 +533,30 @@
         // Stats block for 'mine' below description
         const mineStatsBlock = context === 'mine' ? 
             '<div class="wk-card-stats-block">' +
-                '<div class="wk-card-stat-line"><i class="fas fa-download" style="color: #4facfe;"></i> <span><strong style="color:#fff;" class="wk-dl-count-' + escHtml(item.id) + '">' + (item.downloads || 0) + '</strong> Downloads</span></div>' +
-                '<div class="wk-card-stat-line"><i class="fas fa-heart" style="color: #ff5252;"></i> <span><strong style="color:#fff;" class="wk-like-count-' + escHtml(item.id) + '">' + (item.likes || 0) + '</strong> Likes</span></div>' +
-                '<div class="wk-card-stat-line"><i class="fas fa-eye" style="color: #00e676;"></i> <span><strong style="color:#fff;">' + (item.views || 0) + '</strong> Views</span></div>' +
+                '<div class="wk-card-stat-line"><i class="fas fa-download" style="color: #4facfe;"></i> <span><strong style="color:#fff;" class="wk-dl-count-' + escHtml(item.id) + '">' + (item.downloads || 0) + '</strong> ' + (window.t('workshop.modal.downloads') || 'Downloads').replace(':', '') + '</span></div>' +
+                '<div class="wk-card-stat-line"><i class="fas fa-heart" style="color: #ff5252;"></i> <span><strong style="color:#fff;" class="wk-like-count-' + escHtml(item.id) + '">' + (item.likes || 0) + '</strong> ' + (window.t('workshop.modal.likes') || 'Likes').replace(':', '') + '</span></div>' +
+                '<div class="wk-card-stat-line"><i class="fas fa-eye" style="color: #00e676;"></i> <span><strong style="color:#fff;">' + (item.views || 0) + '</strong> ' + (window.t('workshop.modal.views') || 'Views').replace(':', '') + '</span></div>' +
             '</div>' : '';
 
         const adminActions = context === 'admin' ? 
-            '<button class="wk-btn wk-btn-approve" onclick="approveWkItem(\'' + escHtml(item.id) + '\')" title="Approve"><i class="fas fa-check"></i></button>' +
-            (isWkAdmin ? '<button class="wk-btn wk-btn-official" onclick="toggleOfficialWkItem(\'' + escHtml(item.id) + '\', ' + (item.isOfficial ? 'true' : 'false') + ')" title="' + (item.isOfficial ? 'Remove Official' : 'Make Official') + '"><i class="' + (item.isOfficial ? 'fas' : 'far') + ' fa-star" ' + (item.isOfficial ? 'style="color:#ffaa00;"' : '') + '></i></button>' : '') +
-            '<button class="wk-btn wk-btn-reject" onclick="rejectWkItem(\'' + escHtml(item.id) + '\')" title="Deny"><i class="fas fa-ban"></i></button>' +
-            (isWkAdmin ? '<button class="wk-btn wk-btn-delete" onclick="deleteWkItem(\'' + escHtml(item.id) + '\')" title="Delete"><i class="fas fa-trash"></i></button>' : '') : '';
+            '<button class="wk-btn wk-btn-approve" onclick="approveWkItem(\'' + escHtml(item.id) + '\')" title="' + (window.t('workshop.modal.approve') || 'Approve') + '"><i class="fas fa-check"></i></button>' +
+            (isWkAdmin ? '<button class="wk-btn wk-btn-official" onclick="toggleOfficialWkItem(\'' + escHtml(item.id) + '\', ' + (item.isOfficial ? 'true' : 'false') + ')" title="' + (item.isOfficial ? (window.t('toasts.removed_official') || 'Remove Official') : (window.t('workshop.modal.official') || 'Make Official')) + '"><i class="' + (item.isOfficial ? 'fas' : 'far') + ' fa-star" ' + (item.isOfficial ? 'style="color:#ffaa00;"' : '') + '></i></button>' : '') +
+            '<button class="wk-btn wk-btn-reject" onclick="rejectWkItem(\'' + escHtml(item.id) + '\')" title="' + (window.t('workshop.modal.deny') || 'Deny') + '"><i class="fas fa-ban"></i></button>' +
+            (isWkAdmin ? '<button class="wk-btn wk-btn-delete" onclick="deleteWkItem(\'' + escHtml(item.id) + '\')" title="' + (window.t('workshop.modal.delete') || 'Delete') + '"><i class="fas fa-trash"></i></button>' : '') : '';
         const myActions = context === 'mine' ? 
-            '<button class="wk-btn wk-btn-delete" onclick="deleteWkItem(\'' + escHtml(item.id) + '\')" title="Delete"><i class="fas fa-trash"></i></button>' : '';
+            '<button class="wk-btn wk-btn-delete" onclick="deleteWkItem(\'' + escHtml(item.id) + '\')" title="' + (window.t('workshop.modal.delete') || 'Delete') + '"><i class="fas fa-trash"></i></button>' : '';
         
         // Like button for cards in bottom right (except in 'mine') - ONLY HEART, NO NUMBER!
         const isLiked = Array.isArray(item.likedBy) && currentWkUserUid && item.likedBy.includes(currentWkUserUid);
         const likeBtn = context !== 'mine' ? 
-            '<button class="wk-btn wk-like-btn-card ' + (isLiked ? 'liked' : '') + '" onclick="toggleWkLike(\'' + escHtml(item.id) + '\', event)" title="Like" data-id="' + escHtml(item.id) + '" style="margin-left: auto;">' +
+            '<button class="wk-btn wk-like-btn-card ' + (isLiked ? 'liked' : '') + '" onclick="toggleWkLike(\'' + escHtml(item.id) + '\', event)" title="Like" data-id="' + escHtml(item.id) + '">' +
                 '<i class="' + (isLiked ? 'fas fa-heart' : 'far fa-heart') + '"></i>' +
             '</button>' : '';
 
         return '<div class="wk-card" data-id="' + escHtml(item.id) + '">' +
             statusBadge +
             '<div class="wk-card-header">' +
-                '<img class="wk-card-icon" src="ui/img/icon.png" data-icon="' + escHtml(item.icon || '') + '" data-iconb64="' + escHtml(item.iconB64 || '') + '">' +
+                '<img class="wk-card-icon" src="img/icon.png" data-icon="' + escHtml(item.icon || '') + '" data-iconb64="' + escHtml(item.iconB64 || '') + '">' +
                 '<div class="wk-card-title-wrap">' +
                     '<div class="wk-card-title">' + escHtml(item.title) + '</div>' +
                     '<div class="wk-card-author">' + escHtml(item.authorName || 'Unknown') + '</div>' +
@@ -568,19 +567,25 @@
             mineStatsBlock +
             deniedNote +
             '<div class="wk-card-actions">' +
-                '<button class="wk-btn wk-btn-secondary" onclick="openWkItemModal(\'' + escHtml(item.id) + '\')"><i class="fas fa-info-circle"></i> More Info</button>' +
-                (canInstall ? '<button class="wk-btn wk-btn-primary" onclick="installWkModPack(\'' + escHtml(item.id) + '\')"><i class="fas fa-download"></i> Install</button>' : '') +
-                adminActions +
-                myActions +
-                likeBtn +
+                '<div class="wk-card-actions-row">' +
+                    '<button class="wk-btn wk-btn-secondary wk-btn-full" onclick="openWkItemModal(\'' + escHtml(item.id) + '\')">' +
+                        '<i class="fas fa-info-circle"></i> ' + (window.t('workshop.card_more_info') || 'More Info') +
+                    '</button>' +
+                '</div>' +
+                (canInstall || likeBtn ? '<div class="wk-card-actions-row">' +
+                    (canInstall ? '<button class="wk-btn wk-btn-primary wk-btn-install" onclick="installWkModPack(\'' + escHtml(item.id) + '\')"><i class="fas fa-download"></i> ' + (window.t('workshop.modal.download') || 'Download') + '</button>' : '') +
+                    likeBtn +
+                '</div>' : '') +
+                (adminActions ? '<div class="wk-card-actions-admin-row">' + adminActions + '</div>' : '') +
+                (myActions ? '<div class="wk-card-actions-admin-row">' + myActions + '</div>' : '') +
             '</div>' +
         '</div>';
     }
 
     function getStatusLabel(xst) {
-        if (xst === 'pub') return 'Public';
-        if (xst === 'njt') return 'Denied';
-        return 'Pending Review';
+        if (xst === 'pub') return window.t('workshop.admin.approved') || 'Public';
+        if (xst === 'njt') return window.t('workshop.admin.denied') || 'Denied';
+        return window.t('workshop.admin.pending') || 'Pending Review';
     }
 
     function loadCardIcons(container) {
@@ -608,18 +613,18 @@
         const modal = document.getElementById('wkItemModal');
         if (!modal) return;
 
-        document.getElementById('wkModalIcon').src = 'ui/img/icon.png';
-        document.getElementById('wkModalTitle').textContent = 'Loading...';
+        document.getElementById('wkModalIcon').src = 'img/icon.png';
+        document.getElementById('wkModalTitle').textContent = window.t('workshop.loading') || 'Loading...';
         document.getElementById('wkModalDesc').textContent = '';
         document.getElementById('wkModalVersion').textContent = '';
         const authorEl = document.getElementById('wkModalAuthor');
         const dateEl = document.getElementById('wkModalDate');
-        if (authorEl) authorEl.textContent = 'Loading...';
-        if (dateEl) dateEl.textContent = 'Loading...';
+        if (authorEl) authorEl.textContent = window.t('workshop.loading') || 'Loading...';
+        if (dateEl) dateEl.textContent = window.t('workshop.loading') || 'Loading...';
         const loaderEl = document.getElementById('wkModalLoader');
         if (loaderEl) { loaderEl.textContent = ''; loaderEl.style.display = 'none'; }
         const modsList = document.getElementById('wkModalModsList');
-        if (modsList) modsList.innerHTML = '<div style="text-align:center;padding:20px;color:#aaa;">Loading...</div>';
+        if (modsList) modsList.innerHTML = '<div style="text-align:center;padding:20px;color:#aaa;">' + (window.t('workshop.loading') || 'Loading...') + '</div>';
         const installBtn = document.getElementById('wkModalInstallBtn');
         if (installBtn) installBtn.dataset.id = id;
         const modsTabBtn = document.getElementById('wkModalModsTabBtn');
@@ -750,28 +755,44 @@
             container.innerHTML = '<div style="text-align:center;padding:20px;color:#aaa;font-style:italic;">' + emptyText + '</div>';
             return;
         }
-        const htmls = [];
+        
+        container.innerHTML = '<div id="' + containerId + '_spinner" style="text-align:center;padding:20px;color:#aaa;"><i class="fas fa-spinner fa-spin"></i> ' + (window.t ? (window.t('workshop.loading') || 'Loading...') : 'Loading...') + ' <span id="' + containerId + '_progress">0/' + items.length + '</span></div><div id="' + containerId + '_content"></div>';
+        const contentEl = document.getElementById(containerId + '_content');
+        const progressEl = document.getElementById(containerId + '_progress');
+        let loaded = 0;
+
+        const projectIds = items.map(a => a.project_id).filter(id => id);
+        if (projectIds.length > 0) {
+            try { await api().get_multiple_mod_details(projectIds); } catch(e) {}
+        }
+
         for (let i = 0; i < items.length; i++) {
             const addon = items[i];
+            let itemHtml = '';
             if (addon.project_id) {
                 try {
                     const details = await api().get_mod_details(addon.project_id);
                     if (details && details.success && details.details) {
                         const mod = details.details;
-                        htmls.push('<div class="wk-mod-item"><div class="wk-mod-icon"><img src="' + escHtml(mod.icon_url || 'ui/img/icon.png') + '" onerror="this.src=\'ui/img/icon.png\'"></div><div class="wk-mod-info"><div class="wk-mod-name">' + escHtml(mod.title) + '</div><div class="wk-mod-file">' + escHtml(addon.filename || '') + '</div></div></div>');
-                        continue;
+                        itemHtml = '<div class="wk-mod-item"><div class="wk-mod-icon"><img src="' + escHtml(mod.icon_url || 'img/icon.png') + '" onerror="this.onerror=null;this.src=\'img/icon.png\';"></div><div class="wk-mod-info"><div class="wk-mod-name">' + escHtml(mod.title) + '</div><div class="wk-mod-file">' + escHtml(addon.filename || '') + '</div></div></div>';
                     }
                 } catch (e) {}
             }
-            htmls.push('<div class="wk-mod-item"><div class="wk-mod-icon"><i class="fas ' + iconClass + '" style="color:#4facfe;font-size:18px;"></i></div><div class="wk-mod-info"><div class="wk-mod-name">' + escHtml(addon.display_name || addon.filename || 'Unknown item') + '</div></div></div>');
+            if (!itemHtml) {
+                itemHtml = '<div class="wk-mod-item"><div class="wk-mod-icon"><i class="fas ' + iconClass + '" style="color:#4facfe;font-size:18px;"></i></div><div class="wk-mod-info"><div class="wk-mod-name">' + escHtml(addon.display_name || addon.filename || 'Unknown item') + '</div></div></div>';
+            }
+            if (contentEl) contentEl.insertAdjacentHTML('beforeend', itemHtml);
+            loaded++;
+            if (progressEl) progressEl.textContent = loaded + '/' + items.length;
         }
-        container.innerHTML = htmls.join('');
+        const spinnerEl = document.getElementById(containerId + '_spinner');
+        if (spinnerEl) spinnerEl.remove();
     }
 
     window.installWkModPack = async function (id) {
         let item = wkItemCache[id];
         if (!item) item = await getWkItem(id);
-        if (!item) { showWkToast('Could not load mod pack data'); return; }
+        if (!item) { showWkToast(window.t('toasts.err_load_modpack') || 'Could not load mod pack data'); return; }
         
         // Record download if not author
         if (item.uid !== currentWkUserUid) {
@@ -795,13 +816,17 @@
         }
 
         const snap = item.snap || {};
+        const iconData = item.iconB64 || snap.iconB64 || (item.icon && (item.icon.startsWith('data:') || item.icon.startsWith('http://') || item.icon.startsWith('https://')) ? item.icon : null) || (snap.icon && (snap.icon.startsWith('data:') || snap.icon.startsWith('http://') || snap.icon.startsWith('https://')) ? snap.icon : null);
         const payload = {
             profile: {
                 name: item.title || 'Mod Pack',
                 version: snap.version || '',
-                icon: item.icon || '',
+                icon: iconData || item.icon || '',
+                iconB64: item.iconB64 || snap.iconB64 || null,
+                iconUrl: item.iconUrl || snap.iconUrl || null,
                 addons: snap.addons || [],
-                jvm_args: snap.jvmArgs || null
+                jvm_args: snap.jvmArgs || null,
+                configZipB64: snap.configZipB64 || null
             }
         };
         const contentStr = '$$PROFILE_SHARE$$' + JSON.stringify(payload);
@@ -809,20 +834,20 @@
             window.closeWkItemModal();
             window.installSharedProfile(contentStr);
         } else {
-            showWkToast('Install function not available');
+            showWkToast(window.t('toasts.install_not_avail') || 'Install function not available');
         }
     };
 
     window.toggleWkLike = async function(id, event) {
         if (event && event.stopPropagation) event.stopPropagation();
         if (!currentWkUserUid) {
-            showWkToast('You must be logged in to like items.');
+            showWkToast(window.t('toasts.login_to_like') || 'You must be logged in to like items.');
             return;
         }
         let item = wkItemCache[id];
         if (!item) item = await getWkItem(id);
         if (item && item.uid === currentWkUserUid) {
-            showWkToast('You cannot like your own modpack.');
+            showWkToast(window.t('toasts.like_own_modpack') || 'You cannot like your own modpack.');
             return;
         }
         try {
@@ -853,10 +878,10 @@
                     modalLikesStat.textContent = res.likes;
                 }
             } else {
-                showWkToast((res && res.error) || 'Failed to like item');
+                showWkToast(window.t('toasts.failed_like', {err: res && res.error}) || ((res && res.error) || 'Failed to like item'));
             }
         } catch(e) {
-            showWkToast('Error: ' + e.message);
+            showWkToast(window.t('toasts.error_prefix', {msg: e.message}) || ('Error: ' + e.message));
         }
     };
 
@@ -905,9 +930,9 @@
         const card = document.getElementById('wkSelectedProfileCard');
         if (card) card.classList.add('empty');
         const titleText = document.getElementById('wkSelectedProfileTitle');
-        if (titleText) titleText.textContent = 'Select an installation...';
+        if (titleText) titleText.textContent = window.t('workshop.create.select_profile_title') || 'Select an installation...';
         const subText = document.getElementById('wkSelectedProfileSubtitle');
-        if (subText) subText.textContent = 'Click to choose which installation to pack';
+        if (subText) subText.textContent = window.t('workshop.create.select_profile_subtitle') || 'Click to choose which installation to pack';
         
         const placeholder = document.getElementById('wkCreateIconPlaceholder');
         const preview = document.getElementById('wkCreateIconPreview');
@@ -921,7 +946,7 @@
     }
 
     window.selectWkCreateType = function (type) {
-        if (type === 'theme') { showWkToast('Themes coming soon!'); return; }
+        if (type === 'theme') { showWkToast(window.t('toasts.themes_soon') || 'Themes coming soon!'); return; }
         wkCreateType = type;
         document.querySelectorAll('.wk-type-btn').forEach(function(b) { b.classList.toggle('selected', b.dataset.type === type); });
         goToWkCreateStep2();
@@ -979,7 +1004,7 @@
             list.innerHTML = wkLoadedProfiles.map(function(p) {
                 const modCount = (p.addons || []).filter(function(a){ return a && a.type === 'mod'; }).length;
                 return '<div class="wk-profile-item-card" onclick="selectWkProfileForPack(\'' + escHtml(p.id) + '\')">' +
-                    '<div class="wk-profile-item-icon"><img src="ui/img/icon.png" data-icon="' + escHtml(p.icon || '') + '"></div>' +
+                    '<div class="wk-profile-item-icon"><img src="img/icon.png" data-icon="' + escHtml(p.icon || '') + '"></div>' +
                     '<div class="wk-profile-item-info">' +
                         '<div class="wk-profile-item-name">' + escHtml(p.name) + '</div>' +
                         '<div class="wk-profile-item-meta">' + escHtml(formatVersionString(p.version || 'Vanilla')) + ' &bull; ' + modCount + ' mods</div>' +
@@ -993,7 +1018,7 @@
                 img.src = src;
             });
         } catch (e) {
-            list.innerHTML = '<div class="wk-empty"><p>Error loading installations</p></div>';
+            list.innerHTML = '<div class="wk-empty"><p>' + (window.t('toasts.err_load_installs') || 'Error loading installations') + '</p></div>';
         }
     };
 
@@ -1041,8 +1066,8 @@
         const modCountTotal = profileAddons.filter(function(a){ return a && (a.type === 'mod' || a.type === 'file' || (a.filename && a.filename.endsWith('.jar')) || a.project_id); }).length || profileAddons.length;
         const subText = document.getElementById('wkSelectedProfileSubtitle');
         const customCount = modCountTotal - modCountWithId;
-        let subtitleText = 'Version: ' + formatVersionString(p.version || 'Vanilla') + ' \u2022 ' + modCountWithId + ' mods to publish';
-        if (customCount > 0) subtitleText += ' (' + customCount + ' custom/local excluded)';
+        let subtitleText = (window.t('play.version') || 'Version') + ': ' + formatVersionString(p.version || 'Vanilla') + ' \u2022 ' + (window.t('workshop.create.mods_to_publish', {count: modCountWithId}) || (modCountWithId + ' mods to publish'));
+        if (customCount > 0) subtitleText += ' ' + (window.t('workshop.create.custom_excluded', {count: customCount}) || ('(' + customCount + ' custom/local excluded)'));
         if (subText) subText.textContent = subtitleText;
 
         // Show/hide the external addons warning
@@ -1091,27 +1116,56 @@
         const descEl = document.getElementById('wkCreateDesc');
         const title = (titleEl ? titleEl.value : '').trim().slice(0, 30);
         const desc = (descEl ? descEl.value : '').trim().slice(0, 200);
-        if (!title) { showWkToast('Please enter a title'); return; }
-        if (title.length > 30) { showWkToast('Title must be at most 30 characters'); return; }
-        if (!desc) { showWkToast('Please enter a description'); return; }
-        if (desc.length > 200) { showWkToast('Description must be at most 200 characters'); return; }
-        if (!wkSelectedInstallation) { showWkToast('Please select an installation'); return; }
+        if (!title) { showWkToast(window.t('toasts.enter_title') || 'Please enter a title'); return; }
+        if (title.length > 30) { showWkToast(window.t('toasts.title_max_30') || 'Title must be at most 30 characters'); return; }
+        if (!desc) { showWkToast(window.t('toasts.enter_desc') || 'Please enter a description'); return; }
+        if (desc.length > 200) { showWkToast(window.t('toasts.desc_max_200') || 'Description must be at most 200 characters'); return; }
+        if (!wkSelectedInstallation) { showWkToast(window.t('toasts.select_installation_wk') || 'Please select an installation'); return; }
 
         const btn = document.getElementById('wkSubmitBtn');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...'; }
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + (window.t('workshop.create.submitting') || 'Submitting...'); }
 
         try {
-            // Filter addons: only include those with a Modrinth project_id and version_id.
-            // Custom/local mods (detected from files without IDs) are excluded from workshop uploads.
+            // Filter addons: only include those with a Modrinth project_id.
+            // Exclude datapacks as decided; preserve mods, resourcepacks, and shaders.
             const allAddons = wkSelectedInstallation.addons || [];
             const publishableAddons = allAddons.filter(function(a) {
-                return a && a.project_id && a.project_id.length > 0;
+                return a && a.project_id && a.project_id.length > 0 && a.type !== 'datapack';
+            }).map(function(a) {
+                let ext = '.jar';
+                if (a.type === 'resourcepack' || a.type === 'shader') ext = '.zip';
+                return {
+                    project_id: a.project_id,
+                    version_id: a.version_id,
+                    filename: a.filename || (a.project_id + ext),
+                    type: a.type || 'mod',
+                    state: (a.enabled !== false && a.state !== 'disabled') ? 'enabled' : 'disabled',
+                    enabled: (a.enabled !== false && a.state !== 'disabled')
+                };
             });
+
+            // Package configs and options.txt from the installation
+            let configZipB64 = null;
+            if (api().workshop_package_profile && wkSelectedInstallation.id) {
+                try {
+                    const pkgRes = await api().workshop_package_profile(wkSelectedInstallation.id);
+                    if (pkgRes && pkgRes.success && pkgRes.configZipB64) {
+                        configZipB64 = pkgRes.configZipB64;
+                    }
+                } catch (pkgErr) {
+                    console.warn('[Workshop] Could not package configs:', pkgErr.message);
+                }
+            }
+
             const snap = {
                 version: wkSelectedInstallation.version || '',
                 addons: publishableAddons,
                 jvmArgs: wkSelectedInstallation.jvm_args || null
             };
+            if (configZipB64) {
+                snap.configZipB64 = configZipB64;
+            }
+
             const data = {
                 type: 'modpack',
                 title: title,
@@ -1123,16 +1177,16 @@
             const res = await api().workshop_submit_item(data);
             if (res && res.success) {
                 window.closeWkCreateModal();
-                showWkToast('Mod pack submitted for review!', 'success');
+                showWkToast(window.t('toasts.modpack_submitted') || 'Mod pack submitted for review!', 'success');
                 wkItemCache = {};
                 setTimeout(function() { renderMyPendingItems(); }, 500);
             } else {
-                showWkToast((res && res.error) || 'Submission failed');
+                showWkToast(window.t('toasts.submission_failed', {err: res && res.error}) || ((res && res.error) || 'Submission failed'));
             }
         } catch (e) {
-            showWkToast('Error: ' + e.message);
+            showWkToast(window.t('toasts.error_prefix', {msg: e.message}) || ('Error: ' + e.message));
         } finally {
-            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit for Review'; }
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> ' + (window.t('workshop.create.submit') || 'Submit for Review'); }
         }
     };
 
@@ -1148,35 +1202,36 @@
     async function loadWorkshopAdminItems(statusFilter) {
         const grid = document.getElementById('wkAdminGrid');
         if (!grid) return;
-        grid.innerHTML = '<div class="wk-loading"><div class="wk-spinner"></div><span>Loading admin items...</span></div>';
+        grid.innerHTML = '<div class="wk-loading"><div class="wk-spinner"></div><span>' + (window.t('workshop.admin.loading') || 'Loading admin items...') + '</span></div>';
         try {
             const res = await api().workshop_admin_get_items(statusFilter || activeAdminFilter);
             const items = (res && res.items) || [];
             if (items.length === 0) {
-                grid.innerHTML = '<div class="wk-empty"><i class="fas fa-shield-alt"></i><p>No items found for this filter.</p></div>';
+                grid.innerHTML = '<div class="wk-empty"><i class="fas fa-shield-alt"></i><p>' + (window.t('workshop.admin.empty') || 'No items found for this filter.') + '</p></div>';
                 return;
             }
             grid.innerHTML = items.map(function(item) { return renderModPackCardHTML(item, 'admin'); }).join('');
             loadCardIcons(grid);
         } catch(e) {
-            grid.innerHTML = '<div class="wk-empty"><i class="fas fa-exclamation-circle"></i><p>Error loading admin items.</p></div>';
+            grid.innerHTML = '<div class="wk-empty"><i class="fas fa-exclamation-circle"></i><p>' + (window.t('toasts.err_load_admin') || 'Error loading admin items.') + '</p></div>';
         }
     }
 
     window.approveWkItem = async function(id) {
-        if (!confirm('Approve and publish this item to the community?')) return;
+        if (!confirm(window.t('toasts.confirm_approve') || 'Approve and publish this item to the community?')) return;
         try {
             const res = await api().workshop_moderate_item(id, 'pub', '', null);
             if (res && res.success) {
-                showWkToast('Item approved successfully', 'success');
+                showWkToast(window.t('toasts.item_approved') || 'Item approved successfully', 'success');
                 wkItemCache = {};
-                if (activeWkTab === 'admin') loadWorkshopAdminItems(activeAdminFilter);
-                if (activeWkTab === 'modpacks') loadWorkshopModPacks();
+                // Always refresh both lists so changes are visible regardless of active tab
+                loadWorkshopAdminItems(activeAdminFilter);
+                loadWorkshopModPacks();
                 closeWkItemModal();
             } else {
-                showWkToast((res && res.error) || 'Failed to approve item');
+                showWkToast(window.t('toasts.failed_approve', {err: res && res.error}) || ((res && res.error) || 'Failed to approve item'));
             }
-        } catch(e) { showWkToast('Error: ' + e.message); }
+        } catch(e) { showWkToast(window.t('toasts.error_prefix', {msg: e.message}) || ('Error: ' + e.message)); }
     };
 
     let currentRejectId = null;
@@ -1200,62 +1255,66 @@
         const input = document.getElementById('wkRejectNoteInput');
         const note = input ? input.value.trim() : '';
         if (!note) {
-            showWkToast('Please specify a reason for rejection', 'error');
+            showWkToast(window.t('toasts.specify_rejection') || 'Please specify a reason for rejection', 'error');
             return;
         }
         const btn = document.getElementById('wkConfirmRejectBtn');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Denying...'; }
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + (window.t('workshop.reject.denying') || 'Denying...'); }
         try {
             const res = await api().workshop_moderate_item(currentRejectId, 'njt', note, null);
             if (res && res.success) {
-                showWkToast('Item rejected', 'success');
+                showWkToast(window.t('toasts.item_rejected') || 'Item rejected', 'success');
                 wkItemCache = {};
                 closeWkRejectModal();
-                if (activeWkTab === 'admin') loadWorkshopAdminItems(activeAdminFilter);
-                if (activeWkTab === 'modpacks') loadWorkshopModPacks();
+                // Always refresh both lists so changes are visible regardless of active tab
+                loadWorkshopAdminItems(activeAdminFilter);
+                loadWorkshopModPacks();
                 closeWkItemModal();
             } else {
-                showWkToast((res && res.error) || 'Failed to reject item');
+                showWkToast(window.t('toasts.failed_reject', {err: res && res.error}) || ((res && res.error) || 'Failed to reject item'));
             }
         } catch(e) { 
-            showWkToast('Error: ' + e.message); 
+            showWkToast(window.t('toasts.error_prefix', {msg: e.message}) || ('Error: ' + e.message)); 
         } finally {
-            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-ban"></i> Deny'; }
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-ban"></i> ' + (window.t('workshop.modal.deny') || 'Deny'); }
         }
     };
 
     window.toggleOfficialWkItem = async function(id, currentOfficial) {
         const newOfficial = !currentOfficial;
-        if (!confirm(newOfficial ? 'Mark this modpack as OFFICIAL?' : 'Remove official status from this modpack?')) return;
+        if (!confirm(newOfficial ? (window.t('toasts.confirm_mark_official') || 'Mark this modpack as OFFICIAL? (will also be approved automatically)') : (window.t('toasts.confirm_remove_official') || 'Remove official status from this modpack?'))) return;
         try {
-            const res = await api().workshop_moderate_item(id, null, null, newOfficial);
+            // When making official, also auto-approve (status=pub). When removing official, leave status unchanged.
+            const newStatus = newOfficial ? 'pub' : null;
+            const res = await api().workshop_moderate_item(id, newStatus, null, newOfficial);
             if (res && res.success) {
-                showWkToast(newOfficial ? 'Marked as Official' : 'Removed official status', 'success');
+                showWkToast(newOfficial ? (window.t('toasts.marked_official') || 'Marked as Official & Approved') : (window.t('toasts.removed_official') || 'Removed official status'), 'success');
                 wkItemCache = {};
-                if (activeWkTab === 'admin') loadWorkshopAdminItems(activeAdminFilter);
-                if (activeWkTab === 'modpacks') loadWorkshopModPacks();
+                // Always refresh both lists so changes are visible regardless of active tab
+                loadWorkshopAdminItems(activeAdminFilter);
+                loadWorkshopModPacks();
                 closeWkItemModal();
             } else {
-                showWkToast((res && res.error) || 'Failed to change official status');
+                showWkToast(window.t('toasts.failed_official', {err: res && res.error}) || ((res && res.error) || 'Failed to change official status'));
             }
-        } catch(e) { showWkToast('Error: ' + e.message); }
+        } catch(e) { showWkToast(window.t('toasts.error_prefix', {msg: e.message}) || ('Error: ' + e.message)); }
     };
 
     window.deleteWkItem = async function(id) {
-        if (!confirm('WARNING! Are you sure you want to PERMANENTLY DELETE this item from the database? This action cannot be undone.')) return;
+        if (!confirm(window.t('toasts.confirm_delete_wk') || 'WARNING! Are you sure you want to PERMANENTLY DELETE this item from the database? This action cannot be undone.')) return;
         try {
             const res = await api().workshop_delete_item(id);
             if (res && res.success) {
-                showWkToast('Item permanently deleted', 'success');
+                showWkToast(window.t('toasts.item_deleted') || 'Item permanently deleted', 'success');
                 wkItemCache = {};
                 if (activeWkTab === 'admin') loadWorkshopAdminItems(activeAdminFilter);
                 if (activeWkTab === 'modpacks') loadWorkshopModPacks();
                 if (typeof renderMyPendingItems === 'function') renderMyPendingItems();
                 closeWkItemModal();
             } else {
-                showWkToast((res && res.error) || 'Failed to delete item');
+                showWkToast(window.t('toasts.failed_delete_item', {err: res && res.error}) || ((res && res.error) || 'Failed to delete item'));
             }
-        } catch(e) { showWkToast('Error: ' + e.message); }
+        } catch(e) { showWkToast(window.t('toasts.error_prefix', {msg: e.message}) || ('Error: ' + e.message)); }
     };
 
     // Hook showSection
@@ -1327,6 +1386,22 @@
                 reader.readAsDataURL(file);
             });
         }
+
+        // Submodals and workshop modals backdrop click handlers
+        [
+            { id: 'wkProfileSelectModal', close: closeWkProfileSelectModal },
+            { id: 'wkRejectModal', close: closeWkRejectModal },
+            { id: 'wkItemModal', close: closeWkItemModal },
+            { id: 'wkCreateModal', close: closeWkCreateModal }
+        ].forEach(function(item) {
+            const el = document.getElementById(item.id);
+            if (el) {
+                el.addEventListener('click', function(e) {
+                    if (e.target === el) item.close();
+                });
+            }
+        });
+
         restoreWkAccordionStates();
     });
 

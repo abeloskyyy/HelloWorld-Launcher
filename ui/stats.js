@@ -220,35 +220,41 @@ document.addEventListener('DOMContentLoaded', async () => {
         const days = stats.totalDaysPlayed || 0;
         const sessions = stats.totalSessions || 0;
         
-        document.getElementById('statsModalStreak').innerHTML = `${streak} <span style="font-size: 14px; font-weight: normal; color: #888;">days</span>`;
+        const streakEl = document.getElementById('statsModalStreak');
+        if (streakEl) streakEl.innerHTML = `${streak} <span style="font-size: 14px; font-weight: normal; color: #888;">${window.t('stats.days_unit')}</span>`;
         const maxStreakEl = document.getElementById('statsModalMaxStreak');
-        if (maxStreakEl) maxStreakEl.innerHTML = `${maxStreak} <span style="font-size: 14px; font-weight: normal; color: #888;">days</span>`;
-        document.getElementById('statsModalHours').innerHTML = `${totalHours} <span style="font-size: 14px; font-weight: normal; color: #888;">h</span>`;
-        document.getElementById('statsModalDays').innerHTML = `${days} <span style="font-size: 14px; font-weight: normal; color: #888;">days</span>`;
-        document.getElementById('statsModalSessions').innerHTML = `${sessions}`;
+        if (maxStreakEl) maxStreakEl.innerHTML = `${maxStreak} <span style="font-size: 14px; font-weight: normal; color: #888;">${window.t('stats.days_unit')}</span>`;
+        const hoursEl = document.getElementById('statsModalHours');
+        if (hoursEl) hoursEl.innerHTML = `${totalHours} <span style="font-size: 14px; font-weight: normal; color: #888;">${window.t('stats.hours_unit')}</span>`;
+        const daysEl = document.getElementById('statsModalDays');
+        if (daysEl) daysEl.innerHTML = `${days} <span style="font-size: 14px; font-weight: normal; color: #888;">${window.t('stats.days_unit')}</span>`;
+        const sessionsEl = document.getElementById('statsModalSessions');
+        if (sessionsEl) sessionsEl.innerHTML = `${sessions}`;
         
         const avatarImg = document.getElementById('statsUserAvatarImg');
         const fallback = document.getElementById('statsUserAvatarFallback');
         
-        if (avatarUrl) {
-            avatarImg.src = avatarUrl;
-            avatarImg.style.display = 'block';
-            fallback.style.display = 'none';
-        } else {
-            // Self avatar logic (since we don't have avatarUrl passed for self)
-            const selfHead = document.getElementById('userAvatarHead');
-            const selfImg = selfHead ? selfHead.querySelector('img') : null;
-            if (selfImg && selfImg.src) {
-                avatarImg.src = selfImg.src;
+        if (avatarImg && fallback) {
+            if (avatarUrl) {
+                avatarImg.src = avatarUrl;
                 avatarImg.style.display = 'block';
                 fallback.style.display = 'none';
             } else {
-                avatarImg.style.display = 'none';
-                fallback.style.display = 'block';
+                // Self avatar logic (since we don't have avatarUrl passed for self)
+                const selfHead = document.getElementById('userAvatarHead');
+                const selfImg = selfHead ? selfHead.querySelector('img') : null;
+                if (selfImg && selfImg.src) {
+                    avatarImg.src = selfImg.src;
+                    avatarImg.style.display = 'block';
+                    fallback.style.display = 'none';
+                } else {
+                    avatarImg.style.display = 'none';
+                    fallback.style.display = 'block';
+                }
             }
         }
         
-        modal.classList.add('show');
+        if (modal) modal.classList.add('show');
     }
     
     document.getElementById('closeStatsModalBtn').onclick = () => {

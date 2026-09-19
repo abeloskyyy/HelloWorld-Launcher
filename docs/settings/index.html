@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Settings - HelloWorld Launcher</title>
+    <meta name="description" content="Manage your HelloWorld Launcher account settings and player profile.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="../styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+
+    <link rel="icon" href="../favicon.png">
+</head>
+
+<body class="settings-page">
+    <div id="authLoaderOverlay" style="position: fixed; inset: 0; background: #0f0c29; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white;">
+        <i class="fas fa-spinner fa-spin" style="font-size: 3rem; margin-bottom: 20px; color: var(--primary);"></i>
+        <h2 style="font-family: 'Clash Display', sans-serif;">HelloWorld Launcher</h2>
+        <p style="opacity: 0.7;" data-i18n="global.loading">Loading services...</p>
+    </div>
+
+    <div class="blob-cont">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <!-- Global Navigation Bar -->
+    <nav class="navbar">
+        <div class="container nav-container">
+            <a href="../" class="logo">
+                <img src="https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/title.png"
+                    alt="HelloWorld Launcher" class="nav-logo-img">
+            </a>
+            <div class="nav-links">
+                <a href="https://github.com/abeloskyyy/HelloWorld-Launcher" target="_blank" class="github-link"><i class="bi bi-github"></i> GitHub</a>
+            </div>
+            
+            <div class="nav-right-group">
+                <a href="../" id="navDownloadBtn" class="btn btn-primary sm-hidden" data-i18n="nav.download">Download Now</a>
+                <a href="#" id="navLoginBtn" class="btn btn-secondary sm-hidden" style="display: none;" data-i18n="nav.login">Log In</a>
+                
+                <!-- User badge - dropdown trigger -->
+                <div id="navUserBadge" class="nav-user-badge-wrapper" style="display:none;">
+                    <div class="nav-user-inner" id="navUserInner">
+                        <div class="nav-user-avatar">
+                            <img id="navUserAvatarImg" src="https://mc-heads.net/avatar/Steve" alt="User avatar" />
+                        </div>
+                        <span id="navUsername" class="nav-username"></span>
+                        <span id="navBadgesRow" class="hw-badges-row"></span>
+                        <i class="fas fa-chevron-down nav-user-chevron" id="navUserChevron"></i>
+                    </div>
+                    <!-- Dropdown -->
+                    <div class="nav-user-dropdown" id="navUserDropdown">
+                        <a href="../settings/" class="nav-dropdown-item" id="navEditProfileBtn">
+                            <i class="fas fa-user-edit"></i>
+                            <span data-i18n="nav.edit_profile">Edit Profile</span>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Settings Gear Button -->
+                <a href="../settings/" class="nav-settings-btn" id="navSettingsBtn" title="Settings" aria-label="Settings">
+                    <i class="fas fa-cog"></i>
+                </a>
+
+                <!-- Language Selector with flags -->
+                <div class="lang-select-wrapper" id="langSelectorWrapper">
+                    <button class="lang-btn" id="langBtn" aria-label="Select Language">
+                        <img class="lang-flag" id="langFlagImg" src="https://flagcdn.com/gb.svg" alt="EN" width="20" height="15">
+                        <span class="lang-code" id="langCode">EN</span>
+                        <i class="fas fa-chevron-down lang-chevron" id="langChevron"></i>
+                    </button>
+                    <div class="lang-dropdown" id="langDropdown">
+                        <button class="lang-option" data-lang="en"><img src="https://flagcdn.com/gb.svg" width="20" height="15" alt=""> EN</button>
+                        <button class="lang-option" data-lang="es"><img src="https://flagcdn.com/es.svg" width="20" height="15" alt=""> ES</button>
+                        <button class="lang-option" data-lang="fr"><img src="https://flagcdn.com/fr.svg" width="20" height="15" alt=""> FR</button>
+                        <button class="lang-option" data-lang="de"><img src="https://flagcdn.com/de.svg" width="20" height="15" alt=""> DE</button>
+                        <button class="lang-option" data-lang="pt"><img src="https://flagcdn.com/br.svg" width="20" height="15" alt=""> PT</button>
+                        <button class="lang-option" data-lang="it"><img src="https://flagcdn.com/it.svg" width="20" height="15" alt=""> IT</button>
+                        <button class="lang-option" data-lang="ru"><img src="https://flagcdn.com/ru.svg" width="20" height="15" alt=""> RU</button>
+                        <button class="lang-option" data-lang="ja"><img src="https://flagcdn.com/jp.svg" width="20" height="15" alt=""> JA</button>
+                        <button class="lang-option" data-lang="zh"><img src="https://flagcdn.com/cn.svg" width="20" height="15" alt=""> ZH</button>
+                        <button class="lang-option" data-lang="ko"><img src="https://flagcdn.com/kr.svg" width="20" height="15" alt=""> KO</button>
+                        <button class="lang-option" data-lang="pl"><img src="https://flagcdn.com/pl.svg" width="20" height="15" alt=""> PL</button>
+                        <button class="lang-option" data-lang="nl"><img src="https://flagcdn.com/nl.svg" width="20" height="15" alt=""> NL</button>
+                        <button class="lang-option" data-lang="tr"><img src="https://flagcdn.com/tr.svg" width="20" height="15" alt=""> TR</button>
+                        <button class="lang-option" data-lang="ar"><img src="https://flagcdn.com/sa.svg" width="20" height="15" alt=""> AR</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Settings Page View -->
+    <main class="settings-page-screen">
+        <div class="settings-container">
+            
+            <!-- Header Navigation -->
+            <div class="settings-header-nav">
+                <a href="../" class="settings-back-btn">
+                    <i class="fas fa-arrow-left"></i> <span data-i18n="settings.back_home">Back to Home</span>
+                </a>
+                <div class="settings-title-group">
+                    <h1 data-i18n="settings.main_title">Settings</h1>
+                </div>
+            </div>
+
+            <!-- Settings Layout: Sidebar + Main Content -->
+            <div class="settings-layout">
+                
+                <!-- Sidebar ("Apartados") -->
+                <aside class="settings-sidebar">
+                    <div class="settings-tab-item active" data-tab="account">
+                        <i class="fas fa-user-circle"></i>
+                        <span data-i18n="settings.tab_account">Account</span>
+                        <i class="fas fa-chevron-right settings-tab-arrow"></i>
+                    </div>
+                </aside>
+
+                <!-- Main Settings Content Area -->
+                <section class="settings-content-panel">
+                    
+                    <!-- Top Action Bar -->
+                    <div class="settings-top-bar-actions">
+                        <div>
+                            <h2 data-i18n="settings.account_title">Account Settings</h2>
+                            <p style="font-size: 0.88rem; color: var(--text-muted);" data-i18n="settings.account_subtitle">Manage your player identity, avatar, and public profile details.</p>
+                        </div>
+                        <button class="btn btn-primary" id="saveAccountBtnTop">
+                            <i class="fas fa-save"></i> <span data-i18n="settings.save">Save Changes</span>
+                        </button>
+                    </div>
+
+                    <!-- Top Launcher-Style Player Profile Preview Card -->
+                    <div>
+                        <h4 style="margin-bottom: 12px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; color: var(--secondary); font-weight: 600;" data-i18n="settings.live_preview_label">Player Card Preview</h4>
+                        
+                        <div id="avatarBackgroundPreview" class="launcher-profile-card-preview">
+                            <div class="launcher-profile-plate">
+                                <div id="dashboardAvatarWrapper" class="hw-avatar-halo-wrapper" style="position: relative; display: inline-flex; z-index: 2;">
+                                    <div class="hw-avatar-halo-ambient"></div>
+                                    <div class="hw-avatar-halo-ring"></div>
+                                    <div class="hw-avatar-halo-sparkle"></div>
+                                    <img id="dashboardAvatarPreview" src="https://ui-avatars.com/api/?name=Player&background=random&color=fff&rounded=true&bold=true&format=svg" alt="Avatar" style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255,255,255,0.25); image-rendering: pixelated; filter: drop-shadow(0 4px 14px rgba(0,0,0,0.8));">
+                                    <div id="countryBadge" style="position: absolute; top: 5px; right: -5px; width: 32px; height: 32px; border-radius: 50%; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; overflow: hidden; border: 2px solid rgba(255,255,255,0.3); z-index: 10; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.8));">
+                                        <img id="countryFlagSvg" src="" alt="Country" style="width: 100%; height: 100%; object-fit: cover;">
+                                    </div>
+                                </div>
+
+                                <h2 class="launcher-profile-display-name">
+                                    <span id="dashboardDisplayName">Player</span>
+                                    <span id="dashboardBadgesRow" class="hw-badges-row"></span>
+                                </h2>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Single-Column Form Controls ("Linea Recta") -->
+                    <div class="form-single-column">
+                        
+                        <!-- 1. Avatar & Background Customization -->
+                        <div class="form-group-single">
+                            <label data-i18n="settings.avatar_background_label">Avatar &amp; Profile Banner</label>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <input type="file" id="avatarUploadInput" accept="image/png, image/jpeg, image/webp" style="display: none;">
+                                <button class="btn btn-secondary" onclick="document.getElementById('avatarUploadInput').click()" style="flex: 1; min-width: 140px; font-size: 0.9em;">
+                                    <i class="fas fa-camera"></i> <span data-i18n="settings.upload_avatar">Upload Avatar</span>
+                                </button>
+                                <button class="btn btn-secondary" id="useDefaultAvatarBtn" title="Use default Minecraft head" style="display:none; padding: 0 16px; font-size: 0.9em;">
+                                    <i class="fas fa-cube"></i> <span data-i18n="settings.mc_head">MC Head</span>
+                                </button>
+                                <select id="dashboardBackground" class="form-control" style="flex: 1; min-width: 180px; padding: 10px;">
+                                    <option value="default" data-i18n="bg.default">Default Banner</option>
+                                    <option value="gradient1" data-i18n="bg.purple">Purple Gradient</option>
+                                    <option value="gradient2" data-i18n="bg.blue">Blue Gradient</option>
+                                    <option value="gradient3" data-i18n="bg.green">Green Gradient</option>
+                                    <option value="gradient4" data-i18n="bg.orange">Orange Gradient</option>
+                                    <option value="gradient5" data-i18n="bg.pink">Pink Gradient</option>
+                                    <option value="minecraft1">Minecraft Overworld</option>
+                                    <option value="minecraft2">Minecraft Sky</option>
+                                    <option value="minecraft3">Minecraft Nether</option>
+                                    <option value="minecraft4">Minecraft End</option>
+                                    <option value="minecraft5">Minecraft Village</option>
+                                    <option value="minecraft6">Minecraft Forest</option>
+                                    <option value="minecraft7">Minecraft Desert</option>
+                                    <option value="minecraft8">Minecraft Ocean</option>
+                                    <option value="minecraft9">Minecraft Cherry Grove</option>
+                                </select>
+                            </div>
+                            <p style="font-size: 0.8em; opacity: 0.65; margin-top: 4px;" data-i18n="settings.avatar_help">Images are cropped to 1:1 and resized to 128x128 pixels.</p>
+                        </div>
+
+                        <!-- 2. Username Form Group -->
+                        <div class="form-group-single" id="usernameFormGroup">
+                            <label data-i18n="settings.username_label">Minecraft Username</label>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="text" id="dashboardUsername" class="form-control" readonly disabled>
+                                <button class="btn btn-secondary" id="editUsernameBtn" style="padding: 0 16px;"><i class="fas fa-edit"></i></button>
+                            </div>
+                            <p style="font-size: 0.8em; color: #ff8c82; margin-top: 4px; line-height: 1.3;" data-i18n="settings.username_warning">
+                                <i class="bi bi-exclamation-triangle"></i> Changing your username might cause you to lose progress, ranks, and inventory on third-party servers.
+                            </p>
+                        </div>
+
+                        <!-- 3. Country Select -->
+                        <div class="form-group-single">
+                            <label data-i18n="settings.country_label">Country</label>
+                            <select id="dashboardCountry" class="form-control">
+                                <option value="" data-i18n="settings.select_country">Select your country</option>
+                                <option value="AR" data-i18n="country.AR">Argentina</option>
+                                <option value="AU" data-i18n="country.AU">Australia</option>
+                                <option value="AT" data-i18n="country.AT">Austria</option>
+                                <option value="BE" data-i18n="country.BE">Belgium</option>
+                                <option value="BR" data-i18n="country.BR">Brazil</option>
+                                <option value="CA" data-i18n="country.CA">Canada</option>
+                                <option value="CL" data-i18n="country.CL">Chile</option>
+                                <option value="CN" data-i18n="country.CN">China</option>
+                                <option value="CO" data-i18n="country.CO">Colombia</option>
+                                <option value="CZ" data-i18n="country.CZ">Czech Republic</option>
+                                <option value="DK" data-i18n="country.DK">Denmark</option>
+                                <option value="EG" data-i18n="country.EG">Egypt</option>
+                                <option value="FI" data-i18n="country.FI">Finland</option>
+                                <option value="FR" data-i18n="country.FR">France</option>
+                                <option value="DE" data-i18n="country.DE">Germany</option>
+                                <option value="GR" data-i18n="country.GR">Greece</option>
+                                <option value="HK" data-i18n="country.HK">Hong Kong</option>
+                                <option value="HU" data-i18n="country.HU">Hungary</option>
+                                <option value="IS" data-i18n="country.IS">Iceland</option>
+                                <option value="IN" data-i18n="country.IN">India</option>
+                                <option value="ID" data-i18n="country.ID">Indonesia</option>
+                                <option value="IE" data-i18n="country.IE">Ireland</option>
+                                <option value="IL" data-i18n="country.IL">Israel</option>
+                                <option value="IT" data-i18n="country.IT">Italy</option>
+                                <option value="JP" data-i18n="country.JP">Japan</option>
+                                <option value="LU" data-i18n="country.LU">Luxembourg</option>
+                                <option value="MY" data-i18n="country.MY">Malaysia</option>
+                                <option value="MX" data-i18n="country.MX">Mexico</option>
+                                <option value="NL" data-i18n="country.NL">Netherlands</option>
+                                <option value="NZ" data-i18n="country.NZ">New Zealand</option>
+                                <option value="NG" data-i18n="country.NG">Nigeria</option>
+                                <option value="NO" data-i18n="country.NO">Norway</option>
+                                <option value="PE" data-i18n="country.PE">Peru</option>
+                                <option value="PH" data-i18n="country.PH">Philippines</option>
+                                <option value="PL" data-i18n="country.PL">Poland</option>
+                                <option value="PT" data-i18n="country.PT">Portugal</option>
+                                <option value="RO" data-i18n="country.RO">Romania</option>
+                                <option value="RU" data-i18n="country.RU">Russia</option>
+                                <option value="SA" data-i18n="country.SA">Saudi Arabia</option>
+                                <option value="SG" data-i18n="country.SG">Singapore</option>
+                                <option value="ZA" data-i18n="country.ZA">South Africa</option>
+                                <option value="KR" data-i18n="country.KR">South Korea</option>
+                                <option value="ES" data-i18n="country.ES">Spain</option>
+                                <option value="SE" data-i18n="country.SE">Sweden</option>
+                                <option value="CH" data-i18n="country.CH">Switzerland</option>
+                                <option value="TH" data-i18n="country.TH">Thailand</option>
+                                <option value="TR" data-i18n="country.TR">Turkey</option>
+                                <option value="UA" data-i18n="country.UA">Ukraine</option>
+                                <option value="AE" data-i18n="country.AE">United Arab Emirates</option>
+                                <option value="GB" data-i18n="country.GB">United Kingdom</option>
+                                <option value="US" data-i18n="country.US">United States</option>
+                                <option value="VE" data-i18n="country.VE">Venezuela</option>
+                                <option value="VN" data-i18n="country.VN">Vietnam</option>
+                                <option value="OTHER" data-i18n="country.OTHER">Other</option>
+                            </select>
+                        </div>
+
+                        <!-- 4. Biography -->
+                        <div class="form-group-single">
+                            <label data-i18n="settings.biography_label">Biography <span style="opacity: 0.6; font-size: 0.85em;">(max 500 characters)</span></label>
+                            <textarea id="dashboardBiography" class="form-control" rows="4" maxlength="500" placeholder="Tell us about yourself..." data-i18n-placeholder="settings.biography_placeholder" style="resize: none;"></textarea>
+                            <p style="font-size: 0.8em; opacity: 0.6; margin-top: 2px; text-align: right;"><span id="biographyCharCount">0</span>/500</p>
+                        </div>
+
+                        <!-- 5. Links -->
+                        <div class="form-group-single">
+                            <label data-i18n="settings.links_label">Links <span style="opacity: 0.6; font-size: 0.85em;">(title and URL)</span></label>
+                            <div id="linksContainer">
+                                <!-- Links rendered dynamically -->
+                            </div>
+                            <button type="button" class="btn btn-secondary" id="addLinkBtn" style="width: 100%; margin-top: 6px; font-size: 0.9em;">
+                                <i class="fas fa-plus"></i> <span data-i18n="settings.add_link">Add Link</span>
+                            </button>
+                        </div>
+
+                        <!-- 6. Favorite Mob -->
+                        <div class="form-group-single">
+                            <label data-i18n="settings.fav_mob_label">Favorite Mob</label>
+                            <input type="text" id="dashboardFavoriteMob" class="form-control" placeholder="E.g. Creeper, Enderman..." data-i18n-placeholder="settings.fav_mob_placeholder" maxlength="50">
+                        </div>
+
+                        <!-- 7. Playstyle Tags -->
+                        <div class="form-group-single">
+                            <label data-i18n="settings.tags_label">Playstyle Tags <span style="opacity: 0.6; font-size: 0.85em;">(pick up to 5)</span></label>
+                            <div id="playstyleTagsGrid" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px;">
+                                <!-- Tags rendered dynamically -->
+                            </div>
+                            <p style="font-size: 0.8em; opacity: 0.6; margin-top: 4px;" data-i18n="settings.tags_hint">Click to select/deselect. Max 5 tags.</p>
+                        </div>
+
+                        <!-- 8. Log Out Button -->
+                        <div style="margin-top: 10px;">
+                            <button class="btn btn-secondary" id="accountLogoutBtn" style="width: 100%; border-color: #ff8c82; color: #ff8c82;">
+                                <i class="fas fa-sign-out-alt"></i> <span data-i18n="settings.logout">Log Out</span>
+                            </button>
+                        </div>
+
+                    </div>
+
+                    <!-- Bottom Action Bar & Feedback -->
+                    <div class="settings-bottom-actions">
+                        <div id="accountError" style="color: #ff8c82; font-size: 0.95em; text-align: center; display: none;"></div>
+                        <div id="accountSuccess" style="color: #4CAF50; font-size: 0.95em; text-align: center; display: none;"></div>
+                        
+                        <button class="btn btn-primary" id="saveAccountBtnBottom" style="width: 100%; font-size: 1.05rem; padding: 14px;">
+                            <i class="fas fa-save"></i> <span data-i18n="settings.save">Save Changes</span>
+                        </button>
+                    </div>
+
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- Avatar Cropper Modal Overlay -->
+    <div id="cropperModal" class="review-modal" style="z-index: 2000;">
+        <div class="review-modal-content" style="max-width: 500px; text-align: center; border-radius: 12px; background: rgba(20, 20, 25, 0.95); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px);">
+            <button class="close-modal" id="closeCropperModal" style="top: 15px; right: 15px;">&times;</button>
+            <h3 style="margin-bottom: 20px; font-weight: 600; color: #fff;" data-i18n="cropper.title">Crop your Avatar</h3>
+            <div style="height: 400px; width: 100%; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); border-radius: 8px; overflow: hidden; margin-bottom: 25px;">
+                <img id="cropperImage" src="" style="max-width: 100%; max-height: 100%; display: block;">
+            </div>
+            <div style="display: flex; gap: 15px;">
+                <button class="btn btn-secondary" id="cancelCropBtn" style="flex: 1; padding: 12px; border-radius: 8px; font-weight: 600;" data-i18n="cropper.cancel">Cancel</button>
+                <button class="btn btn-primary" id="applyCropBtn" style="flex: 1; padding: 12px; border-radius: 8px; font-weight: 600;" data-i18n="cropper.apply">Apply Crop</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK (same as index.html) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, push, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut, OAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, deleteField, serverTimestamp as firestoreTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        window.firebaseModules = {
+            initializeApp, getDatabase, ref, push, onValue, serverTimestamp,
+            getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut, OAuthProvider, signInWithPopup,
+            getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, deleteField, firestoreTimestamp
+        };
+    </script>
+    <script src="../script.js" type="module"></script>
+</body>
+</html>

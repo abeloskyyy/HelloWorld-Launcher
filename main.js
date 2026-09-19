@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, shell, dialog, safeStorage, Notification } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, Tray, shell, dialog, safeStorage, Notification, nativeImage } = require('electron')
 const path = require('path')
 const http = require('http')
 const { URL } = require('url')
@@ -46,38 +46,156 @@ const fs = require('fs-extra')
 // Catch unhandled exceptions & rejections to stop infinite Electron OS popups if edge cases happen
 process.on('uncaughtException', (error) => {
   console.error('[Global Error] Uncaught Exception:', error);
+  if (app.isPackaged) {
+    dialog.showErrorBox('Error de inicio', `${error.message}\n\n${error.stack || ''}`);
+    app.quit();
+  }
 });
 process.on('unhandledRejection', (reason, promise) => {
   console.error('[Global Error] Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.abelosky.helloworldlauncher');
+}
+
+const activeNotifications = new Set();
+
+function parseLaunchProfileArg(args) {
+  if (!Array.isArray(args)) return null;
+  for (const arg of args) {
+    if (typeof arg === 'string') {
+      const match = arg.match(/^--launch-profile=(.+)$/i);
+      if (match) return match[1].replace(/^["']|["']$/g, '');
+    }
+  }
+  const idx = args.indexOf('--launch-profile');
+  if (idx !== -1 && idx + 1 < args.length) {
+    return String(args[idx + 1]).replace(/^["']|["']$/g, '');
+  }
+  return null;
+}
+
+let pendingAutoLaunchProfileId = parseLaunchProfileArg(process.argv);
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  console.log('[SingleInstance] Another instance is already running. Quitting.');
+  app.quit();
+  process.exit(0);
+} else {
+  app.on('second-instance', (event, commandLine) => {
+    console.log('[SingleInstance] Second instance launched with commandLine:', commandLine);
+    showAndFocusWindow();
+    const targetProfileId = parseLaunchProfileArg(commandLine);
+    if (targetProfileId && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('auto-launch-profile', targetProfileId);
+    }
+  });
+}
+
 
 const { Client } = require('minecraft-launcher-core')
+const { applyMclcPatch, markExistingIndexesVerified } = require('./src/utils/mclcPatch')
+applyMclcPatch()
 const msmc = require('msmc')
 const axios = require('axios')
-const { autoUpdater } = require("electron-updater")
-
-// Configure AutoUpdater
-autoUpdater.logger = require("electron-log")
-autoUpdater.logger.transports.file.level = "info"
-autoUpdater.autoDownload = false // Let user decide, or set true to auto-download
+let autoUpdater = null
+try {
+  autoUpdater = require("electron-updater").autoUpdater
+  // Configure AutoUpdater
+  autoUpdater.logger = require("electron-log")
+  autoUpdater.logger.transports.file.level = "info"
+  autoUpdater.autoDownload = false // Let user decide, or set true to auto-download
+} catch (e) {
+  console.warn("[AutoUpdater] electron-updater could not be loaded:", e.message)
+}
 
 // -- Modules --
 const rpc = require('./src/utils/rpc')
 const paths = require('./src/utils/paths')
+markExistingIndexesVerified(paths.getMcDir())
 const profileManager = require('./src/handlers/profiles')
 const modManager = require('./src/handlers/mods')
 const versionUtils = require('./src/utils/version')
+const { addServerToServersDat, getServerHistory } = require('./src/utils/serversDat')
 
-// Hardware Acceleration Check before App Ready
+// Hardware Acceleration & High-Performance GPU (Max VRAM / Dedicated GPU) Configuration
+const configuredGpuPaths = new Set();
+function applyGpuPreference(exePath, preferHighPerformance = true) {
+  if (process.platform !== 'win32' || !exePath) return;
+  const cacheKey = `${exePath}:${preferHighPerformance}`;
+  if (configuredGpuPaths.has(cacheKey)) return;
+  configuredGpuPaths.add(cacheKey);
+  try {
+    const { exec } = require('child_process');
+    const pref = preferHighPerformance ? 'GpuPreference=2;' : 'GpuPreference=1;';
+    const regCmd = `reg add "HKCU\\Software\\Microsoft\\DirectX\\UserGpuPreferences" /v "${exePath}" /t REG_SZ /d "${pref}" /f`;
+    exec(regCmd, (err) => {
+      if (!err) {
+        console.log(`[GPU] Assigned ${exePath} to ${preferHighPerformance ? 'High-Performance Dedicated GPU (Max VRAM)' : 'Power-Saving GPU'}`);
+      }
+    });
+  } catch (e) { }
+}
+
+function ensureJavaGpuPreference(jPath, preferHighPerformance = true) {
+  if (process.platform !== 'win32' || !jPath || jPath === 'java') return;
+  applyGpuPreference(jPath, preferHighPerformance);
+  if (/javaw\.exe$/i.test(jPath)) {
+    applyGpuPreference(jPath.replace(/javaw\.exe$/i, 'java.exe'), preferHighPerformance);
+  } else if (/java\.exe$/i.test(jPath)) {
+    applyGpuPreference(jPath.replace(/java\.exe$/i, 'javaw.exe'), preferHighPerformance);
+  }
+}
+
+function registerAllKnownJavaRuntimes(preferHighPerformance = true) {
+  if (process.platform !== 'win32') return;
+  try {
+    const runtimesDir = path.join(paths.getMcDir(), 'java-runtimes');
+    if (fs.existsSync(runtimesDir)) {
+      const scanDir = (dir) => {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            scanDir(fullPath);
+          } else if (entry.isFile() && /java(w)?\.exe$/i.test(entry.name)) {
+            applyGpuPreference(fullPath, preferHighPerformance);
+          }
+        }
+      };
+      scanDir(runtimesDir);
+    }
+  } catch (_) { }
+}
+
 try {
   const userJsonPath = paths.getUserFilePath();
+  let hwAccelEnabled = true;
   if (fs.existsSync(userJsonPath)) {
     const data = JSON.parse(fs.readFileSync(userJsonPath, 'utf8'));
     if (data.hw_accel === false) {
-      console.log("Hardware acceleration is disabled by user setting.");
-      app.disableHardwareAcceleration();
+      hwAccelEnabled = false;
     }
+  }
+
+  if (!hwAccelEnabled) {
+    console.log("[GPU] Hardware acceleration is disabled by user setting.");
+    app.disableHardwareAcceleration();
+    applyGpuPreference(process.execPath, false);
+    registerAllKnownJavaRuntimes(false);
+  } else {
+    console.log("[GPU] Hardware acceleration enabled: forcing high-performance GPU with maximum VRAM.");
+    app.commandLine.appendSwitch('force_high_performance_gpu');
+    app.commandLine.appendSwitch('force-high-performance-gpu');
+    applyGpuPreference(process.execPath, true);
+    registerAllKnownJavaRuntimes(true);
+    // Environment variables for NVIDIA Optimus & AMD discrete graphics offloading
+    process.env.SHIM_MCCOMPAT = '0x800000001';
+    process.env.__NV_PRIME_RENDER_OFFLOAD = '1';
+    process.env.__GLX_VENDOR_LIBRARY_NAME = 'nvidia';
+    process.env.DRI_PRIME = '1';
   }
 } catch (e) {
   console.error("Could not read user data for hardware acceleration check:", e);
@@ -102,14 +220,19 @@ let activeDownloads = new Map() // version_id -> { launcher, gameProcess, cancel
 let launcherAssetProgressLogged = false;
 let launcherAssetCopyProgressLogged = false;
 launcher.on('debug', (e) => {
+  if (isLaunchCancelled) return;
   console.log("[Launcher Debug]", e);
   mainWindow && mainWindow.webContents.send('info-message', e);
 })
 launcher.on('data', (e) => {
+  if (isLaunchCancelled) return;
   console.log("[Launcher Data]", e);
   mainWindow && mainWindow.webContents.send('info-message', e);
 })
+let lastProgressEmitTime = 0;
 launcher.on('progress', (e) => {
+  if (isLaunchCancelled) return;
+  const now = Date.now();
   if (e?.type === 'assets') {
     if (e.task === 0) launcherAssetProgressLogged = false;
     if (!launcherAssetProgressLogged) {
@@ -123,9 +246,15 @@ launcher.on('progress', (e) => {
       launcherAssetCopyProgressLogged = true;
     }
   } else {
-    console.log("[Launcher Progress]", e);
+    if (now - lastProgressEmitTime > 200 || e.task === e.total || e.task === 0) {
+      console.log("[Launcher Progress]", e);
+    }
   }
-  mainWindow && mainWindow.webContents.send('download-progress', e);
+  // Throttle IPC events to at most once per 80ms to keep IPC and UI butter-smooth
+  if (now - lastProgressEmitTime > 80 || e.task === e.total || e.task === 0) {
+    lastProgressEmitTime = now;
+    mainWindow && mainWindow.webContents.send('download-progress', e);
+  }
 })
 launcher.on('close', handleLauncherClose);
 
@@ -182,6 +311,21 @@ const loadUserData = () => {
     console.warn('[loadUserData] username was an object on disk, sanitized to:', userDataCache.username);
   }
 
+  // Auto-fix: if Microsoft account is missing uuid, try to restore from saved accounts
+  if (userDataCache.account_type === 'microsoft' && (!userDataCache.uuid || userDataCache.uuid === 'undefined')) {
+    try {
+      const savedAccs = loadSavedAccounts();
+      const match = savedAccs.find(a => a.type === 'microsoft' && (a.username === userDataCache.username || a.uuid));
+      if (match && match.uuid) {
+        userDataCache.uuid = match.uuid;
+        if (!userDataCache.last_skin_url && match.avatarUrl && match.avatarUrl.startsWith('http')) {
+          userDataCache.last_skin_url = match.avatarUrl;
+        }
+        saveUserData(userDataCache);
+      }
+    } catch (_) {}
+  }
+
   // Ensure mcdir is valid
   if (!userDataCache.mcdir || userDataCache.mcdir.trim() === "") {
     userDataCache.mcdir = paths.getMcDir();
@@ -193,7 +337,7 @@ const loadUserData = () => {
   }
 
   return userDataCache;
-}
+};
 
 const saveUserData = (data) => {
   userDataCache = { ...data }; // Update cache immediately
@@ -241,6 +385,9 @@ const saveUserData = (data) => {
     const userFile = paths.getUserFilePath();
     fs.ensureDirSync(path.dirname(userFile));
     fs.writeJsonSync(userFile, toSave, { spaces: 2 });
+    if (typeof updateTrayMenu === 'function') {
+      try { updateTrayMenu(); } catch (_) {}
+    }
   } catch (e) {
     console.error("Error saving user data:", e);
   }
@@ -326,6 +473,9 @@ function saveSavedAccounts(accounts) {
   try {
     fs.ensureDirSync(path.dirname(filePath));
     fs.writeJsonSync(filePath, toWrite, { spaces: 2 });
+    if (typeof updateTrayMenu === 'function') {
+      try { updateTrayMenu(); } catch (_) {}
+    }
   } catch (e) {
     console.error('[SavedAccounts] Error saving:', e);
   }
@@ -557,9 +707,54 @@ async function syncClientVersionToUsersDoc(auth, force = false) {
   }
 }
 
+let cachedSocialAuth = null;
+let cachedSocialAuthExpires = 0;
+const accountAuthCache = new Map(); // uid -> { uid, idToken, expiresAt, accountId, username, accountType }
+const _roleCache = new Map(); // uid -> { roles: { isAdmin, isMod }, expiresAt }
+
+function invalidateSocialAuthCache() {
+  cachedSocialAuth = null;
+  cachedSocialAuthExpires = 0;
+  accountAuthCache.clear();
+  _roleCache.clear();
+}
+
+async function getAuthForSocialAccount(accountInfo) {
+  if (!accountInfo || !accountInfo.refreshToken) return null;
+  const cached = accountAuthCache.get(accountInfo.uid);
+  if (cached && cached.idToken && Date.now() < cached.expiresAt) {
+    return cached;
+  }
+  try {
+    const refreshed = await refreshFirebaseToken(accountInfo.refreshToken);
+    const authObj = {
+      uid: refreshed.uid || accountInfo.uid,
+      idToken: refreshed.idToken,
+      refreshToken: refreshed.refreshToken,
+      accountId: accountInfo.accountId,
+      username: accountInfo.username,
+      accountType: accountInfo.accountType,
+      expiresAt: Date.now() + 45 * 60 * 1000
+    };
+    accountAuthCache.set(authObj.uid, authObj);
+    return authObj;
+  } catch (err) {
+    if (err.message === 'INVALID_REFRESH_TOKEN') {
+      accountAuthCache.delete(accountInfo.uid);
+    }
+    return null;
+  }
+}
+
 // --- Social Helper: Get valid social auth credentials for current user ---
 async function getSocialAuth() {
   const userData = loadUserData();
+  const currentType = userData.account_type;
+  const currentUid = currentType === 'microsoft' ? userData.firebase_ms_uid : userData.firebase_uid;
+  if (cachedSocialAuth && cachedSocialAuth.uid === currentUid && Date.now() < cachedSocialAuthExpires) {
+    return cachedSocialAuth;
+  }
+
   if (userData.account_type === 'helloworld') {
     if (!userData.firebase_refresh_token) throw new Error('NO_SOCIAL_AUTH');
     try {
@@ -568,9 +763,12 @@ async function getSocialAuth() {
       userData.firebase_refresh_token = refreshed.refreshToken;
       saveUserData(userData);
       const authObj = { uid: userData.firebase_uid, idToken: refreshed.idToken, accountType: 'helloworld', username: userData.username };
+      cachedSocialAuth = authObj;
+      cachedSocialAuthExpires = Date.now() + 45 * 60 * 1000;
       syncClientVersionToUsersDoc(authObj);
       return authObj;
     } catch (err) {
+      invalidateSocialAuthCache();
       if (err.message === 'INVALID_REFRESH_TOKEN') {
         userData.firebase_uid = "";
         userData.firebase_refresh_token = "";
@@ -587,9 +785,12 @@ async function getSocialAuth() {
       userData.firebase_ms_refresh_token = refreshed.refreshToken;
       saveUserData(userData);
       const authObj = { uid: userData.firebase_ms_uid, idToken: refreshed.idToken, accountType: 'microsoft', username: userData.username };
+      cachedSocialAuth = authObj;
+      cachedSocialAuthExpires = Date.now() + 45 * 60 * 1000;
       syncClientVersionToUsersDoc(authObj);
       return authObj;
     } catch (err) {
+      invalidateSocialAuthCache();
       if (err.message === 'INVALID_REFRESH_TOKEN') {
         userData.firebase_ms_uid = "";
         userData.firebase_ms_refresh_token = "";
@@ -640,14 +841,22 @@ function formatPresenceVersionLabel(version, fallbackMcVersion) {
   return `${info.software} ${info.mcVersion}`;
 }
 
+function sanitizeWorldName(name) {
+  if (!name) return '';
+  const m = String(name).match(/ServerLevel\[([^\]]+)\]/i);
+  return (m && m[1]) ? m[1].trim() : String(name).trim();
+}
+
 function presenceStatusLabel(status, serverIp, worldName) {
   switch (status) {
     case 'online':
       return 'Online';
     case 'menu':
       return 'In Menu';
-    case 'playing':
-      return worldName ? `Playing ${worldName}` : 'Playing Minecraft';
+    case 'playing': {
+      const cleanWorld = sanitizeWorldName(worldName);
+      return cleanWorld ? `Playing ${cleanWorld}` : 'Playing Minecraft';
+    }
     case 'server':
       return serverIp ? `Playing on ${serverIp}` : 'Playing Multiplayer';
     default:
@@ -851,22 +1060,8 @@ class PresenceManager {
 
   startConnectionCheck() {
     this.stopConnectionCheck();
-    if (!this.lastServerIp) return;
-
-    console.log(`[Presence] Starting connection check for ${this.lastServerIp}`);
-    this.connectionCheckTimer = setInterval(async () => {
-      if (!this.lastServerIp) {
-        this.stopConnectionCheck();
-        return;
-      }
-
-      const isConnected = await this.checkServerConnection(this.lastServerIp);
-      if (!isConnected && this.currentState?.status === 'server') {
-        console.log('[Presence] Server connection lost, updating state');
-        this.safeRun(this.onServerLeave());
-        this.stopConnectionCheck();
-      }
-    }, 5000); // Check every 5 seconds
+    // Game process closure is handled natively by child.on('close') -> onGameClosed().
+    // Polling process.kill or netstat caused false disconnects on Windows.
   }
 
   async sendHeartbeat() {
@@ -954,6 +1149,7 @@ class PresenceManager {
 
   async onSingleplayerStart(worldName) {
     if (!this.gameContext) return;
+    triggerStreakUpdate();
     // Don't start if we're in the process of leaving singleplayer
     if (this.isLeavingSingleplayer) {
       console.log('[Presence] Ignoring singleplayer start - leaving in progress');
@@ -964,7 +1160,7 @@ class PresenceManager {
       console.log('[Presence] Ignoring singleplayer start - on server');
       return;
     }
-    this.gameContext.worldName = worldName || this.gameContext.worldName || '';
+    this.gameContext.worldName = sanitizeWorldName(worldName || this.gameContext.worldName || '');
     const { versionLabel, profileName, ign } = this.gameContext;
     rpc.setPlaying({ version: versionLabel, profileName, ign, worldName: this.gameContext.worldName });
     if (!this.canUsePresence()) return;
@@ -980,6 +1176,7 @@ class PresenceManager {
 
   async onServerJoin(serverIp) {
     if (!this.gameContext) return;
+    triggerStreakUpdate();
     const { versionLabel, profileName, ign } = this.gameContext;
     this.lastServerIp = serverIp;
     this.isLeavingSingleplayer = false; // Clear leaving flag when joining server
@@ -1022,10 +1219,15 @@ class PresenceManager {
 
   async onSingleplayerStop() {
     if (!this.gameContext) return;
+    // Don't override if user is already on or connecting to a server
+    if (this.lastServerIp) {
+      console.log(`[Presence] Ignoring singleplayer stop - active server connection: ${this.lastServerIp}`);
+      return;
+    }
     const { versionLabel, profileName, ign } = this.gameContext;
     this.gameContext.worldName = null;
-    this.pendingWorldName = null; // Clear pending world name to prevent re-activation
-    this.isLeavingSingleplayer = true; // Set flag to prevent re-activation
+    this.pendingWorldName = null;
+    this.isLeavingSingleplayer = true;
     rpc.setMenu({ version: versionLabel, profileName, ign });
     if (!this.canUsePresence()) return;
     await this.writeState({
@@ -1036,98 +1238,45 @@ class PresenceManager {
       worldName: '',
       ign: ign || this.getPlayerName()
     });
-    // Clear flag after a longer delay to allow all saving logs to process
     setTimeout(() => {
       this.isLeavingSingleplayer = false;
-    }, 5000);
+    }, 4000);
   }
 
   async onGameClosed() {
     this.stopConnectionCheck();
-    this.isLeavingSingleplayer = false; // Clear flag on game close
-    this.pendingWorldName = null; // Clear pending world name
-    await this.setLauncherOnline(); // Set to launcher online, not offline
+    this.isLeavingSingleplayer = false;
+    this.pendingWorldName = null;
+    await this.setLauncherOnline();
   }
 
   handleGameLog(line) {
     if (!line) return;
+    const lines = line.split(/\r?\n/);
+    if (lines.length > 1) {
+      for (const l of lines) {
+        this.handleGameLog(l);
+      }
+      return;
+    }
     const cleaned = line.trim();
     if (!cleaned) return;
 
-    // Debug: log all relevant lines
     if (cleaned.includes('Connecting') || cleaned.includes('server') || cleaned.includes('Server') ||
       cleaned.includes('level') || cleaned.includes('world') || cleaned.includes('integrated') ||
       cleaned.includes('Saving') || cleaned.includes('Stopping')) {
       console.log(`[Presence] Game log: ${cleaned}`);
     }
 
-    // Check for singleplayer stop FIRST - highest priority
-    if (/Stopping singleplayer server/i.test(cleaned) ||
-      /Saving worlds/i.test(cleaned) ||
-      /Saving the world/i.test(cleaned) ||
-      /Saving level/i.test(cleaned) ||
-      (/lost connection/i.test(cleaned) && cleaned.includes('Disconnected'))) {
-      console.log('[Presence] Detected singleplayer stop');
-      this.safeRun(this.onSingleplayerStop());
-      return;
-    }
-
-    // Skip all world detection if we're leaving singleplayer
-    if (this.isLeavingSingleplayer) {
-      console.log('[Presence] Skipping world detection - leaving singleplayer');
-      return;
-    }
-
-    // Multiple patterns for world loading - extract name from ServerLevel[Name] format
-    const serverLevelMatch = cleaned.match(/ServerLevel\[([^\]]+)\]/i);
-    if (serverLevelMatch && serverLevelMatch[1]) {
-      this.pendingWorldName = serverLevelMatch[1];
-      console.log(`[Presence] Detected world name from ServerLevel: ${this.pendingWorldName}`);
-    }
-
-    const worldMatch = cleaned.match(/Loaded level '([^']+)'/i) ||
-      cleaned.match(/Preparing level "([^"]+)"/i) ||
-      cleaned.match(/Loading level '([^']+)'/i) ||
-      cleaned.match(/Loading world '([^']+)'/i) ||
-      cleaned.match(/loading world '([^']+)'/i) ||
-      cleaned.match(/Saving chunks for level '([^']+)'/i);
-    if (worldMatch && worldMatch[1]) {
-      this.pendingWorldName = worldMatch[1];
-      console.log(`[Presence] Detected world name: ${this.pendingWorldName}`);
-      
-      if (this.gameContext && this.currentState && this.currentState.status === 'playing' && !this.gameContext.worldName) {
-        this.safeRun(this.onSingleplayerStart(this.pendingWorldName));
-      }
-    }
-
-    // Multiple patterns for integrated server start - only trigger when we have a world name
-    if (/Starting integrated server/i.test(cleaned) ||
-      /Starting minecraft server/i.test(cleaned)) {
-      const worldName = this.pendingWorldName || this.gameContext?.worldName || '';
-      this.pendingWorldName = null;
-      console.log(`[Presence] Starting singleplayer world: ${worldName}`);
-      this.safeRun(this.onSingleplayerStart(worldName));
-      return;
-    }
-
-    // Also trigger on Server thread if we have a pending world name
-    if (/Server thread/i.test(cleaned) && this.pendingWorldName) {
-      const worldName = this.pendingWorldName;
-      this.pendingWorldName = null;
-      console.log(`[Presence] Starting singleplayer world (from Server thread): ${worldName}`);
-      this.safeRun(this.onSingleplayerStart(worldName));
-      return;
-    }
-
-    // Multiple patterns for server connection
-    const connectMatch = cleaned.match(/Connecting to ([^,]+),\s*(\d+)/i) ||
-      cleaned.match(/Connecting to '([^:]+):(\d+)'/i) ||
-      cleaned.match(/Connecting to ([^:]+):(\d+)/i) ||
-      cleaned.match(/Logging into ([^:]+):(\d+)/i) ||
-      cleaned.match(/Joining ([^:]+):(\d+)/i) ||
+    // 1. Server connection check - HIGHEST PRIORITY
+    // Handles forms: "Connecting to play.example.com, 25565", "Connecting to play.example.com:25565", "Connecting to play.example.com", etc.
+    const connectMatch = cleaned.match(/Connecting to\s+([a-zA-Z0-9.\-_]+)(?:[,\s:]+(\d+))?/i) ||
+      cleaned.match(/Connecting to '([^:']+)(?::(\d+))?'/i) ||
+      cleaned.match(/Logging into ([a-zA-Z0-9.\-_]+)(?::(\d+))?/i) ||
+      cleaned.match(/Joining ([a-zA-Z0-9.\-_]+)(?::(\d+))?/i) ||
       cleaned.match(/joined the game/i);
+
     if (connectMatch) {
-      // If it's "joined the game", we can't get IP from this, but we know we're on a server
       if (cleaned.includes('joined the game')) {
         if (cleaned.includes('Server thread') || cleaned.includes('Integrated Server')) {
           const worldName = this.pendingWorldName || this.gameContext?.worldName || '';
@@ -1136,23 +1285,106 @@ class PresenceManager {
           this.safeRun(this.onSingleplayerStart(worldName));
           return;
         }
-        console.log('[Presence] Player joined a server (no IP in log)');
-        // We'll stay in menu state since we don't have the IP
+        if (!this.lastServerIp) {
+          console.log('[Presence] Player joined multiplayer server without explicit IP in log');
+          this.safeRun(this.onServerJoin(''));
+        }
         return;
       }
+
       const host = (connectMatch[1] || '').trim();
       const port = (connectMatch[2] || '').trim();
-      const serverIp = port === '25565' ? host : `${host}:${port}`;
+      const serverIp = (!port || port === '25565') ? host : `${host}:${port}`;
       console.log(`[Presence] Detected server connection to: ${serverIp}`);
+      this.isLeavingSingleplayer = false;
+      this.pendingWorldName = null;
+      if (this.gameContext) this.gameContext.worldName = null;
       this.safeRun(this.onServerJoin(serverIp));
       return;
     }
-    if (/Disconnected from server/i.test(cleaned) || /Disconnecting from server/i.test(cleaned) || /Lost connection/i.test(cleaned) || /Connection closed/i.test(cleaned)) {
+
+    // 2. Disconnect from server - Genuine disconnects only
+    // Exclude in-game chat messages and background connection resets (e.g. server list pings, proxy transfers)
+    const isChat = cleaned.includes('[CHAT]') || cleaned.includes('[System] [CHAT]');
+    if (!isChat) {
+      const isClientDisconnect =
+        /(?:Render|Client) thread.*(?:Disconnecting|Disconnected) from server/i.test(cleaned) ||
+        /(?:^|\s)Disconnecting from server/i.test(cleaned) ||
+        /(?:^|\s)Disconnected from server/i.test(cleaned);
+
+      const isServerDrop =
+        /Lost connection:\s*(?:Disconnected|Timed out|Kicked|Server closed|You have been|Internal Exception: io\.netty)/i.test(cleaned) &&
+        !/Lost connection:\s*Transferred/i.test(cleaned);
+
+      if (isClientDisconnect || isServerDrop) {
+        if (this.lastServerIp) {
+          console.log(`[Presence] Detected server disconnect: ${cleaned}`);
+          this.safeRun(this.onServerLeave());
+          return;
+        } else if (this.currentState?.status === 'playing') {
+          console.log(`[Presence] Detected singleplayer disconnect: ${cleaned}`);
+          this.safeRun(this.onSingleplayerStop());
+          return;
+        }
+      }
+    }
+
+    if (/Stopping!/i.test(cleaned) && this.lastServerIp) {
       this.safeRun(this.onServerLeave());
       return;
     }
-    if (/Stopping!/i.test(cleaned) && this.lastServerIp) {
-      this.safeRun(this.onServerLeave());
+
+    // 3. Singleplayer stop - only if NOT on a server
+    if (!this.lastServerIp) {
+      if (/Stopping singleplayer server/i.test(cleaned) ||
+        /Saving worlds/i.test(cleaned) ||
+        /Saving the world/i.test(cleaned) ||
+        /Saving level/i.test(cleaned)) {
+        console.log('[Presence] Detected singleplayer stop');
+        this.safeRun(this.onSingleplayerStop());
+        return;
+      }
+    }
+
+    // 4. World loading detection (only if not leaving singleplayer and not on a server)
+    if (!this.isLeavingSingleplayer && !this.lastServerIp) {
+      const serverLevelMatch = cleaned.match(/ServerLevel\[([^\]]+)\]/i);
+      if (serverLevelMatch && serverLevelMatch[1]) {
+        this.pendingWorldName = sanitizeWorldName(serverLevelMatch[1]);
+        console.log(`[Presence] Detected world name from ServerLevel: ${this.pendingWorldName}`);
+      }
+
+      const worldMatch = cleaned.match(/Loaded level '([^']+)'/i) ||
+        cleaned.match(/Preparing level "([^"]+)"/i) ||
+        cleaned.match(/Loading level '([^']+)'/i) ||
+        cleaned.match(/Loading world '([^']+)'/i) ||
+        cleaned.match(/loading world '([^']+)'/i) ||
+        cleaned.match(/Saving chunks for level '([^']+)'/i);
+      if (worldMatch && worldMatch[1]) {
+        this.pendingWorldName = sanitizeWorldName(worldMatch[1]);
+        console.log(`[Presence] Detected world name: ${this.pendingWorldName}`);
+        
+        if (this.gameContext && this.currentState && this.currentState.status === 'playing' && !this.gameContext.worldName) {
+          this.safeRun(this.onSingleplayerStart(this.pendingWorldName));
+        }
+      }
+
+      if (/Starting integrated server/i.test(cleaned) ||
+        /Starting minecraft server/i.test(cleaned)) {
+        const worldName = this.pendingWorldName || this.gameContext?.worldName || '';
+        this.pendingWorldName = null;
+        console.log(`[Presence] Starting singleplayer world: ${worldName}`);
+        this.safeRun(this.onSingleplayerStart(worldName));
+        return;
+      }
+
+      if (/Server thread/i.test(cleaned) && this.pendingWorldName) {
+        const worldName = this.pendingWorldName;
+        this.pendingWorldName = null;
+        console.log(`[Presence] Starting singleplayer world (from Server thread): ${worldName}`);
+        this.safeRun(this.onSingleplayerStart(worldName));
+        return;
+      }
     }
   }
 
@@ -1214,6 +1446,19 @@ async function fetchPresenceForUser(uid, auth, fsDocId = null) {
 }
 
 let gameStartTime = null;
+let streakSessionTimer = null;
+let streakCountedThisRun = false;
+
+function triggerStreakUpdate() {
+  if (streakCountedThisRun || isLaunchCancelled) return;
+  streakCountedThisRun = true;
+  if (streakSessionTimer) {
+    clearTimeout(streakSessionTimer);
+    streakSessionTimer = null;
+  }
+  console.log('[Stats] Gameplay threshold met (in-game world/server or verified active playtime), recording streak and session');
+  updateStreakAndSessions();
+}
 
 async function updateStreakAndSessions() {
   try {
@@ -1259,7 +1504,7 @@ async function updateStreakAndSessions() {
     
     await fsSet(`users/${auth.uid}/stats/main`, { ...stats, ...updates }, auth.idToken);
     
-    if (mainWindow) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('stats-updated');
     }
   } catch (e) {
@@ -1269,30 +1514,45 @@ async function updateStreakAndSessions() {
 
 async function handleLauncherClose(e) {
   console.log('[Launcher Close]', e);
-  if (mainWindow) mainWindow.webContents.send('info-message', 'Game Closed');
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('info-message', 'Game Closed');
   presenceManager.safeRun(presenceManager.onGameClosed());
 
+  if (streakSessionTimer) {
+    clearTimeout(streakSessionTimer);
+    streakSessionTimer = null;
+  }
+
   if (gameStartTime) {
-    const playTimeHours = (Date.now() - gameStartTime) / (1000 * 60 * 60);
+    const elapsedMs = Date.now() - gameStartTime;
     gameStartTime = null;
-    try {
-      const auth = await getSocialAuth().catch(() => null);
-      if (auth) {
-        let stats;
-        try {
-          stats = await fsGet(`users/${auth.uid}/stats/main`, auth.idToken);
-        } catch (e) {
-          stats = { totalHours: 0 };
-        }
-        const newHours = (stats.totalHours || 0) + playTimeHours;
-        await fsSet(`users/${auth.uid}/stats/main`, { ...stats, totalHours: newHours }, auth.idToken);
-        
-        if (mainWindow) {
-          mainWindow.webContents.send('stats-updated');
-        }
+
+    // Only count playtime and streak if the game was actually played for at least 30s and was not cancelled
+    if (elapsedMs >= 30000 && !isLaunchCancelled) {
+      if (!streakCountedThisRun) {
+        triggerStreakUpdate();
       }
-    } catch (e) {
-      console.error('[Stats] Error updating playtime:', e.message);
+      const playTimeHours = elapsedMs / (1000 * 60 * 60);
+      try {
+        const auth = await getSocialAuth().catch(() => null);
+        if (auth) {
+          let stats;
+          try {
+            stats = await fsGet(`users/${auth.uid}/stats/main`, auth.idToken);
+          } catch (e) {
+            stats = { totalHours: 0 };
+          }
+          const newHours = (stats.totalHours || 0) + playTimeHours;
+          await fsSet(`users/${auth.uid}/stats/main`, { ...stats, totalHours: newHours }, auth.idToken);
+          
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('stats-updated');
+          }
+        }
+      } catch (err) {
+        console.error('[Stats] Error updating playtime:', err.message);
+      }
+    } else {
+      console.log(`[Stats] Game session under 30s (${(elapsedMs / 1000).toFixed(1)}s) or cancelled, skipping streak and playtime.`);
     }
   }
 }
@@ -1317,18 +1577,244 @@ function resetPresenceCaches() {
   friendProfileCache.clear();
 }
 
-function showPresenceNotification(title, body) {
+function getNotificationIconPath() {
+  const launcherDir = paths.getLauncherDir();
+  const iconInLauncherDir = path.join(launcherDir, 'icon.png');
+  if (fs.existsSync(iconInLauncherDir)) {
+    return iconInLauncherDir;
+  }
+  try {
+    const candidates = [
+      path.join(__dirname, 'build', 'icon.png'),
+      path.join(__dirname, 'ui', 'icon.png'),
+      path.join(process.resourcesPath, 'icon.png')
+    ];
+    for (const cand of candidates) {
+      if (fs.existsSync(cand)) {
+        fs.ensureDirSync(launcherDir);
+        fs.copyFileSync(cand, iconInLauncherDir);
+        return iconInLauncherDir;
+      }
+    }
+  } catch (_) {}
+  return path.join(__dirname, 'ui', 'icon.png');
+}
+
+async function resolveAvatarFile(profile) {
+  if (!profile) return getNotificationIconPath();
+  try {
+    const avatarsDir = path.join(paths.getLauncherDir(), 'avatars');
+    fs.ensureDirSync(avatarsDir);
+
+    const isMicrosoft = profile.accountType === 'microsoft';
+    const uid = profile.uid || profile.username || 'custom';
+
+    // 1. If it's a Microsoft account, fetch head skin from mc-heads.net
+    if (isMicrosoft) {
+      const mcUuid = profile.mcUuid || profile.uuid || profile.username;
+      if (mcUuid) {
+        const avatarFilePath = path.join(avatarsDir, `ms_${mcUuid}.png`);
+        if (fs.existsSync(avatarFilePath)) {
+          return avatarFilePath;
+        }
+        try {
+          const resp = await axios.get(`https://mc-heads.net/avatar/${encodeURIComponent(mcUuid)}/128`, {
+            responseType: 'arraybuffer',
+            timeout: 4000
+          });
+          if (resp.data && resp.data.length > 0) {
+            fs.writeFileSync(avatarFilePath, Buffer.from(resp.data));
+            return avatarFilePath;
+          }
+        } catch (err) {
+          console.warn('[NotificationAvatar] Failed to fetch mc-heads avatar:', err.message);
+        }
+      }
+    }
+
+    // 2. If it has avatarBase64 (HelloWorld custom avatar / skin head)
+    let avatarBase64 = profile.avatarBase64 || profile.avatarUrl;
+    if (avatarBase64 && typeof avatarBase64 === 'string') {
+      try {
+        let cleanBase64 = avatarBase64;
+        if (cleanBase64.includes('base64,')) {
+          cleanBase64 = cleanBase64.split('base64,')[1];
+        }
+        const buf = Buffer.from(cleanBase64, 'base64');
+        if (buf.length > 0) {
+          const avatarFilePath = path.join(avatarsDir, `${uid}.png`);
+          fs.writeFileSync(avatarFilePath, buf);
+          return avatarFilePath;
+        }
+      } catch (b64Err) {
+        console.warn('[NotificationAvatar] Failed to parse base64 avatar:', b64Err.message);
+      }
+    }
+
+    // 3. Web URL avatar
+    const avatarUrl = (profile.avatarUrl && profile.avatarUrl.startsWith('http')) ? profile.avatarUrl :
+                     (profile.last_avatar_url && profile.last_avatar_url.startsWith('http')) ? profile.last_avatar_url : null;
+    if (avatarUrl) {
+      try {
+        const avatarFilePath = path.join(avatarsDir, `${uid}.png`);
+        const resp = await axios.get(avatarUrl, {
+          responseType: 'arraybuffer',
+          timeout: 4000
+        });
+        if (resp.data && resp.data.length > 0) {
+          fs.writeFileSync(avatarFilePath, Buffer.from(resp.data));
+          return avatarFilePath;
+        }
+      } catch (urlErr) {
+        console.warn('[NotificationAvatar] Failed to download web avatar:', urlErr.message);
+      }
+    }
+
+    // 4. Fallback for HelloWorld / users without avatar: Generate circular letter avatar PNG
+    const letter = (profile.username || '?')[0].toUpperCase();
+    const colors = ['#2ecc71', '#3498db', '#9b59b6', '#e67e22', '#e74c3c', '#1abc9c', '#f39c12', '#34495e'];
+    let hash = 0;
+    const nameStr = profile.username || 'User';
+    for (let i = 0; i < nameStr.length; i++) hash = (hash * 31 + nameStr.charCodeAt(i)) >>> 0;
+    const color = colors[hash % colors.length];
+    const letterAvatarPath = path.join(avatarsDir, `letter_${letter}_${color.replace('#','')}.png`);
+
+    if (fs.existsSync(letterAvatarPath)) {
+      return letterAvatarPath;
+    }
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+      <circle cx="64" cy="64" r="64" fill="${color}"/>
+      <text x="64" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="64" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">${letter}</text>
+    </svg>`;
+    try {
+      const img = nativeImage.createFromBuffer(Buffer.from(svg));
+      if (!img.isEmpty()) {
+        fs.writeFileSync(letterAvatarPath, img.toPNG());
+        return letterAvatarPath;
+      }
+    } catch (_) {}
+
+    try {
+      const uiAvUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(letter)}&background=${color.replace('#','')}&color=fff&rounded=true&bold=true&format=png&size=128`;
+      const resp = await axios.get(uiAvUrl, { responseType: 'arraybuffer', timeout: 3000 });
+      if (resp.data && resp.data.length > 0) {
+        fs.writeFileSync(letterAvatarPath, Buffer.from(resp.data));
+        return letterAvatarPath;
+      }
+    } catch (_) {}
+  } catch (e) {
+    console.error('[NotificationAvatar] Error resolving avatar:', e.message);
+  }
+  return getNotificationIconPath();
+}
+
+function buildWindowsToastXml(title, body, imagePath, isAvatar = false) {
+  const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  let imageXml = '';
+  if (imagePath && fs.existsSync(imagePath)) {
+    let normalized = path.resolve(imagePath).replace(/\\/g, '/');
+    if (!normalized.startsWith('/')) normalized = '/' + normalized;
+    const fileUri = 'file://' + encodeURI(normalized);
+    const crop = isAvatar ? ' hint-crop="circle"' : '';
+    imageXml = `<image placement="appLogoOverride"${crop} src="${esc(fileUri)}" />`;
+  }
+  return '<toast>' +
+    '<visual><binding template="ToastGeneric">' +
+    '<text>' + esc(title) + '</text>' +
+    '<text>' + esc(body) + '</text>' +
+    imageXml +
+    '</binding></visual>' +
+    '</toast>';
+}
+
+async function showPresenceNotification(title, body, profile) {
   if (!Notification.isSupported() || !title || !body) return;
-  const notif = new Notification({ title, body, silent: false });
+  let imagePath = null;
+  let isAvatar = false;
+  if (profile) {
+    try {
+      imagePath = await resolveAvatarFile(profile);
+      isAvatar = true;
+    } catch (_) {}
+  }
+  if (!imagePath) {
+    imagePath = getNotificationIconPath();
+  }
+
+  const notifOpts = {
+    title,
+    body,
+    silent: false,
+    icon: imagePath
+  };
+  if (process.platform === 'win32') {
+    notifOpts.toastXml = buildWindowsToastXml(title, body, imagePath, isAvatar);
+  }
+
+  const notif = new Notification(notifOpts);
+  activeNotifications.add(notif);
+  const cleanup = () => activeNotifications.delete(notif);
+  notif.on('close', cleanup);
+  notif.on('failed', cleanup);
   const handler = () => {
+    cleanup();
     focusMainWindow();
     setTimeout(() => {
-      if (mainWindow) mainWindow.webContents.send('navigate-to-chat', { fromPresence: true, friendName: title });
+      if (mainWindow) {
+        mainWindow.webContents.send('navigate-to-chat', { fromPresence: true, friendName: title, targetTab: 'received' });
+        mainWindow.webContents.send('navigate-to-inbox', { targetTab: 'received' });
+      }
     }, 150);
   };
   notif.on('click', handler);
   notif.on('action', handler);
   notif.show();
+}
+
+// --- Multi-language translation helper for main process ---
+const localesCache = {};
+function getTranslation(key, fallback = '') {
+  try {
+    const userData = loadUserData();
+    const lang = userData?.language || (app ? app.getLocale().split('-')[0] : 'es') || 'es';
+
+    const resolveKey = (obj, pathStr) => {
+      if (!obj) return null;
+      if (typeof obj[pathStr] === 'string') return obj[pathStr];
+      const parts = pathStr.split('.');
+      let cur = obj;
+      for (const p of parts) {
+        if (cur && typeof cur === 'object' && p in cur) {
+          cur = cur[p];
+        } else {
+          return null;
+        }
+      }
+      return typeof cur === 'string' ? cur : null;
+    };
+
+    if (!localesCache[lang]) {
+      const localePath = path.join(__dirname, 'ui', 'locales', `${lang}.json`);
+      if (fs.existsSync(localePath)) {
+        localesCache[lang] = fs.readJsonSync(localePath);
+      }
+    }
+    const val = resolveKey(localesCache[lang], key);
+    if (val) return val;
+
+    for (const fb of ['es', 'en']) {
+      if (!localesCache[fb]) {
+        const fallbackPath = path.join(__dirname, 'ui', 'locales', `${fb}.json`);
+        if (fs.existsSync(fallbackPath)) {
+          localesCache[fallback] = fs.readJsonSync(fallbackPath);
+        }
+      }
+      const fbVal = resolveKey(localesCache[fb], key);
+      if (fbVal) return fbVal;
+    }
+  } catch (_) { }
+  return fallback || key;
 }
 
 function shouldNotifyPresence(prev, next) {
@@ -1337,20 +1823,20 @@ function shouldNotifyPresence(prev, next) {
 
   if (next.state === 'server') {
     if (prevState !== 'server' || prev?.serverIp !== next.serverIp) {
-      const serverLabel = next.serverIp ? next.serverIp : 'a server';
-      return `is playing on ${serverLabel}`;
+      const serverLabel = next.serverIp ? next.serverIp : getTranslation('notif_a_server');
+      return `${getTranslation('notif_is_playing_on')} ${serverLabel}`;
     }
     return null;
   }
 
   if (next.state === 'online' && prevState !== 'online') {
-    return 'is now online';
+    return getTranslation('notif_is_now_online');
   }
 
   const playingStates = new Set(['menu', 'playing']);
   const wasPlaying = playingStates.has(prevState) || prevState === 'server';
   if (playingStates.has(next.state) && !wasPlaying) {
-    return 'started playing Minecraft';
+    return getTranslation('notif_started_playing_mc');
   }
 
   return null;
@@ -1402,7 +1888,7 @@ async function pollPresence(initPass = false) {
       const message = shouldNotifyPresence(prev, presence);
       if (message) {
         const name = profile?.username || 'Amigo';
-        showPresenceNotification(name, message);
+        showPresenceNotification(name, message, profile);
       }
     }
 
@@ -1443,215 +1929,527 @@ function stopPresencePolling() {
 }
 
 // ==========================================
-// MESSAGE NOTIFICATION POLLING
+// INBOX NOTIFICATION POLLING (Incremental Change Detection)
 // ==========================================
 let msgPollingInterval = null;
-let seenMsgIds = {};            // { friendshipId: Set<id> } — immune to clock skew
-let msgPollingReady = false;    // true after first init pass
-let msgPollingInitializing = false; // guard against concurrent init passes
+const notifiedInboxMsgIds = new Map();
+const userInboxCache = new Map(); // uid -> Array of message objects
+let currentPolledUid = null;
 
 function startMessagePolling() {
   if (msgPollingInterval) { clearInterval(msgPollingInterval); msgPollingInterval = null; }
-  if (!msgPollingReady && !msgPollingInitializing) {
-    msgPollingInitializing = true;
-    seenMsgIds = {};
-    console.log('[MsgPoll] Init pass starting...');
-    pollMessages()
-      .then(() => {
-        msgPollingReady = true; msgPollingInitializing = false;
-        console.log('[MsgPoll] Init done -', Object.keys(seenMsgIds).length, 'chats tracked');
-      })
-      .catch(err => {
-        msgPollingInitializing = false;
-        if (err.message !== 'NO_SOCIAL_AUTH') console.error('[MsgPoll] Init error:', err.message);
-      });
-  } else if (!msgPollingReady) {
-    console.log('[MsgPoll] Init already in progress, skipping duplicate');
-  } else {
-    console.log('[MsgPoll] Restarting interval (already initialized)');
-  }
-  msgPollingInterval = setInterval(pollMessages, 5000);
+  console.log('[InboxPoll] Starting message sync...');
+  pollMessages()
+    .then(() => {
+      console.log('[InboxPoll] Initial sync completed');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('force-social-badge-update');
+        mainWindow.webContents.send('inbox-updated');
+      }
+    })
+    .catch(err => {
+      if (err.message !== 'NO_SOCIAL_AUTH') console.error('[InboxPoll] Initial sync error:', err.message);
+    });
+  // Check every 15s using incremental query (0 reads if no new messages)
+  msgPollingInterval = setInterval(pollMessages, 15000);
   startPresencePolling();
 }
 
 function stopMessagePolling() {
   if (msgPollingInterval) { clearInterval(msgPollingInterval); msgPollingInterval = null; }
-  msgPollingReady = false;
-  msgPollingInitializing = false;
-  seenMsgIds = {};
+  currentPolledUid = null;
+  invalidateSocialAuthCache();
+}
+
+function getAccountsForMessagePolling() {
+  const accountsToPoll = [];
+  const seenUids = new Set();
+
+  // 1. Current active user
+  try {
+    const userData = loadUserData();
+    if (userData && userData.username) {
+      if (userData.account_type === 'helloworld' && userData.firebase_uid && userData.firebase_refresh_token) {
+        accountsToPoll.push({
+          uid: userData.firebase_uid,
+          refreshToken: userData.firebase_refresh_token,
+          accountId: userData.firebase_uid,
+          username: userData.username,
+          accountType: 'helloworld',
+          isActive: true
+        });
+        seenUids.add(userData.firebase_uid);
+      } else if (userData.account_type === 'microsoft' && userData.firebase_ms_uid && userData.firebase_ms_refresh_token) {
+        accountsToPoll.push({
+          uid: userData.firebase_ms_uid,
+          refreshToken: userData.firebase_ms_refresh_token,
+          accountId: userData.uuid || userData.firebase_ms_uid,
+          username: userData.username,
+          accountType: 'microsoft',
+          isActive: true
+        });
+        seenUids.add(userData.firebase_ms_uid);
+      }
+    }
+  } catch (_) {}
+
+  // 2. Saved accounts from saved_accounts.json
+  try {
+    const saved = loadSavedAccounts();
+    for (const acc of saved) {
+      if (!acc) continue;
+      if (acc.type === 'helloworld') {
+        const uid = acc.firebase_uid || acc.id;
+        const refreshToken = acc.firebase_refresh_token;
+        if (uid && refreshToken && !seenUids.has(uid)) {
+          accountsToPoll.push({
+            uid,
+            refreshToken,
+            accountId: acc.id || uid,
+            username: acc.username,
+            accountType: 'helloworld',
+            isActive: false
+          });
+          seenUids.add(uid);
+        }
+      } else if (acc.type === 'microsoft') {
+        const uid = acc.firebase_ms_uid;
+        const refreshToken = acc.firebase_ms_refresh_token;
+        if (uid && refreshToken && !seenUids.has(uid)) {
+          accountsToPoll.push({
+            uid,
+            refreshToken,
+            accountId: acc.id || acc.uuid,
+            username: acc.username,
+            accountType: 'microsoft',
+            isActive: false
+          });
+          seenUids.add(uid);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[InboxPoll] Error loading saved accounts:', err.message);
+  }
+
+  return accountsToPoll;
 }
 
 async function pollMessages() {
   try {
-    const auth = await getSocialAuth();
-    const friendships = await fsQuery('friendships', [
-      { field: 'users', op: 'ARRAY_CONTAINS', value: { stringValue: auth.uid } }
-    ], auth.idToken, null, 50);
+    const accounts = getAccountsForMessagePolling();
+    if (accounts.length === 0) return;
 
-    for (const friendship of friendships) {
-      const fid = friendship.id;
-      if (!seenMsgIds[fid]) seenMsgIds[fid] = new Set();
+    for (const accInfo of accounts) {
       try {
-        const res = await axios.get(
-          `${FIRESTORE_BASE}/friendships/${fid}/messages?pageSize=1000`,
-          { headers: { Authorization: `Bearer ${auth.idToken}` } }
-        );
-        const msgs = (res.data.documents || []).map(doc => ({
-          id: doc.name.split('/').pop(),
-          ...parseFirestoreFields(doc.fields)
-        }));
+        const auth = await getAuthForSocialAccount(accInfo);
+        if (!auth || !auth.uid || !auth.idToken) continue;
 
-        if (!msgPollingReady) {
-          // Init pass: mark ALL current messages as already seen
-          msgs.forEach(m => seenMsgIds[fid].add(m.id));
-          console.log(`[MsgPoll] Init: ${msgs.length} existing msgs marked seen`);
+        if (accInfo.isActive && currentPolledUid !== auth.uid) {
+          console.log(`[InboxPoll] Active user switched: old=${currentPolledUid}, new=${auth.uid}`);
+          currentPolledUid = auth.uid;
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('force-social-badge-update');
+            mainWindow.webContents.send('inbox-updated');
+          }
+        }
+
+        if (!notifiedInboxMsgIds.has(auth.uid)) {
+          notifiedInboxMsgIds.set(auth.uid, new Set());
+        }
+        const userNotified = notifiedInboxMsgIds.get(auth.uid);
+        const localReadSet = localReadInboxMsgIds.get(auth.uid) || new Set();
+
+        const hasCache = userInboxCache.has(auth.uid);
+        let cachedMsgs = userInboxCache.get(auth.uid) || [];
+
+        if (!hasCache) {
+          // Initial load for this account: fetch once and store in memory
+          let msgs = [];
+          try {
+            const res = await axios.get(
+              `${FIRESTORE_BASE}/users/${auth.uid}/inbox?pageSize=100`,
+              { headers: { Authorization: `Bearer ${auth.idToken}` } }
+            );
+            if (res.data && res.data.documents) {
+              msgs = res.data.documents.map(doc => ({
+                id: doc.name.split('/').pop(),
+                ...parseFirestoreFields(doc.fields)
+              }));
+            }
+          } catch (innerErr) {
+            if (innerErr.response?.status !== 403) {
+              console.error(`[InboxPoll] Error fetching inbox for ${auth.uid}:`, innerErr.message);
+            }
+          }
+
+          cachedMsgs = msgs.filter(m => m.senderId !== auth.uid && !m.isSentCopy);
+          userInboxCache.set(auth.uid, cachedMsgs);
+
+          const sentCopies = msgs.filter(m => m.isSentCopy === true || m.senderId === auth.uid);
+          if (sentCopies.length > 0) {
+            const currentSent = userSentInboxCache.get(auth.uid) || [];
+            const sentMap = new Map(currentSent.map(m => [m.id, m]));
+            for (const sc of sentCopies) {
+              if (!sentMap.has(sc.id)) sentMap.set(sc.id, sc);
+            }
+            userSentInboxCache.set(auth.uid, Array.from(sentMap.values()));
+            saveLocalSentInboxMsgs();
+          }
+
+          // Silently track read, old (>24h), or self messages
+          const now = Date.now();
+          cachedMsgs.forEach(m => {
+            const isRead = m.read === true || localReadSet.has(m.id);
+            const t = typeof m.timestamp === 'string' ? new Date(m.timestamp).getTime() : (Number(m.timestamp) || 0);
+            const isOld = t === 0 || (now - t > 24 * 60 * 60 * 1000);
+            if (isRead || isOld) {
+              userNotified.add(m.id);
+            }
+          });
+
+          // Find any recent unread candidate to notify on initial start
+          const initialNew = cachedMsgs.filter(m => {
+            if (userNotified.has(m.id)) return false;
+            if (m.read === true || localReadSet.has(m.id)) return false;
+            const t = typeof m.timestamp === 'string' ? new Date(m.timestamp).getTime() : (Number(m.timestamp) || 0);
+            if (t === 0 || (now - t > 24 * 60 * 60 * 1000)) return false;
+            return true;
+          });
+
+          initialNew.forEach(m => userNotified.add(m.id));
+          if (initialNew.length > 0) {
+            const toNotify = initialNew.slice(-5);
+            toNotify.forEach((msg, idx) => {
+              setTimeout(() => {
+                showMsgNotification(msg, {
+                  recipientUid: auth.uid,
+                  recipientAccountId: auth.accountId,
+                  recipientUsername: auth.username,
+                  recipientType: auth.accountType,
+                  idToken: auth.idToken
+                });
+              }, idx * 750);
+            });
+          }
           continue;
         }
 
-        // Find messages from others whose ID we haven't seen yet
-        const newMsgs = msgs
-          .filter(m => m.senderId !== auth.uid && !seenMsgIds[fid].has(m.id))
-          .sort((a, b) => a.timestamp < b.timestamp ? -1 : 1);
-
-        // Mark all as seen (including old ones in case set was rebuilt)
-        msgs.forEach(m => seenMsgIds[fid].add(m.id));
-
-        if (newMsgs.length > 0) console.log(`[MsgPoll] ${newMsgs.length} new msg(s) in fid=${fid.slice(-8)}`);
-
-        for (const msg of newMsgs) {
-          console.log(`[MsgPoll] Notifying: from="${msg.senderName}" body="${msg.content}"`);
-          showMsgNotification(msg, fid);
+        // Incremental check: only query for messages NEWER than the newest cached message
+        let maxTimestamp = 0;
+        for (const m of cachedMsgs) {
+          const t = typeof m.timestamp === 'string' ? new Date(m.timestamp).getTime() : (Number(m.timestamp) || 0);
+          if (t > maxTimestamp) maxTimestamp = t;
         }
-      } catch (innerErr) {
-        console.error(`[MsgPoll] Error fetching fid=${fid.slice(-8)}:`, innerErr.message);
+
+        let newDocs = [];
+        try {
+          if (maxTimestamp > 0) {
+            newDocs = await fsQuerySub(`users/${auth.uid}`, 'inbox', [
+              { field: 'timestamp', op: 'GREATER_THAN', value: { integerValue: String(maxTimestamp) } }
+            ], auth.idToken, 'timestamp', 20);
+          }
+        } catch (innerErr) {
+          if (innerErr.response?.status !== 403) {
+            console.error(`[InboxPoll] Error in incremental check for ${auth.uid}:`, innerErr.message);
+          }
+        }
+
+        const existingIds = new Set(cachedMsgs.map(m => m.id));
+        const trulyNew = newDocs.filter(m => !existingIds.has(m.id) && m.senderId !== auth.uid && !m.isSentCopy);
+
+        if (trulyNew.length > 0) {
+          console.log(`[InboxPoll] ${trulyNew.length} new incoming message(s) detected for ${auth.uid} (${auth.username})`);
+          cachedMsgs = [...trulyNew, ...cachedMsgs];
+          userInboxCache.set(auth.uid, cachedMsgs);
+
+          cachedMsgs.sort((a, b) => {
+            const ta = typeof a.timestamp === 'string' ? new Date(a.timestamp).getTime() : (Number(a.timestamp) || 0);
+            const tb = typeof b.timestamp === 'string' ? new Date(b.timestamp).getTime() : (Number(b.timestamp) || 0);
+            return tb - ta;
+          });
+
+          const toNotify = trulyNew.filter(m => !userNotified.has(m.id));
+          toNotify.forEach(m => userNotified.add(m.id));
+
+          // If this is the active user, refresh renderer UI
+          const currentData = loadUserData();
+          const currentActiveUid = currentData.account_type === 'microsoft' ? currentData.firebase_ms_uid : currentData.firebase_uid;
+          if (currentActiveUid === auth.uid && mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('inbox-updated');
+            mainWindow.webContents.send('force-social-badge-update');
+          }
+
+          toNotify.slice(-5).forEach((msg, idx) => {
+            setTimeout(() => {
+              showMsgNotification(msg, {
+                recipientUid: auth.uid,
+                recipientAccountId: auth.accountId,
+                recipientUsername: auth.username,
+                recipientType: auth.accountType,
+                idToken: auth.idToken
+              });
+            }, idx * 750);
+          });
+        }
+      } catch (accErr) {
+        console.warn(`[InboxPoll] Account poll error for ${accInfo.username}:`, accErr.message);
       }
     }
   } catch (e) {
-    if (e.message !== 'NO_SOCIAL_AUTH') console.error('[MsgPoll] Error:', e.message);
+    console.error('[InboxPoll] Error:', e.message);
   }
 }
 
 function formatNotificationBody(rawContent) {
   if (!rawContent) return '(media)';
   const str = String(rawContent).trim();
+  if (str.startsWith('$$SERVER_SHARE$$')) {
+    try {
+      const payload = JSON.parse(str.substring('$$SERVER_SHARE$$'.length));
+      if (payload && payload.ip) {
+        return `${getTranslation('social.server_invite', 'Server invite')}: ${payload.ip}`;
+      }
+    } catch (_) {}
+    return getTranslation('social.server_invite', 'Sent a server invite');
+  }
   if (str.startsWith('$$PROFILE_SHARE$$')) {
     try {
       const payload = JSON.parse(str.substring('$$PROFILE_SHARE$$'.length));
       if (payload && payload.profile && payload.profile.name) {
-        return `Shared an installation: ${payload.profile.name}`;
+        return `${getTranslation('social.installation', 'Installation')}: ${payload.profile.name}`;
       }
     } catch (_) {}
-    return 'Shared an installation';
+    return getTranslation('social.installation', 'Shared an installation');
   }
   if (str.startsWith('$$LINK$$')) {
     try {
       const payload = JSON.parse(str.substring('$$LINK$$'.length));
       if (payload && (payload.title || payload.url)) {
-        return `Shared a link: ${payload.title || payload.url}`;
+        return `${getTranslation('social.link', 'Link')}: ${payload.title || payload.url}`;
       }
     } catch (_) {}
-    return 'Shared a link';
+    return getTranslation('social.link', 'Shared a link');
   }
   if (str.startsWith('{')) {
     try {
       const payload = JSON.parse(str);
       if (payload && payload.type === 'seed' && payload.seed) {
-        return `Sent a seed: ${payload.seed}`;
+        return `${getTranslation('social.seed', 'Seed')}: ${payload.seed}`;
       }
     } catch (_) {}
   }
   return str;
 }
 
-function buildWindowsToastXml(title, body, friendshipId) {
-  const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  // Minimal valid WinRT toast XML without reply input box
-  return '<toast>' +
-    '<visual><binding template="ToastGeneric">' +
-    '<text>' + esc(title) + '</text>' +
-    '<text>' + esc(body) + '</text>' +
-    '</binding></visual>' +
-    '</toast>';
+function getActiveAccountUid(userData) {
+  if (!userData) return null;
+  if (userData.account_type === 'microsoft') return userData.firebase_ms_uid || null;
+  if (userData.account_type === 'helloworld') return userData.firebase_uid || null;
+  return null;
 }
 
-function showMsgNotification(msg, friendshipId) {
-  if (!Notification.isSupported()) return;
-  const title = msg.senderName || 'New message';
-  const rawBody = msg.content || '';
-  const formattedBody = formatNotificationBody(rawBody);
-  console.log(`[MsgNotif] title="${title}" body="${formattedBody}" fid=${friendshipId}`);
-  if (!formattedBody && !title) return;
+function handleNotificationNavigation(recipientInfo) {
+  showAndFocusWindow();
 
-  let iconPath;
-  try {
-    const p = path.join(__dirname, 'build', 'icon.png');
-    if (require('fs').existsSync(p)) iconPath = p;
-  } catch (_) { }
+  const hasRecipientInfo = Boolean(
+    recipientInfo && (
+      recipientInfo.recipientUid ||
+      recipientInfo.recipientAccountId ||
+      recipientInfo.accountId ||
+      recipientInfo.recipientUsername ||
+      recipientInfo.recipientType
+    )
+  );
 
-  const notifOpts = {
-    title,
-    body: formattedBody || '(media)',
-    silent: false,
-    ...(iconPath ? { icon: iconPath } : {})
-  };
-  if (process.platform === 'win32') {
-    notifOpts.toastXml = buildWindowsToastXml(title, formattedBody || '(media)', friendshipId);
+  setTimeout(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (!hasRecipientInfo) return;
+
+    const latestData = loadUserData();
+    const latestActiveUid = getActiveAccountUid(latestData);
+
+    let isTargetActive = false;
+    if (recipientInfo?.recipientUid && latestActiveUid) {
+      isTargetActive = latestActiveUid === recipientInfo.recipientUid;
+    } else if (recipientInfo?.recipientType) {
+      const isSameType = latestData.account_type === recipientInfo.recipientType;
+      const isSameUser = Boolean(latestData.username && (recipientInfo?.recipientUsername || recipientInfo?.username) && latestData.username.toLowerCase() === (recipientInfo.recipientUsername || recipientInfo.username).toLowerCase());
+      isTargetActive = isSameType && isSameUser;
+    }
+
+    console.log(`[MsgNotif] Navigation: active=${latestData.username}(${latestData.account_type}, uid=${latestActiveUid}) target=${recipientInfo?.recipientUsername || recipientInfo?.username}(${recipientInfo?.recipientType}, uid=${recipientInfo?.recipientUid}) isTargetActive=${isTargetActive}`);
+
+    const targetAccountId = recipientInfo?.recipientAccountId || recipientInfo?.accountId || recipientInfo?.recipientUid;
+
+    if (!isTargetActive && targetAccountId) {
+      mainWindow.webContents.send('switch-to-account-and-open-inbox', {
+        accountId: targetAccountId,
+        recipientUid: recipientInfo.recipientUid,
+        recipientUsername: recipientInfo.recipientUsername || recipientInfo.username,
+        username: recipientInfo.recipientUsername || recipientInfo.username,
+        recipientType: recipientInfo.recipientType,
+        targetTab: 'received'
+      });
+    } else {
+      mainWindow.webContents.send('navigate-to-chat', { fromInbox: true, targetTab: 'received' });
+      mainWindow.webContents.send('navigate-to-inbox', {
+        accountId: targetAccountId,
+        recipientUid: recipientInfo?.recipientUid,
+        recipientUsername: recipientInfo?.recipientUsername || recipientInfo?.username,
+        username: recipientInfo?.recipientUsername || recipientInfo?.username,
+        recipientType: recipientInfo?.recipientType,
+        targetTab: 'received'
+      });
+    }
+  }, 150);
+}
+
+ipcMain.handle('notification-click-navigate', async (e, recipientInfo) => {
+  handleNotificationNavigation(recipientInfo);
+  return { success: true };
+});
+
+async function showMsgNotification(msg, recipientInfo = null) {
+  const currentData = loadUserData();
+  const currentActiveUid = getActiveAccountUid(currentData);
+  const isDifferentAccount = recipientInfo?.recipientUid && recipientInfo.recipientUid !== currentActiveUid;
+
+  let title = msg.senderName || getTranslation('notif_new_message') || 'New Message';
+  if (isDifferentAccount && recipientInfo?.recipientUsername) {
+    title = `${title} (${recipientInfo.recipientUsername})`;
   }
 
-  const notif = new Notification(notifOpts);
+  const rawBody = msg.content || '';
+  const formattedBody = formatNotificationBody(rawBody);
+  console.log(`[MsgNotif] title="${title}" body="${formattedBody}" for recipient=${recipientInfo?.recipientUsername || 'current'} (uid=${recipientInfo?.recipientUid || 'none'}, type=${recipientInfo?.recipientType || 'unknown'})`);
+  if (!formattedBody && !title) return;
 
-  // Click → focus window and navigate to chat
+  // 1. Send in-app notification to launcher UI
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('show-in-app-notification', {
+      title: title,
+      message: formattedBody,
+      duration: 6000,
+      accountId: recipientInfo?.recipientAccountId || recipientInfo?.accountId || recipientInfo?.recipientUid,
+      recipientAccountId: recipientInfo?.recipientAccountId || recipientInfo?.accountId || recipientInfo?.recipientUid,
+      recipientUid: recipientInfo?.recipientUid,
+      recipientUsername: recipientInfo?.recipientUsername,
+      recipientType: recipientInfo?.recipientType,
+      username: recipientInfo?.recipientUsername || recipientInfo?.username
+    });
+  }
+
+  // 2. Desktop Notification
+  if (!Notification.isSupported()) {
+    console.warn('[MsgNotif] Desktop Notification is not supported on this platform');
+    return;
+  }
+
+  let imagePath = null;
+  let isAvatar = false;
+  try {
+    let profile = friendProfileCache.get(msg.senderId);
+    if (!profile && msg.senderId) {
+      try {
+        const token = recipientInfo?.idToken || (await getSocialAuth().then(a => a.idToken).catch(() => null));
+        if (token) {
+          profile = await fsGet(`users/${msg.senderId}`, token);
+          if (profile) friendProfileCache.set(msg.senderId, { ...profile, uid: msg.senderId });
+        }
+      } catch (_) {}
+    }
+    if (!profile && msg.senderName) {
+      profile = { username: msg.senderName, accountType: 'helloworld' };
+    }
+    if (profile) {
+      imagePath = await resolveAvatarFile(profile);
+      isAvatar = true;
+    }
+  } catch (_) {}
+
+  if (!imagePath) {
+    imagePath = getNotificationIconPath();
+    isAvatar = false;
+  }
+
   const doNavigate = () => {
-    if (!mainWindow) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
-    // Small delay so window is ready before IPC message
-    setTimeout(() => {
-      if (mainWindow) mainWindow.webContents.send('navigate-to-chat', { friendshipId, senderName: msg.senderName || '' });
-    }, 150);
+    handleNotificationNavigation(recipientInfo);
   };
 
-  notif.on('click', doNavigate);
-  notif.show();
-}
-
-async function sendMsgFromMain(friendshipId, content, replyMsg) {
   try {
-    const auth = await getSocialAuth();
-    const userData = loadUserData();
-    const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const now = new Date().toISOString();
-    const msgData = {
-      senderId: auth.uid,
-      senderName: userData.username || '',
-      content: content.trim(),
-      timestamp: now,
-      status: 'sent'
-    };
-    if (replyMsg) {
-      msgData.replyTo = replyMsg.id;
-      msgData.replyContent = replyMsg.content;
-      msgData.replySender = replyMsg.senderId;
-      msgData.replySenderName = replyMsg.senderName;
+    let iconObj = undefined;
+    if (imagePath && fs.existsSync(imagePath)) {
+      try {
+        const ni = nativeImage.createFromPath(imagePath);
+        if (!ni.isEmpty()) iconObj = ni;
+      } catch (_) {}
     }
-    await fsSet(`friendships/${friendshipId}/messages/${msgId}`, msgData, auth.idToken);
-    await fsSet(`friendships/${friendshipId}`, { lastMessageAt: now }, auth.idToken, ['lastMessageAt']);
-
-    // Increment unread for all other users
-    try {
-      const fDoc = await fsGet(`friendships/${friendshipId}`, auth.idToken);
-      const otherUids = (fDoc.users || []).filter(u => u !== auth.uid);
-      for (const otherUid of otherUids) {
-        let currentUnread = 0;
-        try { const ud = await fsGet(`friendships/${friendshipId}/unread/${otherUid}`, auth.idToken); currentUnread = ud.count || 0; } catch (_) { }
-        await fsSet(`friendships/${friendshipId}/unread/${otherUid}`, { count: currentUnread + 1 }, auth.idToken);
+    if (!iconObj) {
+      const fallbackIcon = getNotificationIconPath();
+      if (fallbackIcon && fs.existsSync(fallbackIcon)) {
+        try {
+          const ni = nativeImage.createFromPath(fallbackIcon);
+          if (!ni.isEmpty()) iconObj = ni;
+        } catch (_) {}
       }
-    } catch (_) { }
+    }
 
-    lastSeenMsgTimestamps[friendshipId] = now;
-  } catch (e) {
-    console.error('[MsgPoll] Send error:', e.message);
+    const notifOpts = {
+      title,
+      body: formattedBody || '(media)',
+      silent: false,
+      icon: iconObj || imagePath
+    };
+    if (process.platform === 'win32') {
+      try {
+        notifOpts.toastXml = buildWindowsToastXml(title, formattedBody || '(media)', imagePath, isAvatar);
+      } catch (_) {}
+    }
+
+    const notif = new Notification(notifOpts);
+    activeNotifications.add(notif);
+    const cleanupNotif = () => activeNotifications.delete(notif);
+    notif.on('close', cleanupNotif);
+    notif.on('click', () => {
+      cleanupNotif();
+      doNavigate();
+    });
+    notif.on('action', () => {
+      cleanupNotif();
+      doNavigate();
+    });
+    notif.on('failed', (evt, err) => {
+      cleanupNotif();
+      console.warn('[MsgNotif] Native toast notification failed, trying basic fallback:', err);
+      try {
+        const basic = new Notification({
+          title,
+          body: formattedBody || '(media)',
+          silent: false,
+          icon: getNotificationIconPath()
+        });
+        activeNotifications.add(basic);
+        const cleanupBasic = () => activeNotifications.delete(basic);
+        basic.on('close', cleanupBasic);
+        basic.on('click', () => { cleanupBasic(); doNavigate(); });
+        basic.on('action', () => { cleanupBasic(); doNavigate(); });
+        basic.show();
+      } catch (_) {}
+    });
+    notif.show();
+  } catch (err) {
+    console.warn('[MsgNotif] Native toast notification failed, trying basic notification:', err.message);
+    try {
+      const basicNotif = new Notification({
+        title,
+        body: formattedBody || '(media)',
+        silent: false,
+        icon: getNotificationIconPath()
+      });
+      basicNotif.on('click', doNavigate);
+      basicNotif.show();
+    } catch (_) {}
   }
 }
 
@@ -1668,7 +2466,8 @@ function startLocalServer() {
       '.mp4': 'video/mp4', '.txt': 'text/plain; charset=utf-8', '.json': 'application/json'
     };
     const srv = http.createServer((req, res) => {
-      const cleanUrl = req.url.split('?')[0].split('#')[0];
+      const rawUrl = req.url.split('?')[0].split('#')[0];
+      const cleanUrl = rawUrl.replace(/^\/ui\//, '/');
       let filePath;
       if (cleanUrl === '/tips.txt') {
         const rootTips = path.join(__dirname, 'tips.txt');
@@ -1683,12 +2482,263 @@ function startLocalServer() {
         res.end(data);
       });
     });
-    srv.listen(0, 'localhost', () => {
+    srv.listen(0, '127.0.0.1', () => {
       localPort = srv.address().port;
       console.log('[LocalServer] Running on port', localPort);
       resolve(localPort);
     });
   });
+}
+
+// --- System Tray & Background Execution ---
+let tray = null;
+let isQuitting = false;
+let hasShownTrayBalloon = false;
+
+function showAndFocusWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.setAlwaysOnTop(true);
+  mainWindow.show();
+  mainWindow.focus();
+  mainWindow.setAlwaysOnTop(false);
+  try {
+    mainWindow.flashFrame(true);
+  } catch (_) {}
+}
+
+function getTrayIcon() {
+  if (process.platform === 'win32') {
+    const icoPath = path.join(__dirname, 'build', 'icon.ico');
+    if (fs.existsSync(icoPath)) return icoPath;
+  }
+  const pngPath = path.join(__dirname, 'build', 'icon.png');
+  if (fs.existsSync(pngPath)) return pngPath;
+  return getNotificationIconPath();
+}
+
+function formatProfileTrayLabel(profile) {
+  const name = (profile.name || 'Minecraft').trim();
+  let ver = (profile.version || '').trim();
+
+  // Convert "Fabric 1.21.11 (0.28.0)" to "Fabric 1.21.11 - 0.28.0"
+  ver = ver.replace(/\s*\(([^)]+)\)/, (m, g) => ' - ' + g);
+
+  if (ver && name.toLowerCase() !== ver.toLowerCase()) {
+    return `${name} (${ver})`;
+  }
+  return name || ver || 'Minecraft';
+}
+
+function getLastPlayedProfiles(limit = 5) {
+  try {
+    const data = profileManager.loadProfiles();
+    const profilesObj = (data && data.profiles) ? data.profiles : {};
+    const list = Object.entries(profilesObj).map(([id, p]) => ({
+      id,
+      ...p,
+      lastPlayedTime: p.last_played ? new Date(p.last_played).getTime() : 0
+    }));
+
+    // Sort by lastPlayedTime descending (most recent first)
+    list.sort((a, b) => b.lastPlayedTime - a.lastPlayedTime);
+
+    return list.slice(0, limit);
+  } catch (err) {
+    console.error('[Tray] Error loading last played profiles:', err);
+    return [];
+  }
+}
+
+function isAccountActive(acc, current) {
+  if (!current || !acc) return false;
+  if (current.account_type !== acc.type) return false;
+  if (acc.type === 'microsoft') {
+    if (acc.firebase_ms_uid && current.firebase_ms_uid) {
+      return acc.firebase_ms_uid === current.firebase_ms_uid;
+    }
+  } else if (acc.type === 'helloworld') {
+    if (acc.firebase_uid && current.firebase_uid) {
+      return acc.firebase_uid === current.firebase_uid;
+    }
+  }
+  if (acc.uuid && current.uuid) {
+    return acc.uuid.replace(/-/g, '').toLowerCase() === current.uuid.replace(/-/g, '').toLowerCase();
+  }
+  return Boolean(acc.username && current.username && acc.username.toLowerCase() === current.username.toLowerCase());
+}
+
+function updateTrayMenu() {
+  if (!tray || tray.isDestroyed()) return;
+
+  let userLabel = getTranslation('tray.not_connected', 'No conectado');
+  let tooltipText = 'HelloWorld Launcher';
+  let uData = null;
+  try {
+    uData = loadUserData();
+    if (uData && uData.username) {
+      const typeLabel = uData.account_type === 'microsoft' ? 'Microsoft' : (uData.account_type === 'helloworld' ? 'HelloWorld' : 'Offline');
+      userLabel = `${uData.username} (${typeLabel})`;
+      tooltipText = `HelloWorld Launcher - ${uData.username} (${typeLabel})`;
+    }
+  } catch (_) {}
+
+  try {
+    tray.setToolTip(tooltipText);
+  } catch (_) {}
+
+  const savedAccounts = loadSavedAccounts();
+  const accountSubmenu = [];
+
+  if (savedAccounts.length > 0) {
+    for (const acc of savedAccounts) {
+      const typeLabel = acc.type === 'microsoft' ? 'Microsoft' : (acc.type === 'helloworld' ? 'HelloWorld' : 'Offline');
+      const active = isAccountActive(acc, uData);
+      accountSubmenu.push({
+        label: `${acc.username} (${typeLabel})`,
+        type: 'radio',
+        checked: Boolean(active),
+        click: () => {
+          if (active) return;
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('tray-switch-account', {
+              accountId: acc.id || acc.uuid || acc.username,
+              targetType: acc.type,
+              username: acc.username
+            });
+          }
+        }
+      });
+    }
+  } else {
+    accountSubmenu.push({
+      label: getTranslation('tray.no_saved_accounts', 'Sin cuentas guardadas'),
+      enabled: false
+    });
+  }
+
+  accountSubmenu.push({ type: 'separator' });
+  accountSubmenu.push({
+    label: getTranslation('tray.manage_accounts', 'Gestionar cuentas...'),
+    click: () => {
+      showAndFocusWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('open-account-switcher');
+      }
+    }
+  });
+
+  const recentProfiles = getLastPlayedProfiles(5);
+  const profileMenuItems = [];
+
+  if (recentProfiles.length > 0) {
+    for (const p of recentProfiles) {
+      const label = formatProfileTrayLabel(p);
+      profileMenuItems.push({
+        label,
+        click: () => {
+          showAndFocusWindow();
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('quick-launch-profile', { profileId: p.id });
+          }
+        }
+      });
+    }
+  } else {
+    profileMenuItems.push({
+      label: getTranslation('tray.no_recent_profiles', 'Sin perfiles jugados'),
+      enabled: false
+    });
+  }
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: getTranslation('tray.open', 'Abrir HelloWorld Launcher'),
+      click: () => showAndFocusWindow()
+    },
+    { type: 'separator' },
+    {
+      label: `${getTranslation('tray.connected_as', 'Conectado como')}: ${userLabel}`,
+      enabled: false
+    },
+    {
+      label: getTranslation('tray.switch_account', 'Cambiar de cuenta'),
+      submenu: accountSubmenu
+    },
+    {
+      label: getTranslation('tray.social', 'Amigos y Social'),
+      click: () => {
+        showAndFocusWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('navigate-to-chat', { targetTab: 'received' });
+        }
+      }
+    },
+    { type: 'separator' },
+    ...profileMenuItems,
+    { type: 'separator' },
+    {
+      label: getTranslation('tray.discord', 'Discord de la comunidad'),
+      click: () => {
+        shell.openExternal('https://dsc.gg/helloworld-launcher');
+      }
+    },
+    { type: 'separator' },
+    {
+      label: getTranslation('tray.quit', 'Salir de HelloWorld Launcher'),
+      click: () => {
+        isQuitting = true;
+        if (tray && !tray.isDestroyed()) {
+          try { tray.destroy(); } catch (_) {}
+        }
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.destroy();
+        }
+        app.quit();
+      }
+    }
+  ]);
+
+  try {
+    tray.setContextMenu(contextMenu);
+  } catch (_) {}
+}
+
+function createTray() {
+  if (tray && !tray.isDestroyed()) return;
+
+  const iconPath = getTrayIcon();
+  let trayImage;
+  try {
+    trayImage = nativeImage.createFromPath(iconPath);
+    if (trayImage.isEmpty()) {
+      trayImage = nativeImage.createFromPath(path.join(__dirname, 'ui', 'icon.png'));
+    }
+  } catch (_) {
+    trayImage = iconPath;
+  }
+
+  try {
+    tray = new Tray(trayImage);
+    tray.setToolTip('HelloWorld Launcher');
+
+    updateTrayMenu();
+
+    tray.on('click', () => {
+      showAndFocusWindow();
+    });
+
+    tray.on('double-click', () => {
+      showAndFocusWindow();
+    });
+
+    tray.on('right-click', () => {
+      updateTrayMenu();
+    });
+  } catch (err) {
+    console.error('[Tray] Failed to initialize tray:', err);
+  }
 }
 
 // --- Windows ---
@@ -1721,11 +2771,33 @@ const createWindow = async () => {
     try { win.webContents.invalidate(); } catch (_) {}
   });
 
+  // Intercept window close (X button or Alt+F4) and hide to system tray instead of exiting
+  win.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      win.hide();
+      if (!hasShownTrayBalloon && process.platform === 'win32' && tray && !tray.isDestroyed()) {
+        hasShownTrayBalloon = true;
+        try {
+          tray.displayBalloon({
+            title: 'HelloWorld Launcher',
+            content: 'El launcher sigue ejecutándose en segundo plano para recibir notificaciones.',
+            icon: getTrayIcon()
+          });
+        } catch (_) {}
+      }
+      return false;
+    }
+  });
+
   // Start directly with index.html for instant launch
   if (!localPort) await startLocalServer();
-  win.loadURL(`http://localhost:${localPort}/index.html`)
+  win.loadURL(`http://127.0.0.1:${localPort}/index.html`)
 
-  win.once('ready-to-show', () => {
+  let hasShown = false;
+  const showWindow = () => {
+    if (hasShown) return;
+    hasShown = true;
     win.show();
 
     // Check if dev mode is enabled
@@ -1733,15 +2805,28 @@ const createWindow = async () => {
     if (userData.dev_mode) {
       win.webContents.openDevTools();
     }
-  })
+  };
+
+  win.once('ready-to-show', showWindow);
+  // Resilient fallback: ensure window shows even if ready-to-show takes too long
+  setTimeout(showWindow, 3500);
 
   win.webContents.on('did-finish-load', () => {
     win.webContents.send('sys-ready');
+    if (pendingAutoLaunchProfileId) {
+      const pid = pendingAutoLaunchProfileId;
+      pendingAutoLaunchProfileId = null;
+      setTimeout(() => {
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('auto-launch-profile', pid);
+        }
+      }, 1000);
+    }
     // Start background checks
     checkLatestVersionsAndInstall();
     // Start background update check after 3 seconds without blocking UI
     setTimeout(() => {
-      if (app.isPackaged) {
+      if (app.isPackaged && autoUpdater) {
         autoUpdater.checkForUpdatesAndNotify();
       }
     }, 3000);
@@ -1806,77 +2891,64 @@ async function checkLatestVersionsAndInstall() {
       return;
     }
 
-    console.log(`[Background Update] Latest Release: ${latestRelease}, Latest Snapshot: ${latestSnapshot}`);
+    global.latestReleaseVersion = latestRelease;
+    global.latestSnapshotVersion = latestSnapshot;
 
-    const mcDir = paths.getMcDir();
-    const versionsDir = path.join(mcDir, 'versions');
+    const userData = loadUserData();
+    let userDataChanged = false;
 
-    // Helper to update profile and notify without installing
-    const installAndProfile = async (version, profileName) => {
-      const versionDir = path.join(versionsDir, version);
-      let isInstalled = fs.existsSync(versionDir);
-
-      const profilesData = profileManager.loadProfiles();
-      const profiles = profilesData.profiles || {};
-
-      let existingProfileId = null;
-      for (const [id, prof] of Object.entries(profiles)) {
-        if (prof.name === profileName) {
-          existingProfileId = id;
-          break;
-        }
+    const notifyVersionChange = (version, profileName) => {
+      const notifTitle = getTranslation('notifications.new_version_title') || getTranslation('notif_new_mc_version') || 'New Minecraft Version';
+      const notifDescTemplate = getTranslation('notifications.new_version_desc') || 'Version {version} ({profileName}) is now available to play.';
+      const notifBody = notifDescTemplate.replace('{version}', version).replace('{profileName}', profileName);
+      const notifIcon = getNotificationIconPath();
+      const notifOpts = {
+        title: notifTitle,
+        body: notifBody,
+        icon: notifIcon
+      };
+      if (process.platform === 'win32') {
+        notifOpts.toastXml = buildWindowsToastXml(notifTitle, notifBody, notifIcon, false);
       }
-
-      let versionChanged = false;
-
-      if (existingProfileId) {
-        // Update existing — always ensure directory, icon and version are correct
-        const existingProfile = profiles[existingProfileId];
-        const needsUpdate = existingProfile.version !== version || !existingProfile.directory;
-        if (needsUpdate) {
-          console.log(`[Background Update] Updating profile "${profileName}" to version ${version}.`);
-          versionChanged = true;
-          if (typeof profileManager.forceEditProfile === 'function') {
-            await profileManager.forceEditProfile(existingProfileId, { version: version, icon: 'default.png', directory: mcDir });
-          } else {
-            await profileManager.editProfile(existingProfileId, { version: version, icon: 'default.png', directory: mcDir });
-          }
-          if (mainWindow) mainWindow.webContents.send('reload-profiles');
-        }
-      } else {
-        // Create new
-        console.log(`[Background Update] Creating profile "${profileName}" for version ${version}.`);
-        versionChanged = true;
-        await profileManager.addProfile(profileName, version, 'default.png', mcDir, '', null, true);
-        if (mainWindow) mainWindow.webContents.send('reload-profiles');
-      }
-
-      if (versionChanged) {
-        console.log(`[Background Update] Version ${version} is now available. Sending notification...`);
-        new Notification({
-          title: 'New Minecraft Version',
-          body: `Version ${version} (${profileName}) is now available to play.`
-        }).show();
-        
-        if (mainWindow) {
-          mainWindow.webContents.send('show-in-app-notification', {
-            title: 'New Minecraft Version',
-            message: `Version ${version} (${profileName}) is now available to play.`,
-            duration: 10000
-          });
-        }
-      } else if (isInstalled) {
-        console.log(`[Background Update] Version ${version} is already installed.`);
+      try { new Notification(notifOpts).show(); } catch (_) {}
+      
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('show-in-app-notification', {
+          titleKey: 'notifications.new_version_title',
+          messageKey: 'notifications.new_version_desc',
+          variables: { version, profileName },
+          title: notifTitle,
+          message: notifBody,
+          duration: 10000
+        });
       }
     };
 
-    // Trigger both asynchronously
-    await installAndProfile(latestRelease, 'Latest release');
-    // Only process snapshot if it differs from release to avoid redundant work
-    if (latestSnapshot !== latestRelease) {
-      await installAndProfile(latestSnapshot, 'Latest snapshot');
+    // Notify for release only if version changed from last notified
+    if (userData.last_notified_release !== latestRelease) {
+      if (userData.last_notified_release) {
+        notifyVersionChange(latestRelease, 'Latest release');
+      }
+      userData.last_notified_release = latestRelease;
+      userDataChanged = true;
     }
 
+    // Notify for snapshot only if version changed from last notified
+    if (latestSnapshot !== latestRelease && userData.last_notified_snapshot !== latestSnapshot) {
+      if (userData.last_notified_snapshot) {
+        notifyVersionChange(latestSnapshot, 'Latest snapshot');
+      }
+      userData.last_notified_snapshot = latestSnapshot;
+      userDataChanged = true;
+    }
+
+    if (userDataChanged) {
+      saveUserData(userData);
+    }
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('reload-profiles');
+    }
   } catch (error) {
     console.error('[Background Update] Check failed:', error.message);
   } finally {
@@ -1963,6 +3035,13 @@ ipcMain.handle('login-microsoft', async () => {
     userData.uuid = profileData.id
     userData.mc_token = mcObj.mcToken // mcToken is on the wrapper
     userData.msmc_auth = result.save() // Save token string ONLY
+    userData.firebase_uid = ""
+    userData.firebase_refresh_token = ""
+    userData.firebase_id_token = ""
+    if (profileData.skins && profileData.skins.length > 0 && profileData.skins[0].url) {
+      userData.last_skin_url = profileData.skins[0].url;
+      userData.last_skin_variant = profileData.skins[0].variant || 'classic';
+    }
 
     saveUserData(userData)
 
@@ -1986,7 +3065,11 @@ ipcMain.handle('login-microsoft', async () => {
     if (mainWindow) {
       console.log("Sending login-success to UI");
       mainWindow.webContents.send('login-success', safeProfile);
+      mainWindow.webContents.send('force-social-badge-update');
+      mainWindow.webContents.send('inbox-updated');
     }
+    currentPolledUid = null;
+    invalidateSocialAuthCache();
     startMessagePolling();
     presenceManager.safeRun(presenceManager.setLauncherOnline());
     startPresencePolling();
@@ -2072,6 +3155,10 @@ ipcMain.handle('login-helloworld', async (e, identifier, password) => {
     userData.firebase_uid = localId;
     userData.firebase_refresh_token = authRes.data.refreshToken;
     userData.firebase_id_token = idToken;
+    userData.firebase_ms_uid = "";
+    userData.firebase_ms_refresh_token = "";
+    userData.mc_token = "";
+    userData.msmc_auth = "";
 
     // Clear out old skin/cape data
     userData.last_skin_url = "";
@@ -2106,8 +3193,12 @@ ipcMain.handle('login-helloworld', async (e, identifier, password) => {
 
     if (mainWindow) {
       mainWindow.webContents.send('login-success', safeProfile);
+      mainWindow.webContents.send('force-social-badge-update');
+      mainWindow.webContents.send('inbox-updated');
     }
 
+    currentPolledUid = null;
+    invalidateSocialAuthCache();
     startMessagePolling();
     presenceManager.safeRun(presenceManager.setLauncherOnline());
     startPresencePolling();
@@ -2135,6 +3226,10 @@ ipcMain.handle('logout', async () => {
   stopMessagePolling();
   stopPresencePolling();
   presenceManager.safeRun(presenceManager.setOffline());
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('force-social-badge-update');
+    mainWindow.webContents.send('inbox-updated');
+  }
   const data = loadUserData()
 
   // NOTE: We do NOT remove the account from saved_accounts.json here.
@@ -2242,11 +3337,51 @@ ipcMain.handle('remove-all-accounts', async () => {
   }
 })
 
-ipcMain.handle('switch-account', async (e, accountId) => {
+ipcMain.handle('switch-account', async (e, accountId, targetType = null) => {
   try {
     const accounts = loadSavedAccounts();
-    const acc = accounts.find(a => a.id === accountId);
+    let acc = null;
+
+    // 1. If targetType is specified, prioritize matching that type to prevent username collision
+    if (targetType) {
+      acc = accounts.find(a => a.type === targetType && (
+        a.id === accountId ||
+        (a.firebase_uid && a.firebase_uid === accountId) ||
+        (a.firebase_ms_uid && a.firebase_ms_uid === accountId) ||
+        (a.uuid && a.uuid === accountId) ||
+        a.username === accountId
+      ));
+      if (!acc) {
+        const typeMatches = accounts.filter(a => a.type === targetType);
+        if (typeMatches.length === 1) {
+          acc = typeMatches[0];
+        }
+      }
+    }
+
+    // 2. Exact match by account ID
+    if (!acc) {
+      acc = accounts.find(a => a.id === accountId);
+    }
+
+    // 3. Exact match by Firebase UID (HW or MS)
+    if (!acc) {
+      acc = accounts.find(a => (a.firebase_uid && a.firebase_uid === accountId) || (a.firebase_ms_uid && a.firebase_ms_uid === accountId));
+    }
+
+    // 4. Exact match by Minecraft UUID
+    if (!acc) {
+      acc = accounts.find(a => a.uuid && a.uuid === accountId);
+    }
+
+    // 5. Fallback match by username
+    if (!acc) {
+      acc = accounts.find(a => a.username === accountId);
+    }
+
     if (!acc) return { success: false, error: 'Account not found' };
+
+    _roleCache.clear();
 
     stopMessagePolling();
     stopPresencePolling();
@@ -2275,7 +3410,7 @@ ipcMain.handle('switch-account', async (e, accountId) => {
       saveUserData(currentData);
 
       // Update lastUsed
-      const idx = accounts.findIndex(a => a.id === accountId);
+      const idx = accounts.findIndex(a => a.id === acc.id);
       if (idx >= 0) { accounts[idx].lastUsed = new Date().toISOString(); saveSavedAccounts(accounts); }
 
       return { success: true, newData: currentData };
@@ -2321,7 +3456,7 @@ ipcMain.handle('switch-account', async (e, accountId) => {
         saveUserData(currentData);
 
         // Update saved account with refreshed token
-        const idx = accounts.findIndex(a => a.id === accountId);
+        const idx = accounts.findIndex(a => a.id === acc.id);
         if (idx >= 0) {
           accounts[idx].firebase_refresh_token = refreshed.refreshToken;
           accounts[idx].firebase_id_token = refreshed.idToken;
@@ -2330,9 +3465,15 @@ ipcMain.handle('switch-account', async (e, accountId) => {
           saveSavedAccounts(accounts);
         }
 
+        currentPolledUid = null;
+        invalidateSocialAuthCache();
         startMessagePolling();
         presenceManager.safeRun(presenceManager.setLauncherOnline());
         startPresencePolling();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('force-social-badge-update');
+          mainWindow.webContents.send('inbox-updated');
+        }
 
         return { success: true, newData: currentData };
       } catch (err) {
@@ -2384,25 +3525,40 @@ ipcMain.handle('switch-account', async (e, accountId) => {
         // Preserve MS social verification tokens from saved account
         currentData.firebase_ms_uid = acc.firebase_ms_uid || currentData.firebase_ms_uid || '';
         currentData.firebase_ms_refresh_token = acc.firebase_ms_refresh_token || currentData.firebase_ms_refresh_token || '';
-        currentData.last_skin_url = '';
-        currentData.last_skin_variant = 'classic';
+        if (profileData.skins && profileData.skins.length > 0 && profileData.skins[0].url) {
+          currentData.last_skin_url = profileData.skins[0].url;
+          currentData.last_skin_variant = profileData.skins[0].variant || 'classic';
+        } else {
+          currentData.last_skin_url = acc.last_skin_url || (acc.avatarUrl && acc.avatarUrl.startsWith('http') ? acc.avatarUrl : '');
+          currentData.last_skin_variant = acc.last_skin_variant || 'classic';
+        }
         currentData.last_cape_url = '';
         saveUserData(currentData);
 
         // Update saved account with new refresh token
-        const idx = accounts.findIndex(a => a.id === accountId);
+        const idx = accounts.findIndex(a => a.id === acc.id);
         if (idx >= 0) {
           accounts[idx].msmc_auth = xboxSession.save();
           accounts[idx].mc_token = mcObj.mcToken;
           accounts[idx].uuid = profileData.id;
           accounts[idx].username = profileData.name;
+          if (currentData.last_skin_url) {
+            accounts[idx].last_skin_url = currentData.last_skin_url;
+            accounts[idx].avatarUrl = currentData.last_skin_url;
+          }
           accounts[idx].lastUsed = new Date().toISOString();
           saveSavedAccounts(accounts);
         }
 
         const safeProfile = { name: profileData.name, id: profileData.id, skin: profileData.skins || [] };
-        if (mainWindow) mainWindow.webContents.send('login-success', safeProfile);
+        if (mainWindow) {
+          mainWindow.webContents.send('login-success', safeProfile);
+          mainWindow.webContents.send('force-social-badge-update');
+          mainWindow.webContents.send('inbox-updated');
+        }
 
+        currentPolledUid = null;
+        invalidateSocialAuthCache();
         startMessagePolling();
         presenceManager.safeRun(presenceManager.setLauncherOnline());
         startPresencePolling();
@@ -2466,30 +3622,194 @@ ipcMain.handle('add-profile', async (e, name, version, icon, directory, jvm_args
 })
 
 ipcMain.handle('edit-profile', async (e, profile_id, name, version, loader, icon, ram_min, ram_max, jvm_args, width, height, java_path, enable_custom_skins, addons) => {
-  let ver = version || loader;
-  const info = versionUtils.parseVersionString(ver);
-  if (info) ver = info.normalizedId;
-  const data = {
-    name,
-    version: ver,
-    icon,
-    jvm_args: jvm_args || '',
-    java_path: java_path || ''
-  };
-  if (enable_custom_skins !== undefined && enable_custom_skins !== null && typeof enable_custom_skins === 'boolean') {
-    data.enable_custom_skins = enable_custom_skins;
+  let id = profile_id;
+  let data = {};
+
+  if (typeof profile_id === 'object' && profile_id !== null) {
+    id = profile_id.id || profile_id.profile_id;
+    data = { ...profile_id };
+    delete data.id;
+    delete data.profile_id;
+    if (data.version || data.loader) {
+      const ver = data.version || data.loader;
+      const info = versionUtils.parseVersionString(ver);
+      data.version = info ? info.normalizedId : ver;
+    }
+  } else {
+    let ver = version || loader;
+    if (ver) {
+      const info = versionUtils.parseVersionString(ver);
+      data.version = info ? info.normalizedId : ver;
+    }
+    if (name !== undefined && name !== null) data.name = name;
+    if (icon !== undefined && icon !== null) data.icon = icon;
+    if (jvm_args !== undefined && jvm_args !== null) data.jvm_args = jvm_args;
+    if (java_path !== undefined && java_path !== null) data.java_path = java_path;
+    if (ram_min !== undefined && ram_min !== null) data.ram_min = ram_min;
+    if (ram_max !== undefined && ram_max !== null) data.ram_max = ram_max;
+    if (width !== undefined && width !== null) data.width = width;
+    if (height !== undefined && height !== null) data.height = height;
+    if (enable_custom_skins !== undefined && enable_custom_skins !== null && typeof enable_custom_skins === 'boolean') {
+      data.enable_custom_skins = enable_custom_skins;
+    }
+    if (Array.isArray(enable_custom_skins)) {
+      data.addons = enable_custom_skins;
+    }
+    if (addons !== undefined && addons !== null) {
+      data.addons = addons;
+    }
   }
-  if (Array.isArray(enable_custom_skins)) {
-    data.addons = enable_custom_skins;
-  }
-  if (addons !== undefined && addons !== null) {
-    data.addons = addons;
-  }
-  return await profileManager.editProfile(profile_id, data);
+  return await profileManager.editProfile(id, data);
 })
 
 ipcMain.handle('delete-profile', async (e, id) => profileManager.deleteProfile(id))
 ipcMain.handle('get-profile-icon', async (e, f) => profileManager.getProfileIconAsBase64(f))
+
+// --- Profile Windows Shortcuts & ICO generation ---
+function pngsToIco(pngBuffers) {
+  const count = pngBuffers.length;
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2); // 1 = ICO
+  header.writeUInt16LE(count, 4);
+
+  const dirEntries = [];
+  let offset = 6 + (count * 16);
+
+  for (const buf of pngBuffers) {
+    const width = buf.readUInt32BE(16);
+    const height = buf.readUInt32BE(20);
+    const bWidth = width >= 256 ? 0 : width;
+    const bHeight = height >= 256 ? 0 : height;
+
+    const entry = Buffer.alloc(16);
+    entry.writeUInt8(bWidth, 0);
+    entry.writeUInt8(bHeight, 1);
+    entry.writeUInt8(0, 2);
+    entry.writeUInt8(0, 3);
+    entry.writeUInt16LE(1, 4);
+    entry.writeUInt16LE(32, 6);
+    entry.writeUInt32LE(buf.length, 8);
+    entry.writeUInt32LE(offset, 12);
+
+    dirEntries.push(entry);
+    offset += buf.length;
+  }
+
+  return Buffer.concat([header, ...dirEntries, ...pngBuffers]);
+}
+
+async function getProfileIcoPath(profileId, iconFilename) {
+  const fallbackIco = path.join(__dirname, 'build', 'icon.ico');
+  if (process.platform !== 'win32') return fallbackIco;
+
+  try {
+    const shortcutIconsDir = path.join(app.getPath('userData'), 'profile-shortcuts-icons');
+    fs.ensureDirSync(shortcutIconsDir);
+    const targetIcoPath = path.join(shortcutIconsDir, `${profileId}.ico`);
+
+    let nImg = null;
+    if (typeof iconFilename === 'string' && iconFilename.trim()) {
+      if (iconFilename.startsWith('data:image/')) {
+        nImg = nativeImage.createFromDataURL(iconFilename);
+      } else {
+        const candidates = [
+          path.join(paths.getProfilesImgDir(), iconFilename),
+          path.join(__dirname, 'ui', 'img', 'profiles', iconFilename),
+          path.join(__dirname, 'ui', 'img', iconFilename)
+        ];
+        for (const cand of candidates) {
+          if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+            nImg = nativeImage.createFromPath(cand);
+            if (nImg && !nImg.isEmpty()) break;
+          }
+        }
+      }
+    }
+
+    if (nImg && !nImg.isEmpty()) {
+      const sizes = [256, 48, 32, 16];
+      const pngBuffers = sizes.map(sz => nImg.resize({ width: sz, height: sz, quality: 'best' }).toPNG());
+      const icoBuf = pngsToIco(pngBuffers);
+      fs.writeFileSync(targetIcoPath, icoBuf);
+      return targetIcoPath;
+    }
+  } catch (err) {
+    console.warn('[Shortcut] Error generating profile ICO, falling back to launcher icon:', err.message);
+  }
+
+  return fs.existsSync(fallbackIco) ? fallbackIco : process.execPath;
+}
+
+ipcMain.handle('create-profile-shortcut', async (e, arg1, arg2, arg3) => {
+  if (process.platform !== 'win32') {
+    return { success: false, error: 'Shortcuts are currently only supported on Windows' };
+  }
+  try {
+    let profileId, profileName, icon;
+    if (typeof arg1 === 'object' && arg1 !== null) {
+      profileId = arg1.profileId;
+      profileName = arg1.profileName;
+      icon = arg1.icon;
+    } else {
+      profileId = arg1;
+      profileName = arg2;
+      icon = arg3;
+    }
+
+    if (!profileId) throw new Error('Missing profile ID');
+
+    // Clean profile name for Windows filename (prohibit < > : " / \ | ? * and control chars)
+    const cleanName = (profileName || 'Minecraft')
+      .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+      .trim() || 'Minecraft';
+    const shortcutFileName = `${cleanName} (HelloWorld Launcher).lnk`;
+
+    const desktopDir = app.getPath('desktop');
+    const startMenuDir = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+    fs.ensureDirSync(desktopDir);
+    fs.ensureDirSync(startMenuDir);
+
+    const desktopPath = path.join(desktopDir, shortcutFileName);
+    const startMenuPath = path.join(startMenuDir, shortcutFileName);
+
+    const icoPath = await getProfileIcoPath(profileId, icon);
+    const args = app.isPackaged
+      ? `--launch-profile="${profileId}"`
+      : `"${app.getAppPath()}" --launch-profile="${profileId}"`;
+
+    const shortcutOptions = {
+      target: process.execPath,
+      args,
+      cwd: path.dirname(process.execPath),
+      appUserModelId: 'com.abelosky.helloworldlauncher',
+      description: `${profileName} - HelloWorld Launcher`,
+      icon: icoPath,
+      iconIndex: 0
+    };
+
+    const created = [];
+    const opDesktop = fs.existsSync(desktopPath) ? 'replace' : 'create';
+    const resDesktop = shell.writeShortcutLink(desktopPath, opDesktop, shortcutOptions);
+    if (resDesktop) created.push('desktop');
+
+    const opStartMenu = fs.existsSync(startMenuPath) ? 'replace' : 'create';
+    const resStartMenu = shell.writeShortcutLink(startMenuPath, opStartMenu, shortcutOptions);
+    if (resStartMenu) created.push('startMenu');
+
+    console.log(`[WindowsShortcut] Created shortcut for profile ${profileId} (${profileName}) at:`, created, 'icon:', icoPath);
+    return { success: true, created };
+  } catch (err) {
+    console.error('[WindowsShortcut] Failed to create profile shortcut:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('get-pending-launch-profile', () => {
+  const pid = pendingAutoLaunchProfileId;
+  pendingAutoLaunchProfileId = null;
+  return pid;
+});
 ipcMain.handle('get-worlds', async (e, profile_id) => {
   const mcDir = paths.getMcDir();
   return profileManager.getWorlds(profile_id, mcDir);
@@ -2498,12 +3818,18 @@ ipcMain.handle('read-world-seed', async (e, profile_id, world_name) => {
   const mcDir = paths.getMcDir();
   return await profileManager.readWorldSeed(profile_id, world_name, mcDir);
 })
+ipcMain.handle('get-documents-path', async () => {
+  return app.getPath('documents');
+})
 
 // 3. Modrinth / Addons
 ipcMain.handle('search-modrinth', async (e, { query, options }) => modManager.searchModrinth(query, options))
 ipcMain.handle('get-mod-categories', async (e) => modManager.getModCategories())
 ipcMain.handle('get-mod-versions', async (e, { project_id, game_version, loader }) => modManager.getModVersions(project_id, game_version, loader))
 ipcMain.handle('get-mod-details', async (e, id) => modManager.getModDetails(id))
+ipcMain.handle('get-multiple-mod-details', async (e, ids) => modManager.getMultipleModDetails(ids))
+ipcMain.handle('resolve-mod-dependencies', async (e, { version_id, game_version, loader }) => modManager.resolveModDependencies(version_id, game_version, loader))
+ipcMain.handle('resolve-modpack-compatibility', async (e, args) => modManager.resolveModpackCompatibility(args))
 
 ipcMain.handle('install-addon', async (e, args) => {
   try {
@@ -3020,18 +4346,85 @@ ipcMain.handle('refresh-session', async () => {
 
 // --- Legacy Handlers ---
 ipcMain.handle('close-app', async () => {
+  isQuitting = true;
   await presenceManager.setOffline();
+  if (tray && !tray.isDestroyed()) {
+    try { tray.destroy(); } catch (_) {}
+  }
   app.quit();
-})
+});
 ipcMain.handle('get-version', () => app.getVersion())
 ipcMain.handle('check-internet', async () => {
+  // 1. Ultra-fast DNS lookup (~15ms, practically 0 bytes)
+  const dnsCheck = () => new Promise((resolve) => {
+    const dns = require('dns');
+    dns.lookup('google.com', (err) => {
+      if (!err) return resolve(true);
+      dns.lookup('cloudflare.com', (err2) => {
+        resolve(!err2);
+      });
+    });
+  });
+
   try {
-    // Fast check by fetching Mojang manifest
-    await axios.get('https://piston-meta.mojang.com/mc/game/version_manifest.json', { timeout: 3000 });
+    const hasDns = await dnsCheck();
+    if (hasDns) return true;
+  } catch (_) {}
+
+  // 2. HTTP 204 / HEAD check fallback (0 bytes payload)
+  try {
+    await axios.get('https://www.google.com/generate_204', { timeout: 2500 });
     return true;
-  } catch (e) {
-    return false;
+  } catch (_) {
+    try {
+      await axios.head('https://piston-meta.mojang.com', { timeout: 2500 });
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
+})
+
+ipcMain.handle('show-desktop-notification', async (e, { title, body, senderId }) => {
+  let imagePath = null;
+  let isAvatar = false;
+  if (senderId && friendProfileCache.has(senderId)) {
+    try {
+      imagePath = await resolveAvatarFile(friendProfileCache.get(senderId));
+      isAvatar = true;
+    } catch (_) {}
+  }
+  if (!imagePath) {
+    imagePath = getNotificationIconPath();
+  }
+  const notifOpts = {
+    title: title || 'HelloWorld Launcher',
+    body: body || '',
+    silent: false,
+    icon: imagePath
+  };
+  if (process.platform === 'win32') {
+    notifOpts.toastXml = buildWindowsToastXml(notifOpts.title, notifOpts.body, imagePath, isAvatar);
+  }
+  const notif = new Notification(notifOpts);
+  activeNotifications.add(notif);
+  const cleanup = () => activeNotifications.delete(notif);
+  notif.on('close', cleanup);
+  notif.on('failed', cleanup);
+  const handler = () => {
+    cleanup();
+    showAndFocusWindow();
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('navigate-to-chat', { fromInbox: true, targetTab: 'received' });
+        mainWindow.webContents.send('navigate-to-inbox', { targetTab: 'received' });
+      }
+    }, 150);
+  };
+  notif.on('click', handler);
+  notif.on('action', handler);
+  notif.show();
+  return true;
 })
 
 // Fetch Web Versions
@@ -3097,6 +4490,12 @@ ipcMain.handle('delete-version', async (e, version_id) => {
 
 ipcMain.handle('check-for-updates', () => {
   console.log("IPC: check-for-updates");
+  if (!autoUpdater) {
+    if (mainWindow) {
+      mainWindow.webContents.send('updater-status', { status: 'not-available', info: { version: app.getVersion(), dev: !app.isPackaged } });
+    }
+    return;
+  }
   // Enable dev mode updates if running in dev AND dev-config exists
   if (!app.isPackaged) {
     const devConfig = path.join(__dirname, 'dev-app-update.yml');
@@ -3118,60 +4517,69 @@ ipcMain.handle('check-for-updates', () => {
 
 ipcMain.handle('start-download-update', () => {
   console.log("IPC: start-download-update");
-  autoUpdater.downloadUpdate();
+  if (autoUpdater) autoUpdater.downloadUpdate();
 })
 
 ipcMain.handle('quit-and-install', () => {
   console.log("IPC: quit-and-install (silent=true, forceRunAfter=true)");
-  autoUpdater.quitAndInstall(true, true);
+  if (autoUpdater) autoUpdater.quitAndInstall(true, true);
 })
 
 // AutoUpdater Events
-autoUpdater.on('checking-for-update', () => {
-  console.log('[AutoUpdater] Checking for update...');
-  if (mainWindow) mainWindow.webContents.send('updater-status', { status: 'checking' });
-})
+if (autoUpdater) {
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[AutoUpdater] Checking for update...');
+    if (mainWindow) mainWindow.webContents.send('updater-status', { status: 'checking' });
+  })
 
-autoUpdater.on('update-available', (info) => {
-  console.log('[AutoUpdater] Update available:', info);
-  if (mainWindow) mainWindow.webContents.send('updater-status', { status: 'available', info });
-})
+  autoUpdater.on('update-available', (info) => {
+    console.log('[AutoUpdater] Update available:', info);
+    const userData = loadUserData();
+    if (userData.last_notified_app_version !== info.version) {
+      userData.last_notified_app_version = info.version;
+      saveUserData(userData);
+      if (mainWindow) mainWindow.webContents.send('updater-status', { status: 'available', info });
+    } else {
+      console.log(`[AutoUpdater] User already notified for version ${info.version}, skipping repeat notification.`);
+    }
+  })
 
-autoUpdater.on('update-not-available', (info) => {
-  console.log('[AutoUpdater] Update not available');
-  if (mainWindow) mainWindow.webContents.send('updater-status', { status: 'not-available', info });
-})
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('[AutoUpdater] Update not available');
+    if (mainWindow) mainWindow.webContents.send('updater-status', { status: 'not-available', info });
+  })
 
-autoUpdater.on('error', (err) => {
-  console.error('[AutoUpdater] Error:', err);
+  autoUpdater.on('error', (err) => {
+    console.error('[AutoUpdater] Error:', err);
 
-  // Check if error is due to missing release/latest.yml (404)
-  // GitHub returns 404 if no release exists or latest.yml is missing
-  if (err.message && (err.message.includes("404") || err.message.includes("latest.yml"))) {
-    console.log('[AutoUpdater] Update check failed (likely no release found). Continuing as normal.');
-    if (mainWindow) mainWindow.webContents.send('updater-status', { status: 'not-available', info: { version: app.getVersion() } });
-    return;
-  }
+    // Check if error is due to missing release/latest.yml (404)
+    // GitHub returns 404 if no release exists or latest.yml is missing
+    if (err.message && (err.message.includes("404") || err.message.includes("latest.yml"))) {
+      console.log('[AutoUpdater] Update check failed (likely no release found). Continuing as normal.');
+      if (mainWindow) mainWindow.webContents.send('updater-status', { status: 'not-available', info: { version: app.getVersion() } });
+      return;
+    }
 
-  if (mainWindow) mainWindow.webContents.send('updater-status', { status: 'error', error: err.message });
-})
+    if (mainWindow) mainWindow.webContents.send('updater-status', { status: 'error', error: err.message });
+  })
 
-autoUpdater.on('download-progress', (progressObj) => {
-  let log_message = "Download speed: " + progressObj.bytesPerSecond;
-  log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
-  log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
-  console.log(log_message);
+  autoUpdater.on('download-progress', (progressObj) => {
+    let log_message = "Download speed: " + progressObj.bytesPerSecond;
+    log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
+    log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
+    console.log(log_message);
 
-  if (mainWindow) mainWindow.webContents.send('updater-status', {
-    status: 'downloading',
-    progress: progressObj
-  });
-})
+    if (mainWindow) mainWindow.webContents.send('updater-status', {
+      status: 'downloading',
+      progress: progressObj
+    });
+  })
 
-autoUpdater.on('update-downloaded', (info) => {
-  console.log('[AutoUpdater] Update downloaded');
-  if (mainWindow) mainWindow.webContents.send('updater-status', { status: 'downloaded', info });
-})
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[AutoUpdater] Update downloaded');
+    if (mainWindow) mainWindow.webContents.send('updater-status', { status: 'downloaded', info });
+  })
+}
 
 ipcMain.handle('get-vanilla-versions', async () => {
   try {
@@ -4050,6 +5458,33 @@ ipcMain.handle('select-folder', async (e, currentPath) => {
   return null;
 })
 
+ipcMain.handle('select-file', async (e, currentPath, filters) => {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    defaultPath: currentPath || app.getPath('home'),
+    filters: filters || [
+      { name: 'Executables', extensions: ['exe', 'bat', 'cmd', 'sh', '*'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+
+  if (!result.canceled && result.filePaths.length > 0) {
+    return result.filePaths[0];
+  }
+  return null;
+})
+
+ipcMain.handle('open-logs', async () => {
+  const mcDir = paths.getMcDir();
+  const logsDir = path.join(mcDir, 'logs');
+  if (!fs.existsSync(logsDir)) {
+    fs.ensureDirSync(logsDir);
+  }
+  await shell.openPath(logsDir);
+  return { success: true };
+})
+
 ipcMain.handle('get-skin-data', async () => {
   try {
     const userData = loadUserData();
@@ -4308,6 +5743,12 @@ ipcMain.handle('save-app-settings', async (e, enableTransitions, hwAccel, privac
   data.hw_accel = hwAccel !== false;
   data.privacy_mode = privacyMode === true;
   saveUserData(data);
+
+  if (process.platform === 'win32') {
+    applyGpuPreference(process.execPath, data.hw_accel);
+    registerAllKnownJavaRuntimes(data.hw_accel);
+  }
+
   return { success: true };
 })
 
@@ -4390,16 +5831,31 @@ ipcMain.handle('ms-write-verified', async (e, emailKey, email, username, uuid, f
       email, username, uuid, verified: true, verifiedAt: new Date().toISOString()
     }, refreshed.idToken);
 
+    // Read current user doc to merge badges array (avoid overwriting existing badges)
+    let existingBadges = [];
+    try {
+      const existingDoc = await fsGet(`users/${firebaseUid}`, refreshed.idToken);
+      if (existingDoc && Array.isArray(existingDoc.badges)) {
+        existingBadges = existingDoc.badges;
+      }
+    } catch (_) {}
+
+    // Ensure "premium" badge is in the list (append if missing)
+    const mergedBadges = existingBadges.includes('premium')
+      ? existingBadges
+      : [...existingBadges, 'premium'];
+
     // Create/update users doc so this account is discoverable in social features
     await fsUpdate(`users/${firebaseUid}`, {
       accountType: 'microsoft', username, uuid,
       mcUuid: uuid, usernameLower: usernameLower(username),
       clientVersion: app.getVersion(),
       microsoftVerified: true,
+      badges: mergedBadges,
       updatedAt: new Date().toISOString()
     }, refreshed.idToken);
 
-    console.log('[MS Verify] users doc + microsoftVerified written for:', email);
+    console.log('[MS Verify] users doc + microsoftVerified + premium badge written for:', email);
     return { success: true };
   } catch (err) {
     console.warn('[MS Verify] Failed to write:', err.message);
@@ -4526,21 +5982,41 @@ async function refreshMicrosoftSession(userData, force = false) {
 let currentGameProcess = null;
 let activeGameProcesses = new Set();
 let isLaunchCancelled = false;
+let isStartingGame = false;
 
 // Lock to prevent race conditions when updating profile metadata
 const profileUpdateLocks = new Map();
 
 ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverIp }) => {
+  // Yield to allow the Windows message pump and renderer to paint the spinner and cancel button
+  await new Promise(resolve => setTimeout(resolve, 20));
   console.log(`[Launch] launch-profile called with profileId: ${profileId}, force: ${force}, serverIp: ${serverIp || 'none'}`);
   if (activeGameProcesses.size > 0 && !force) {
     console.log("[Launch] Minecraft is already running and force is false.");
     return { status: 'already_running' };
   }
+  if (isStartingGame && !force) {
+    console.log("[Launch] A game launch is already in progress.");
+    return { status: 'already_launching' };
+  }
+  isStartingGame = true;
   try {
     isLaunchCancelled = false;
+    if (launcher) launcher._cancelled = false;
+    if (launcher && launcher.handler) launcher.handler._cancelled = false;
+    if (streakSessionTimer) {
+      clearTimeout(streakSessionTimer);
+      streakSessionTimer = null;
+    }
+    streakCountedThisRun = false;
+    gameStartTime = null;
+
     const profiles = profileManager.loadProfiles().profiles;
     const profile = profiles[profileId];
-    if (!profile) return { status: 'error', error: "Profile not found" };
+    if (!profile) {
+      isStartingGame = false;
+      return { status: 'error', error: "Profile not found" };
+    }
 
     const verInfo = versionUtils.parseVersionString(profile.version) || { type: 'vanilla', mcVersion: profile.version, loaderVersion: null };
     const isForge = verInfo.type === 'forge';
@@ -4610,6 +6086,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
 
     if (isMissingVersion || missingAddons.length > 0) {
       console.log(`[Launch] Missing files detected. isMissingVersion: ${isMissingVersion}, missingAddons: ${missingAddons.length}`);
+      isStartingGame = false;
       return {
         status: 'missing_files',
         missing_version: isMissingVersion,
@@ -4618,6 +6095,12 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       };
     }
 
+    await new Promise(resolve => setTimeout(resolve, 10));
+    if (isLaunchCancelled) {
+      console.log("[Launch] Launch cancelled early before auth.");
+      isStartingGame = false;
+      return { status: 'cancelled' };
+    }
     const userData = loadUserData();
 
     // 1. Prepare Auth
@@ -4845,23 +6328,41 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
         identifier: serverIp
       };
       console.log(`[Launch] Auto-connecting to server: ${serverIp}`);
+      try {
+        await addServerToServersDat(mcDir, serverIp);
+      } catch (_) {}
     }
 
     // 3. Java Runtime
+    if (isLaunchCancelled) {
+      console.log("[Launch] Launch cancelled early before Java runtime check.");
+      return { status: 'cancelled' };
+    }
     try {
       // Priority: Profile Custom Java Path > Automatic Java Runtime
       const jPath = profile.java_path || await javaRuntime.getJavaPath(mcVersion);
       if (jPath && jPath !== 'java') {
         options.javaPath = jPath;
       }
+      const userData = loadUserData();
+      if (userData.hw_accel !== false && options.javaPath) {
+        ensureJavaGpuPreference(options.javaPath, true);
+      }
     } catch (javaErr) {
       console.warn(`[Launch] Java resolution failed: ${javaErr.message}`);
     }
 
     // 4. Finalize & Launch
+    if (isLaunchCancelled) {
+      console.log("[Launch] Launch cancelled early before MCLC invocation.");
+      isStartingGame = false;
+      return { status: 'cancelled' };
+    }
     console.log(`[Launch] Starting Minecraft ${mcVersion} for ${auth.name}...`);
+    await new Promise(resolve => setTimeout(resolve, 25));
 
     launcher.launch(options).then(child => {
+      isStartingGame = false;
       if (!child) {
         console.error("[Launch] MCLC returned null child process (Java runtime or launch initialization failed).");
         presenceManager.safeRun(presenceManager.onGameClosed());
@@ -4870,12 +6371,39 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       }
       if (isLaunchCancelled) {
         console.log("[Launch] Launch cancelled while starting, killing immediately.");
-        try { process.kill(child.pid, 'SIGKILL'); } catch (e) { }
+        if (streakSessionTimer) {
+          clearTimeout(streakSessionTimer);
+          streakSessionTimer = null;
+        }
+        streakCountedThisRun = false;
+        gameStartTime = null;
+        try {
+          if (process.platform === 'win32' && child.pid) {
+            const { exec } = require('child_process');
+            exec(`taskkill /pid ${child.pid} /T /F`, () => {});
+          } else {
+            process.kill(child.pid, 'SIGKILL');
+          }
+        } catch (e) { }
+        presenceManager.safeRun(presenceManager.onGameClosed());
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('info-message', "Game Closed");
+        }
         return;
       }
 
       gameStartTime = Date.now();
-      updateStreakAndSessions();
+      streakCountedThisRun = false;
+      if (streakSessionTimer) {
+        clearTimeout(streakSessionTimer);
+        streakSessionTimer = null;
+      }
+      // Require at least 30s of uninterrupted runtime before counting streak & session
+      streakSessionTimer = setTimeout(() => {
+        if (!isLaunchCancelled && activeGameProcesses.has(child)) {
+          triggerStreakUpdate();
+        }
+      }, 30000);
 
       currentGameProcess = child;
       activeGameProcesses.add(child);
@@ -4888,55 +6416,90 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
         pid: child.pid
       }));
 
+      let lastStdoutIpcTime = 0;
       child.stdout?.on('data', (data) => {
+        if (isLaunchCancelled) return;
         const message = data.toString().trim();
         if (!message) return;
         console.log('[Game stdout]', message);
         presenceManager.handleGameLog(message);
-        if (mainWindow) mainWindow.webContents.send('info-message', `[Game stdout] ${message}`);
+        const now = Date.now();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          if (message.includes('Setting user:') || message.includes('Sound engine started') || now - lastStdoutIpcTime > 400) {
+            lastStdoutIpcTime = now;
+            mainWindow.webContents.send('info-message', `[Game stdout] ${message}`);
+          }
+        }
       });
 
       child.stderr?.on('data', (data) => {
+        if (isLaunchCancelled) return;
         const message = data.toString().trim();
         if (!message) return;
         console.error('[Game stderr]', message);
         presenceManager.handleGameLog(message);
-        if (mainWindow) mainWindow.webContents.send('info-message', `[Game stderr] ${message}`);
+        const now = Date.now();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          if (now - lastStdoutIpcTime > 400) {
+            lastStdoutIpcTime = now;
+            mainWindow.webContents.send('info-message', `[Game stderr] ${message}`);
+          }
+        }
       });
 
-      child.on('close', () => {
-        console.log("[Launch] Game process closed");
+      child.on('close', (exitCode) => {
+        console.log("[Launch] Game process closed", exitCode);
+        if (streakSessionTimer) {
+          clearTimeout(streakSessionTimer);
+          streakSessionTimer = null;
+        }
         activeGameProcesses.delete(child);
         if (activeGameProcesses.size === 0) {
           currentGameProcess = null;
-          presenceManager.safeRun(presenceManager.onGameClosed());
-          if (mainWindow) mainWindow.webContents.send('info-message', "Game Closed");
+          handleLauncherClose(exitCode);
         }
       });
 
       child.on('error', (err) => {
         console.error("[Launch] Process Error:", err);
+        if (streakSessionTimer) {
+          clearTimeout(streakSessionTimer);
+          streakSessionTimer = null;
+        }
         activeGameProcesses.delete(child);
         if (activeGameProcesses.size === 0) {
           currentGameProcess = null;
-          presenceManager.safeRun(presenceManager.onGameClosed());
+          handleLauncherClose(err);
         }
-        if (mainWindow) mainWindow.webContents.send('error', "Process Error: " + err.message);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('error', "Process Error: " + err.message);
+        }
       });
     }).catch(err => {
+      isStartingGame = false;
+      if (streakSessionTimer) {
+        clearTimeout(streakSessionTimer);
+        streakSessionTimer = null;
+      }
+      streakCountedThisRun = false;
+      gameStartTime = null;
       console.error("[Launch] Launcher Error:", err);
       presenceManager.safeRun(presenceManager.onGameClosed());
-      if (mainWindow) mainWindow.webContents.send('error', "Launch Failed: " + err.message);
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('error', "Launch Failed: " + err.message);
     });
 
     // 5. Update Metadata
     try {
       profile.last_played = new Date().toISOString();
       profileManager.saveProfiles({ profiles });
+      if (typeof updateTrayMenu === 'function') {
+        try { updateTrayMenu(); } catch (_) {}
+      }
     } catch (e) { }
 
     return { success: true };
   } catch (e) {
+    isStartingGame = false;
     console.error("[Launch] Critical Exception:", e);
     return { success: false, error: e.message };
   }
@@ -4945,17 +6508,43 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
 ipcMain.handle('cancel-launch', async () => {
   try {
     isLaunchCancelled = true;
+    isStartingGame = false;
+    if (streakSessionTimer) {
+      clearTimeout(streakSessionTimer);
+      streakSessionTimer = null;
+    }
+    streakCountedThisRun = false;
+    gameStartTime = null;
+    if (launcher) launcher._cancelled = true;
+    if (launcher && launcher.handler) launcher.handler._cancelled = true;
+    // Yield to allow UI animations and window message queue to process cleanly
+    await new Promise(resolve => setTimeout(resolve, 10));
+
     if (currentGameProcess && currentGameProcess.pid) {
-      process.kill(currentGameProcess.pid, 'SIGKILL');
-      console.log('[cancel-launch] Killed game process');
+      const pid = currentGameProcess.pid;
+      console.log('[cancel-launch] Killing game process tree for PID:', pid);
+      try {
+        if (process.platform === 'win32') {
+          const { exec } = require('child_process');
+          exec(`taskkill /pid ${pid} /T /F`, (err) => {
+            if (err) console.warn('[cancel-launch] taskkill note:', err.message);
+          });
+        } else {
+          process.kill(pid, 'SIGKILL');
+        }
+      } catch (killErr) {
+        console.warn('[cancel-launch] Process kill error:', killErr.message);
+      }
       activeGameProcesses.delete(currentGameProcess);
       if (activeGameProcesses.size === 0) {
         currentGameProcess = null;
       }
+      handleLauncherClose('cancelled');
       return { success: true };
     }
-    return { success: true, message: 'Launch marked as cancelled (pending process kill)' };
+    return { success: true, message: 'Launch marked as cancelled' };
   } catch (e) {
+    isStartingGame = false;
     console.error('[cancel-launch] Error killing:', e);
     return { success: false, error: e.message };
   }
@@ -5075,6 +6664,55 @@ ipcMain.handle('stats-get-user', async (e, targetUid) => {
   } catch (e) {
     if (e.message === 'NO_SOCIAL_AUTH') return { success: false, error: 'offline' };
     return { success: true, stats: { streak: 0, totalHours: 0, totalSessions: 0, totalDaysPlayed: 0, streakCompletedToday: false } };
+  }
+});
+
+ipcMain.handle('stats-revert-today-streak', async () => {
+  try {
+    const auth = await getSocialAuth().catch(() => null);
+    if (!auth) return { success: false, error: 'NO_AUTH' };
+
+    let stats;
+    try {
+      stats = await fsGet(`users/${auth.uid}/stats/main`, auth.idToken);
+    } catch (e) {
+      return { success: false, error: 'NO_STATS' };
+    }
+    if (!stats || !stats.lastPlayed) return { success: false, error: 'NO_STATS' };
+
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const lastDate = new Date(stats.lastPlayed).toISOString().split('T')[0];
+
+    if (lastDate !== todayStr) {
+      return { success: false, message: 'Streak was not recorded today' };
+    }
+
+    const newStreak = Math.max(0, (stats.streak || 1) - 1);
+    const newSessions = Math.max(0, (stats.totalSessions || 1) - 1);
+    const newDays = Math.max(0, (stats.totalDaysPlayed || 1) - 1);
+
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const updates = {
+      ...stats,
+      streak: newStreak,
+      totalSessions: newSessions,
+      totalDaysPlayed: newDays,
+      lastPlayed: newStreak > 0 ? yesterday.getTime() : 0
+    };
+
+    await fsSet(`users/${auth.uid}/stats/main`, updates, auth.idToken);
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('stats-updated');
+    }
+
+    return { success: true, newStreak };
+  } catch (e) {
+    console.error('[Stats] Error reverting today streak:', e.message);
+    return { success: false, error: e.message };
   }
 });
 
@@ -5591,6 +7229,82 @@ ipcMain.handle('social-mark-read', async (e, targetFriendshipId) => {
   }
 });
 
+const localReadInboxMsgIds = new Map(); // uid -> Set of read msgIds
+
+function getReadMsgsCachePath() {
+  try {
+    return path.join(app.getPath('userData'), 'read_inbox_cache.json');
+  } catch (_) {
+    return null;
+  }
+}
+
+function loadLocalReadInboxMsgs() {
+  try {
+    const p = getReadMsgsCachePath();
+    if (p && fs.existsSync(p)) {
+      const data = fs.readJsonSync(p);
+      for (const [uid, ids] of Object.entries(data)) {
+        localReadInboxMsgIds.set(uid, new Set(ids));
+      }
+    }
+  } catch (_) {}
+}
+
+function saveLocalReadInboxMsgs() {
+  try {
+    const p = getReadMsgsCachePath();
+    if (p) {
+      const obj = {};
+      for (const [uid, set] of localReadInboxMsgIds.entries()) {
+        obj[uid] = [...set];
+      }
+      fs.writeJsonSync(p, obj);
+    }
+  } catch (_) {}
+}
+
+loadLocalReadInboxMsgs();
+
+const userSentInboxCache = new Map(); // uid -> Array of sent message objects
+
+function getSentMsgsCachePath() {
+  try {
+    return path.join(app.getPath('userData'), 'sent_inbox_cache.json');
+  } catch (_) {
+    return null;
+  }
+}
+
+function loadLocalSentInboxMsgs() {
+  try {
+    const p = getSentMsgsCachePath();
+    if (p && fs.existsSync(p)) {
+      const data = fs.readJsonSync(p);
+      for (const [uid, msgs] of Object.entries(data)) {
+        if (Array.isArray(msgs)) {
+          userSentInboxCache.set(uid, msgs);
+        }
+      }
+    }
+  } catch (_) {}
+}
+
+function saveLocalSentInboxMsgs() {
+  try {
+    const p = getSentMsgsCachePath();
+    if (p) {
+      const obj = {};
+      for (const [uid, msgs] of userSentInboxCache.entries()) {
+        obj[uid] = msgs;
+      }
+      fs.writeJsonSync(p, obj);
+    }
+  } catch (_) {}
+}
+
+loadLocalSentInboxMsgs();
+
 ipcMain.handle('social-get-badge-counts', async () => {
   try {
     const auth = await getSocialAuth();
@@ -5598,13 +7312,30 @@ ipcMain.handle('social-get-badge-counts', async () => {
       { field: 'toUid', op: 'EQUAL', value: { stringValue: auth.uid } }
     ], auth.idToken, null, 100);
     const received = allRecv.filter(r => r.status === 'pending');
-    const friendships = await fsQuery('friendships', [
-      { field: 'users', op: 'ARRAY_CONTAINS', value: { stringValue: auth.uid } }
-    ], auth.idToken, null, 100);
+
     let totalUnread = 0;
-    for (const fs of friendships) {
-      try { const ud = await fsGet(`friendships/${fs.id}/unread/${auth.uid}`, auth.idToken); totalUnread += ud.count || 0; } catch (_) { }
+    const localReadSet = localReadInboxMsgIds.get(auth.uid) || new Set();
+    const cachedMsgs = userInboxCache.get(auth.uid);
+    if (cachedMsgs) {
+      totalUnread = cachedMsgs.filter(m => m.senderId !== auth.uid && !m.isSentCopy && m.read === false && !localReadSet.has(m.id)).length;
+    } else {
+      try {
+        const res = await axios.get(
+          `${FIRESTORE_BASE}/users/${auth.uid}/inbox?pageSize=100`,
+          { headers: { Authorization: `Bearer ${auth.idToken}` } }
+        );
+        if (res.data && res.data.documents) {
+          const msgs = res.data.documents.map(doc => ({
+            id: doc.name.split('/').pop(),
+            ...parseFirestoreFields(doc.fields)
+          }));
+          const filtered = msgs.filter(m => m.senderId !== auth.uid && !m.isSentCopy);
+          userInboxCache.set(auth.uid, filtered);
+          totalUnread = filtered.filter(m => m.read === false && !localReadSet.has(m.id)).length;
+        }
+      } catch (_) {}
     }
+
     return { success: true, pendingRequests: received.length, unreadMessages: totalUnread };
   } catch (e) {
     if (e.message === 'NO_SOCIAL_AUTH') return { success: true, pendingRequests: 0, unreadMessages: 0 };
@@ -5672,16 +7403,336 @@ ipcMain.handle('social-remove-group-member', async (e, groupId, memberUid) => {
   }
 });
 
+// --- Social Inbox IPC Handlers ---
+ipcMain.handle('social-inbox-get', async (e, beforeTimestamp = null) => {
+  try {
+    const auth = await getSocialAuth();
+    if (!auth || !auth.idToken) return { success: false, messages: [] };
+
+    let messages = userInboxCache.get(auth.uid);
+    if (!messages) {
+      // Fetch once if cache is not yet populated
+      try {
+        const res = await axios.get(`${FIRESTORE_BASE}/users/${auth.uid}/inbox?pageSize=100`, {
+          headers: { Authorization: `Bearer ${auth.idToken}` }
+        });
+        if (res.data && res.data.documents) {
+          messages = res.data.documents.map(doc => ({
+            id: doc.name.split('/').pop(),
+            ...parseFirestoreFields(doc.fields)
+          }));
+        }
+      } catch (err) {
+        console.warn('[Social] Could not fetch users/' + auth.uid + '/inbox:', err.message);
+      }
+
+      if (messages && messages.length > 0) {
+        const sentCopies = messages.filter(m => m.isSentCopy === true || m.senderId === auth.uid);
+        if (sentCopies.length > 0) {
+          const currentSent = userSentInboxCache.get(auth.uid) || [];
+          const sentMap = new Map(currentSent.map(m => [m.id, m]));
+          for (const sc of sentCopies) {
+            if (!sentMap.has(sc.id)) sentMap.set(sc.id, sc);
+          }
+          userSentInboxCache.set(auth.uid, Array.from(sentMap.values()));
+          saveLocalSentInboxMsgs();
+        }
+      }
+
+      messages = (messages || []).filter(m => m.senderId !== auth.uid && !m.isSentCopy);
+      userInboxCache.set(auth.uid, messages);
+      console.log(`[Social] Initial load: cached ${messages.length} inbox messages for ${auth.uid}`);
+    }
+
+    // Apply local read set
+    const localReadSet = localReadInboxMsgIds.get(auth.uid) || new Set();
+    let result = messages.map(m => ({
+      ...m,
+      read: m.read === true || localReadSet.has(m.id)
+    }));
+
+    // Filter by timestamp if paging
+    if (beforeTimestamp) {
+      result = result.filter(m => {
+        const t = typeof m.timestamp === 'string' ? new Date(m.timestamp).getTime() : (Number(m.timestamp) || 0);
+        return t < beforeTimestamp;
+      });
+    }
+
+    // Sort descending by timestamp (newest first)
+    result.sort((a, b) => {
+      const ta = typeof a.timestamp === 'string' ? new Date(a.timestamp).getTime() : (Number(a.timestamp) || 0);
+      const tb = typeof b.timestamp === 'string' ? new Date(b.timestamp).getTime() : (Number(b.timestamp) || 0);
+      return tb - ta;
+    });
+
+    return { success: true, messages: result, lastRead: Date.now() };
+  } catch (e) {
+    console.error('[Social] Error in social-inbox-get:', e.message);
+    return { success: false, error: e.message, messages: [] };
+  }
+});
+
+ipcMain.handle('social-inbox-send', async (e, recipientUids, content, type = 'text', recipientNames = []) => {
+  try {
+    const auth = await getSocialAuth();
+    if (!auth || !auth.idToken) return { success: false, error: 'NO_AUTH' };
+    const senderName = auth.username || auth.displayName || 'User';
+    const now = Date.now();
+    const targets = Array.isArray(recipientUids) ? recipientUids : [recipientUids];
+    const names = Array.isArray(recipientNames) ? recipientNames : (recipientNames ? [recipientNames] : []);
+
+    // Create and save sent record for sender
+    const sentId = `${now}_${Math.random().toString(36).slice(2)}`;
+    const sentRecord = {
+      id: sentId,
+      senderId: auth.uid,
+      senderName,
+      recipientUids: targets,
+      recipientNames: names,
+      recipientUid: targets[0] || '',
+      content,
+      type,
+      timestamp: now,
+      read: true,
+      isSentCopy: true
+    };
+
+    if (!userSentInboxCache.has(auth.uid)) {
+      userSentInboxCache.set(auth.uid, []);
+    }
+    const sentList = userSentInboxCache.get(auth.uid);
+    sentList.unshift(sentRecord);
+    if (sentList.length > 200) sentList.length = 200;
+    saveLocalSentInboxMsgs();
+
+    // 1. Save sent copy in user's own inbox subcollection (uses existing Firestore rules for inbox)
+    fsSet(`users/${auth.uid}/inbox/${sentId}`, sentRecord, auth.idToken).catch((err) => {
+      console.warn('[Social] Could not save sent copy in users/' + auth.uid + '/inbox:', err.message);
+    });
+
+    // 2. Also attempt users/${auth.uid}/sent/${sentId} (if sent rules enabled in Firestore)
+    fsSet(`users/${auth.uid}/sent/${sentId}`, sentRecord, auth.idToken).catch(() => {});
+
+    for (const target of targets) {
+      if (target === auth.uid) continue;
+
+      const msgId = `${now}_${Math.random().toString(36).slice(2)}`;
+      const msgData = {
+        id: msgId,
+        senderId: auth.uid,
+        senderName,
+        recipientUid: target,
+        recipientNames: names,
+        content,
+        type,
+        timestamp: now,
+        read: false
+      };
+
+      try {
+        await fsSet(`users/${target}/inbox/${msgId}`, msgData, auth.idToken);
+      } catch (err) {
+        console.warn(`[Social] Failed to set users/${target}/inbox/${msgId}:`, err.message);
+        try {
+          await fsSet(`inbox/${msgId}`, msgData, auth.idToken);
+        } catch (_) {}
+      }
+    }
+
+    return { success: true, sentRecord };
+  } catch (e) {
+    console.error('[Social] social-inbox-send error:', e.message);
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('social-inbox-get-sent', async (e, beforeTimestamp = null) => {
+  try {
+    const auth = await getSocialAuth();
+    if (!auth || !auth.idToken) return { success: false, messages: [] };
+
+    let messages = userSentInboxCache.get(auth.uid) || [];
+    if (!messages || messages.length === 0) {
+      const foundMsgs = [];
+      const seenIds = new Set();
+
+      // Check users/${auth.uid}/inbox for sent copies
+      try {
+        const res = await axios.get(`${FIRESTORE_BASE}/users/${auth.uid}/inbox?pageSize=100`, {
+          headers: { Authorization: `Bearer ${auth.idToken}` }
+        });
+        if (res.data && res.data.documents) {
+          const docs = res.data.documents.map(doc => ({
+            id: doc.name.split('/').pop(),
+            ...parseFirestoreFields(doc.fields)
+          }));
+          const sentCopies = docs.filter(m => m.isSentCopy === true || m.senderId === auth.uid);
+          for (const m of sentCopies) {
+            if (!seenIds.has(m.id)) {
+              seenIds.add(m.id);
+              foundMsgs.push(m);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[Social] Could not check users/' + auth.uid + '/inbox for sent copies:', err.message);
+      }
+
+      // Also try users/${auth.uid}/sent if allowed
+      try {
+        const res = await axios.get(`${FIRESTORE_BASE}/users/${auth.uid}/sent?pageSize=100`, {
+          headers: { Authorization: `Bearer ${auth.idToken}` }
+        });
+        if (res.data && res.data.documents) {
+          const remoteMsgs = res.data.documents.map(doc => ({
+            id: doc.name.split('/').pop(),
+            ...parseFirestoreFields(doc.fields)
+          }));
+          for (const m of remoteMsgs) {
+            if (!seenIds.has(m.id)) {
+              seenIds.add(m.id);
+              foundMsgs.push(m);
+            }
+          }
+        }
+      } catch (_) {}
+
+      if (foundMsgs.length > 0) {
+        userSentInboxCache.set(auth.uid, foundMsgs);
+        saveLocalSentInboxMsgs();
+        messages = foundMsgs;
+      }
+    }
+
+    let result = messages ? [...messages] : [];
+
+    if (beforeTimestamp) {
+      result = result.filter(m => {
+        const t = typeof m.timestamp === 'string' ? new Date(m.timestamp).getTime() : (Number(m.timestamp) || 0);
+        return t < beforeTimestamp;
+      });
+    }
+
+    result.sort((a, b) => {
+      const ta = typeof a.timestamp === 'string' ? new Date(a.timestamp).getTime() : (Number(a.timestamp) || 0);
+      const tb = typeof b.timestamp === 'string' ? new Date(b.timestamp).getTime() : (Number(b.timestamp) || 0);
+      return tb - ta;
+    });
+
+    return { success: true, messages: result };
+  } catch (e) {
+    console.error('[Social] Error in social-inbox-get-sent:', e.message);
+    return { success: false, error: e.message, messages: [] };
+  }
+});
+
+ipcMain.handle('social-inbox-mark-read', async (e, msgId) => {
+  try {
+    const auth = await getSocialAuth();
+    if (!auth || !auth.uid) return { success: false, error: 'NO_AUTH' };
+
+    if (!localReadInboxMsgIds.has(auth.uid)) {
+      localReadInboxMsgIds.set(auth.uid, new Set());
+    }
+    localReadInboxMsgIds.get(auth.uid).add(msgId);
+    saveLocalReadInboxMsgs();
+
+    const cached = userInboxCache.get(auth.uid);
+    if (cached) {
+      const targetMsg = cached.find(m => m.id === msgId);
+      if (targetMsg) targetMsg.read = true;
+    }
+
+    // Try updating Firestore
+    try {
+      await fsSet(`users/${auth.uid}/inbox/${msgId}`, { read: true }, auth.idToken, ['read']);
+    } catch (fsErr) {
+      console.warn(`[Social] Could not update Firestore read status for ${msgId}:`, fsErr.message);
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('[Social] social-inbox-mark-read error:', err.message);
+    return { success: false, error: err.message };
+  }
+});
+
 ipcMain.handle('get-user-profile', async (e, uid) => {
   try {
     const auth = await getSocialAuth();
     // Fetch user data from Firestore users collection
     const userDoc = await fsGet(`users/${uid}`, auth.idToken);
     const presence = await fetchPresenceForUser(uid, auth);
-    return { success: true, data: userDoc, presence };
+
+    // Determine mod/admin status by checking admins/ collection
+    let isModerator = false;
+    let isAdmin = false;
+    try {
+      const adminDoc = await fsGet(`admins/${uid}`, auth.idToken);
+      if (adminDoc) {
+        const role = (adminDoc.role || 'admin').toLowerCase();
+        if (role === 'admin' || role === 'owner') { isAdmin = true; isModerator = true; }
+        else if (role === 'moderator' || role === 'mod') { isModerator = true; }
+      }
+    } catch (_) {}
+
+    // Build badges array, merging Firestore badges with role-based ones
+    const badges = Array.isArray(userDoc && userDoc.badges) ? [...userDoc.badges] : [];
+
+    // AUTO-MIGRATION (read-only): legacy verified MS users who don't have the badges field yet
+    if (userDoc && userDoc.microsoftVerified === true && !badges.includes('premium')) {
+      badges.push('premium');
+    }
+    // Merge moderator badge from admin doc (no Firestore write here)
+    if (isModerator && !badges.includes('moderator')) badges.push('moderator');
+
+    return { success: true, data: { ...(userDoc || {}), badges }, isModerator, isAdmin, presence };
   } catch (e) {
     console.error('[get-user-profile] Error:', e);
     return { success: false, error: e.message };
+  }
+});
+
+// Fetch current user's own badges (for the account button in the launcher header)
+ipcMain.handle('get-own-badges', async () => {
+  try {
+    const auth = await getSocialAuth();
+    const userDoc = await fsGet(`users/${auth.uid}`, auth.idToken);
+    const badges = Array.isArray(userDoc && userDoc.badges) ? [...userDoc.badges] : [];
+
+    // AUTO-MIGRATION: if this is a verified Microsoft user without the premium badge yet, add it now
+    let needsWrite = false;
+    if (userDoc && userDoc.microsoftVerified === true && !badges.includes('premium')) {
+      badges.push('premium');
+      needsWrite = true;
+    }
+
+    // Also check admins/ collection for the current user
+    try {
+      const adminDoc = await fsGet(`admins/${auth.uid}`, auth.idToken);
+      if (adminDoc) {
+        const role = (adminDoc.role || 'admin').toLowerCase();
+        if ((role === 'admin' || role === 'owner' || role === 'moderator' || role === 'mod') && !badges.includes('moderator')) {
+          badges.push('moderator');
+          needsWrite = true;
+        }
+      }
+    } catch (_) {}
+
+    // Write badges back to Firestore if a migration happened
+    if (needsWrite) {
+      try {
+        await fsUpdate(`users/${auth.uid}`, { badges }, auth.idToken);
+        console.log(`[Badges] Auto-migrated badges for ${auth.uid}:`, badges);
+      } catch (writeErr) {
+        console.warn('[Badges] Could not write migrated badges:', writeErr.message);
+      }
+    }
+
+    return { success: true, badges };
+  } catch (e) {
+    return { success: true, badges: [] }; // fail silently, badges are non-critical
   }
 });
 
@@ -5773,6 +7824,25 @@ ipcMain.handle('social-get-group-details', async (e, groupId) => {
   }
 });
 
+ipcMain.handle('get-my-presence-server', async () => {
+  try {
+    const serverIp = presenceManager?.currentState?.serverIp || presenceManager?.lastServerIp || '';
+    return { success: true, serverIp };
+  } catch (err) {
+    return { success: true, serverIp: '' };
+  }
+});
+
+ipcMain.handle('get-server-history', async () => {
+  try {
+    const history = await getServerHistory(paths.getMcDir());
+    return { success: true, history };
+  } catch (err) {
+    console.warn('[IPC] get-server-history failed:', err.message);
+    return { success: true, history: [] };
+  }
+});
+
 
 // ============================================================
 // WORKSHOP SYSTEM - IPC Handlers
@@ -5789,36 +7859,115 @@ function _wkDec(str) {
   return str;
 }
 
-async function _wkAdminCheck(idToken) {
+async function _wkGetUserRoles(idToken) {
+  if (!idToken) return { isAdmin: false, isMod: false };
   try {
     const parts = idToken.split('.');
+    if (parts.length < 2) return { isAdmin: false, isMod: false };
     const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
     const uid = payload.user_id || payload.sub || '';
-    const currentSecrets = loadSecrets();
-    const rawAdmin = currentSecrets.WORKSHOP_ADMIN_UID || APP_SECRETS.WORKSHOP_ADMIN_UID || '';
-    const adminUid = _wkDec(rawAdmin) || rawAdmin;
-    return uid === rawAdmin || uid === adminUid;
-  } catch(e) { return false; }
+    if (!uid) return { isAdmin: false, isMod: false };
+
+    const cached = _roleCache.get(uid);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.roles;
+    }
+
+    let isAdmin = false;
+    let isMod = false;
+
+    // 1. Secrets fallback check
+    try {
+      const currentSecrets = loadSecrets();
+      const rawAdmin = currentSecrets.WORKSHOP_ADMIN_UID || APP_SECRETS.WORKSHOP_ADMIN_UID || '';
+      const adminUid = _wkDec(rawAdmin) || rawAdmin;
+      if (adminUid && (uid === rawAdmin || uid === adminUid)) {
+        isAdmin = true;
+        isMod = true;
+      }
+      let mods = currentSecrets.WORKSHOP_MODERATOR_UIDS || APP_SECRETS.WORKSHOP_MODERATOR_UIDS || [];
+      if (typeof mods === 'string') {
+        mods = mods.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      if (Array.isArray(mods)) {
+        for (const m of mods) {
+          const decM = _wkDec(m) || m;
+          if (uid === m || uid === decM) {
+            isMod = true;
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (isAdmin && isMod) {
+      const roles = { isAdmin: true, isMod: true };
+      _roleCache.set(uid, { roles, expiresAt: Date.now() + 5 * 60 * 1000 });
+      return roles;
+    }
+
+    // 2. Candidate UIDs (primary UID + linked account UIDs for current user only)
+    const candidateUids = new Set([uid]);
+    try {
+      const ud = loadUserData();
+      if (ud.firebase_uid === uid || ud.firebase_ms_uid === uid || ud.uuid === uid) {
+        if (ud.firebase_uid) candidateUids.add(ud.firebase_uid);
+        if (ud.firebase_ms_uid) candidateUids.add(ud.firebase_ms_uid);
+      }
+    } catch (_) {}
+
+    // 3. Query Firestore admins/ collection
+    for (const cUid of candidateUids) {
+      try {
+        const doc = await fsGet(`admins/${cUid}`, idToken);
+        if (doc) {
+          const role = (doc.role || 'admin').toLowerCase();
+          if (role === 'admin' || role === 'owner') {
+            isAdmin = true;
+            isMod = true;
+            break;
+          } else if (role === 'moderator' || role === 'mod') {
+            isMod = true;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 4. Fallback check: users/ doc role
+    if (!isAdmin) {
+      for (const cUid of candidateUids) {
+        try {
+          const userDoc = await fsGet(`users/${cUid}`, idToken);
+          if (userDoc) {
+            const role = (userDoc.role || '').toLowerCase();
+            if (role === 'admin' || role === 'owner') {
+              isAdmin = true;
+              isMod = true;
+              break;
+            } else if (role === 'moderator' || role === 'mod') {
+              isMod = true;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    const roles = { isAdmin, isMod: isMod || isAdmin };
+    _roleCache.set(uid, { roles, expiresAt: Date.now() + 5 * 60 * 1000 });
+    return roles;
+  } catch (e) {
+    console.warn('[_wkGetUserRoles] Error:', e.message);
+    return { isAdmin: false, isMod: false };
+  }
+}
+
+async function _wkAdminCheck(idToken) {
+  const roles = await _wkGetUserRoles(idToken);
+  return roles.isAdmin;
 }
 
 async function _wkModCheck(idToken) {
-  try {
-    if (await _wkAdminCheck(idToken)) return true;
-    const parts = idToken.split('.');
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
-    const uid = payload.user_id || payload.sub || '';
-    const currentSecrets = loadSecrets();
-    let mods = currentSecrets.WORKSHOP_MODERATOR_UIDS || APP_SECRETS.WORKSHOP_MODERATOR_UIDS || [];
-    if (typeof mods === 'string') {
-      mods = mods.split(',').map(s => s.trim()).filter(Boolean);
-    }
-    if (!Array.isArray(mods)) return false;
-    for (const m of mods) {
-      const decM = _wkDec(m) || m;
-      if (uid === m || uid === decM) return true;
-    }
-    return false;
-  } catch(e) { return false; }
+  const roles = await _wkGetUserRoles(idToken);
+  return roles.isMod;
 }
 
 async function _wkNotifyAdmin(item, authorName) {
@@ -5877,6 +8026,113 @@ async function _wkNotifyAdmin(item, authorName) {
     console.warn('[Workshop] No Discord webhook URL configured.');
   }
 }
+
+// --- Workshop Configs Packaging & Extraction ---
+function packageProfileConfigs(profileDir) {
+  try {
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip();
+    let hasFiles = false;
+
+    const configPath = path.join(profileDir, 'config');
+    const defConfigPath = path.join(profileDir, 'defaultconfigs');
+    const optionsPath = path.join(profileDir, 'options.txt');
+
+    const addFolderFiltered = (localDir, zipPrefix) => {
+      if (!fs.existsSync(localDir)) return;
+      const entries = fs.readdirSync(localDir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(localDir, entry.name);
+        const zipEntryDir = zipPrefix || '';
+        if (entry.isDirectory()) {
+          addFolderFiltered(fullPath, zipPrefix ? `${zipPrefix}/${entry.name}` : entry.name);
+        } else if (entry.isFile()) {
+          const lower = entry.name.toLowerCase();
+          // Filter out logs, crash reports, cache and backup files
+          if (lower.endsWith('.log') || lower.endsWith('.gz') || lower.endsWith('.bak') || lower.endsWith('.tmp') || lower.endsWith('.old')) continue;
+          try {
+            const stat = fs.statSync(fullPath);
+            if (stat.size > 2 * 1024 * 1024) continue; // Skip single files > 2MB
+            zip.addLocalFile(fullPath, zipEntryDir);
+            hasFiles = true;
+          } catch (_) {}
+        }
+      }
+    };
+
+    if (fs.existsSync(configPath)) {
+      addFolderFiltered(configPath, 'config');
+    }
+    if (fs.existsSync(defConfigPath)) {
+      addFolderFiltered(defConfigPath, 'defaultconfigs');
+    }
+    if (fs.existsSync(optionsPath)) {
+      try {
+        zip.addLocalFile(optionsPath, '');
+        hasFiles = true;
+      } catch (_) {}
+    }
+
+    if (!hasFiles) return null;
+
+    const buffer = zip.toBuffer();
+    // Keep zip buffer under 550KB so base64 string is <= 733KB, well within Firestore's 1MB document limit
+    if (buffer.length > 550 * 1024) {
+      console.warn('[packageProfileConfigs] Configs zip exceeds 550KB, skipping to protect Firestore document size:', buffer.length);
+      return null;
+    }
+    console.log(`[packageProfileConfigs] Successfully packaged configs (${buffer.length} bytes compressed)`);
+    return buffer.toString('base64');
+  } catch (err) {
+    console.error('[packageProfileConfigs] Error:', err.message);
+    return null;
+  }
+}
+
+function extractProfileConfigs(profileDir, configZipB64) {
+  if (!configZipB64 || typeof configZipB64 !== 'string') return { success: true };
+  try {
+    const AdmZip = require('adm-zip');
+    const buffer = Buffer.from(configZipB64, 'base64');
+    const zip = new AdmZip(buffer);
+    fs.ensureDirSync(profileDir);
+    zip.extractAllTo(profileDir, true);
+    console.log(`[extractProfileConfigs] Extracted configs to ${profileDir}`);
+    return { success: true };
+  } catch (err) {
+    console.error('[extractProfileConfigs] Error:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+ipcMain.handle('workshop-package-profile', async (e, profileId) => {
+  try {
+    const profiles = profileManager.loadProfiles().profiles;
+    const profile = profiles[profileId];
+    if (!profile) return { success: false, error: 'Profile not found' };
+    const mcDir = paths.getMcDir();
+    const profileDir = profile.directory || mcDir;
+    const configZipB64 = packageProfileConfigs(profileDir);
+    return { success: true, configZipB64 };
+  } catch (err) {
+    console.error('[workshop-package-profile]', err.message);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('workshop-extract-configs', async (e, { profile_id, configZipB64 }) => {
+  try {
+    const profiles = profileManager.loadProfiles().profiles;
+    const profile = profiles[profile_id];
+    if (!profile) return { success: false, error: 'Profile not found' };
+    const mcDir = paths.getMcDir();
+    const profileDir = profile.directory || mcDir;
+    return extractProfileConfigs(profileDir, configZipB64);
+  } catch (err) {
+    console.error('[workshop-extract-configs]', err.message);
+    return { success: false, error: err.message };
+  }
+});
 
 // GET items (pub = approved public items)
 function wkParseItem(item) {
@@ -5985,6 +8241,10 @@ ipcMain.handle('workshop-submit-item', async (e, data) => {
     // Addons as JSON string (Firestore array of maps is complex)
     if (snap.addons && snap.addons.length > 0) {
       snapFields.addonsJson = { stringValue: JSON.stringify(snap.addons) };
+    }
+    // Configs & options as Base64 ZIP
+    if (snap.configZipB64 && typeof snap.configZipB64 === 'string') {
+      snapFields.configZipB64 = { stringValue: snap.configZipB64 };
     }
 
     const fields = buildFSFields(docData);
@@ -6097,9 +8357,8 @@ ipcMain.handle('workshop-check-admin', async () => {
   try {
     const auth = await getSocialAuth();
     if (!auth || !auth.idToken) return { success: true, isAdmin: false, isMod: false };
-    const isAdmin = await _wkAdminCheck(auth.idToken);
-    const isMod = await _wkModCheck(auth.idToken);
-    return { success: true, isAdmin, isMod };
+    const roles = await _wkGetUserRoles(auth.idToken);
+    return { success: true, isAdmin: roles.isAdmin, isMod: roles.isMod };
   } catch(e) {
     return { success: true, isAdmin: false, isMod: false };
   }
@@ -6174,11 +8433,70 @@ ipcMain.handle('workshop-delete-item', async (e, id) => {
     return { success: false, error: e.message };
   }
 });
-// Required for Windows toast notifications - must be before app.whenReady()
-if (process.platform === 'win32') app.setAppUserModelId('com.abelosky.helloworldlauncher');
+// Windows shortcut maintenance helper
+
+function ensureWindowsShortcut() {
+  if (process.platform !== 'win32') return;
+  try {
+    const startMenuDir = path.join(
+      app.getPath('appData'),
+      'Microsoft', 'Windows', 'Start Menu', 'Programs'
+    );
+    if (!fs.existsSync(startMenuDir)) {
+      fs.mkdirSync(startMenuDir, { recursive: true });
+    }
+    const shortcutPath = path.join(startMenuDir, 'HelloWorld Launcher.lnk');
+
+    let iconPath = path.join(__dirname, 'build', 'icon.ico');
+    if (!fs.existsSync(iconPath)) {
+      iconPath = process.execPath;
+    }
+
+    const shortcutOptions = {
+      target: process.execPath,
+      args: app.isPackaged ? '' : `"${app.getAppPath()}"`,
+      cwd: path.dirname(process.execPath),
+      appUserModelId: 'com.abelosky.helloworldlauncher',
+      description: 'HelloWorld Launcher',
+      icon: iconPath,
+      iconIndex: 0
+    };
+
+    let needWrite = true;
+    if (fs.existsSync(shortcutPath)) {
+      try {
+        const current = shell.readShortcutLink(shortcutPath);
+        if (current.appUserModelId === 'com.abelosky.helloworldlauncher' && current.target === process.execPath) {
+          needWrite = false;
+        }
+      } catch (_) {}
+    }
+
+    if (needWrite) {
+      shell.writeShortcutLink(shortcutPath, fs.existsSync(shortcutPath) ? 'replace' : 'create', shortcutOptions);
+      console.log('[WindowsShortcut] Ensured Start Menu shortcut with AppUserModelId:', shortcutPath);
+    }
+
+    // Also update Desktop shortcut with AppUserModelId if present
+    try {
+      const desktopPath = path.join(app.getPath('desktop'), 'HelloWorld Launcher.lnk');
+      if (fs.existsSync(desktopPath)) {
+        const currentDesktop = shell.readShortcutLink(desktopPath);
+        if (currentDesktop.appUserModelId !== 'com.abelosky.helloworldlauncher' || currentDesktop.target !== process.execPath) {
+          shell.writeShortcutLink(desktopPath, 'replace', shortcutOptions);
+          console.log('[WindowsShortcut] Updated Desktop shortcut with AppUserModelId:', desktopPath);
+        }
+      }
+    } catch (_) {}
+  } catch (e) {
+    console.error('[WindowsShortcut] Error updating shortcuts:', e.message);
+  }
+}
 
 // --- App Events ---
 app.whenReady().then(() => {
+  ensureWindowsShortcut();
+  getNotificationIconPath();
   // Ensure default profile images exist in user data
   try {
     const srcDir = path.join(__dirname, 'ui', 'img', 'profiles');
@@ -6220,17 +8538,27 @@ app.whenReady().then(() => {
   });
 
   createWindow();
+  createTray();
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    } else {
+      showAndFocusWindow();
+    }
   });
 });
 
 app.on('window-all-closed', async () => {
+  if (!isQuitting) return;
   await presenceManager.setOffline();
   if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('before-quit', async () => {
+  isQuitting = true;
+  if (tray && !tray.isDestroyed()) {
+    try { tray.destroy(); } catch (_) {}
+  }
   console.log("App closing, cleaning up processes...");
 
   // Set presence to offline when launcher closes (await to ensure it completes)

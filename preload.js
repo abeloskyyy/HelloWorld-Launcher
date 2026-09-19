@@ -1,4 +1,15 @@
-const { contextBridge, ipcRenderer } = require('electron')
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
+
+// Restore UI Scale immediately before DOM renders to prevent flicker
+try {
+    const savedScale = localStorage.getItem('hw_launcher_scale');
+    if (savedScale) {
+        const factor = parseFloat(savedScale);
+        if (!isNaN(factor) && factor >= 0.45 && factor <= 1.55) {
+            webFrame.setZoomFactor(factor);
+        }
+    }
+} catch (e) {}
 
 // --- Modern API (New Features) ---
 contextBridge.exposeInMainWorld('hwlAPI', {
@@ -9,7 +20,7 @@ contextBridge.exposeInMainWorld('hwlAPI', {
     logout: () => ipcRenderer.invoke('logout'),
     // Account Switcher
     getSavedAccounts: () => ipcRenderer.invoke('get-saved-accounts'),
-    switchAccount: (accountId) => ipcRenderer.invoke('switch-account', accountId),
+    switchAccount: (accountId, targetType) => ipcRenderer.invoke('switch-account', accountId, targetType),
     removeSavedAccount: (accountId) => ipcRenderer.invoke('remove-saved-account', accountId),
     removeAllAccounts: () => ipcRenderer.invoke('remove-all-accounts'),
 
@@ -22,6 +33,10 @@ contextBridge.exposeInMainWorld('hwlAPI', {
     getProfileIcon: (filename) => ipcRenderer.invoke('get-profile-icon', filename),
     getWorlds: (profile_id) => ipcRenderer.invoke('get-worlds', profile_id),
     read_world_seed: (profile_id, world_name) => ipcRenderer.invoke('read-world-seed', profile_id, world_name),
+    getDocumentsPath: () => ipcRenderer.invoke('get-documents-path'),
+    createProfileShortcut: (data) => ipcRenderer.invoke('create-profile-shortcut', data),
+    getPendingLaunchProfile: () => ipcRenderer.invoke('get-pending-launch-profile'),
+    onAutoLaunchProfile: (callback) => ipcRenderer.on('auto-launch-profile', (event, profileId) => callback(profileId)),
 
     // Mods & Skins
     searchModrinth: (query, options) => ipcRenderer.invoke('search-modrinth', { query, options }),
@@ -32,6 +47,8 @@ contextBridge.exposeInMainWorld('hwlAPI', {
     getInstalledAddons: (profile_id, type, world_name) => ipcRenderer.invoke('get-installed-addons', { profile_id, type, world_name }),
     toggleAddon: (filename, profile_id, type, world_name) => ipcRenderer.invoke('toggle-addon', { filename, profile_id, type, world_name }),
     deleteAddon: (filename, profile_id, type, world_name) => ipcRenderer.invoke('delete-addon', { filename, profile_id, type, world_name }),
+    resolveModpackCompatibility: (opts) => ipcRenderer.invoke('resolve-modpack-compatibility', opts),
+    resolveModDependencies: (opts) => ipcRenderer.invoke('resolve-mod-dependencies', opts),
 
     getSkinPacks: () => ipcRenderer.invoke('get-skin-packs'),
     createSkinPack: (data) => ipcRenderer.invoke('create-skin-pack', data),
@@ -44,6 +61,7 @@ contextBridge.exposeInMainWorld('hwlAPI', {
     onInfoMessage: (callback) => ipcRenderer.on('info-message', (event, data) => callback(data)),
     onLoginUpdate: (callback) => ipcRenderer.on('login-update', (event, data) => callback(data)),
     onStatsUpdated: (callback) => ipcRenderer.on('stats-updated', () => callback()),
+    onServicesDown429: (callback) => ipcRenderer.on('services-down-429', () => callback()),
 
     // Auto-Updater
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
@@ -53,7 +71,46 @@ contextBridge.exposeInMainWorld('hwlAPI', {
 
     // Onboarding
     getOnboardingStatus: () => ipcRenderer.invoke('get-onboarding-status'),
-    completeOnboarding: () => ipcRenderer.invoke('complete-onboarding')
+    completeOnboarding: () => ipcRenderer.invoke('complete-onboarding'),
+
+    // Workshop (Compatibility with workshop.js)
+    workshop_get_items: (type, xst) => ipcRenderer.invoke('workshop-get-items', type, xst),
+    workshop_get_item: (id) => ipcRenderer.invoke('workshop-get-item', id),
+    workshop_get_my_items: () => ipcRenderer.invoke('workshop-get-my-items'),
+    workshop_submit_item: (data) => ipcRenderer.invoke('workshop-submit-item', data),
+    workshop_record_view: (id) => ipcRenderer.invoke('workshop-record-view', id),
+    workshop_toggle_like: (id) => ipcRenderer.invoke('workshop-toggle-like', id),
+    workshop_record_download: (id) => ipcRenderer.invoke('workshop-record-download', id),
+    workshop_check_admin: () => ipcRenderer.invoke('workshop-check-admin'),
+    workshop_admin_get_items: (status) => ipcRenderer.invoke('workshop-admin-get-items', status),
+    workshop_moderate_item: (id, status, note, isOfficial) => ipcRenderer.invoke('workshop-moderate-item', id, status, note, isOfficial),
+    workshop_delete_item: (id) => ipcRenderer.invoke('workshop-delete-item', id),
+    workshop_package_profile: (profile_id) => ipcRenderer.invoke('workshop-package-profile', profile_id),
+    workshop_extract_configs: (profile_id, configZipB64) => ipcRenderer.invoke('workshop-extract-configs', { profile_id, configZipB64 }),
+    
+    // Social Compatibility
+    social_get_auth: () => ipcRenderer.invoke('social-get-auth'),
+    get_my_presence_server: () => ipcRenderer.invoke('get-my-presence-server'),
+    get_server_history: () => ipcRenderer.invoke('get-server-history'),
+
+    // Legacy search compatibility
+    search_modrinth_mods: (query, options, project_type) => {
+        let finalOptions = options || {};
+        finalOptions.projectType = project_type || 'mod';
+        return ipcRenderer.invoke('search-modrinth', { query, options: finalOptions });
+    },
+
+    // UI Scaling & Navigation
+    setZoomFactor: (factor) => {
+        try { webFrame.setZoomFactor(factor); } catch (e) { console.error(e); }
+    },
+    getZoomFactor: () => {
+        try { return webFrame.getZoomFactor(); } catch (e) { return 1.0; }
+    },
+    selectFile: (current_path, filters) => ipcRenderer.invoke('select-file', current_path, filters),
+    select_file: (current_path, filters) => ipcRenderer.invoke('select-file', current_path, filters),
+    openUrl: (url) => ipcRenderer.invoke('open-url', url),
+    openExternal: (url) => ipcRenderer.invoke('open-url', url)
 });
 
 
@@ -69,9 +126,11 @@ const pywebviewAPI = {
     refresh_session: () => ipcRenderer.invoke('refresh-session'),
     check_internet: () => ipcRenderer.invoke('check-internet'),
     close_app: () => ipcRenderer.invoke('close-app'),
+    show_desktop_notification: (opts) => ipcRenderer.invoke('show-desktop-notification', opts),
+    notification_click_navigate: (recipientInfo) => ipcRenderer.invoke('notification-click-navigate', recipientInfo),
     // Account Switcher
     get_saved_accounts: () => ipcRenderer.invoke('get-saved-accounts'),
-    switch_account: (accountId) => ipcRenderer.invoke('switch-account', accountId),
+    switch_account: (accountId, targetType) => ipcRenderer.invoke('switch-account', accountId, targetType),
     remove_saved_account: (accountId) => ipcRenderer.invoke('remove-saved-account', accountId),
     remove_all_accounts: () => ipcRenderer.invoke('remove-all-accounts'),
 
@@ -87,6 +146,9 @@ const pywebviewAPI = {
         ipcRenderer.invoke('edit-profile', profile_id, name, version, loader, icon, ram_min, ram_max, jvm_args, width, height, java_path, enable_custom_skins, addons),
     delete_profile: (profile_id) => ipcRenderer.invoke('delete-profile', profile_id),
     get_worlds: (profile_id) => ipcRenderer.invoke('get-worlds', profile_id),
+    create_profile_shortcut: (profile_id, name, icon) => ipcRenderer.invoke('create-profile-shortcut', { profileId: profile_id, profileName: name, icon }),
+    get_pending_launch_profile: () => ipcRenderer.invoke('get-pending-launch-profile'),
+    on_auto_launch_profile: (callback) => ipcRenderer.on('auto-launch-profile', (event, profileId) => callback(profileId)),
 
     // Versions & Game
     get_available_versions: () => ipcRenderer.invoke('get-available-versions'),
@@ -94,7 +156,7 @@ const pywebviewAPI = {
     get_forge_mc_versions: () => ipcRenderer.invoke('get-forge-mc-versions'),
     get_fabric_mc_versions: () => ipcRenderer.invoke('get-fabric-mc-versions'),
     get_neoforge_mc_versions: () => ipcRenderer.invoke('get-neoforge-mc-versions'),
-    get_quilt_mc_versions: () => ipcRenderer.invoke('get-quilt-mc-versions'),
+
     get_loader_versions: (type, mc_version) => ipcRenderer.invoke('get-loader-versions', { type, mc_version }),
     install_version: (version_id) => ipcRenderer.invoke('install-version', version_id),
     get_launcher_version: () => ipcRenderer.invoke('get-version'),
@@ -106,6 +168,15 @@ const pywebviewAPI = {
     save_app_settings: (enableTransitions, hwAccel, privacyMode) => ipcRenderer.invoke('save-app-settings', enableTransitions, hwAccel, privacyMode),
     save_dev_mode: (enabled) => ipcRenderer.invoke('save-dev-mode', enabled),
     select_folder: (current_path) => ipcRenderer.invoke('select-folder', current_path),
+    select_file: (current_path, filters) => ipcRenderer.invoke('select-file', current_path, filters),
+    setZoomFactor: (factor) => {
+        try { webFrame.setZoomFactor(factor); } catch (e) { console.error(e); }
+    },
+    getZoomFactor: () => {
+        try { return webFrame.getZoomFactor(); } catch (e) { return 1.0; }
+    },
+    get_documents_path: () => ipcRenderer.invoke('get-documents-path'),
+    getDocumentsPath: () => ipcRenderer.invoke('get-documents-path'),
 
     // Skins
     get_skin_data: () => ipcRenderer.invoke('get-skin-data'),
@@ -131,11 +202,15 @@ const pywebviewAPI = {
         });
     },
     get_mod_details: (project_id) => ipcRenderer.invoke('get-mod-details', project_id),
+    get_multiple_mod_details: (project_ids) => ipcRenderer.invoke('get-multiple-mod-details', project_ids),
     get_mod_versions: (project_id, game_version, loader) => ipcRenderer.invoke('get-mod-versions', { project_id, game_version, loader }),
     install_project: (project_id, version_id, profile_id, type, world_name, force_reinstall) =>
         ipcRenderer.invoke('install-addon', {
             project_id, version_id, profile_id, type, world_name, force_reinstall
         }),
+    resolve_mod_dependencies: (version_id, game_version, loader, profile_id) =>
+        ipcRenderer.invoke('resolve-mod-dependencies', { version_id, game_version, loader, profile_id }),
+    resolve_modpack_compatibility: (opts) => ipcRenderer.invoke('resolve-modpack-compatibility', opts),
     on_mod_download_progress: (callback) => ipcRenderer.on('mod-download-progress', (_event, data) => callback(data)),
     toggle_mod: (arg1, arg2, arg3, arg4, arg5) => {
         // Handle multiple signatures:
@@ -173,6 +248,8 @@ const pywebviewAPI = {
     check_review_reminder: () => ipcRenderer.invoke('check-review-reminder'),
     mark_review_action: (action) => ipcRenderer.invoke('mark-review-action', action),
     open_url: (url) => ipcRenderer.invoke('open-url', url),
+    openUrl: (url) => ipcRenderer.invoke('open-url', url),
+    openExternal: (url) => ipcRenderer.invoke('open-url', url),
     ms_write_verified: (emailKey, email, username, uuid, firebaseUid, firebaseRefreshToken) => ipcRenderer.invoke('ms-write-verified', emailKey, email, username, uuid, firebaseUid, firebaseRefreshToken),
 
     // UI Dialogs
@@ -189,6 +266,7 @@ const pywebviewAPI = {
     social_get_auth: () => ipcRenderer.invoke('social-get-auth'),
     stats_get_my_stats: () => ipcRenderer.invoke('stats-get-my-stats'),
     stats_get_user: (targetUid) => ipcRenderer.invoke('stats-get-user', targetUid),
+    stats_revert_today_streak: () => ipcRenderer.invoke('stats-revert-today-streak'),
     social_search_user: (query) => ipcRenderer.invoke('social-search-user', query),
     social_send_request: (toUid) => ipcRenderer.invoke('social-send-request', toUid),
     social_get_requests: () => ipcRenderer.invoke('social-get-requests'),
@@ -196,27 +274,35 @@ const pywebviewAPI = {
     social_reject_request: (requestId) => ipcRenderer.invoke('social-reject-request', requestId),
     social_cancel_request: (requestId) => ipcRenderer.invoke('social-cancel-request', requestId),
     social_get_friends: () => ipcRenderer.invoke('social-get-friends'),
-    social_create_group: (name, description, imageBase64, members) => ipcRenderer.invoke('social-create-group', name, description, imageBase64, members),
     social_remove_friend: (friendshipId) => ipcRenderer.invoke('social-remove-friend', friendshipId),
     social_block_user: (targetUid, friendshipId) => ipcRenderer.invoke('social-block-user', targetUid, friendshipId),
     social_unblock_user: (targetUid) => ipcRenderer.invoke('social-unblock-user', targetUid),
     social_get_blocked: () => ipcRenderer.invoke('social-get-blocked'),
-    social_send_message: (friendshipId, content, replyTo) => ipcRenderer.invoke('social-send-message', friendshipId, content, replyTo),
-    social_get_messages: (friendshipId, beforeTimestamp) => ipcRenderer.invoke('social-get-messages', friendshipId, beforeTimestamp),
-    social_mark_read: (friendshipId) => ipcRenderer.invoke('social-mark-read', friendshipId),
-    social_edit_message: (friendshipId, msgId, newContent) => ipcRenderer.invoke('social-edit-message', friendshipId, msgId, newContent),
-    social_delete_message: (friendshipId, msgId) => ipcRenderer.invoke('social-delete-message', friendshipId, msgId),
-    social_set_reply: (friendshipId, replyTo) => ipcRenderer.invoke('social-set-reply', friendshipId, replyTo),
-    social_get_reply: (friendshipId) => ipcRenderer.invoke('social-get-reply', friendshipId),
     social_get_badge_counts: () => ipcRenderer.invoke('social-get-badge-counts'),
+    social_inbox_send: (recipientUids, content, type, recipientNames) => ipcRenderer.invoke('social-inbox-send', recipientUids, content, type, recipientNames),
+    social_inbox_get: (beforeTimestamp) => ipcRenderer.invoke('social-inbox-get', beforeTimestamp),
+    social_inbox_get_sent: (beforeTimestamp) => ipcRenderer.invoke('social-inbox-get-sent', beforeTimestamp),
+    social_inbox_mark_read: (msgId) => ipcRenderer.invoke('social-inbox-mark-read', msgId),
+    social_get_messages: (targetFriendshipId, beforeTimestamp) => ipcRenderer.invoke('social-get-messages', targetFriendshipId, beforeTimestamp),
+    social_send_message: (targetFriendshipId, content, replyTo) => ipcRenderer.invoke('social-send-message', targetFriendshipId, content, replyTo),
+    social_edit_message: (targetFriendshipId, msgId, newContent) => ipcRenderer.invoke('social-edit-message', targetFriendshipId, msgId, newContent),
+    social_delete_message: (targetFriendshipId, msgId) => ipcRenderer.invoke('social-delete-message', targetFriendshipId, msgId),
+    social_set_reply: (targetFriendshipId, replyTo) => ipcRenderer.invoke('social-set-reply', targetFriendshipId, replyTo),
+    social_get_reply: (targetFriendshipId) => ipcRenderer.invoke('social-get-reply', targetFriendshipId),
+    social_mark_read: (targetFriendshipId) => ipcRenderer.invoke('social-mark-read', targetFriendshipId),
+    social_create_group: (name, description, imageBase64, members) => ipcRenderer.invoke('social-create-group', name, description, imageBase64, members),
+    social_get_group_details: (groupId) => ipcRenderer.invoke('social-get-group-details', groupId),
     social_edit_group: (groupId, updates) => ipcRenderer.invoke('social-edit-group', groupId, updates),
     social_add_group_members: (groupId, memberUids) => ipcRenderer.invoke('social-add-group-members', groupId, memberUids),
     social_remove_group_member: (groupId, memberUid) => ipcRenderer.invoke('social-remove-group-member', groupId, memberUid),
     social_promote_admin: (groupId, memberUid) => ipcRenderer.invoke('social-promote-admin', groupId, memberUid),
     social_demote_admin: (groupId, adminUid) => ipcRenderer.invoke('social-demote-admin', groupId, adminUid),
-    social_get_group_details: (groupId) => ipcRenderer.invoke('social-get-group-details', groupId),
+    get_launcher_version: () => ipcRenderer.invoke('get-version'),
+    get_my_presence_server: () => ipcRenderer.invoke('get-my-presence-server'),
+    get_server_history: () => ipcRenderer.invoke('get-server-history'),
     get_user_profile: (uid) => ipcRenderer.invoke('get-user-profile', uid),
     add_profile_link: (uid, url, title, type) => ipcRenderer.invoke('add-profile-link', uid, url, title, type),
+    get_own_badges: () => ipcRenderer.invoke('get-own-badges'),
 
     // Workshop
     workshop_get_items: (type, xst) => ipcRenderer.invoke('workshop-get-items', type, xst),
@@ -231,7 +317,9 @@ const pywebviewAPI = {
     workshop_check_admin: () => ipcRenderer.invoke('workshop-check-admin'),
     workshop_admin_get_items: (status) => ipcRenderer.invoke('workshop-admin-get-items', status),
     workshop_moderate_item: (id, status, note, isOfficial) => ipcRenderer.invoke('workshop-moderate-item', id, status, note, isOfficial),
-    workshop_delete_item: (id) => ipcRenderer.invoke('workshop-delete-item', id)
+    workshop_delete_item: (id) => ipcRenderer.invoke('workshop-delete-item', id),
+    workshop_package_profile: (profile_id) => ipcRenderer.invoke('workshop-package-profile', profile_id),
+    workshop_extract_configs: (profile_id, configZipB64) => ipcRenderer.invoke('workshop-extract-configs', { profile_id, configZipB64 })
 };
 
 contextBridge.exposeInMainWorld('pywebview', {
@@ -278,6 +366,34 @@ ipcRenderer.on('navigate-to-chat', (event, data) => {
     window.dispatchEvent(new CustomEvent('navigate-to-chat', { detail: data }));
 });
 
+ipcRenderer.on('navigate-to-inbox', (event, data) => {
+    window.dispatchEvent(new CustomEvent('navigate-to-inbox', { detail: data }));
+});
+
+ipcRenderer.on('switch-to-account-and-open-inbox', (event, data) => {
+    window.dispatchEvent(new CustomEvent('switch-to-account-and-open-inbox', { detail: data }));
+});
+
+ipcRenderer.on('inbox-updated', (event, data) => {
+    window.dispatchEvent(new CustomEvent('inbox-updated', { detail: data }));
+});
+
+ipcRenderer.on('force-social-badge-update', () => {
+    window.dispatchEvent(new Event('force-social-badge-update'));
+});
+
+ipcRenderer.on('quick-launch-profile', (event, data) => {
+    window.dispatchEvent(new CustomEvent('quick-launch-profile', { detail: data }));
+});
+
+ipcRenderer.on('tray-switch-account', (event, data) => {
+    window.dispatchEvent(new CustomEvent('tray-switch-account', { detail: data }));
+});
+
+ipcRenderer.on('open-account-switcher', () => {
+    window.dispatchEvent(new Event('open-account-switcher'));
+});
+
 // Expose electronAPI for direct event listening
 contextBridge.exposeInMainWorld('electronAPI', {
     on: (channel, callback) => {
@@ -288,5 +404,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     removeListener: (channel, callback) => {
         ipcRenderer.removeListener(channel, callback);
+    },
+    notificationClickNavigate: (recipientInfo) => ipcRenderer.invoke('notification-click-navigate', recipientInfo),
+    openUrl: (url) => ipcRenderer.invoke('open-url', url),
+    openExternal: (url) => ipcRenderer.invoke('open-url', url),
+    setZoomFactor: (factor) => {
+        try { webFrame.setZoomFactor(factor); } catch (e) { console.error(e); }
+    },
+    getZoomFactor: () => {
+        try { return webFrame.getZoomFactor(); } catch (e) { return 1.0; }
     }
 });

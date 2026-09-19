@@ -13,6 +13,21 @@ class JavaRuntimeManager {
         this.manifestUrl = 'https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json';
 
         fs.ensureDirSync(this.runtimesDir);
+        this.resolvedCache = new Map();
+    }
+
+    fastFindJavaExe(dir, javaExe) {
+        const candidates = [
+            path.join(dir, 'bin', javaExe),
+            path.join(dir, javaExe),
+            path.join(dir, 'jre', 'bin', javaExe)
+        ];
+        for (const c of candidates) {
+            try {
+                if (fs.existsSync(c)) return c;
+            } catch (_) {}
+        }
+        return null;
     }
 
     /**
@@ -27,6 +42,14 @@ class JavaRuntimeManager {
         console.log(`[JavaRuntime] Resolving Java for version: ${mcVersion}`);
         const javaExe = process.platform === 'win32' ? 'javaw.exe' : 'java';
 
+        // 0. Ultra-fast in-memory cache check (< 0.1ms)
+        if (this.resolvedCache && this.resolvedCache.has(mcVersion)) {
+            const memPath = this.resolvedCache.get(mcVersion);
+            if (fs.existsSync(memPath)) {
+                return memPath;
+            }
+        }
+
         // Load cached mapping if available
         let manifestCache = {};
         try {
@@ -40,8 +63,9 @@ class JavaRuntimeManager {
             const cachedComponent = manifestCache[mcVersion];
             const cachedDir = path.join(this.runtimesDir, cachedComponent);
             if (await fs.pathExists(cachedDir)) {
-                const existingPath = await this.findFileRecursive(cachedDir, javaExe);
+                const existingPath = this.fastFindJavaExe(cachedDir, javaExe) || await this.findFileRecursive(cachedDir, javaExe);
                 if (existingPath) {
+                    this.resolvedCache.set(mcVersion, existingPath);
                     console.log(`[JavaRuntime] Found offline cached Java runtime (${cachedComponent}): ${existingPath}`);
                     return existingPath;
                 }
@@ -79,8 +103,9 @@ class JavaRuntimeManager {
             const componentDir = path.join(this.runtimesDir, component);
 
             if (await fs.pathExists(componentDir)) {
-                const existingPath = await this.findFileRecursive(componentDir, javaExe);
+                const existingPath = this.fastFindJavaExe(componentDir, javaExe) || await this.findFileRecursive(componentDir, javaExe);
                 if (existingPath) {
+                    this.resolvedCache.set(mcVersion, existingPath);
                     console.log(`[JavaRuntime] Found existing Java runtime: ${existingPath}`);
                     return existingPath;
                 }
@@ -90,11 +115,12 @@ class JavaRuntimeManager {
             console.log(`[JavaRuntime] Downloading runtime ${component}...`);
             await this.downloadRuntime(component, componentDir, mcVersion, onProgress);
 
-            const newPath = await this.findFileRecursive(componentDir, javaExe);
+            const newPath = this.fastFindJavaExe(componentDir, javaExe) || await this.findFileRecursive(componentDir, javaExe);
             if (!newPath) {
                 throw new Error(`[JavaRuntime] Failed to find ${javaExe} after downloading component ${component}`);
             }
 
+            this.resolvedCache.set(mcVersion, newPath);
             console.log(`[JavaRuntime] Successfully installed Java runtime: ${newPath}`);
             return newPath;
         } catch (err) {

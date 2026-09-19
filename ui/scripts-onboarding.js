@@ -24,6 +24,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     const wizShowSnapshots = document.getElementById('wizShowSnapshots');
     const wizShowOld = document.getElementById('wizShowOld');
 
+    const wizLanguageSelect = document.getElementById('wizLanguageSelect');
+    const wizLangDropdownBtn = document.getElementById('wizLangDropdownBtn');
+    const wizLangDropdownMenu = document.getElementById('wizLangDropdownMenu');
+
+    if (wizLangDropdownBtn && wizLangDropdownMenu) {
+        wizLangDropdownBtn.addEventListener('click', () => {
+            wizLangDropdownMenu.classList.toggle('show');
+        });
+        
+        // Close when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#wizLangDropdownContainer')) {
+                wizLangDropdownMenu.classList.remove('show');
+            }
+        });
+    }
+
+    window.selectWizLanguage = function(langCode, langText, flagCode) {
+        if (wizLanguageSelect) wizLanguageSelect.value = langCode;
+        const textSpan = document.getElementById('wizCurrentLangText');
+        if (textSpan) textSpan.textContent = langText;
+        const iconImg = document.getElementById('wizCurrentLangIcon');
+        if (iconImg) iconImg.src = `https://purecatamphetamine.github.io/country-flag-icons/3x2/${flagCode}.svg`;
+        if (wizLangDropdownMenu) wizLangDropdownMenu.classList.remove('show');
+    };
+
     // Replay Button
     const replayBtn = document.getElementById('replayTutorialBtn');
 
@@ -119,14 +145,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         if (step === totalSteps) {
-            nextBtn.innerHTML = 'Finish <i class="fas fa-check"></i>';
+            nextBtn.innerHTML = (window.t ? window.t('tutorial.finish') : 'Finish') + ' <i class="fas fa-check"></i>';
             nextBtn.classList.add('btn-finish');
 
             // Play video if on final step
             const video = document.getElementById('tutorialFinalVideo');
             if (video) video.play().catch(e => console.error("Could not play video:", e));
         } else {
-            nextBtn.innerHTML = 'Next <i class="fas fa-arrow-right"></i>';
+            nextBtn.innerHTML = (window.t ? window.t('tutorial.next') : 'Next') + ' <i class="fas fa-arrow-right"></i>';
             nextBtn.classList.remove('btn-finish');
 
             // Pause video outside of final step
@@ -204,7 +230,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     nextBtn.addEventListener('click', async () => {
         if (currentStep === 1) {
             // Save config and go to step 2 (Tutorial Intro)
-            saveConfig();
+            await saveConfig();
+
+            const selectedLang = document.getElementById('wizLanguageSelect');
+            if (selectedLang && typeof window.setLanguage === 'function') {
+                await window.setLanguage(selectedLang.value);
+            }
             showStep(2);
         } else if (currentStep < totalSteps) {
             showStep(currentStep + 1);
@@ -283,6 +314,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 wizShowSnapshots.checked = !!data.show_snapshots;
                 wizShowOld.checked = !!data.show_old;
             }
+            const langKey = window.currentLanguage || 'en';
+            const langData = (window.AVAILABLE_LANGS && window.AVAILABLE_LANGS[langKey]) ? window.AVAILABLE_LANGS[langKey] : { name: 'English', flag: 'GB' };
+            window.selectWizLanguage(langKey, langData.name, langData.flag);
         } catch (e) {
             console.error("Error loading config for wizard:", e);
         }

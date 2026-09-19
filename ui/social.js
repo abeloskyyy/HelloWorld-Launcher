@@ -11,31 +11,37 @@
     let socialInitializing = false;
     let badgeInterval = null;
     let modalContentInterval = null;
-    let chatInterval = null;
-    let activeChatFriendship = null; // { id, profile }
     let activeSocialTab = 'friends';
     let activeReqSubtab = 'received';
     let socialModalOpen = false;
-    let chatEarliestTimestamp = null;
     let lastPendingRequests = 0;
     let lastUnreadMessages = 0;
-    let lastMessageIds = new Set(); // Track loaded message IDs for smart polling
-    let replyingTo = null; // { id, content, senderId, senderName }
-    let editingMessageId = null; // ID of message being edited
     let cachedFriends = null;   // Last loaded friends array
-    let pendingChatOpen = null; // friendshipId to open once friends are loaded
     let currentProfileUid = null; // UID of currently viewed profile
     let profileRefreshInterval = null; // Interval for refreshing profile presence
 
     // --- Helpers ---
-    function showNotification(title, body) {
+    function showNotification(title, body, senderId) {
+        if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.show_desktop_notification === 'function') {
+            window.pywebview.api.show_desktop_notification({ title, body, senderId });
+            return;
+        }
         if (!('Notification' in window)) return;
+        const attachClick = (n) => {
+            n.onclick = () => {
+                window.focus();
+                if (typeof openSocialModal === 'function') openSocialModal('received');
+                if (typeof window.openInbox === 'function') window.openInbox('received');
+            };
+        };
         if (Notification.permission === 'granted') {
-            new Notification(title, { body, icon: 'ui/icon.png' });
+            const n = new Notification(title, { body, icon: 'img/icon.png' });
+            attachClick(n);
         } else if (Notification.permission !== 'denied') {
             Notification.requestPermission().then(permission => {
                 if (permission === 'granted') {
-                    new Notification(title, { body, icon: 'ui/icon.png' });
+                    const n = new Notification(title, { body, icon: 'img/icon.png' });
+                    attachClick(n);
                 }
             });
         }
@@ -61,9 +67,137 @@
         return `<span class="avatar-letter">${letter}</span>`;
     }
 
-    function premiumBadge() {
-        return '<span class="premium-badge"><i class="fas fa-dollar-sign"></i></span>';
+    // --- Badge definitions ---
+    const BADGE_DEFS = {
+        premium:   { cls: 'hw-badge-premium',   icon: 'fa-dollar-sign', key: 'badges.premium',   defaultTitle: 'Cuenta Premium' },
+        moderator: { cls: 'hw-badge-moderator',  icon: 'fa-wrench',      key: 'badges.moderator', defaultTitle: 'Moderador'      },
+        creator:   { cls: 'hw-badge-creator',    icon: 'fa-crown',       key: 'badges.creator',   defaultTitle: 'Creador'        },
+    };
+
+    // Authentic 12-scallop Twitter/Meta verified rosette SVG
+    const BADGE_ROSETTE_SVG = '<svg class="hw-badge-shape" viewBox="0 0 22 22" aria-hidden="true"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.887-1.692-.474-.45-1.058-.756-1.692-.887-.633-.13-1.29-.083-1.897.14-.274-.586-.706-1.084-1.246-1.438C12.275 1.808 11.646 1.61 11 1.628c-.646.018-1.275.215-1.816.57-.54.354-.972.852-1.246 1.438-.607-.223-1.264-.27-1.897-.14-.634.131-1.218.437-1.692.887-.45.474-.756 1.058-.887 1.692-.13.633-.083 1.29.14 1.897-.586.274-1.084.706-1.438 1.246C1.808 9.725 1.61 10.354 1.628 11c.018.646.215 1.275.57 1.816.354.54.852.972 1.438 1.246-.223.607-.27 1.264-.14 1.897.131.634.437 1.218.887 1.692.474.45 1.058.756 1.692.887.633.13 1.29.083 1.897-.14.274.586.706 1.084 1.246 1.438.541.355 1.17.552 1.816.57.646-.018 1.275-.215 1.816-.57.54-.354.972-.852 1.246-1.438.607.223 1.264.27 1.897.14.634-.131 1.218-.437 1.692-.887.45-.474.756-1.058.887-1.692.13-.633.083-1.29-.14-1.897.586-.274 1.084-.706 1.438-1.246.355-.541.552-1.17.57-1.816z"/></svg>';
+
+    /**
+     * Renders an HTML string with badge icons for a given badges array.
+     * @param {string[]} badges  - e.g. ["premium", "moderator"]
+     * @param {boolean}  large   - if true adds hw-badge-lg class for profile modal
+     * @returns {string} HTML string with .hw-badges-row container
+     */
+    function renderBadgesHtml(badges, large = false) {
+        if (!Array.isArray(badges) || badges.length === 0) return '';
+        const lgCls = large ? ' hw-badge-lg' : '';
+        const parts = badges
+            .filter(b => BADGE_DEFS[b])
+            .map(b => {
+                const def = BADGE_DEFS[b];
+                const title = (typeof window.t === 'function' && window.t(def.key) && window.t(def.key) !== def.key)
+                    ? window.t(def.key)
+                    : (def.defaultTitle || def.key);
+                return `<span class="hw-badge ${def.cls}${lgCls}" title="${title}" data-i18n-title="${def.key}">${BADGE_ROSETTE_SVG}<i class="fas ${def.icon}"></i></span>`;
+            });
+        if (parts.length === 0) return '';
+        return `<span class="hw-badges-row">${parts.join('')}</span>`;
     }
+
+    // Legacy shim — kept for safety, maps to renderBadgesHtml(['premium'])
+    function premiumBadge() {
+        return renderBadgesHtml(['premium']);
+    }
+
+    // Badge priority hierarchy for profile avatar halos (Creator > Moderator > Premium)
+    const BADGE_HALO_PRIORITY = {
+        creator:   { rank: 3, haloClass: 'hw-halo-creator',   name: 'creator' },
+        moderator: { rank: 2, haloClass: 'hw-halo-moderator', name: 'moderator' },
+        premium:   { rank: 1, haloClass: 'hw-halo-premium',   name: 'premium' }
+    };
+
+    /**
+     * Finds the highest priority badge from an array of badges
+     * @param {string[]} badges
+     * @returns {object|null}
+     */
+    function getHighestPriorityBadge(badges) {
+        if (!Array.isArray(badges) || badges.length === 0) return null;
+        let highest = null;
+        let maxRank = 0;
+        for (const b of badges) {
+            const key = (typeof b === 'string' ? b : (b && b.id)).toLowerCase();
+            const conf = BADGE_HALO_PRIORITY[key];
+            if (conf && conf.rank > maxRank) {
+                maxRank = conf.rank;
+                highest = conf;
+            }
+        }
+        return highest;
+    }
+
+    /**
+     * Updates an avatar halo wrapper based on the most important badge
+     * @param {string|HTMLElement} wrapper
+     * @param {string[]} badges
+     */
+    function updateAvatarHalo(wrapper, badges) {
+        const el = typeof wrapper === 'string' ? document.getElementById(wrapper) : wrapper;
+        if (!el) return;
+        el.classList.remove('hw-halo-creator', 'hw-halo-moderator', 'hw-halo-premium');
+        const topBadge = getHighestPriorityBadge(badges);
+        if (topBadge) {
+            el.classList.add(topBadge.haloClass);
+        }
+    }
+
+    window.renderBadgesHtml = renderBadgesHtml;
+    window.updateAvatarHalo = updateAvatarHalo;
+    window.getHighestPriorityBadge = getHighestPriorityBadge;
+
+    function sanitizeWorldName(name) {
+        if (!name) return '';
+        const m = String(name).match(/ServerLevel\[([^\]]+)\]/i);
+        return (m && m[1]) ? m[1].trim() : String(name).trim();
+    }
+    window.sanitizeWorldName = sanitizeWorldName;
+
+    function formatPresenceStatus(presence) {
+        if (!presence) {
+            return (window.t ? window.t('social.status_offline') : null) || 'Desconectado';
+        }
+        const state = presence.state || presence.status || 'offline';
+        const serverIp = presence.serverIp ? presence.serverIp.trim() : '';
+        const worldName = presence.worldName ? sanitizeWorldName(presence.worldName) : '';
+
+        if (state === 'server') {
+            if (serverIp) {
+                if (window.t) {
+                    const translated = window.t('social.status_playing_server', { server: serverIp });
+                    if (translated && translated !== 'social.status_playing_server') return translated;
+                }
+                return `Jugando en ${serverIp}`;
+            }
+            return (window.t ? window.t('social.status_playing_multiplayer') : null) || 'Jugando en multijugador';
+        }
+
+        if (state === 'playing') {
+            if (worldName) {
+                if (window.t) {
+                    const translated = window.t('social.status_playing_world', { world: worldName });
+                    if (translated && translated !== 'social.status_playing_world') return translated;
+                }
+                return `Jugando en ${worldName}`;
+            }
+            return (window.t ? window.t('social.status_playing_singleplayer') : null) || 'Jugando a un jugador';
+        }
+
+        if (state === 'menu') {
+            return (window.t ? window.t('social.status_menu') : null) || 'En el menú';
+        }
+
+        if (state === 'online') {
+            return (window.t ? window.t('social.status_online') : null) || 'En línea';
+        }
+
+        return (window.t ? window.t('social.status_offline') : null) || 'Desconectado';
+    }
+    window.formatPresenceStatus = formatPresenceStatus;
 
     function formatTime(ts) {
         if (!ts) return '';
@@ -80,24 +214,48 @@
     }
 
     function formatVersionString(version) {
+        if (!version) return '';
         if (window.formatVersionString) return window.formatVersionString(version);
-        return version || 'Unknown Version';
+        let v = version.toLowerCase();
+        let loaderName = '';
+        if (v.startsWith('fabric')) { loaderName = 'Fabric'; v = v.replace(/^fabric(?:-loader)?-?/, ''); }
+        else if (v.startsWith('forge')) { loaderName = 'Forge'; v = v.replace(/^forge-?/, ''); }
+        
+        if (loaderName) {
+            const split = v.split('-');
+            if (split.length >= 2) {
+                return `${loaderName} ${split[0]} (${split.slice(1).join('-')})`;
+            } else if (split.length === 1 && split[0]) {
+                return `${loaderName} ${split[0]}`;
+            }
+            return loaderName;
+        }
+        return version;
     }
 
     // --- Init ---
-    window.initSocial = async function () {
-        if (socialInitialized || socialInitializing) return;
+    window.initSocial = async function (force = false) {
+        if ((socialInitialized || socialInitializing) && !force) return;
         socialInitializing = true;
-        if (!window.APP_VERSION && api().get_launcher_version) {
+        if (force) {
+            socialAuth = null;
+            socialInitialized = false;
+            cachedFriends = null;
+            lastPendingRequests = 0;
+            lastUnreadMessages = 0;
+        }
+        if (!window.APP_VERSION && api() && api().get_launcher_version) {
             try { window.APP_VERSION = await api().get_launcher_version(); } catch(e){}
         }
         try {
+            if (!api() || !api().social_get_auth) return;
             const res = await api().social_get_auth();
             if (res && res.success) {
                 socialAuth = res;
                 socialInitialized = true;
                 startBadgePolling();
-                // If modal is already open in offline state, refresh it
+                await updateBadge();
+                // If modal is already open, refresh it with new account data
                 if (socialModalOpen) {
                     const offlineMsg = document.getElementById('socialOfflineMsg');
                     const container = document.getElementById('friendsListContainer');
@@ -105,10 +263,19 @@
                     if (container) container.style.display = 'block';
                     switchSocialTab(activeSocialTab);
                     startModalPolling();
+                    if (typeof loadFriends === 'function') loadFriends(true);
+                    if (typeof loadRequests === 'function') loadRequests(true);
+                    const inboxPanel = document.getElementById('socialPanelInbox');
+                    if (inboxPanel && inboxPanel.style.display !== 'none' && typeof loadInboxMessages === 'function') {
+                        loadInboxMessages(true);
+                    }
                 }
+            } else {
+                window.onSocialLogout();
             }
         } catch (e) {
             console.warn('[Social] initSocial failed:', e.message);
+            window.onSocialLogout();
         } finally {
             socialInitializing = false;
         }
@@ -118,9 +285,9 @@
         socialAuth = null;
         socialInitialized = false;
         socialInitializing = false;
+        cachedFriends = null;
         lastPendingRequests = 0;
         lastUnreadMessages = 0;
-        lastMessageIds.clear();
         stopBadgePolling();
         stopModalPolling();
         closeSocialModal();
@@ -131,8 +298,13 @@
     // --- Badge polling ---
     async function updateBadge() {
         try {
+            if (!api() || !api().social_get_badge_counts) return;
             const res = await api().social_get_badge_counts();
-            if (!res || !res.success) return;
+            if (!res || !res.success) {
+                const el = document.getElementById('socialBadge');
+                if (el) el.style.display = 'none';
+                return;
+            }
             const pending = res.pendingRequests || 0;
             const unread = res.unreadMessages || 0;
             const total = pending + unread;
@@ -150,14 +322,24 @@
             if (pending > lastPendingRequests && lastPendingRequests >= 0) {
                 showNotification('New Friend Request', `You have ${pending} pending friend request${pending > 1 ? 's' : ''}`);
             }
-            // Show notifications for new messages
-            if (unread > lastUnreadMessages && lastUnreadMessages >= 0) {
-                showNotification('New Message', `You have ${unread} unread message${unread > 1 ? 's' : ''}`);
-            }
             lastPendingRequests = pending;
             lastUnreadMessages = unread;
         } catch (e) { /* silently ignore */ }
     }
+
+    window.addEventListener('force-social-badge-update', async () => {
+        if (!socialAuth || !socialInitialized) {
+            await window.initSocial(true).catch(() => {});
+        } else {
+            await updateBadge();
+        }
+    });
+
+    window.addEventListener('login-success', () => {
+        window.initSocial(true).catch(() => {});
+    });
+
+    window.updateSocialBadges = updateBadge;
 
     function startBadgePolling() {
         updateBadge();
@@ -180,7 +362,7 @@
                 if (!socialModalOpen || !socialAuth) return;
                 if (activeSocialTab === 'friends') loadFriends(false);
                 else if (activeSocialTab === 'requests') loadRequests(false);
-            }, 15000);
+            }, 10000);
         }
     }
 
@@ -189,11 +371,16 @@
     }
 
     // --- Modal open/close ---
-    function openSocialModal() {
+    async function openSocialModal(targetInboxTab = 'received') {
         const modal = document.getElementById('socialModal');
         if (!modal) return;
+        modal.classList.remove('closing');
         modal.classList.add('show');
         socialModalOpen = true;
+
+        if (!socialAuth && typeof window.initSocial === 'function') {
+            await window.initSocial(true).catch(() => {});
+        }
 
         // Load saved panel width from user config
         const MIN_WIDTH = 220;
@@ -233,6 +420,7 @@
         if (container) container.style.display = 'block';
         switchSocialTab(activeSocialTab);
         startModalPolling();
+        if (typeof window.openInbox === 'function') window.openInbox(targetInboxTab || 'received');
     }
 
     function closeSocialModal() {
@@ -241,6 +429,13 @@
         socialModalOpen = false;
         stopModalPolling();
         closeChat();
+        // Always reset inbox subtab to 'received' so reopening always starts on Received
+        currentInboxTab = 'received';
+        const btnRecv = document.getElementById('inboxTabReceived');
+        const btnSent = document.getElementById('inboxTabSent');
+        if (btnRecv) btnRecv.classList.add('active');
+        if (btnSent) btnSent.classList.remove('active');
+        if (typeof window.closeInbox === 'function') window.closeInbox();
         // Clear all lists and inputs
         const friendsList = document.getElementById('friendsList');
         if (friendsList) friendsList.innerHTML = '';
@@ -259,6 +454,7 @@
         const blockedSection = document.getElementById('blockedSection');
         if (blockedSection) blockedSection.style.display = 'none';
     }
+    window.openSocialModal = openSocialModal;
     window.closeSocialModal = closeSocialModal;
 
     // --- Tabs ---
@@ -271,7 +467,6 @@
         document.querySelectorAll('.social-tab-content').forEach(c => {
             c.classList.toggle('active', c.id === tabMap[tab]);
         });
-        closeChat();
         if (!socialAuth) return;
         if (tab === 'friends') loadFriends(true);
         else if (tab === 'requests') loadRequests(true);
@@ -296,6 +491,7 @@
             renderFriendsList([]);
         }
         loadBlocked();
+        // Removed loadInboxMessages from loadFriends to prevent double-fetching which destroys the blue dot
     }
 
     function renderFriendsList(friends) {
@@ -306,7 +502,7 @@
             list.innerHTML = '<div class="social-empty"><i class="fas fa-user-friends"></i><p>No friends yet. Add some!</p></div>';
             return;
         }
-        list.innerHTML = friends.map(f => {
+        list.innerHTML = friends.filter(f => !f.isGroup).map(f => {
             const isGroup = f.isGroup;
             let p, avatarHtml, nameHtml, profileJson, actionHtml;
             const unread = f.unread > 0 ? `<span class="chat-unread-badge">${f.unread}</span>` : '';
@@ -322,13 +518,13 @@
                 profileJson = escapeHtml(JSON.stringify({ ...p, isGroup: true, members: f.groupData.members, admin: f.groupData.admin, admins: f.groupData.admins || [f.groupData.admin], memberVersions: f.groupData.memberVersions || {}, description: f.groupData.description || '' }));
                 actionHtml = `
                     ${unread}
-                    <button class="social-action-btn social-btn-chat" title="Chat" onclick='socialOpenChat("${fidSafe}", ${profileJson})'><i class="fas fa-comment"></i></button>
+
                     <button class="social-action-btn social-btn-remove" title="Leave Group" onclick='socialRemoveFriend("${fidSafe}", "${escapeHtml(f.groupData.name)}")'><i class="fas fa-sign-out-alt"></i></button>
                 `;
             } else {
                 p = f.profile;
                 avatarHtml = getAvatarHtml(p, 38);
-                const pb = p.accountType === 'microsoft' ? premiumBadge() : '';
+                const pb = renderBadgesHtml(Array.isArray(p.badges) ? p.badges : (p.accountType === 'microsoft' ? ['premium'] : []));
                 const presence = f.presence || {};
                 const state = presence.state || 'offline';
                 const pillClassMap = {
@@ -344,23 +540,18 @@
                                          pillClassMap[state] || 'presence-indicator-offline';
                 const stateClass = displayStateClass;
                 
-                // Simplified status labels - only show basic states
-                let stateLabel = 'Offline';
-                if (state === 'online') stateLabel = 'Online';
-                else if (state === 'menu') stateLabel = 'Playing';
-                else if (state === 'playing') stateLabel = 'Playing Singleplayer';
-                else if (state === 'server') stateLabel = 'Playing Multiplayer';
+                // Formatted & translated status label
+                const stateLabel = formatPresenceStatus(presence);
                 
-                // Join button for server and singleplayer
+                // Join button ONLY for multiplayer server (never for singleplayer)
                 let joinTarget = '';
-                if (state === 'server' && presence.serverIp) {
-                    joinTarget = presence.serverIp;
-                } else if (state === 'playing' && presence.worldName) {
-                    joinTarget = `singleplayer:${presence.worldName}`;
+                if (state === 'server' && presence && presence.serverIp) {
+                    joinTarget = presence.serverIp.trim();
                 }
                 
+                const joinBtnText = (window.t ? (window.t('social.join_server') || 'UNIRSE') : 'UNIRSE').toUpperCase();
                 const joinButtonHtml = joinTarget 
-                    ? `<button class="social-action-btn social-btn-join" title="Join" onclick='socialJoinServer("${escapeHtml(joinTarget)}", "${escapeHtml(p.username)}")'><i class="fas fa-sign-in-alt"></i></button>` 
+                    ? `<button class="social-btn-join friend-join-btn" title="${escapeHtml(joinBtnText)}" onclick='socialJoinServer("${escapeHtml(joinTarget)}", "${escapeHtml(p.username)}")'>${escapeHtml(joinBtnText)}</button>` 
                     : '';
                 
                 const presenceInline = `
@@ -373,11 +564,12 @@
                 nameHtml = `${escapeHtml(p.username)} ${pb}<div style="margin-top:6px;">${presenceInline}</div>`;
                 const pWithVer = Object.assign({}, p, { clientVersion: p.clientVersion || (presence && presence.clientVersion) || '' });
                 profileJson = escapeHtml(JSON.stringify(pWithVer));
+
                 const uidSafe = escapeHtml(p.uid);
                 const nameSafe = escapeHtml(p.username);
                 actionHtml = `
                     ${unread}
-                    <button class="social-action-btn social-btn-chat" title="Chat" onclick='socialOpenChat("${fidSafe}", ${profileJson})'><i class="fas fa-comment"></i></button>
+
                     <button class="social-action-btn social-btn-block" title="Block" onclick='socialBlockFriend("${uidSafe}", "${fidSafe}", "${nameSafe}")'><i class="fas fa-ban"></i></button>
                     <button class="social-action-btn social-btn-remove" title="Remove" onclick='socialRemoveFriend("${fidSafe}", "${nameSafe}")'><i class="fas fa-user-minus"></i></button>
                 `;
@@ -396,18 +588,9 @@
               </div>
             </div>`;
         }).join('');
-
-        // Open pending chat if we were navigated from a notification
-        if (pendingChatOpen) {
-            const target = friends.find(f => f.friendshipId === pendingChatOpen);
-            if (target) {
-                pendingChatOpen = null;
-                openChat(target.friendshipId, target.profile);
-            }
-        }
     }
 
-    window.socialOpenChat = function (fid, profile) { openChat(fid, profile); };
+    window.socialOpenChat = function () { if (typeof window.openInbox === 'function') window.openInbox('received'); };
     window.socialBlockFriend = function (uid, fid, username) { blockFriend(uid, fid, username); };
     window.socialRemoveFriend = function (fid, username) { removeFriend(fid, username); };
     window.socialUnblockUser = function (uid, username) { unblockUser(uid, username); };
@@ -418,19 +601,37 @@
         if (!modal) return;
 
         // Set server info
-        document.getElementById('joinServerIp').textContent = serverIp;
-        document.getElementById('joinServerFriend').textContent = username;
+        const ipEl = document.getElementById('joinServerIp');
+        if (ipEl) ipEl.textContent = serverIp || '';
+        
+        const friendEl = document.getElementById('joinServerFriend');
+        const invitedContainer = friendEl ? friendEl.parentElement : null;
+        if (friendEl) {
+            if (username && username.trim()) {
+                friendEl.textContent = username.trim();
+                if (invitedContainer) invitedContainer.style.display = 'block';
+            } else {
+                if (invitedContainer) invitedContainer.style.display = 'none';
+            }
+        }
+
+        const container = document.getElementById('joinServerProfilesList');
+        if (container) {
+            container.innerHTML = `<div style="color: #888; text-align: center; padding: 20px;">${window.t ? window.t('social.loading_installations') || 'Cargando instalaciones...' : 'Cargando instalaciones...'}</div>`;
+        }
 
         // Load profiles directly from API
-        if (window.pywebview && window.pywebview.api) {
-            window.pywebview.api.get_profiles().then(profilesData => {
+        const clientApi = (typeof api === 'function' && api()) || (window.pywebview && window.pywebview.api);
+        if (clientApi && typeof clientApi.get_profiles === 'function') {
+            clientApi.get_profiles().then(profilesData => {
                 if (profilesData && profilesData.profiles) {
                     window.profilesData = profilesData;
                     renderJoinServerProfiles(serverIp);
+                } else if (container) {
+                    container.innerHTML = `<div style="color: #888; text-align: center; padding: 20px;">${window.t ? window.t('social.no_installations') || 'No installations available. Create one first.' : 'No installations available. Create one first.'}</div>`;
                 }
             }).catch(err => {
                 console.error('Failed to load profiles:', err);
-                const container = document.getElementById('joinServerProfilesList');
                 if (container) {
                     container.innerHTML = '<div style="color: #f87171; text-align: center; padding: 20px;">Failed to load profiles.</div>';
                 }
@@ -445,7 +646,7 @@
         if (modal) modal.classList.remove('show');
     }
 
-    function renderJoinServerProfiles(serverIp) {
+    async function renderJoinServerProfiles(serverIp) {
         const container = document.getElementById('joinServerProfilesList');
         if (!container) return;
 
@@ -453,65 +654,115 @@
         const profileIds = Object.keys(profiles);
 
         if (profileIds.length === 0) {
-            container.innerHTML = '<div style="color: #888; text-align: center; padding: 20px;">No installations available. Create one first.</div>';
+            container.innerHTML = `<div style="color: #888; text-align: center; padding: 20px;">${window.t ? window.t('social.no_installations') || 'No installations available. Create one first.' : 'No installations available. Create one first.'}</div>`;
             return;
         }
 
-        container.innerHTML = profileIds.map(id => {
+        const clientApi = (typeof api === 'function' && api()) || (window.pywebview && window.pywebview.api);
+        const htmlArr = await Promise.all(profileIds.map(async id => {
             const profile = profiles[id];
+            
+            // Resolve icon
+            let resolvedIcon = profile.icon;
+            if (profile.icon && clientApi && clientApi.get_profile_icon) {
+                try { resolvedIcon = await clientApi.get_profile_icon(profile.icon); } catch (_) {}
+            }
+            if (resolvedIcon && window.resolveImageSource) {
+                resolvedIcon = window.resolveImageSource(resolvedIcon);
+            }
+
+            const iconHtml = resolvedIcon
+                ? `<img src="${resolvedIcon}" style="width:38px; height:38px; border-radius:8px; object-fit:cover; flex-shrink:0;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><div style="display:none; width:38px; height:38px; border-radius:8px; background:linear-gradient(135deg,rgba(79,172,254,0.3),rgba(0,242,254,0.15)); align-items:center; justify-content:center; flex-shrink:0;"><i class='fas fa-cube' style='color:#4facfe; font-size:16px;'></i></div>`
+                : `<div style="width:38px; height:38px; border-radius:8px; background:linear-gradient(135deg,rgba(79,172,254,0.3),rgba(0,242,254,0.15)); display:flex; align-items:center; justify-content:center; flex-shrink:0;"><i class='fas fa-cube' style='color:#4facfe; font-size:16px;'></i></div>`;
+
+            // Format version label
+            let versionLabel = profile.version || 'Unknown';
+            try {
+                if (window.versionUtils && window.versionUtils.parseVersionString) {
+                    const parsed = window.versionUtils.parseVersionString(profile.version);
+                    if (parsed && parsed.type !== 'vanilla') {
+                        const loaderName = parsed.type.charAt(0).toUpperCase() + parsed.type.slice(1);
+                        versionLabel = parsed.loaderVersion
+                            ? `${loaderName} ${parsed.loaderVersion} (MC ${parsed.mcVersion})`
+                            : `${loaderName} (MC ${parsed.mcVersion})`;
+                    } else if (parsed) {
+                        versionLabel = `Vanilla ${parsed.mcVersion}`;
+                    }
+                }
+            } catch(_) {}
+
             return `
-                <div class="join-server-profile-item" onclick="joinServerWithProfile('${id}', '${serverIp}')">
-                    <div style="font-weight: 600; color: #fff;">${escapeHtml(profile.name || id)}</div>
-                    <div style="font-size: 0.85rem; color: #aaa;">${escapeHtml(profile.version || 'Unknown version')}</div>
+                <div class="join-server-profile-item" data-profile-id="${escapeHtml(id)}" style="display:flex; align-items:center; gap:12px; padding: 10px; margin: 0 4px 4px 4px; border-radius: 8px; transition: background 0.2s; cursor: pointer;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+                    ${iconHtml}
+                    <div style="min-width:0; text-align: left;">
+                        <div style="font-weight:600; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(profile.name || id)}</div>
+                        <div style="font-size:0.8rem; color:#6b7280; margin-top:2px;">${escapeHtml(versionLabel)}</div>
+                    </div>
                 </div>
             `;
-        }).join('');
+        }));
+        
+        container.innerHTML = htmlArr.join('');
+        container.querySelectorAll('.join-server-profile-item').forEach(item => {
+            const pId = item.dataset.profileId;
+            item.onclick = () => window.joinServerWithProfile(pId, serverIp);
+        });
     }
 
     window.joinServerWithProfile = async function(profileId, serverIp) {
         closeJoinServerModal();
-        
-        // Close the social modal
+
+        // Copy server IP to clipboard as convenience for player
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(serverIp).catch(() => {});
+        }
+
+        // Close social and profile modals
         closeSocialModal();
-        
-        // Close the profile modal
         const profileModal = document.getElementById('userProfileModal');
         if (profileModal) profileModal.classList.remove('show');
-        
+
         // Clear profile refresh interval
         if (profileRefreshInterval) {
             clearInterval(profileRefreshInterval);
             profileRefreshInterval = null;
         }
         currentProfileUid = null;
-        
-        // Select the profile in the UI explicitly
-        const profileSelect = document.getElementById('profileSelect');
-        if (profileSelect) {
-            profileSelect.value = profileId;
-            if (window.selectProfile) {
-                window.selectProfile(profileId);
+
+        console.log(`[Social] Joining server ${serverIp} with profile ${profileId}`);
+
+        // Update selected profile in UI
+        const profiles = window.profilesData?.profiles || {};
+        const profile = profiles[profileId];
+        if (typeof window.selectOption === 'function' && profile) {
+            window.selectOption(profileId, profile);
+        } else {
+            const profileSelect = document.getElementById('profileSelect');
+            if (profileSelect) {
+                profileSelect.value = profileId;
+                try { profileSelect.dispatchEvent(new Event('change')); } catch (_) {}
             }
         }
-        
-        // Wait a tiny bit for the UI state to update before launching
-        await new Promise(r => setTimeout(r, 50));
-        
-        // Launch game with server parameter using the central launch function
-        if (typeof window.launchGame === 'function') {
-            if (serverIp.startsWith('singleplayer:')) {
-                const worldName = serverIp.replace('singleplayer:', '');
-                console.log(`Launching singleplayer world ${worldName} with profile ${profileId}`);
-                window.pendingServerParam = null;
-            } else {
-                console.log(`Joining server ${serverIp} with profile ${profileId}`);
-                window.pendingServerParam = serverIp;
-            }
-            window.launchGame();
+
+        // Go to play section
+        if (typeof showSection === 'function') {
+            showSection('play');
+        }
+
+        // Store server IP — launchGame reads window.pendingServerParam
+        window.pendingServerParam = serverIp;
+        console.log('[Social] pendingServerParam set to:', serverIp);
+
+        // Delegate to launchGame which handles all UI states (play button, cancel, etc.)
+        const launcherFn = (typeof launchGame === 'function' && launchGame) || (typeof window.launchGame === 'function' && window.launchGame);
+        if (launcherFn) {
+            await launcherFn();
         } else {
-            console.error("Global launchGame function not found!");
+            console.error('[Social] launchGame is not available');
+            if (typeof showToast === 'function') showToast('Could not launch game.', 'error');
         }
     };
+
 
     // Initialize join server modal event listeners
     function initJoinServerModal() {
@@ -529,18 +780,16 @@
     }
 
     async function blockFriend(uid, fid, username) {
-        if (!confirm(`Block ${username}? They will be removed from friends and unable to send you requests.`)) return;
+        const confirmMsg = (window.t ? window.t('social.confirm_block_long', { username }) : '') || `Block ${username}? They will be removed from friends and unable to send you requests.`;
+        if (!confirm(confirmMsg)) return;
         try { await api().social_block_user(uid, fid); loadFriends(false); } catch (e) {}
     }
 
     async function removeFriend(fid, username) {
-        if (!confirm(`Remove ${username} from your friends? They can send you a new request later.`)) return;
+        const confirmMsg = (window.t ? window.t('social.confirm_remove_friend', { username }) : '') || `Remove ${username} from your friends? They can send you a new request later.`;
+        if (!confirm(confirmMsg)) return;
         try {
             await api().social_remove_friend(fid);
-            // Close chat if it's currently open with this friend/group
-            if (activeChatFriendship && activeChatFriendship.id === fid) {
-                closeChat();
-            }
             loadFriends(false);
         } catch (e) {}
     }
@@ -559,7 +808,7 @@
             if (count) count.textContent = res.blocked.length;
             if (list) list.innerHTML = res.blocked.map(b => {
                 const p = b.profile;
-                const pb = p.accountType === 'microsoft' ? premiumBadge() : '';
+                const pb = renderBadgesHtml(Array.isArray(p.badges) ? p.badges : (p.accountType === 'microsoft' ? ['premium'] : []));
                 const uidSafe = escapeHtml(p.uid);
                 const nameSafe = escapeHtml(p.username);
                 return `<div class="social-user-item blocked-item">
@@ -618,7 +867,7 @@
         const list = document.getElementById('searchUserResults');
         if (!list) return;
         list.innerHTML = users.map(u => {
-            const pb = u.accountType === 'microsoft' ? premiumBadge() : '';
+            const pb = renderBadgesHtml(Array.isArray(u.badges) ? u.badges : (u.accountType === 'microsoft' ? ['premium'] : []));
             const sub = u.accountType === 'microsoft' ? 'Premium' : 'HelloWorld';
             const uidSafe = escapeHtml(u.uid);
             const usernameSafe = escapeHtml(u.username);
@@ -675,15 +924,10 @@
             const presence = res.presence || res.data.presence || null;
             const state = presence ? (presence.state || 'offline') : 'offline';
             
-            // Simplified status labels
-            let statusText = 'Offline';
-            if (state === 'online') statusText = 'Online';
-            else if (state === 'menu') statusText = 'Playing';
-            else if (state === 'playing') statusText = 'Playing Singleplayer';
-            else if (state === 'server') statusText = 'Playing Multiplayer';
+            const statusText = formatPresenceStatus(presence);
             
             const serverText = presence && presence.state === 'server' && presence.serverIp ? presence.serverIp : '';
-            const worldText = presence && presence.state === 'playing' && presence.worldName ? presence.worldName : '';
+            const worldText = presence && presence.state === 'playing' && presence.worldName ? sanitizeWorldName(presence.worldName) : '';
             const instanceText = presence && presence.instanceName ? presence.instanceName : '';
             const versionText = presence && presence.mcVersion ? presence.mcVersion : '';
             const instanceDisplay = instanceText && versionText ? `${instanceText} (${versionText})` : (instanceText || versionText || '');
@@ -751,19 +995,18 @@
             }
             if (presenceCard) presenceCard.style.opacity = '1';
             
-            // Handle Join button
+            // Handle Join button - only for multiplayer server
             const joinBtn = document.getElementById('profileJoinBtn');
             if (joinBtn) {
+                const isOwnProfile = socialAuth && socialAuth.uid === uid;
                 let joinTarget = '';
                 if (state === 'server' && serverText) {
                     joinTarget = serverText;
-                } else if (state === 'playing' && worldText) {
-                    joinTarget = `singleplayer:${worldText}`;
                 }
                 
-                if (joinTarget) {
+                if (joinTarget && !isOwnProfile) {
                     joinBtn.style.display = 'inline-flex';
-                    joinBtn.onclick = () => openJoinServerModal(joinTarget, username);
+                    joinBtn.onclick = () => window.socialJoinServer(joinTarget, username);
                 } else {
                     joinBtn.style.display = 'none';
                 }
@@ -806,7 +1049,7 @@
         const backgroundPreview = document.getElementById('profileBackgroundPreview');
         const countryBadge = document.getElementById('profileCountryBadge');
         const countryFlagSvg = document.getElementById('profileCountryFlagSvg');
-        const premiumBadge = document.getElementById('profilePremiumBadge');
+        const badgesContainer = document.getElementById('profileBadgesContainer');
         const presenceCard = document.getElementById('profilePresenceCard');
         const presenceIndicator = document.getElementById('profilePresenceIndicator');
         const presenceStatus = document.getElementById('profilePresenceStatus');
@@ -824,7 +1067,11 @@
             if (nameSpan) nameSpan.textContent = username;
             else displayName.textContent = username;
         }
-        if (premiumBadge) premiumBadge.style.display = 'none';
+        if (badgesContainer) badgesContainer.innerHTML = '';
+        const avatarWrapper = document.getElementById('profileAvatarWrapper');
+        if (avatarWrapper) {
+            avatarWrapper.classList.remove('hw-halo-creator', 'hw-halo-moderator', 'hw-halo-premium');
+        }
         if (avatarPreview) avatarPreview.src = `https://ui-avatars.com/api/?name=${username}&background=random&color=fff&rounded=true&bold=true&format=svg`;
         if (biography) biography.textContent = 'Loading...';
         if (linksContainer) linksContainer.innerHTML = '<p style="margin: 0; color: #6b7280; font-size: 0.9rem; font-style: italic;">Loading...</p>';
@@ -842,15 +1089,17 @@
         if (presenceDetails) presenceDetails.style.display = 'none';
         if (joinBtn) joinBtn.style.display = 'none';
         
-        const viewStatsBtn = document.getElementById('viewProfileStatsBtn');
-        if (viewStatsBtn) {
-            viewStatsBtn.onclick = () => {
-                if (window.showUserStats) {
-                    const avatarUrl = document.getElementById('profileAvatarPreview')?.src;
-                    window.showUserStats(uid, username, avatarUrl);
-                }
-            };
-        }
+        // Reset embedded stats grid
+        const pStreak = document.getElementById('userProfileStreak');
+        const pMaxStreak = document.getElementById('userProfileMaxStreak');
+        const pHours = document.getElementById('userProfileHours');
+        const pDays = document.getElementById('userProfileDays');
+        const pSessions = document.getElementById('userProfileSessions');
+        if (pStreak) pStreak.textContent = '-';
+        if (pMaxStreak) pMaxStreak.textContent = '-';
+        if (pHours) pHours.textContent = '-';
+        if (pDays) pDays.textContent = '-';
+        if (pSessions) pSessions.textContent = '-';
 
         if (presenceIndicator) {
             presenceIndicator.classList.remove('presence-indicator-online', 'presence-indicator-menu', 'presence-indicator-playing', 'presence-indicator-server', 'presence-indicator-offline');
@@ -895,13 +1144,15 @@
                     else displayName.textContent = data.displayName || username;
                 }
                 
-                // Show premium badge for microsoft accounts
-                if (premiumBadge && data.accountType === 'microsoft') {
-                    premiumBadge.style.display = 'inline-flex';
-                    console.log('[Profile] Showing premium badge for microsoft account');
-                } else if (premiumBadge) {
-                    premiumBadge.style.display = 'none';
+                // Render all badges for this profile (large size) and apply aura halo
+                // data.badges is always provided by the backend (with auto-migration for legacy accounts)
+                const profileBadges = Array.isArray(data.badges) && data.badges.length > 0
+                    ? data.badges
+                    : (data.accountType === 'microsoft' ? ['premium'] : []);
+                if (badgesContainer) {
+                    badgesContainer.innerHTML = renderBadgesHtml(profileBadges, true);
                 }
+                updateAvatarHalo('profileAvatarWrapper', profileBadges);
                 
                 // Update avatar if available
                 if (data.avatarBase64 && avatarPreview) {
@@ -960,15 +1211,10 @@
                 const presence = res.presence || data.presence || null;
                 const state = presence ? (presence.state || 'offline') : 'offline';
                 
-                // Simplified status labels
-                let statusText = 'Offline';
-                if (state === 'online') statusText = 'Online';
-                else if (state === 'menu') statusText = 'Playing';
-                else if (state === 'playing') statusText = 'Playing Singleplayer';
-                else if (state === 'server') statusText = 'Playing Multiplayer';
+                const statusText = formatPresenceStatus(presence);
                 
                 const serverText = presence && presence.state === 'server' && presence.serverIp ? presence.serverIp : '';
-                const worldText = presence && presence.state === 'playing' && presence.worldName ? presence.worldName : '';
+                const worldText = presence && presence.state === 'playing' && presence.worldName ? sanitizeWorldName(presence.worldName) : '';
                 const instanceText = presence && presence.instanceName ? presence.instanceName : '';
                 const versionText = presence && presence.mcVersion ? presence.mcVersion : '';
                 const instanceDisplay = instanceText && versionText ? `${instanceText} (${versionText})` : (instanceText || versionText || '');
@@ -1032,19 +1278,18 @@
                 }
                 if (presenceCard) presenceCard.style.opacity = '1';
                 
-                // Handle Join button
+                // Handle Join button - only for multiplayer server
                 const joinBtn = document.getElementById('profileJoinBtn');
                 if (joinBtn) {
+                    const isOwnProfile = socialAuth && socialAuth.uid === uid;
                     let joinTarget = '';
                     if (state === 'server' && serverText) {
                         joinTarget = serverText;
-                    } else if (state === 'playing' && worldText) {
-                        joinTarget = `singleplayer:${worldText}`;
                     }
                     
-                    if (joinTarget) {
+                    if (joinTarget && !isOwnProfile) {
                         joinBtn.style.display = 'inline-flex';
-                        joinBtn.onclick = () => openJoinServerModal(joinTarget, username);
+                        joinBtn.onclick = () => window.socialJoinServer(joinTarget, username);
                     } else {
                         joinBtn.style.display = 'none';
                     }
@@ -1073,13 +1318,6 @@
                     }
                 } else if (linksContainer) {
                     linksContainer.innerHTML = '<p style="margin: 0; color: #6b7280; font-size: 0.9rem; font-style: italic;">No links</p>';
-                }
-
-                // Show/hide Add Link button based on whether it's the user's own profile
-                const addLinkBtn = document.getElementById('addLinkBtn');
-                if (addLinkBtn) {
-                    const isOwnProfile = socialAuth && socialAuth.uid === uid;
-                    addLinkBtn.style.display = isOwnProfile ? 'block' : 'none';
                 }
                 
                 // Apply background
@@ -1116,7 +1354,7 @@
                             const existingDarkening = backgroundPreview.querySelector('.darkening-overlay');
                             if (existingOverlay) existingOverlay.remove();
                             if (existingDarkening) existingDarkening.remove();
-                            backgroundPreview.appendChild(overlay);
+                            backgroundPreview.prepend(overlay);
                         }
                     } else if (imageBackgrounds[data.background]) {
                         // Load image and wait for it to load before hiding spinner
@@ -1131,7 +1369,7 @@
                             const existingDarkening = backgroundPreview.querySelector('.darkening-overlay');
                             if (existingOverlay) existingOverlay.remove();
                             if (existingDarkening) existingDarkening.remove();
-                            backgroundPreview.appendChild(overlay);
+                            backgroundPreview.prepend(overlay);
                             
                             // Hide spinner after image loads with fade-out animation
                             if (loadingSpinner) {
@@ -1166,6 +1404,31 @@
                 if (countryBadge && countryFlagSvg && data.country && data.country !== '' && data.country !== 'OTHER') {
                     countryFlagSvg.src = `https://flagcdn.com/w80/${data.country.toLowerCase()}.png`;
                     countryBadge.style.display = 'flex';
+                }
+                
+                // Fetch and display player stats directly in profile
+                try {
+                    if (api() && api().stats_get_user) {
+                        const statsRes = await api().stats_get_user(uid);
+                        const stats = (statsRes && statsRes.success && statsRes.stats) ? statsRes.stats : { streak: 0, maxStreak: 0, totalHours: 0, totalDaysPlayed: 0, totalSessions: 0 };
+                        const streakEl = document.getElementById('userProfileStreak');
+                        const maxStreakEl = document.getElementById('userProfileMaxStreak');
+                        const hoursEl = document.getElementById('userProfileHours');
+                        const daysEl = document.getElementById('userProfileDays');
+                        const sessionsEl = document.getElementById('userProfileSessions');
+                        
+                        const daysUnit = (typeof window.t === 'function') ? window.t('stats.days_unit') : 'days';
+                        const hoursUnit = (typeof window.t === 'function') ? window.t('stats.hours_unit') : 'h';
+                        
+                        if (streakEl) streakEl.innerHTML = `${stats.streak !== undefined ? stats.streak : 0} <span style="font-size: 11px; font-weight: normal; color: #888;">${daysUnit}</span>`;
+                        if (maxStreakEl) maxStreakEl.innerHTML = `${stats.maxStreak !== undefined ? stats.maxStreak : (stats.streak || 0)} <span style="font-size: 11px; font-weight: normal; color: #888;">${daysUnit}</span>`;
+                        const th = typeof stats.totalHours === 'number' ? stats.totalHours.toFixed(1) : (stats.totalHours || '0.0');
+                        if (hoursEl) hoursEl.innerHTML = `${th} <span style="font-size: 11px; font-weight: normal; color: #888;">${hoursUnit}</span>`;
+                        if (daysEl) daysEl.innerHTML = `${stats.totalDaysPlayed || 0} <span style="font-size: 11px; font-weight: normal; color: #888;">${daysUnit}</span>`;
+                        if (sessionsEl) sessionsEl.textContent = `${stats.totalSessions || 0}`;
+                    }
+                } catch (stErr) {
+                    console.error('[Profile] Error fetching stats for profile:', stErr);
                 }
                 
             } else {
@@ -1208,6 +1471,47 @@
                 presenceIndicator.classList.add('presence-indicator-offline');
             }
             if (presenceCard) presenceCard.style.opacity = '0.6';
+        }
+    };
+
+    // View Own Profile
+    window.viewOwnProfile = async function () {
+        try {
+            let uid = socialAuth && socialAuth.uid;
+            let username = socialAuth && socialAuth.username;
+
+            if (!uid && typeof api === 'function' && api() && api().social_get_auth) {
+                try {
+                    const res = await api().social_get_auth();
+                    if (res && res.success && res.uid) {
+                        socialAuth = res;
+                        uid = res.uid;
+                        username = res.username;
+                    }
+                } catch (e) {
+                    console.error('[Social] Error fetching social_get_auth for own profile:', e);
+                }
+            }
+
+            if (!uid && typeof api === 'function' && api() && api().get_user_json) {
+                try {
+                    const udata = await api().get_user_json();
+                    if (udata) {
+                        uid = udata.firebase_uid || udata.firebase_ms_uid;
+                        username = udata.username;
+                    }
+                } catch (e) {
+                    console.error('[Social] Error fetching get_user_json for own profile:', e);
+                }
+            }
+
+            if (uid) {
+                await window.viewUserProfile(uid, username || 'Player');
+            } else {
+                console.warn('[Social] Could not determine own UID to view profile');
+            }
+        } catch (err) {
+            console.error('[Social] Error in viewOwnProfile:', err);
         }
     };
 
@@ -1471,7 +1775,7 @@
         }
         
         if (!selectedLinkType) {
-            showToast('Please select a link type');
+            showToast(window.t ? window.t('toasts.select_link_type') : 'Please select a link type');
             if (urlInput) urlInput.focus();
             return;
         }
@@ -1661,7 +1965,7 @@
         }
         
         if (!selectedShareLinkType) {
-            showToast('Please select a link type');
+            showToast(window.t ? window.t('toasts.select_link_type') : 'Please select a link type');
             if (urlInput) urlInput.focus();
             return;
         }
@@ -1672,7 +1976,6 @@
         }
         
         try {
-            // Send link as a chat message with special format
             const linkData = {
                 url: url,
                 title: title || url,
@@ -1681,51 +1984,8 @@
             };
             
             const messageContent = `$$LINK$$${JSON.stringify(linkData)}`;
-            
-            // Optimistic UI: add message immediately
-            const container = document.getElementById('chatMessages');
-            const myUid = socialAuth.uid;
-            const tempId = `temp_${Date.now()}`;
-            const typeIcon = getLinkTypeIcon(selectedShareLinkType.id);
-            
-            const html = `<div class="chat-msg chat-msg-mine" data-sender-id="${myUid}" data-content="${escapeHtml(messageContent)}" data-temp="${tempId}">
-              <div class="chat-msg-bubble">
-                <div class="chat-link-card">
-                    <div class="chat-link-card-header">
-                        <div class="chat-link-card-icon">
-                            <i class="${typeIcon}"></i>
-                        </div>
-                        <div class="chat-link-card-info">
-                            <div class="chat-link-card-title">${escapeHtml(linkData.title)}</div>
-                            <div class="chat-link-card-type">${escapeHtml(linkData.typeName)}</div>
-                        </div>
-                    </div>
-                    <a href="${escapeHtml(linkData.url)}" target="_blank" class="chat-link-card-btn">
-                        <i class="fas fa-external-link-alt"></i> Open Link
-                    </a>
-                </div>
-              </div>
-            </div>`;
-            
-            if (container) {
-                container.insertAdjacentHTML('beforeend', html);
-                container.scrollTop = container.scrollHeight;
-            }
-            
-            const res = await api().social_send_message(activeChatFriendship.id, messageContent);
-            
-            if (res && res.success) {
-                closeShareLinkModal();
-                // Remove temp message, will be replaced by real message via polling
-                const tempEl = container.querySelector(`[data-temp="${tempId}"]`);
-                if (tempEl) tempEl.remove();
-            } else {
-                // Remove temp message on error
-                const tempEl = container.querySelector(`[data-temp="${tempId}"]`);
-                if (tempEl) tempEl.remove();
-                showToast('Failed to send link: ' + (res && res.error || 'Unknown error'));
-                if (urlInput) urlInput.focus();
-            }
+            closeShareLinkModal();
+            await broadcastContent(messageContent, 'link');
         } catch (e) {
             showToast('Error sending link: ' + e.message);
             if (urlInput) urlInput.focus();
@@ -1773,7 +2033,7 @@
         if (reqs.length === 0) { list.innerHTML = '<div class="social-empty"><i class="fas fa-inbox"></i><p>No pending requests</p></div>'; return; }
         list.innerHTML = reqs.map(r => {
             const p = r.profile || {};
-            const pb = (p.accountType === 'microsoft') ? premiumBadge() : '';
+            const pb = renderBadgesHtml(Array.isArray(p.badges) ? p.badges : (p.accountType === 'microsoft' ? ['premium'] : []));
             const idSafe = escapeHtml(r.id);
             const uidSafe = escapeHtml(p.uid);
             const nameSafe = escapeHtml(p.username || 'Unknown');
@@ -1798,7 +2058,7 @@
         if (reqs.length === 0) { list.innerHTML = '<div class="social-empty"><i class="fas fa-paper-plane"></i><p>No sent requests</p></div>'; return; }
         list.innerHTML = reqs.map(r => {
             const p = r.profile || {};
-            const pb = (p.accountType === 'microsoft') ? premiumBadge() : '';
+            const pb = renderBadgesHtml(Array.isArray(p.badges) ? p.badges : (p.accountType === 'microsoft' ? ['premium'] : []));
             const idSafe = escapeHtml(r.id);
             return `<div class="social-user-item">
               <div class="social-item-avatar">${getAvatarHtml(p, 38)}</div>
@@ -1832,7 +2092,8 @@
         try { const res = await api().social_cancel_request(id); if (res && res.success) loadRequests(false); } catch (e) {}
     };
     window.socialBlockFromRequest = async function (uid, reqId, username) {
-        if (!confirm(`Block ${username}?`)) return;
+        const confirmMsg = (window.t ? window.t('social.confirm_block', { username }) : '') || `Block ${username}?`;
+        if (!confirm(confirmMsg)) return;
         try {
             await api().social_reject_request(reqId);
             await api().social_block_user(uid, null);
@@ -1840,1212 +2101,12 @@
         } catch (e) {}
     };
 
-    // --- Chat ---
-    function checkLauncherVersionCompatibility(profile) {
-        let myVer = window.APP_VERSION;
-        if (!myVer && window.pywebview && window.pywebview.api && window.pywebview.api.get_launcher_version) {
-            try { window.pywebview.api.get_launcher_version().then(v => { if (v) window.APP_VERSION = v; }); } catch(e){}
-        }
-        myVer = window.APP_VERSION || '2.0.0';
-        if (!profile) return { compatible: true };
-        if (profile.isGroup) {
-            const members = profile.memberVersions || {};
-            const memberKeys = Object.keys(members);
-            for (const uid of memberKeys) {
-                const m = members[uid];
-                if (m && m.version && m.version !== myVer) {
-                    return { compatible: false, message: `Cannot send message: ${m.username || 'Member'} is using launcher v${m.version} (you are on v${myVer}). Update required to prevent version bugs.` };
-                } else if (!m || !m.version) {
-                    return { compatible: false, message: `Cannot send message: ${m?.username || 'A member'} is using an older launcher version (pre-v2.0.0). Update required.` };
-                }
-            }
-            return { compatible: true };
-        } else {
-            const theirVer = profile.clientVersion || (activeChatFriendship && activeChatFriendship.profile && activeChatFriendship.profile.clientVersion) || '';
-            if (theirVer && theirVer !== myVer) {
-                return { compatible: false, message: `Cannot send message: ${profile.username || 'User'} is using launcher v${theirVer} (you are on v${myVer}). Update required to prevent version bugs.` };
-            } else if (!theirVer) {
-                return { compatible: false, message: `Cannot send message: ${profile.username || 'User'} is using an older launcher version (pre-v2.0.0). Update required to prevent version bugs.` };
-            }
-            return { compatible: true };
-        }
+    // --- Chat deprecated: Replaced by Inbox system ---
+    function openChat() {
+        if (typeof window.openInbox === 'function') window.openInbox('received');
     }
 
-    function updateChatInputVersionState(profile) {
-        const compat = checkLauncherVersionCompatibility(profile);
-        const input = document.getElementById('chatInput');
-        const sendBtn = document.getElementById('chatSendBtn');
-        if (!compat.compatible) {
-            if (input) {
-                input.disabled = true;
-                input.placeholder = compat.message;
-                input.style.opacity = '0.6';
-                input.style.cursor = 'not-allowed';
-            }
-            if (sendBtn) {
-                sendBtn.disabled = true;
-                sendBtn.style.opacity = '0.4';
-                sendBtn.style.cursor = 'not-allowed';
-            }
-        } else {
-            if (input) {
-                input.disabled = false;
-                input.placeholder = 'Type a message...';
-                input.style.opacity = '1';
-                input.style.cursor = 'text';
-            }
-            if (sendBtn) {
-                sendBtn.disabled = false;
-                sendBtn.style.opacity = '1';
-                sendBtn.style.cursor = 'pointer';
-            }
-        }
-    }
-
-    function openChat(fid, profile) {
-        activeChatFriendship = { id: fid, profile };
-        const panel = document.getElementById('socialPanelChat');
-        if (panel) panel.style.display = 'flex';
-        const headerName = document.getElementById('chatHeaderName');
-        const headerBadge = document.getElementById('chatHeaderBadge');
-        const headerAvatar = document.getElementById('chatHeaderAvatar');
-        const headerActions = document.getElementById('chatHeaderActions');
-        if (headerName) headerName.textContent = profile.username || '';
-        if (headerBadge) headerBadge.innerHTML = profile.accountType === 'microsoft' ? premiumBadge() : '';
-        if (headerAvatar) headerAvatar.innerHTML = getAvatarHtml(profile, 36);
-        if (headerActions) {
-            const isAdmin = profile.isGroup && socialAuth && (profile.admins || []).includes(socialAuth.uid);
-            headerActions.style.display = isAdmin ? 'flex' : 'none';
-        }
-        chatEarliestTimestamp = null;
-        lastMessageIds.clear();
-        
-        // Check version compatibility immediately and after async version resolve
-        updateChatInputVersionState(profile);
-        if (api().get_launcher_version) {
-            api().get_launcher_version().then(ver => {
-                if (ver) {
-                    window.APP_VERSION = ver;
-                    updateChatInputVersionState(profile);
-                }
-            }).catch(()=>{});
-        }
-        
-        // Clear message container immediately to prevent mixing
-        const container = document.getElementById('chatMessages');
-        if (container) container.innerHTML = '';
-        
-        loadChatMessages(true);
-        // Mark read
-        try { api().social_mark_read(fid); updateBadge(); } catch (e) {}
-        // Load reply state from Firestore
-        loadReplyState();
-        // Start chat polling (smart scroll) every 2.5s for fast real-time chat
-        if (chatInterval) clearInterval(chatInterval);
-        chatInterval = setInterval(() => loadChatMessages(false), 2500);
-    }
-
-    function closeChat() {
-        activeChatFriendship = null;
-        if (chatInterval) { clearInterval(chatInterval); chatInterval = null; }
-        const panel = document.getElementById('socialPanelChat');
-        if (panel) panel.style.display = 'none';
-    }
-
-    async function loadReplyState() {
-        if (!activeChatFriendship) return;
-        try {
-            const res = await api().social_get_reply(activeChatFriendship.id);
-            if (res && res.success && res.reply) {
-                const reply = res.reply;
-                replyingTo = {
-                    id: reply.msgId,
-                    content: reply.content,
-                    senderId: reply.senderId,
-                    senderName: reply.senderName
-                };
-                // Show reply preview
-                const input = document.getElementById('chatInput');
-                const inputArea = document.querySelector('.chat-input-area');
-                if (!input || !inputArea) return;
-                let existingPreview = document.getElementById('chatReplyPreview');
-                if (existingPreview) existingPreview.remove();
-                const isMyReply = reply.senderId === socialAuth.uid;
-                const preview = document.createElement('div');
-                preview.id = 'chatReplyPreview';
-                preview.className = 'chat-reply-preview-input';
-                preview.innerHTML = `
-                    <div class="reply-preview-header">
-                        <span class="reply-preview-label">↳ Replying to ${isMyReply ? 'yourself' : reply.senderName}</span>
-                        <button class="reply-preview-cancel" onclick="cancelReply()">✕</button>
-                    </div>
-                    <span class="reply-preview-text">${escapeHtml((reply.content || '').slice(0, 60))}${(reply.content || '').length > 60 ? '…' : ''}</span>
-                `;
-                inputArea.insertBefore(preview, inputArea.firstChild);
-            }
-        } catch (e) {
-            console.error('[Social] loadReplyState error:', e.message);
-        }
-    }
-
-    async function loadChatMessages(scrollBottom) {
-        if (!activeChatFriendship || !socialAuth) return;
-        const currentFid = activeChatFriendship.id;
-        try {
-            const res = await api().social_get_messages(currentFid, null);
-            if (!activeChatFriendship || activeChatFriendship.id !== currentFid) return; // Discard if chat changed
-            
-            if (!res || !res.success) {
-                console.warn('[Social] loadChatMessages failed:', res?.error);
-                return;
-            }
-            renderMessages(res.messages || [], scrollBottom, currentFid);
-        } catch (e) {
-            console.error('[Social] loadChatMessages error:', e.message);
-        }
-    }
-
-    function renderMessages(msgs, scrollBottom, currentFid) {
-        if (!activeChatFriendship || activeChatFriendship.id !== currentFid) return; // Double check
-        const container = document.getElementById('chatMessages');
-        if (!container) return;
-        if (!socialAuth) {
-            console.warn('[Social] renderMessages called without socialAuth');
-            return;
-        }
-        
-        const myUid = socialAuth.uid;
-        
-        if (msgs.length === 0) {
-            container.innerHTML = '<div class="chat-empty"><p>No messages yet. Say hello!</p></div>';
-            lastMessageIds.clear();
-            return;
-        }
-
-        const isFirstLoad = lastMessageIds.size === 0;
-
-        if (!isFirstLoad) {
-            // SILENT SYNC: Find deleted messages
-            // We only remove messages from the DOM if they are completely missing from `msgs` 
-            // BUT we only consider messages newer than or equal to the oldest message in `msgs`
-            const serverMsgIds = new Set(msgs.map(m => m.id));
-            const domMsgs = Array.from(container.querySelectorAll('.chat-msg[data-msg-id]'));
-            let DOMChanged = false;
-            
-            domMsgs.forEach(msgEl => {
-                const id = msgEl.dataset.msgId;
-                if (!serverMsgIds.has(id)) {
-                    // Check if it's an old message that wasn't fetched due to pagination limit
-                    // Or a temporary sending message. If it's a normal message and it's missing, delete it!
-                    if (!msgEl.dataset.temp) {
-                        msgEl.remove();
-                        lastMessageIds.delete(id);
-                        DOMChanged = true;
-                    }
-                }
-            });
-
-            // SILENT SYNC: Find edited messages
-            msgs.forEach(serverMsg => {
-                const msgEl = container.querySelector(`.chat-msg[data-msg-id="${serverMsg.id}"]`);
-                if (msgEl) {
-                    const currentContent = msgEl.dataset.content;
-                    if (currentContent !== serverMsg.content) {
-                        msgEl.dataset.content = serverMsg.content;
-                        const textEl = msgEl.querySelector('.chat-msg-text');
-                        if (textEl) textEl.textContent = serverMsg.content;
-                        const timeEl = msgEl.querySelector('.chat-msg-time');
-                        if (timeEl && serverMsg.edited) {
-                            timeEl.textContent = formatTime(serverMsg.timestamp) + ' (edited)';
-                        }
-                        DOMChanged = true;
-                    }
-                }
-            });
-            
-            // Remove empty placeholder if it exists
-            const emptyEl = container.querySelector('.chat-empty');
-            if (emptyEl) emptyEl.remove();
-            
-            if (DOMChanged) {
-                // If DOM changed (edits or deletes), refresh friends list to update previews
-                setTimeout(() => loadFriends(false), 500);
-            }
-        }
-        
-        chatEarliestTimestamp = msgs[0] ? msgs[0].timestamp : null;
-        let newMsgs = msgs.filter(m => !lastMessageIds.has(m.id));
-
-        // Resolve any pending temp elements to their real IDs before rendering.
-        // This prevents duplicates when the chat poll fires while a send is still in-flight.
-        newMsgs = newMsgs.filter(msg => {
-            if (msg.senderId === myUid) {
-                const tempEl = container.querySelector('[data-temp]:not([data-msg-id])');
-                if (tempEl) {
-                    tempEl.dataset.msgId = msg.id;
-                    delete tempEl.dataset.temp;
-                    lastMessageIds.add(msg.id);
-                    return false; // already represented in DOM, skip
-                }
-            }
-            return true;
-        });
-        if (newMsgs.length === 0 && lastMessageIds.size > 0) return;
-
-        // If new messages arrived, refresh friends list to update last message preview
-        if (newMsgs.length > 0) {
-            setTimeout(() => loadFriends(false), 500);
-        }
-
-        // Check if user is near bottom for smart scroll
-        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
-        let html = '';
-        let prevSender = container.lastElementChild?.dataset.senderId;
-        for (const msg of newMsgs) {
-            const isMine = msg.senderId === myUid;
-            const showAv = msg.senderId !== prevSender && !isMine;
-            const cls = isMine ? 'chat-msg chat-msg-mine' : 'chat-msg chat-msg-other';
-            const avatarEl = showAv
-                ? `<div class="chat-msg-avatar">${getAvatarHtml(activeChatFriendship.profile, 28)}</div>`
-                : `<div class="chat-msg-avatar-spacer"></div>`;
-            const statusText = isMine && msg.status ? `<span class="chat-msg-status">${msg.status}</span>` : '';
-            const editedText = msg.edited ? ' (edited)' : '';
-            // Reply preview
-            let replyHtml = '';
-            if (msg.replyTo) {
-                const isMyReply = msg.replySender === myUid;
-                let replyText = msg.replyContent || '';
-                // Format profile share replies
-                if (replyText.startsWith('$$PROFILE_SHARE$$')) {
-                    try {
-                        const p = JSON.parse(replyText.substring('$$PROFILE_SHARE$$'.length)).profile;
-                        replyText = p ? `Installation: ${p.name}` : `Installation: Unknown`;
-                    } catch(e) {
-                        replyText = 'Installation';
-                    }
-                }
-                replyHtml = `<div class="chat-reply-preview">
-                    <span class="chat-reply-label">↳ ${isMyReply ? 'You' : (msg.replySenderName || 'Unknown')}</span>
-                    <span class="chat-reply-text">${escapeHtml(replyText.slice(0, 50))}${replyText.length > 50 ? '…' : ''}</span>
-                </div>`;
-            }
-            
-            // Check for profile share
-            let msgContentHtml = `<span class="chat-msg-text">${escapeHtml(msg.content)}</span>`;
-            if (msg.content && msg.content.startsWith('$$PROFILE_SHARE$$')) {
-                try {
-                    const payload = JSON.parse(msg.content.substring('$$PROFILE_SHARE$$'.length));
-                    if (payload && payload.profile) {
-                        const p = payload.profile;
-                        const defaultIcon = 'ui/img/icon.png';
-                        // Icon source will be async loaded via dataset or handled gracefully
-                        msgContentHtml = `
-                            <div class="chat-profile-card">
-                                <div class="chat-profile-card-header">
-                                    <img src="${defaultIcon}" class="chat-profile-card-icon" data-async-icon="${p.icon || ''}">
-                                    <div class="chat-profile-card-info">
-                                        <div class="chat-profile-card-name">${escapeHtml(p.name)}</div>
-                                        <div class="chat-profile-card-version">${escapeHtml(formatVersionString(p.version))}</div>
-                                    </div>
-                                </div>
-                                <div class="chat-profile-card-actions">
-                                    <button class="chat-profile-card-btn chat-profile-btn-view" onclick="viewSharedProfile('${escapeHtml(msg.content)}')">View Installation</button>
-                                    <button class="chat-profile-card-btn chat-profile-btn-install" onclick="installSharedProfile('${escapeHtml(msg.content)}')">Install</button>
-                                </div>
-                            </div>
-                        `;
-                    }
-                } catch(e) {
-                    console.error("Error parsing profile share", e);
-                }
-            } else if (msg.content && msg.content.startsWith('$$LINK$$')) {
-                try {
-                    const linkData = JSON.parse(msg.content.substring('$$LINK$$'.length));
-                    if (linkData && linkData.url) {
-                        const typeIcon = getLinkTypeIcon(linkData.type);
-                        msgContentHtml = `
-                            <div class="chat-link-card">
-                                <div class="chat-link-card-header">
-                                    <div class="chat-link-card-icon">
-                                        <i class="${typeIcon}"></i>
-                                    </div>
-                                    <div class="chat-link-card-info">
-                                        <div class="chat-link-card-title">${escapeHtml(linkData.title || linkData.url)}</div>
-                                        <div class="chat-link-card-type">${escapeHtml(linkData.typeName || 'Link')}</div>
-                                    </div>
-                                </div>
-                                <a href="${escapeHtml(linkData.url)}" target="_blank" class="chat-link-card-btn">
-                                    <i class="fas fa-external-link-alt"></i> Open Link
-                                </a>
-                            </div>
-                        `;
-                    }
-                } catch (e) {
-                    console.error('[Social] Failed to parse link share:', e);
-                }
-            }
-            
-            // Check for seed card
-            if (msg.content) {
-                try {
-                    const payload = JSON.parse(msg.content);
-                    if (payload && payload.type === 'seed' && payload.seed) {
-                        msgContentHtml = `
-                            <div class="chat-msg-seed-card">
-                                <div class="seed-card-header">
-                                    <i class="fas fa-seedling"></i>
-                                    <span>Seed</span>
-                                </div>
-                                <div class="seed-card-content">
-                                    <span class="seed-value">${escapeHtml(String(payload.seed))}</span>
-                                    <button class="seed-copy-btn" onclick="copySeedToClipboard('${escapeHtml(String(payload.seed))}', this)">
-                                        <i class="fas fa-copy"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                    }
-                } catch(e) {
-                    // Not JSON, just regular text
-                }
-            }
-
-            html += `<div class="${cls}" data-sender-id="${msg.senderId}" data-msg-id="${msg.id}" data-content="${escapeHtml(msg.content)}" data-reply-to="${msg.replyTo || ''}" data-reply-content="${escapeHtml(msg.replyContent || '')}" data-reply-sender="${msg.replySender || ''}" data-reply-sender-name="${escapeHtml(msg.replySenderName || '')}">
-              ${!isMine ? avatarEl : ''}
-              <div class="chat-msg-bubble">
-                ${replyHtml}
-                ${msgContentHtml}
-                <span class="chat-msg-time">${formatTime(msg.timestamp)}${editedText}</span>
-                ${statusText}
-              </div>
-            </div>`;
-            prevSender = msg.senderId;
-            lastMessageIds.add(msg.id);
-        }
-        if (isFirstLoad) {
-            // First load - render all
-            container.innerHTML = html;
-        } else {
-            // Append new messages
-            container.insertAdjacentHTML('beforeend', html);
-        }
-        if (scrollBottom || isNearBottom) container.scrollTop = container.scrollHeight;
-        
-        // Load missing icons asynchronously
-        container.querySelectorAll('img[data-async-icon]').forEach(async img => {
-            const iconName = img.dataset.asyncIcon;
-            if (iconName && !img.dataset.loaded) {
-                img.dataset.loaded = "true";
-                try {
-                    const rawIcon = await api().get_profile_icon(iconName);
-                    img.src = window.resolveImageSource ? window.resolveImageSource(rawIcon) : rawIcon;
-                } catch(e) {}
-            }
-        });
-        
-        // Add event listeners to new messages
-        attachMessageEventListeners();
-    }
-
-    function attachMessageEventListeners() {
-        const container = document.getElementById('chatMessages');
-        if (!container || container.dataset.listenersAttached) return;
-        container.dataset.listenersAttached = 'true';
-        
-        container.addEventListener('dblclick', (e) => {
-            const msg = e.target.closest('.chat-msg');
-            if (!msg || !msg.dataset.msgId) return;
-            const msgId = msg.dataset.msgId;
-            const content = msg.dataset.content;
-            const senderId = msg.dataset.senderId;
-            const senderName = senderId === socialAuth.uid ? 'You' : (activeChatFriendship.profile.username || 'Unknown');
-            startReply({ id: msgId, content, senderId, senderName });
-        });
-        
-        container.addEventListener('contextmenu', (e) => {
-            const msg = e.target.closest('.chat-msg');
-            if (!msg || !msg.dataset.msgId) return;
-            e.preventDefault();
-            showContextMenu(e, msg);
-        });
-    }
-
-    function startReply(msg) {
-        replyingTo = msg;
-        editingMessageId = null;
-        // Persist to Firestore
-        api().social_set_reply(activeChatFriendship.id, msg);
-        const input = document.getElementById('chatInput');
-        if (!input) return;
-        input.focus();
-        // Show reply preview above input
-        const inputArea = document.querySelector('.chat-input-area');
-        if (!inputArea) return;
-        let existingPreview = document.getElementById('chatReplyPreview');
-        if (existingPreview) existingPreview.remove();
-        const isMyReply = msg.senderId === socialAuth.uid;
-        const preview = document.createElement('div');
-        preview.id = 'chatReplyPreview';
-        preview.className = 'chat-reply-preview-input';
-        
-        let replyText = msg.content || '';
-        if (replyText.startsWith('$$PROFILE_SHARE$$')) {
-            try {
-                const p = JSON.parse(replyText.substring('$$PROFILE_SHARE$$'.length)).profile;
-                replyText = p ? `Installation: ${p.name}` : `Installation: Unknown`;
-            } catch(e) {
-                replyText = 'Installation';
-            }
-        }
-        
-        preview.innerHTML = `
-            <div class="reply-preview-header">
-                <span class="reply-preview-label">↳ Replying to ${isMyReply ? 'yourself' : msg.senderName}</span>
-                <button class="reply-preview-cancel" onclick="cancelReply()">✕</button>
-            </div>
-            <span class="reply-preview-text">${escapeHtml(replyText.slice(0, 60))}${replyText.length > 60 ? '…' : ''}</span>
-        `;
-        inputArea.insertBefore(preview, inputArea.firstChild);
-    }
-
-    function startEdit(msgId, content) {
-        editingMessageId = msgId;
-        replyingTo = null;
-        const input = document.getElementById('chatInput');
-        if (!input) return;
-        input.value = content;
-        input.placeholder = 'Edit your message...';
-        input.focus();
-        // Remove reply preview if exists
-        const replyPreview = document.getElementById('chatReplyPreview');
-        if (replyPreview) replyPreview.remove();
-        
-        // Show edit preview above input
-        const inputArea = document.querySelector('.chat-input-area');
-        if (!inputArea) return;
-        let existingPreview = document.getElementById('chatEditPreview');
-        if (existingPreview) existingPreview.remove();
-        const preview = document.createElement('div');
-        preview.id = 'chatEditPreview';
-        preview.className = 'chat-reply-preview-input';
-        preview.innerHTML = `
-            <div class="reply-preview-header">
-                <span class="reply-preview-label" style="color: #34d399">✎ Editing Message</span>
-                <button class="reply-preview-cancel" onclick="cancelEdit()">✕</button>
-            </div>
-            <span class="reply-preview-text">${escapeHtml((content || '').slice(0, 60))}${(content || '').length > 60 ? '…' : ''}</span>
-        `;
-        inputArea.insertBefore(preview, inputArea.firstChild);
-    }
-    
-    window.cancelEdit = function() {
-        editingMessageId = null;
-        const input = document.getElementById('chatInput');
-        const editPreview = document.getElementById('chatEditPreview');
-        if (editPreview) editPreview.remove();
-        if (input) {
-            input.placeholder = 'Type a message...';
-            input.value = '';
-        }
-    };
-
-    function showContextMenu(e, msgEl) {
-        const msgId = msgEl.dataset.msgId;
-        const content = msgEl.dataset.content;
-        const senderId = msgEl.dataset.senderId;
-        const isMine = senderId === socialAuth.uid;
-        const isProfileShare = content && content.startsWith('$$PROFILE_SHARE$$');
-        const canEdit = isMine && !isProfileShare;
-        
-        // Remove existing context menu
-        const existing = document.getElementById('chatContextMenu');
-        if (existing) existing.remove();
-        
-        if (!isMine) return;
-        
-        const menu = document.createElement('div');
-        menu.id = 'chatContextMenu';
-        menu.className = 'chat-context-menu';
-        
-        let menuHtml = '';
-        if (isMine) {
-            menuHtml += `<button class="context-menu-item context-menu-danger" data-action="delete"><i class="fas fa-trash"></i> Delete</button>`;
-        }
-        
-        menu.innerHTML = menuHtml;
-        menu.style.left = `${e.pageX}px`;
-        menu.style.top = `${e.pageY}px`;
-        document.body.appendChild(menu);
-        
-        // Handle clicks
-        menu.addEventListener('click', (menuE) => {
-            const btn = menuE.target.closest('.context-menu-item');
-            if (!btn) return;
-            const action = btn.dataset.action;
-            if (action === 'delete') {
-                showDeleteConfirmation(msgId);
-            }
-            menu.remove();
-        });
-        
-        // Close on click outside
-        const closeMenu = (ev) => {
-            if (!menu.contains(ev.target)) {
-                menu.remove();
-                document.removeEventListener('click', closeMenu);
-            }
-        };
-        setTimeout(() => document.addEventListener('click', closeMenu), 0);
-    }
-
-    function showDeleteConfirmation(msgId) {
-        const existing = document.getElementById('deleteMessageModal');
-        if (existing) existing.remove();
-        
-        const modal = document.createElement('div');
-        modal.id = 'deleteMessageModal';
-        modal.className = 'modal show';
-        modal.innerHTML = `
-            <div class="modal-content delete-modal">
-                <h3>Delete Message?</h3>
-                <p>This action cannot be undone.</p>
-                <div class="modal-actions">
-                    <button class="btn-secondary" id="cancelDelete">Cancel</button>
-                    <button class="btn-danger" id="confirmDelete">Delete</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-        
-        document.getElementById('cancelDelete').addEventListener('click', () => modal.remove());
-        document.getElementById('confirmDelete').addEventListener('click', async () => {
-            const res = await api().social_delete_message(activeChatFriendship.id, msgId);
-            if (res && res.success) {
-                const msgEl = document.querySelector(`[data-msg-id="${msgId}"]`);
-                if (msgEl) msgEl.remove();
-            } else {
-                console.error('[Social] Failed to delete message:', res?.error);
-                showToast('Failed to delete message: ' + (res?.error || 'Unknown Error'));
-            }
-            modal.remove();
-        });
-    }
-
-    function handleChatGridButtonClick(e) {
-        const btn = e.currentTarget;
-        const type = btn.dataset.type;
-        
-        if (!activeChatFriendship) {
-            console.warn('[Social] No active chat to send card to');
-            return;
-        }
-
-        switch (type) {
-            case 'installation':
-                // Open share profile modal (existing functionality)
-                openShareProfileModal();
-                break;
-            case 'seed':
-                // Open seed modal
-                openShareSeedModal();
-                break;
-            case 'server':
-                // TODO: Implement server invite sharing
-                showToast('Server invite sharing coming soon!');
-                break;
-            case 'link':
-                // Open share link modal
-                openShareLinkModal();
-                break;
-            default:
-                console.warn('[Social] Unknown button type:', type);
-        }
-    }
-
-    async function sendChatMessage() {
-        const input = document.getElementById('chatInput');
-        if (!input || !activeChatFriendship) return;
-        if (activeChatFriendship.profile) {
-            const compat = checkLauncherVersionCompatibility(activeChatFriendship.profile);
-            if (!compat.compatible) {
-                showToast(compat.message, 'warning');
-                return;
-            }
-        }
-        const content = input.value.trim();
-        if (!content) return;
-        
-        // Handle edit mode
-        if (editingMessageId) {
-            const res = await api().social_edit_message(activeChatFriendship.id, editingMessageId, content);
-            if (res && res.success) {
-                // Update message in UI
-                const msgEl = document.querySelector(`[data-msg-id="${editingMessageId}"] .chat-msg-text`);
-                if (msgEl) msgEl.textContent = content;
-                const timeEl = document.querySelector(`[data-msg-id="${editingMessageId}"] .chat-msg-time`);
-                if (timeEl) timeEl.textContent = formatTime(new Date().toISOString()) + ' (edited)';
-                const containerMsg = document.querySelector(`[data-msg-id="${editingMessageId}"]`);
-                if (containerMsg) containerMsg.dataset.content = content;
-            } else {
-                console.error('[Social] Failed to edit message:', res?.error);
-                showToast('Failed to edit message: ' + (res?.error || 'Unknown Error'));
-            }
-            editingMessageId = null;
-            input.value = '';
-            cancelEdit();
-            input.disabled = false;
-            input.focus();
-            return;
-        }
-        
-        input.value = '';
-        input.disabled = true;
-        // Optimistic UI: add "sending" message immediately
-        const container = document.getElementById('chatMessages');
-        const myUid = socialAuth.uid;
-        const tempId = `temp_${Date.now()}`;
-        const tempMsg = {
-            id: tempId,
-            senderId: myUid,
-            content,
-            timestamp: new Date().toISOString(),
-            status: 'sending'
-        };
-        if (replyingTo) {
-            tempMsg.replyTo = replyingTo.id;
-            tempMsg.replyContent = replyingTo.content;
-            tempMsg.replySender = replyingTo.senderId;
-            tempMsg.replySenderName = replyingTo.senderName;
-        }
-        const prevSender = container.lastElementChild?.dataset.senderId;
-        const showAv = prevSender !== myUid;
-        let replyHtml = '';
-        if (replyingTo) {
-            const isMyReply = replyingTo.senderId === myUid;
-            let replyText = replyingTo.content || '';
-            // Format profile share replies
-            if (replyText.startsWith('$$PROFILE_SHARE$$')) {
-                try {
-                    const p = JSON.parse(replyText.substring('$$PROFILE_SHARE$$'.length)).profile;
-                    replyText = p ? `Installation: ${p.name}` : `Installation: Unknown`;
-                } catch(e) {
-                    replyText = 'Installation';
-                }
-            }
-            replyHtml = `<div class="chat-reply-preview">
-                <span class="chat-reply-label">↳ ${isMyReply ? 'You' : replyingTo.senderName}</span>
-                <span class="chat-reply-text">${escapeHtml(replyText.slice(0, 50))}${replyText.length > 50 ? '…' : ''}</span>
-            </div>`;
-        }
-        let msgContentHtml = `<span class="chat-msg-text">${escapeHtml(content)}</span>`;
-        if (content.startsWith('$$PROFILE_SHARE$$')) {
-            try {
-                const payload = JSON.parse(content.substring('$$PROFILE_SHARE$$'.length));
-                if (payload && payload.profile) {
-                    const p = payload.profile;
-                    const defaultIcon = 'ui/img/icon.png';
-                    msgContentHtml = `
-                        <div class="chat-profile-card">
-                            <div class="chat-profile-card-header">
-                                <img src="${defaultIcon}" class="chat-profile-card-icon" data-async-icon="${p.icon || ''}">
-                                <div class="chat-profile-card-info">
-                                    <div class="chat-profile-card-name">${escapeHtml(p.name)}</div>
-                                    <div class="chat-profile-card-version">${escapeHtml(formatVersionString(p.version))}</div>
-                                </div>
-                            </div>
-                            <div class="chat-profile-card-actions">
-                                <button class="chat-profile-card-btn chat-profile-btn-view" onclick="viewSharedProfile('${escapeHtml(content)}')">View Installation</button>
-                                <button class="chat-profile-card-btn chat-profile-btn-install" onclick="installSharedProfile('${escapeHtml(content)}')">Install</button>
-                            </div>
-                        </div>
-                    `;
-                }
-            } catch(e) {}
-        }
-        
-        const html = `<div class="chat-msg chat-msg-mine" data-sender-id="${myUid}" data-content="${escapeHtml(content)}" data-reply-to="${replyingTo ? replyingTo.id : ''}" data-reply-content="${replyingTo ? escapeHtml(replyingTo.content) : ''}" data-reply-sender="${replyingTo ? replyingTo.senderId : ''}" data-reply-sender-name="${replyingTo ? escapeHtml(replyingTo.senderName) : ''}" data-temp="${tempId}">
-          <div class="chat-msg-bubble">
-            ${replyHtml}
-            ${msgContentHtml}
-            <span class="chat-msg-time">Sending...</span>
-            <span class="chat-msg-status">sending</span>
-          </div>
-        </div>`;
-        container.insertAdjacentHTML('beforeend', html);
-        container.scrollTop = container.scrollHeight;
-        try {
-            const res = await api().social_send_message(activeChatFriendship.id, content, replyingTo);
-            if (res && res.success) {
-                // Just update the temp message status from "Sending..." to "sent"
-                const tempEl = container.querySelector(`[data-temp="${tempId}"] .chat-msg-time`);
-                if (tempEl) tempEl.textContent = formatTime(new Date().toISOString());
-                const statusEl = container.querySelector(`[data-temp="${tempId}"] .chat-msg-status`);
-                if (statusEl) statusEl.textContent = 'sent';
-                // Remove the temp attribute so it's treated as a real message
-                const msgEl = container.querySelector(`[data-temp="${tempId}"]`);
-                if (msgEl) {
-                    delete msgEl.dataset.temp;
-                    msgEl.dataset.msgId = res.msgId;
-                    lastMessageIds.add(res.msgId);
-                }
-            } else {
-                // Show error
-                const tempEl = container.querySelector(`[data-temp="${tempId}"] .chat-msg-time`);
-                if (tempEl) tempEl.textContent = 'Failed';
-            }
-        } catch (e) {
-            console.error('[Social] sendChatMessage error:', e.message);
-            const tempEl = container.querySelector(`[data-temp="${tempId}"] .chat-msg-time`);
-            if (tempEl) tempEl.textContent = 'Error';
-        }
-        input.disabled = false;
-        input.focus();
-        cancelReply();
-    }
-
-    window.cancelReply = function() {
-        replyingTo = null;
-        editingMessageId = null;
-        // Clear from Firestore
-        if (activeChatFriendship) {
-            api().social_set_reply(activeChatFriendship.id, null);
-        }
-        const input = document.getElementById('chatInput');
-        const replyPreview = document.getElementById('chatReplyPreview');
-        if (replyPreview) replyPreview.remove();
-        if (input) {
-            input.placeholder = 'Type a message...';
-            input.value = '';
-        }
-    };
-
-    // --- Group Chat ---
-    let createGroupSelectedFriends = new Set();
-    let createGroupImageBase64 = '';
-
-    function openCreateGroupModal() {
-        const modal = document.getElementById('createGroupModal');
-        if (!modal) return;
-        
-        // Reset state
-        createGroupSelectedFriends.clear();
-        createGroupImageBase64 = '';
-        
-        // Reset UI
-        document.getElementById('createGroupStep1').style.display = 'block';
-        document.getElementById('createGroupStep2').style.display = 'none';
-        document.getElementById('groupNameInput').value = '';
-        document.getElementById('groupDescInput').value = '';
-        document.getElementById('groupIconPreview').style.display = 'none';
-        document.getElementById('groupIconPreview').src = '';
-        document.getElementById('groupIconPlaceholder').style.display = 'block';
-        document.getElementById('nextCreateGroupBtn').disabled = true;
-        document.getElementById('confirmCreateGroupBtn').disabled = true;
-
-        // Render friends list
-        renderCreateGroupFriends();
-
-        modal.classList.add('show');
-    }
-
-    function closeCreateGroupModal() {
-        const modal = document.getElementById('createGroupModal');
-        if (modal) modal.classList.remove('show');
-    }
-
-    function renderCreateGroupFriends() {
-        const list = document.getElementById('groupFriendsList');
-        if (!list || !cachedFriends) return;
-
-        // Only show individual friends (not groups)
-        const individualFriends = cachedFriends.filter(f => !f.isGroup);
-
-        if (individualFriends.length === 0) {
-            list.innerHTML = '<div class="social-empty" style="color: #888; font-size: 13px; text-align: center; padding: 20px;">You need friends to create a group chat.</div>';
-            return;
-        }
-
-        list.innerHTML = individualFriends.map(f => {
-            const p = f.profile;
-            const avatarHtml = getAvatarHtml(p, 30);
-            const isSelected = createGroupSelectedFriends.has(p.uid);
-            
-            return `
-            <div class="social-user-item" style="cursor: pointer; padding: 6px 10px; border-radius: 6px;" onclick="toggleCreateGroupFriend('${escapeHtml(p.uid)}')">
-                <div class="social-item-avatar" style="width: 30px; height: 30px;">${avatarHtml}</div>
-                <div class="social-item-info" style="flex: 1;">
-                    <div class="social-item-name" style="font-size: 13px;">${escapeHtml(p.username)}</div>
-                </div>
-                <div class="social-item-actions">
-                    <i class="fas ${isSelected ? 'fa-check-square' : 'fa-square'}" style="color: ${isSelected ? '#4facfe' : 'rgba(255,255,255,0.25)'}; font-size: 18px; transition: color 0.2s;"></i>
-                </div>
-            </div>`;
-        }).join('');
-    }
-
-    window.toggleCreateGroupFriend = function(uid) {
-        if (createGroupSelectedFriends.has(uid)) {
-            createGroupSelectedFriends.delete(uid);
-        } else {
-            createGroupSelectedFriends.add(uid);
-        }
-        document.getElementById('nextCreateGroupBtn').disabled = createGroupSelectedFriends.size === 0;
-        renderCreateGroupFriends();
-    };
-
-    function handleGroupImageSelect(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            const img = new Image();
-            img.onload = function() {
-                const canvas = document.createElement('canvas');
-                canvas.width = 128;
-                canvas.height = 128;
-                const ctx = canvas.getContext('2d');
-                
-                // Crop and resize logic to make it square
-                const size = Math.min(img.width, img.height);
-                const startX = (img.width - size) / 2;
-                const startY = (img.height - size) / 2;
-                
-                ctx.drawImage(img, startX, startY, size, size, 0, 0, 128, 128);
-                
-                createGroupImageBase64 = canvas.toDataURL('image/jpeg', 0.8);
-                
-                const preview = document.getElementById('groupIconPreview');
-                preview.src = createGroupImageBase64;
-                preview.style.display = 'block';
-                document.getElementById('groupIconPlaceholder').style.display = 'none';
-            };
-            img.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
-    }
-
-    async function submitCreateGroup() {
-        const name = document.getElementById('groupNameInput').value.trim();
-        const desc = document.getElementById('groupDescInput').value.trim();
-        
-        if (!name) return;
-
-        const btn = document.getElementById('confirmCreateGroupBtn');
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
-
-        try {
-            const members = Array.from(createGroupSelectedFriends);
-            const res = await api().social_create_group(name, desc, createGroupImageBase64, members);
-            
-            if (res && res.success) {
-                closeCreateGroupModal();
-                loadFriends(true); // reload friends to see new group
-            } else {
-                showToast('Failed to create group: ' + (res?.error || 'Unknown error'));
-            }
-        } catch (e) {
-            console.error('[Social] createGroup error:', e);
-            showToast('Failed to create group');
-        } finally {
-            btn.innerHTML = 'Create';
-            btn.disabled = false;
-        }
-    }
-
-    // --- Group Settings ---
-    let currentGroupSettingsId = null;
-    let currentGroupSettingsData = null;
-    let editGroupImageBase64 = '';
-
-    function openGroupSettingsModal() {
-        if (!activeChatFriendship || !activeChatFriendship.profile.isGroup) return;
-        currentGroupSettingsId = activeChatFriendship.id;
-        currentGroupSettingsData = activeChatFriendship.profile;
-        const modal = document.getElementById('groupSettingsModal');
-        if (!modal) return;
-        modal.classList.add('show');
-        switchGroupSettingsTab('info');
-        loadGroupSettingsInfo();
-        loadGroupMembers();
-    }
-
-    function closeGroupSettingsModal() {
-        const modal = document.getElementById('groupSettingsModal');
-        if (modal) modal.classList.remove('show');
-        currentGroupSettingsId = null;
-        currentGroupSettingsData = null;
-        editGroupImageBase64 = '';
-    }
-
-    function switchGroupSettingsTab(tab) {
-        const infoTab = document.getElementById('groupTabInfo');
-        const membersTab = document.getElementById('groupTabMembers');
-        
-        document.querySelectorAll('.group-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-        
-        if (tab === 'info') {
-            membersTab.style.opacity = '0';
-            setTimeout(() => {
-                membersTab.style.display = 'none';
-                infoTab.style.display = 'block';
-                setTimeout(() => {
-                    infoTab.style.opacity = '1';
-                }, 10);
-            }, 200);
-        } else {
-            infoTab.style.opacity = '0';
-            setTimeout(() => {
-                infoTab.style.display = 'none';
-                membersTab.style.display = 'block';
-                setTimeout(() => {
-                    membersTab.style.opacity = '1';
-                }, 10);
-            }, 200);
-        }
-    }
-
-    function loadGroupSettingsInfo() {
-        if (!currentGroupSettingsData) return;
-        document.getElementById('editGroupNameInput').value = currentGroupSettingsData.username || '';
-        document.getElementById('editGroupDescInput').value = currentGroupSettingsData.description || '';
-        const preview = document.getElementById('editGroupIconPreview');
-        const placeholder = document.getElementById('editGroupIconPlaceholder');
-        if (currentGroupSettingsData.avatarBase64) {
-            preview.src = currentGroupSettingsData.avatarBase64;
-            preview.style.display = 'block';
-            placeholder.style.display = 'none';
-            editGroupImageBase64 = currentGroupSettingsData.avatarBase64;
-        } else {
-            preview.style.display = 'none';
-            placeholder.style.display = 'block';
-            editGroupImageBase64 = '';
-        }
-    }
-
-    async function loadGroupMembers() {
-        if (!currentGroupSettingsId) return;
-        const res = await api().social_get_group_details(currentGroupSettingsId);
-        if (!res || !res.success) return;
-        const group = res.group;
-        const profiles = res.profiles || [];
-        const myUid = socialAuth.uid;
-        const isOwner = group.admin === myUid;
-        const admins = group.admins || [group.admin];
-        const isAdmin = admins.includes(myUid);
-
-        // Render members list
-        const list = document.getElementById('groupMembersList');
-        if (list) {
-            list.innerHTML = profiles.map(p => {
-                const isMemberOwner = p.uid === group.admin;
-                const isMemberAdmin = admins.includes(p.uid);
-                const isMe = p.uid === myUid;
-                const canManage = (isOwner || (isAdmin && p.uid !== group.admin)) && !isMe;
-                const canPromote = isAdmin && !isMemberAdmin && !isMe;
-                const canDemote = isOwner && isMemberAdmin && !isMemberOwner;
-                const avatar = getAvatarHtml(p, 36);
-                const roleText = isMemberOwner ? 'Owner' : (isMemberAdmin ? 'Admin' : 'Member');
-                const roleColor = isMemberOwner ? '#ffd700' : (isMemberAdmin ? '#4facfe' : '#888888');
-                const roleBgColor = isMemberOwner ? 'rgba(255,215,0,0.15)' : (isMemberAdmin ? 'rgba(79,172,254,0.15)' : 'rgba(136,136,136,0.15)');
-                const roleIcon = isMemberOwner ? 'fa-crown' : (isMemberAdmin ? 'fa-shield-alt' : 'fa-user');
-                const youBadge = isMe ? '<div class="member-you-badge">You</div>' : '';
-                
-                // Check if this member is already a friend
-                const isFriend = cachedFriends && cachedFriends.some(f => !f.isGroup && f.profile.uid === p.uid);
-                const canSendRequest = !isMe && !isFriend;
-                let actions = '';
-                if (canPromote) {
-                    actions += `<button class="social-action-btn social-btn-add" title="Make Admin" onclick='promoteGroupMember("${escapeHtml(p.uid)}")'><i class="fas fa-shield-alt"></i></button>`;
-                }
-                if (canDemote) {
-                    actions += `<button class="social-action-btn social-btn-block" title="Remove Admin" onclick='demoteGroupAdmin("${escapeHtml(p.uid)}")'><i class="fas fa-shield-alt" style="color:#ff6b6b;"></i></button>`;
-                }
-                if (canManage) {
-                    actions += `<button class="social-action-btn social-btn-remove" title="Remove from Group" onclick='removeGroupMember("${escapeHtml(p.uid)}", "${escapeHtml(p.username)}")'><i class="fas fa-user-minus"></i></button>`;
-                }
-                // Add friend request button if not already friends
-                if (canSendRequest) {
-                    actions += `<button class="social-action-btn social-btn-add" title="Send Friend Request" onclick='sendFriendRequest("${escapeHtml(p.uid)}", "${escapeHtml(p.username)}")'><i class="fas fa-user-plus"></i></button>`;
-                }
-                const actionsCol = actions ? `<div class="social-item-actions">${actions}</div>` : '';
-                return `<div class="social-user-item" style="padding: 8px 12px; ${isMe ? 'background: rgba(79,172,254,0.1); border-radius: 8px;' : ''}; display: flex; align-items: center; gap: 12px; margin-bottom: 6px; border-radius: 8px;">
-                    <div class="social-item-avatar" style="width:36px;height:36px; flex-shrink: 0; border-radius: 50%; overflow: hidden;">${avatar}</div>
-                    <div style="flex:1; display: flex; flex-direction: column; gap: 3px; min-width: 0;">
-                        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;">
-                            <div style="font-size:14px; font-weight: 500; color: #e0e6ed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(p.username)}</div>
-                            ${youBadge}
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <div class="member-role-badge" style="color:${roleColor}; background: ${roleBgColor}; border: 1px solid ${roleColor}30;"><i class="fas ${roleIcon}"></i>${roleText}</div>
-                        </div>
-                    </div>
-                    ${actionsCol}
-                </div>`;
-            }).join('');
-        }
-
-        // Render add members list (friends not in group)
-        const addList = document.getElementById('addMembersList');
-        if (addList && cachedFriends) {
-            const members = new Set(group.members);
-            const nonMembers = cachedFriends.filter(f => !f.isGroup && !members.has(f.profile.uid));
-            if (nonMembers.length === 0) {
-                addList.innerHTML = '<div class="social-empty" style="padding:10px;"><p style="font-size:12px;">No friends to add</p></div>';
-            } else {
-                addList.innerHTML = nonMembers.map(f => {
-                    const p = f.profile;
-                    return `<div class="social-user-item" style="cursor:pointer; padding:6px 10px; border-radius:6px;" onclick='toggleAddGroupMember("${escapeHtml(p.uid)}", this)'>
-                        <div class="social-item-avatar" style="width:30px;height:30px;">${getAvatarHtml(p, 30)}</div>
-                        <div class="social-item-info" style="flex:1;">
-                            <div class="social-item-name" style="font-size:13px;">${escapeHtml(p.username)}</div>
-                        </div>
-                        <div class="social-item-actions">
-                            <i class="fas fa-plus add-member-icon" style="color:#4facfe; font-size:14px;"></i>
-                        </div>
-                    </div>`;
-                }).join('');
-            }
-        }
-    }
-
-    window.toggleAddGroupMember = async function(uid, el) {
-        if (!currentGroupSettingsId) return;
-        try {
-            const res = await api().social_add_group_members(currentGroupSettingsId, [uid]);
-            if (res && res.success) {
-                el.style.opacity = '0.5';
-                el.style.pointerEvents = 'none';
-                const icon = el.querySelector('.add-member-icon');
-                if (icon) { icon.className = 'fas fa-check'; icon.style.color = '#5cb85c'; }
-                // Refresh members
-                await loadGroupMembers();
-                // Update active chat profile members
-                if (activeChatFriendship && activeChatFriendship.profile) {
-                    activeChatFriendship.profile.members = res.users || activeChatFriendship.profile.members;
-                }
-            } else {
-                showToast('Failed to add member: ' + (res?.error || 'Unknown error'));
-            }
-        } catch (e) {
-            showToast('Error adding member');
-        }
-    };
-
-    window.promoteGroupMember = async function(uid) {
-        if (!currentGroupSettingsId) return;
-        try {
-            const res = await api().social_promote_admin(currentGroupSettingsId, uid);
-            if (res && res.success) {
-                await loadGroupMembers();
-            } else {
-                showToast('Failed to promote: ' + (res?.error || 'Unknown error'));
-            }
-        } catch (e) { showToast('Error promoting member'); }
-    };
-
-    window.demoteGroupAdmin = async function(uid) {
-        if (!currentGroupSettingsId) return;
-        try {
-            const res = await api().social_demote_admin(currentGroupSettingsId, uid);
-            if (res && res.success) {
-                await loadGroupMembers();
-            } else {
-                showToast('Failed to demote: ' + (res?.error || 'Unknown error'));
-            }
-        } catch (e) { showToast('Error demoting admin'); }
-    };
-
-    window.removeGroupMember = async function(uid, username) {
-        if (!currentGroupSettingsId) return;
-        if (!confirm(`Remove ${username} from the group?`)) return;
-        try {
-            const res = await api().social_remove_group_member(currentGroupSettingsId, uid);
-            if (res && res.success) {
-                await loadGroupMembers();
-            } else {
-                showToast('Failed to remove: ' + (res?.error || 'Unknown error'));
-            }
-        } catch (e) { showToast('Error removing member'); }
-    };
-
-    async function saveGroupInfo() {
-        if (!currentGroupSettingsId) return;
-        const name = document.getElementById('editGroupNameInput').value.trim();
-        const description = document.getElementById('editGroupDescInput').value.trim();
-        if (!name) { showToast('Group name is required'); return; }
-        const updates = { name, description };
-        if (editGroupImageBase64) updates.imageBase64 = editGroupImageBase64;
-        else if (currentGroupSettingsData && !currentGroupSettingsData.avatarBase64) updates.imageBase64 = '';
-        try {
-            const res = await api().social_edit_group(currentGroupSettingsId, updates);
-            if (res && res.success) {
-                // Update local state
-                if (currentGroupSettingsData) {
-                    currentGroupSettingsData.username = name;
-                    currentGroupSettingsData.description = description;
-                    currentGroupSettingsData.avatarBase64 = updates.imageBase64 || currentGroupSettingsData.avatarBase64;
-                }
-                if (activeChatFriendship && activeChatFriendship.profile) {
-                    activeChatFriendship.profile.username = name;
-                    activeChatFriendship.profile.description = description;
-                    activeChatFriendship.profile.avatarBase64 = updates.imageBase64 || activeChatFriendship.profile.avatarBase64;
-                    document.getElementById('chatHeaderName').textContent = name;
-                    document.getElementById('chatHeaderAvatar').innerHTML = getAvatarHtml(activeChatFriendship.profile, 36);
-                }
-                loadFriends(false);
-                closeGroupSettingsModal();
-            } else {
-                showToast('Failed to save: ' + (res?.error || 'Unknown error'));
-            }
-        } catch (e) { showToast('Error saving group info'); }
-    }
-
-    function handleEditGroupImageSelect(e) {
-        const file = e.target.files && e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = 128; canvas.height = 128;
-                const ctx = canvas.getContext('2d');
-                const size = Math.min(img.width, img.height);
-                const startX = (img.width - size) / 2;
-                const startY = (img.height - size) / 2;
-                ctx.drawImage(img, startX, startY, size, size, 0, 0, 128, 128);
-                editGroupImageBase64 = canvas.toDataURL('image/jpeg', 0.8);
-                const preview = document.getElementById('editGroupIconPreview');
-                preview.src = editGroupImageBase64;
-                preview.style.display = 'block';
-                document.getElementById('editGroupIconPlaceholder').style.display = 'none';
-            };
-            img.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
-    }
-
-    function formatVersionString(version) {
-        if (!version) return '';
-        let v = version.toLowerCase();
-        let loaderName = '';
-        if (v.startsWith('fabric')) { loaderName = 'Fabric'; v = v.replace(/^fabric(?:-loader)?-?/, ''); }
-        else if (v.startsWith('forge')) { loaderName = 'Forge'; v = v.replace(/^forge-?/, ''); }
-        else if (v.startsWith('quilt')) { loaderName = 'Quilt'; v = v.replace(/^quilt(?:-loader)?-?/, ''); }
-        
-        if (loaderName) {
-            const split = v.split('-');
-            if (split.length >= 2) {
-                return `${loaderName} ${split[0]} (${split.slice(1).join('-')})`;
-            } else if (split.length === 1 && split[0]) {
-                return `${loaderName} ${split[0]}`;
-            }
-            return loaderName;
-        }
-        return version;
-    }
+    function closeChat() {}
 
     window.closeViewProfileModal = function() {
         const modal = document.getElementById('viewProfileModal');
@@ -3076,7 +2137,7 @@
                                 continue;
                             }
                             
-                            let iconSrc = 'ui/img/icon.png';
+                            let iconSrc = 'img/icon.png';
                             if (profile.icon) {
                                 try {
                                     const rawIcon = await api().get_profile_icon(profile.icon);
@@ -3301,37 +2362,21 @@
     }
 
     async function sendSeedCard(seed) {
-        if (!activeChatFriendship) return;
-        
-        // Convert BigInt to string before JSON serialization
-        // BigInt cannot be directly serialized by JSON.stringify
         const seedString = typeof seed === 'bigint' ? seed.toString() : String(seed);
-        
         const seedData = {
             type: 'seed',
             seed: seedString
         };
-        
         const content = JSON.stringify(seedData);
-        
-        try {
-            const res = await api().social_send_message(activeChatFriendship.id, content);
-            if (res && res.success) {
-                closeShareSeedModal();
-                loadChatMessages(true);
-            } else {
-                showToast('Failed to send seed: ' + (res?.error || 'Unknown error'));
-            }
-        } catch (e) {
-            console.error('Error sending seed:', e);
-            showToast('Failed to send seed: ' + e.message);
-        }
+        if (typeof closeShareSeedModal === 'function') closeShareSeedModal();
+        broadcastContent(content, 'seed');
     }
 
     window.copySeedToClipboard = function(seed, btn) {
         navigator.clipboard.writeText(seed).then(() => {
             const originalHtml = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            const copiedText = (window.t && window.t('social.copied')) ? window.t('social.copied') : 'Copied!';
+            btn.innerHTML = `<i class="fas fa-check"></i> ${copiedText}`;
             btn.classList.add('copied');
             
             setTimeout(() => {
@@ -3340,83 +2385,33 @@
             }, 2000);
         }).catch(err => {
             console.error('Failed to copy seed:', err);
-            showToast('Failed to copy to clipboard');
+            showToast((window.t && window.t('social.error')) ? window.t('social.error') : 'Failed to copy to clipboard');
         });
     };
 
     async function shareProfileToChat(profile, iconSrc) {
-        if (!activeChatFriendship) return;
-        if (activeChatFriendship.profile) {
-            const compat = checkLauncherVersionCompatibility(activeChatFriendship.profile);
-            if (!compat.compatible) {
-                showToast(compat.message, 'warning');
-                return;
-            }
+        let shareableIcon = iconSrc;
+        if (!shareableIcon && profile.icon) {
+            try {
+                const rawIcon = await api().get_profile_icon(profile.icon);
+                shareableIcon = rawIcon;
+            } catch(e) {}
         }
-        
+        if (!shareableIcon) shareableIcon = profile.icon;
+
         const payload = {
             type: 'profile_share',
             profile: {
                 name: profile.name,
                 version: profile.version,
-                icon: profile.icon,
+                icon: shareableIcon,
                 jvm_args: profile.jvm_args,
                 addons: profile.addons || []
             }
         };
-        
-        // Send it as stringified JSON starting with a special marker
         const contentStr = '$$PROFILE_SHARE$$' + JSON.stringify(payload);
-        
-        // Optimistic UI
-        const container = document.getElementById('chatMessages');
-        const myUid = socialAuth.uid;
-        const tempId = `temp_${Date.now()}`;
-        
-        const html = `<div class="chat-msg chat-msg-mine" data-sender-id="${myUid}" data-content="${escapeHtml(contentStr)}" data-temp="${tempId}">
-          <div class="chat-msg-bubble">
-            <div class="chat-profile-card">
-                <div class="chat-profile-card-header">
-                    <img src="${iconSrc}" class="chat-profile-card-icon">
-                    <div class="chat-profile-card-info">
-                        <div class="chat-profile-card-name">${escapeHtml(profile.name)}</div>
-                        <div class="chat-profile-card-version">${escapeHtml(formatVersionString(profile.version))}</div>
-                    </div>
-                </div>
-                <div class="chat-profile-card-actions">
-                    <button class="chat-profile-card-btn chat-profile-btn-view" onclick="viewSharedProfile('${escapeHtml(contentStr)}')">View Installation</button>
-                    <button class="chat-profile-card-btn chat-profile-btn-install" onclick="installSharedProfile('${escapeHtml(contentStr)}')">Install</button>
-                </div>
-            </div>
-            <span class="chat-msg-time">Sending...</span>
-            <span class="chat-msg-status">sending</span>
-          </div>
-        </div>`;
-        container.insertAdjacentHTML('beforeend', html);
-        container.scrollTop = container.scrollHeight;
-        
-        try {
-            const res = await api().social_send_message(activeChatFriendship.id, contentStr, null);
-            if (res && res.success) {
-                const tempEl = container.querySelector(`[data-temp="${tempId}"] .chat-msg-time`);
-                if (tempEl) tempEl.textContent = formatTime(new Date().toISOString());
-                const statusEl = container.querySelector(`[data-temp="${tempId}"] .chat-msg-status`);
-                if (statusEl) statusEl.textContent = 'sent';
-                const msgEl = container.querySelector(`[data-temp="${tempId}"]`);
-                if (msgEl) {
-                    delete msgEl.dataset.temp;
-                    msgEl.dataset.msgId = res.msgId;
-                    lastMessageIds.add(res.msgId);
-                }
-            } else {
-                const tempEl = container.querySelector(`[data-temp="${tempId}"] .chat-msg-time`);
-                if (tempEl) tempEl.textContent = 'Failed';
-            }
-        } catch (e) {
-            console.error('[Social] shareProfile error:', e.message);
-            const tempEl = container.querySelector(`[data-temp="${tempId}"] .chat-msg-time`);
-            if (tempEl) tempEl.textContent = 'Error';
-        }
+        if (typeof closeShareProfileModal === 'function') closeShareProfileModal();
+        broadcastContent(contentStr, 'installation');
     }
 
     // --- Profile View/Install Handlers ---
@@ -3434,7 +2429,7 @@
             
             // Icon
             const vpIcon = document.getElementById('vpIcon');
-            vpIcon.src = 'ui/img/icon.png';
+            vpIcon.src = 'img/icon.png';
             if (p.icon) {
                 try {
                     const rawIcon = await api().get_profile_icon(p.icon);
@@ -3499,7 +2494,7 @@
                                 htmls.push(`
                                     <div class="social-user-item" style="padding: 10px; border-radius: 8px;">
                                         <div class="social-item-avatar" style="width:32px; height:32px; border-radius:6px; background: rgba(0,0,0,0.3);">
-                                            <img src="${mod.icon_url || 'ui/img/icon.png'}" style="width:100%; height:100%; object-fit:cover; border-radius:6px;">
+                                            <img src="${mod.icon_url || 'img/icon.png'}" style="width:100%; height:100%; object-fit:cover; border-radius:6px;">
                                         </div>
                                         <div class="social-item-info">
                                             <div class="social-item-name">${escapeHtml(mod.title)}</div>
@@ -3556,6 +2551,153 @@
         }
     };
     
+    async function getDefaultInstallationDirectory() {
+        try {
+            let basePath = '';
+            if (window.hwlAPI && typeof window.hwlAPI.getDocumentsPath === 'function') {
+                basePath = await window.hwlAPI.getDocumentsPath();
+            } else if (typeof api === 'function' && api() && typeof api().getDocumentsPath === 'function') {
+                basePath = await api().getDocumentsPath();
+            } else if (typeof api === 'function' && api() && typeof api().get_documents_path === 'function') {
+                basePath = await api().get_documents_path();
+            } else if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.getDocumentsPath === 'function') {
+                basePath = await window.pywebview.api.getDocumentsPath();
+            }
+
+            if (basePath) {
+                const separator = basePath.includes('\\') ? '\\' : '/';
+                const uuid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('dir-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9));
+                return `${basePath}${separator}MinecraftDirectories${separator}${uuid}`;
+            }
+
+            let fallbackBase = '';
+            try {
+                const userData = await api().get_user_json();
+                fallbackBase = userData.mcdir || '';
+            } catch (_) {}
+
+            if (fallbackBase) {
+                const separator = fallbackBase.includes('\\') ? '\\' : '/';
+                const uuid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('dir-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9));
+                return `${fallbackBase}${separator}MinecraftDirectories${separator}${uuid}`;
+            }
+            return '';
+        } catch (e) {
+            console.error('[Social] Error generating default installation directory:', e);
+            return '';
+        }
+    }
+
+    window.runSharedProfileCompatCheck = async function() {
+        const p = window.sharedProfileData;
+        const confirmInstallAllBtn = document.getElementById('confirmInstallAllBtn');
+        const compatBox = document.getElementById('ipCompatibilityBox');
+
+        // For Modrinth modpacks, versions are uploaded directly to Modrinth.
+        // Individual mod resolution does not apply and "Install All (Force)" must never be shown!
+        if (!p || p.isModrinthModpack || !p.addons || p.addons.length === 0) {
+            if (compatBox) compatBox.style.display = 'none';
+            if (confirmInstallAllBtn) {
+                confirmInstallAllBtn.classList.add('hidden');
+                confirmInstallAllBtn.style.setProperty('display', 'none', 'important');
+            }
+            return;
+        }
+
+        const swSelect = document.getElementById('ipSoftwareSelect');
+        const mcSelect = document.getElementById('ipMcVersionSelect');
+        const targetLoader = swSelect ? swSelect.value : 'fabric';
+        const targetMc = mcSelect ? mcSelect.value : '';
+        if (!targetMc) return;
+
+        const spinner = document.getElementById('ipCompatSpinner');
+        const badgeOk = document.getElementById('ipCompatBadgeOk');
+        const badgeAuto = document.getElementById('ipCompatBadgeAuto');
+        const badgeErr = document.getElementById('ipCompatBadgeErr');
+        const countOk = document.getElementById('ipCompatCountOk');
+        const countAuto = document.getElementById('ipCompatCountAuto');
+        const countErr = document.getElementById('ipCompatCountErr');
+        const incompatWrap = document.getElementById('ipCompatIncompatibleListWrap');
+        const incompatList = document.getElementById('ipCompatIncompatibleList');
+
+        if (compatBox) compatBox.style.display = 'block';
+        if (spinner) spinner.style.display = 'inline-block';
+
+        try {
+            const resolver = (api() && api().resolve_modpack_compatibility) || 
+                             (window.hwlAPI && window.hwlAPI.resolveModpackCompatibility);
+            if (!resolver) {
+                if (spinner) spinner.style.display = 'none';
+                if (confirmInstallAllBtn) {
+                    confirmInstallAllBtn.classList.add('hidden');
+                    confirmInstallAllBtn.style.setProperty('display', 'none', 'important');
+                }
+                return;
+            }
+
+            const res = await resolver({
+                addons: p.addons,
+                targetMcVersion: targetMc,
+                targetLoader: targetLoader,
+                autoIncludeMissingDeps: true
+            });
+
+            if (spinner) spinner.style.display = 'none';
+
+            if (res && res.success) {
+                window.lastCompatReport = res;
+                if (countOk) countOk.textContent = res.compatible.length;
+
+                if (badgeAuto && countAuto) {
+                    if (res.autoAdded && res.autoAdded.length > 0) {
+                        badgeAuto.style.display = 'inline-flex';
+                        countAuto.textContent = res.autoAdded.length;
+                    } else {
+                        badgeAuto.style.display = 'none';
+                    }
+                }
+
+                if (badgeErr && countErr) {
+                    if (res.incompatible && res.incompatible.length > 0) {
+                        badgeErr.style.display = 'inline-flex';
+                        countErr.textContent = res.incompatible.length;
+
+                        if (incompatWrap && incompatList) {
+                            incompatWrap.style.display = 'block';
+                            incompatList.innerHTML = res.incompatible.map(item => {
+                                const cleanName = item.name || (item.filename ? item.filename.replace(/\.(jar|zip|mrpack)$/i, '').replace(/[-_+](fabric|forge|neoforge|quilt|mc)?v?[0-9].*$/i, '').replace(/[-_]/g, ' ').trim() : '') || item.project_id || 'Unknown Mod';
+                                return `
+                                    <div class="compat-incompat-item">
+                                        <div class="item-title">${escapeHtml(cleanName)}</div>
+                                        <div class="item-reason">${escapeHtml(item.reason || 'Incompatible')}</div>
+                                    </div>
+                                `;
+                            }).join('');
+                        }
+                        if (confirmInstallAllBtn && !p.isModrinthModpack) {
+                            confirmInstallAllBtn.classList.remove('hidden');
+                            confirmInstallAllBtn.style.setProperty('display', 'inline-flex', 'important');
+                        }
+                    } else {
+                        badgeErr.style.display = 'none';
+                        if (incompatWrap) incompatWrap.style.display = 'none';
+                        if (confirmInstallAllBtn) {
+                            confirmInstallAllBtn.classList.add('hidden');
+                            confirmInstallAllBtn.style.setProperty('display', 'none', 'important');
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('[CompatCheck] Error:', e);
+            if (spinner) spinner.style.display = 'none';
+            if (confirmInstallAllBtn) {
+                confirmInstallAllBtn.classList.add('hidden');
+                confirmInstallAllBtn.style.setProperty('display', 'none', 'important');
+            }
+        }
+    };
+
     window.installSharedProfile = async function(contentStr) {
         try {
             const payload = JSON.parse(contentStr.substring('$$PROFILE_SHARE$$'.length));
@@ -3564,11 +2706,38 @@
             
             // Store the shared profile data for installation
             window.sharedProfileData = p;
+            window.lastCompatReport = null;
             
-            // Open the install profile modal
+            // Open the install profile modal IMMEDIATELY to avoid delay
             const modal = document.getElementById('installProfileModal');
             if (!modal) return;
+            modal.classList.add('show');
             
+            // Reset compatibility UI and secondary button
+            const compatBox = document.getElementById('ipCompatibilityBox');
+            if (compatBox) compatBox.style.display = 'none';
+            const incompatList = document.getElementById('ipCompatIncompatibleList');
+            if (incompatList) incompatList.style.display = 'none';
+            const toggleBtn = document.getElementById('ipCompatToggleIncompatBtn');
+            if (toggleBtn) toggleBtn.classList.remove('open');
+            const confirmInstallAllBtn = document.getElementById('confirmInstallAllBtn');
+            if (confirmInstallAllBtn) {
+                confirmInstallAllBtn.classList.add('hidden');
+                confirmInstallAllBtn.style.setProperty('display', 'none', 'important');
+            }
+
+            // Preview icon if available
+            const ipIconPreview = document.getElementById('ipIconPreview');
+            if (ipIconPreview) {
+                const previewSrc = (p.icon && (p.icon.startsWith('data:') || p.icon.startsWith('http'))) ? p.icon : (p.iconUrl || '');
+                if (previewSrc) {
+                    ipIconPreview.src = previewSrc;
+                    ipIconPreview.style.display = 'block';
+                } else {
+                    ipIconPreview.style.display = 'none';
+                }
+            }
+
             // Populate fields with shared profile data
             const defaultJVMArgs = '-Xmx4G -Xms1G -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M';
             document.getElementById('ipNameInput').value = p.name || '';
@@ -3576,18 +2745,125 @@
             document.getElementById('ipJvmInput').value = p.jvm_args || defaultJVMArgs;
             
             const modrinthRow = document.getElementById('ipModrinthVersionRow');
-            if (modrinthRow) modrinthRow.style.display = 'none';
             
-            // Auto-fill game directory with user's configured Minecraft directory
-            try {
-                const userData = await api().get_user_json();
-                document.getElementById('ipDirInput').value = userData.mcdir || '';
-            } catch(e) {
-                console.error('[Social] Error fetching user mcdir:', e.message);
-                document.getElementById('ipDirInput').value = '';
+            // Auto-fill game directory with dedicated UUID directory
+            getDefaultInstallationDirectory().then(dirPath => {
+                const dirInput = document.getElementById('ipDirInput');
+                if (dirInput) dirInput.value = dirPath || '';
+            });
+
+            // If profile has addons, configure version selects to allow choosing Minecraft version
+            if (p.addons && p.addons.length > 0 && modrinthRow) {
+                modrinthRow.style.display = 'flex';
+
+                const swSelect = document.getElementById('ipSoftwareSelect');
+                const mcSelect = document.getElementById('ipMcVersionSelect');
+                const loaderSelect = document.getElementById('ipLoaderVersionSelect');
+
+                // Determine initial software & mcVersion from p.version
+                let initialLoader = 'fabric';
+                let initialMc = '';
+                if (p.version) {
+                    const match = p.version.match(/^(Fabric|Forge|NeoForge|Vanilla|Quilt)\s+([0-9.]+)/i);
+                    if (match) {
+                        initialLoader = match[1].toLowerCase();
+                        initialMc = match[2];
+                    } else {
+                        const m = p.version.match(/([0-9]+\.[0-9]+(?:\.[0-9]+)?)/);
+                        if (m) initialMc = m[1];
+                    }
+                }
+
+                if (swSelect) {
+                    swSelect.innerHTML = `
+                        <option value="fabric">Fabric</option>
+                        <option value="forge">Forge</option>
+                        <option value="neoforge">NeoForge</option>
+                    `;
+                    if (['fabric', 'forge', 'neoforge'].includes(initialLoader)) {
+                        swSelect.value = initialLoader;
+                    } else {
+                        swSelect.value = 'fabric';
+                    }
+                }
+
+                const updateLoaderSelect = async (selSw, selMc) => {
+                    if (!loaderSelect) return;
+                    loaderSelect.innerHTML = '<option value="">Loading...</option>';
+                    loaderSelect.disabled = true;
+                    try {
+                        const loaders = await api().get_loader_versions(selSw, selMc);
+                        loaderSelect.innerHTML = '';
+                        if (!loaders || loaders.length === 0) {
+                            loaderSelect.innerHTML = '<option value="">Default loader</option>';
+                        } else {
+                            loaders.forEach(l => {
+                                const opt = document.createElement('option');
+                                opt.value = l;
+                                opt.textContent = l;
+                                loaderSelect.appendChild(opt);
+                            });
+                            loaderSelect.disabled = false;
+                        }
+                    } catch(e) {
+                        loaderSelect.innerHTML = '<option value="">Default loader</option>';
+                    }
+                };
+
+                const updateMcSelect = async (selSw, preferredMc = null) => {
+                    if (!mcSelect) return;
+                    mcSelect.innerHTML = '<option value="">Loading...</option>';
+                    mcSelect.disabled = true;
+                    try {
+                        let versions = [];
+                        if (selSw === 'fabric') versions = await api().get_fabric_mc_versions();
+                        else if (selSw === 'forge') versions = await api().get_forge_mc_versions();
+                        else if (selSw === 'neoforge') versions = await api().get_neoforge_mc_versions();
+                        else versions = await api().get_vanilla_versions();
+
+                        mcSelect.innerHTML = '';
+                        if (!versions || versions.length === 0) {
+                            mcSelect.innerHTML = '<option value="">No versions found</option>';
+                        } else {
+                            versions.forEach(v => {
+                                const opt = document.createElement('option');
+                                opt.value = v;
+                                opt.textContent = v;
+                                mcSelect.appendChild(opt);
+                            });
+                        }
+                        mcSelect.disabled = false;
+
+                        let chosenMc = preferredMc;
+                        if (!chosenMc || (versions && !versions.includes(chosenMc))) {
+                            chosenMc = mcSelect.options.length > 0 ? mcSelect.options[0].value : '';
+                        }
+                        if (chosenMc) mcSelect.value = chosenMc;
+
+                        await updateLoaderSelect(selSw, chosenMc);
+                        await window.runSharedProfileCompatCheck();
+                    } catch(e) {
+                        console.error('[Social] Error updating mcSelect:', e);
+                    }
+                };
+
+                if (swSelect) {
+                    swSelect.onchange = async () => {
+                        await updateMcSelect(swSelect.value, null);
+                    };
+                }
+
+                if (mcSelect) {
+                    mcSelect.onchange = async () => {
+                        await updateLoaderSelect(swSelect ? swSelect.value : 'fabric', mcSelect.value);
+                        await window.runSharedProfileCompatCheck();
+                    };
+                }
+
+                await updateMcSelect(swSelect ? swSelect.value : 'fabric', initialMc);
+            } else {
+                if (modrinthRow) modrinthRow.style.display = 'none';
             }
-            
-            modal.classList.add('show');
         } catch(e) {
             console.error('[Social] installSharedProfile error:', e.message);
         }
@@ -3603,9 +2879,44 @@
             worldName: worldName || null
         };
         
+        // Open modal IMMEDIATELY to eliminate latency
         const modal = document.getElementById('installProfileModal');
         if (!modal) return;
+        modal.classList.add('show');
         
+        // Reset compatibility UI and secondary button
+        const compatBox = document.getElementById('ipCompatibilityBox');
+        if (compatBox) compatBox.style.display = 'none';
+        const confirmInstallAllBtn = document.getElementById('confirmInstallAllBtn');
+        if (confirmInstallAllBtn) {
+            confirmInstallAllBtn.classList.add('hidden');
+            confirmInstallAllBtn.style.setProperty('display', 'none', 'important');
+        }
+
+        // Show modpack icon preview
+        const ipIconPreview = document.getElementById('ipIconPreview');
+        if (ipIconPreview) {
+            if (iconUrl) {
+                ipIconPreview.src = iconUrl;
+                ipIconPreview.style.display = 'block';
+            } else {
+                ipIconPreview.style.display = 'none';
+            }
+        }
+        if (!iconUrl && projectId) {
+            api().get_mod_details(projectId).then(res => {
+                if (res && res.success && res.details && res.details.icon_url) {
+                    if (window.sharedProfileData && window.sharedProfileData.projectId === projectId) {
+                        window.sharedProfileData.iconUrl = res.details.icon_url;
+                        if (ipIconPreview) {
+                            ipIconPreview.src = res.details.icon_url;
+                            ipIconPreview.style.display = 'block';
+                        }
+                    }
+                }
+            }).catch(() => {});
+        }
+
         const defaultJVMArgs = '-Xmx4G -Xms1G -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M';
         document.getElementById('ipNameInput').value = defaultName || 'Modrinth Modpack';
         document.getElementById('ipJavaInput').value = '';
@@ -3614,15 +2925,13 @@
         const modrinthRow = document.getElementById('ipModrinthVersionRow');
         if (modrinthRow) modrinthRow.style.display = 'flex';
         
-        try {
-            const userData = await api().get_user_json();
-            document.getElementById('ipDirInput').value = userData.mcdir || '';
-        } catch(e) {
-            console.error('[Social] Error fetching user mcdir:', e.message);
-            document.getElementById('ipDirInput').value = '';
-        }
+        // Auto-complete UUID installation directory
+        getDefaultInstallationDirectory().then(dirPath => {
+            const dirInput = document.getElementById('ipDirInput');
+            if (dirInput) dirInput.value = dirPath || '';
+        });
         
-        // Fetch all modpack versions from Modrinth to populate dropdowns
+        // Fetch all modpack versions from Modrinth to populate dropdowns asynchronously
         let allVersions = [];
         try {
             const resVersions = await api().get_mod_versions(projectId, null, null);
@@ -3655,12 +2964,11 @@
                 if (s === 'fabric') return 'Fabric';
                 if (s === 'forge') return 'Forge';
                 if (s === 'neoforge') return 'NeoForge';
-                if (s === 'quilt') return 'Quilt';
                 if (s === 'vanilla') return 'Vanilla';
                 return s.charAt(0).toUpperCase() + s.slice(1);
             };
             
-            const order = ['fabric', 'forge', 'neoforge', 'quilt', 'vanilla'];
+            const order = ['fabric', 'forge', 'neoforge', 'vanilla'];
             const sortedLoaders = Array.from(loadersSet).sort((a, b) => {
                 const ia = order.indexOf(a);
                 const ib = order.indexOf(b);
@@ -3757,17 +3065,33 @@
             let defaultMc = versionObj && versionObj.game_versions && versionObj.game_versions[0] ? versionObj.game_versions[0] : null;
             await updateMcVersions(defaultLoader, defaultMc);
         }
-        
-        modal.classList.add('show');
     };
 
     window.closeInstallProfileModal = function() {
         const modal = document.getElementById('installProfileModal');
         if (modal) modal.classList.remove('show');
         window.sharedProfileData = null;
+        window.lastCompatReport = null;
+        const compatBox = document.getElementById('ipCompatibilityBox');
+        if (compatBox) compatBox.style.display = 'none';
+        const incompatList = document.getElementById('ipCompatIncompatibleList');
+        if (incompatList) incompatList.style.display = 'none';
+        const toggleBtn = document.getElementById('ipCompatToggleIncompatBtn');
+        if (toggleBtn) toggleBtn.classList.remove('open');
+        const confirmInstallAllBtn = document.getElementById('confirmInstallAllBtn');
+        if (confirmInstallAllBtn) {
+            confirmInstallAllBtn.classList.add('hidden');
+            confirmInstallAllBtn.style.setProperty('display', 'none', 'important');
+        }
+        const ipIconPreview = document.getElementById('ipIconPreview');
+        if (ipIconPreview) {
+            ipIconPreview.src = '';
+            ipIconPreview.style.display = 'none';
+        }
     };
     
-    window.confirmInstallSharedProfile = async function() {
+    window.confirmInstallSharedProfile = async function(opts = {}) {
+        const forceAll = !!(opts && opts.forceAll);
         const p = window.sharedProfileData;
         if (!p) return;
         
@@ -3777,13 +3101,20 @@
         const jvmArgs = document.getElementById('ipJvmInput').value.trim() || p.jvm_args || null;
         
         if (!name) {
-            showToast('Please enter an installation name');
+            showToast(window.t ? window.t('toasts.enter_install_name') : 'Please enter an installation name');
             return;
         }
         
         if (!dir) {
-            showToast('Please enter a game directory');
+            showToast(window.t ? window.t('toasts.enter_game_dir') : 'Please enter a game directory');
             return;
+        }
+
+        if (forceAll) {
+            const warnMsg = (window.t ? window.t('installations.install_all_confirm') : 'Some mods may be incompatible with the selected version and could cause Minecraft to crash. Are you sure you want to install all mods anyway?');
+            if (!window.confirm(warnMsg)) {
+                return;
+            }
         }
         
         if (p.isModrinthModpack) {
@@ -3805,16 +3136,22 @@
                     profileVersion = `Fabric ${mcVersion} (${loaderVersion})`;
                 } else if (software === 'neoforge' && loaderVersion) {
                     profileVersion = `NeoForge ${mcVersion} (${loaderVersion})`;
-                } else if (software === 'quilt' && loaderVersion) {
-                    profileVersion = `Quilt ${mcVersion} (${loaderVersion})`;
                 } else if (software === 'optifine' && loaderVersion) {
                     profileVersion = `OptiFine ${mcVersion} (${loaderVersion})`;
                 }
                 
                 // 1) Pass Modrinth icon URL directly to backend
-                let iconArg = p.iconUrl || 'default.png';
+                let iconArg = p.iconUrl || p.icon || 'default.png';
+                if ((!iconArg || iconArg === 'default.png') && p.projectId) {
+                    try {
+                        const d = await api().get_mod_details(p.projectId);
+                        if (d && d.success && d.details && d.details.icon_url) {
+                            iconArg = d.details.icon_url;
+                        }
+                    } catch(e) {}
+                }
                 
-                // 2) Create profile with chosen version
+                // 2) Create profile with chosen version and downloaded icon
                 const resCreate = await api().add_profile(name, profileVersion, iconArg, dir || null, jvmArgs, javaPath);
                 
                 if (resCreate && resCreate.success) {
@@ -3866,25 +3203,74 @@
         }
         
         try {
+            let finalVersion = p.version || 'Vanilla';
+            const swSelect = document.getElementById('ipSoftwareSelect');
+            const mcSelect = document.getElementById('ipMcVersionSelect');
+            const loaderSelect = document.getElementById('ipLoaderVersionSelect');
+
+            if (swSelect && mcSelect && mcSelect.value) {
+                const sw = swSelect.value;
+                const mc = mcSelect.value;
+                const ldr = loaderSelect && !loaderSelect.disabled ? loaderSelect.value : '';
+                if (sw === 'vanilla') finalVersion = `Vanilla ${mc}`;
+                else if (sw === 'fabric') finalVersion = ldr ? `Fabric ${mc} (${ldr})` : `Fabric ${mc}`;
+                else if (sw === 'forge') finalVersion = ldr ? `Forge ${mc} (${ldr})` : `Forge ${mc}`;
+                else if (sw === 'neoforge') finalVersion = ldr ? `NeoForge ${mc} (${ldr})` : `NeoForge ${mc}`;
+            }
+
+            let profileIconArg = p.icon || p.iconB64 || p.iconUrl || 'default.png';
             const result = await api().add_profile(
                 name, 
-                p.version, 
-                p.icon, 
+                finalVersion, 
+                profileIconArg, 
                 dir || null, 
                 jvmArgs, 
                 javaPath
             );
             
             if (result.success) {
-                // If the profile has addons, save them
-                if (p.addons && p.addons.length > 0) {
+                // If the profile has configs in snapshot, extract them to the profile folder
+                if (p.configZipB64 && api().workshop_extract_configs) {
                     try {
-                        const normAddons = p.addons.filter(a => a.project_id && a.version_id).map(function(a){
+                        await api().workshop_extract_configs(result.profile_id, p.configZipB64);
+                    } catch (cfgErr) {
+                        console.error("[Social] Error extracting modpack configs:", cfgErr.message);
+                    }
+                }
+
+                // If compatibility check was performed, determine candidate addons
+                let candidateAddons = p.addons;
+                if (!forceAll && window.lastCompatReport && window.lastCompatReport.success) {
+                    candidateAddons = [
+                        ...(window.lastCompatReport.compatible || []),
+                        ...(window.lastCompatReport.autoAdded || [])
+                    ];
+                } else if (forceAll && window.lastCompatReport && window.lastCompatReport.success) {
+                    // For forceAll, upgrade compatible ones to matching versions, keep incompatible ones as-is, and append auto-added dependencies!
+                    const compMap = new Map();
+                    (window.lastCompatReport.compatible || []).forEach(c => compMap.set(c.project_id, c));
+                    const merged = (p.addons || []).map(a => compMap.get(a.project_id) || a);
+                    const seenIds = new Set(merged.map(a => a.project_id));
+                    (window.lastCompatReport.autoAdded || []).forEach(dep => {
+                        if (!seenIds.has(dep.project_id)) {
+                            merged.push(dep);
+                            seenIds.add(dep.project_id);
+                        }
+                    });
+                    candidateAddons = merged;
+                }
+
+                // If the profile has addons, save them
+                if (candidateAddons && candidateAddons.length > 0) {
+                    try {
+                        const normAddons = candidateAddons.filter(a => a.project_id && a.version_id).map(function(a){
                             const isEn = (a.enabled !== false && a.state !== 'disabled');
+                            let ext = '.jar';
+                            if (a.type === 'resourcepack' || a.type === 'shader') ext = '.zip';
                             return {
                                 project_id: a.project_id,
                                 version_id: a.version_id,
-                                filename: a.filename || `${a.project_id}.jar`,
+                                filename: a.filename || `${a.project_id}${ext}`,
                                 type: a.type || 'mod',
                                 state: isEn ? 'enabled' : 'disabled',
                                 enabled: isEn
@@ -3893,9 +3279,9 @@
                         await api().edit_profile(
                             result.profile_id, 
                             name, 
-                            p.version, 
+                            finalVersion, 
                             null, 
-                            p.icon, 
+                            p.icon || profileIconArg, 
                             null, 
                             null, 
                             jvmArgs, 
@@ -3926,61 +3312,6 @@
 
     // --- DOM ready setup ---
     document.addEventListener('DOMContentLoaded', () => {
-        // Group Settings
-        const groupSettingsBtn = document.getElementById('groupSettingsBtn');
-        if (groupSettingsBtn) groupSettingsBtn.addEventListener('click', openGroupSettingsModal);
-
-        const closeGroupSettingsBtn = document.getElementById('closeGroupSettingsBtn');
-        if (closeGroupSettingsBtn) closeGroupSettingsBtn.addEventListener('click', closeGroupSettingsModal);
-
-        document.querySelectorAll('.group-tab-btn').forEach(btn => {
-            btn.addEventListener('click', () => switchGroupSettingsTab(btn.dataset.tab));
-        });
-
-        const editGroupIconSelector = document.getElementById('editGroupIconSelector');
-        const editGroupImageInput = document.getElementById('editGroupImageInput');
-        if (editGroupIconSelector && editGroupImageInput) {
-            editGroupIconSelector.addEventListener('click', () => editGroupImageInput.click());
-            editGroupImageInput.addEventListener('change', handleEditGroupImageSelect);
-        }
-
-        const saveGroupInfoBtn = document.getElementById('saveGroupInfoBtn');
-        if (saveGroupInfoBtn) saveGroupInfoBtn.addEventListener('click', saveGroupInfo);
-
-        // Create Group
-        const openCreateGroupBtn = document.getElementById('openCreateGroupBtn');
-        if (openCreateGroupBtn) openCreateGroupBtn.addEventListener('click', openCreateGroupModal);
-        
-        const cancelCreateGroupBtn = document.getElementById('cancelCreateGroupBtn');
-        if (cancelCreateGroupBtn) cancelCreateGroupBtn.addEventListener('click', closeCreateGroupModal);
-
-        const nextCreateGroupBtn = document.getElementById('nextCreateGroupBtn');
-        if (nextCreateGroupBtn) nextCreateGroupBtn.addEventListener('click', () => {
-            document.getElementById('createGroupStep1').style.display = 'none';
-            document.getElementById('createGroupStep2').style.display = 'block';
-        });
-
-        const backCreateGroupBtn = document.getElementById('backCreateGroupBtn');
-        if (backCreateGroupBtn) backCreateGroupBtn.addEventListener('click', () => {
-            document.getElementById('createGroupStep1').style.display = 'block';
-            document.getElementById('createGroupStep2').style.display = 'none';
-        });
-
-        const groupNameInput = document.getElementById('groupNameInput');
-        if (groupNameInput) groupNameInput.addEventListener('input', (e) => {
-            document.getElementById('confirmCreateGroupBtn').disabled = e.target.value.trim().length === 0;
-        });
-
-        const groupIconSelector = document.getElementById('groupIconSelector');
-        const groupImageInput = document.getElementById('groupImageInput');
-        if (groupIconSelector && groupImageInput) {
-            groupIconSelector.addEventListener('click', () => groupImageInput.click());
-            groupImageInput.addEventListener('change', handleGroupImageSelect);
-        }
-
-        const confirmCreateGroupBtn = document.getElementById('confirmCreateGroupBtn');
-        if (confirmCreateGroupBtn) confirmCreateGroupBtn.addEventListener('click', submitCreateGroup);
-
         // Social button
         const socialBtn = document.getElementById('socialBtn');
         if (socialBtn) {
@@ -3991,7 +3322,7 @@
                     e.stopPropagation();
                     return;
                 }
-                openSocialModal();
+                openSocialModal('received');
             });
         }
 
@@ -3999,22 +3330,45 @@
         const closeBtn = document.getElementById('closeSocialModal');
         if (closeBtn) closeBtn.addEventListener('click', closeSocialModal);
 
-        // Overlay click to close removed
-
-        // OS notification click → open social modal and navigate to specific chat
+        // OS notification click / navigation events → open social modal and inbox
         window.addEventListener('navigate-to-chat', (e) => {
-            const { friendshipId } = e.detail || {};
-            if (!friendshipId) return;
-            openSocialModal();
-            // If friends are already cached, open immediately
-            if (cachedFriends) {
-                const target = cachedFriends.find(f => f.friendshipId === friendshipId);
-                if (target) { openChat(target.friendshipId, target.profile); return; }
+            const targetTab = e?.detail?.targetTab || 'received';
+            openSocialModal(targetTab);
+            if (typeof window.openInbox === 'function') window.openInbox(targetTab);
+        });
+
+        window.addEventListener('navigate-to-inbox', async (e) => {
+            const detail = e?.detail;
+            const targetId = detail?.accountId || detail?.recipientUid;
+            const targetTab = detail?.targetTab || 'received';
+            if (targetId && window.performAccountSwitch) {
+                try {
+                    const userData = await window.pywebview.api.get_user_json();
+                    const currentActiveUid = userData?.account_type === 'microsoft'
+                        ? (userData?.firebase_ms_uid || null)
+                        : (userData?.account_type === 'helloworld' ? (userData?.firebase_uid || null) : null);
+                    let isTargetActive = false;
+                    if (detail.recipientUid && currentActiveUid) {
+                        isTargetActive = currentActiveUid === detail.recipientUid;
+                    } else if (detail.recipientType) {
+                        isTargetActive = userData?.account_type === detail.recipientType && (
+                            !detail.recipientUsername || (userData?.username && userData.username.toLowerCase() === detail.recipientUsername.toLowerCase())
+                        );
+                    }
+                    if (!isTargetActive) {
+                        await window.performAccountSwitch(targetId, true, '', detail.recipientUsername || detail.username || '', detail.recipientType || '');
+                        return;
+                    }
+                } catch (_) {}
             }
-            // Otherwise set pending and let loadFriends handle it
-            pendingChatOpen = friendshipId;
-            switchSocialTab('friends');
-            loadFriends(true);
+            if (typeof window.openSocialModal === 'function') await window.openSocialModal(targetTab);
+            else openSocialModal(targetTab);
+            if (typeof window.openInbox === 'function') window.openInbox(targetTab);
+        });
+
+        window.addEventListener('inbox-updated', () => {
+            if (typeof loadInboxMessages === 'function') loadInboxMessages(false);
+            if (typeof updateBadge === 'function') updateBadge();
         });
 
         // Tab buttons
@@ -4032,12 +3386,6 @@
         if (searchBtn) searchBtn.addEventListener('click', searchUser);
         const searchInput = document.getElementById('searchUserInput');
         if (searchInput) searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') searchUser(); });
-
-        // Chat grid buttons
-        const chatGridBtns = document.querySelectorAll('.chat-grid-btn');
-        chatGridBtns.forEach(btn => {
-            btn.addEventListener('click', handleChatGridButtonClick);
-        });
 
         const cancelShareProfileBtn = document.getElementById('cancelShareProfileBtn');
         if (cancelShareProfileBtn) cancelShareProfileBtn.addEventListener('click', closeShareProfileModal);
@@ -4087,7 +3435,7 @@
                     const worldName = document.getElementById('seedWorldSelect').value;
                     
                     if (!profileId || !worldName) {
-                        showToast('Please select an installation and world');
+                        showToast(window.t ? window.t('toasts.select_install_world') : 'Please select an installation and world');
                         return;
                     }
                     
@@ -4107,7 +3455,23 @@
         if (cancelInstallProfileBtn) cancelInstallProfileBtn.addEventListener('click', closeInstallProfileModal);
 
         const confirmInstallProfileBtn = document.getElementById('confirmInstallProfileBtn');
-        if (confirmInstallProfileBtn) confirmInstallProfileBtn.addEventListener('click', confirmInstallSharedProfile);
+        if (confirmInstallProfileBtn) confirmInstallProfileBtn.addEventListener('click', () => confirmInstallSharedProfile());
+
+        const confirmInstallAllBtn = document.getElementById('confirmInstallAllBtn');
+        if (confirmInstallAllBtn) confirmInstallAllBtn.addEventListener('click', () => confirmInstallSharedProfile({ forceAll: true }));
+
+        const toggleCompatIncompatBtn = document.getElementById('ipCompatToggleIncompatBtn');
+        if (toggleCompatIncompatBtn) {
+            toggleCompatIncompatBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const list = document.getElementById('ipCompatIncompatibleList');
+                if (list) {
+                    const isHidden = list.style.display === 'none' || !list.style.display;
+                    list.style.display = isHidden ? 'flex' : 'none';
+                    toggleCompatIncompatBtn.classList.toggle('open', isHidden);
+                }
+            });
+        }
 
         const ipDirBtn = document.getElementById('ipDirBtn');
         if (ipDirBtn) ipDirBtn.addEventListener('click', async () => {
@@ -4125,17 +3489,9 @@
             if (selectedDir) document.getElementById('ipJavaInput').value = selectedDir;
         });
 
-        // Chat back button
-        const chatBackBtn = document.getElementById('chatBackBtn');
-        if (chatBackBtn) chatBackBtn.addEventListener('click', closeChat);
-
         // Blocked toggle
         const blockedToggleBtn = document.getElementById('blockedToggleBtn');
         if (blockedToggleBtn) blockedToggleBtn.addEventListener('click', toggleBlockedSection);
-
-        // Load more messages
-        const loadMoreBtn = document.getElementById('chatLoadMoreBtn');
-        if (loadMoreBtn) loadMoreBtn.addEventListener('click', loadMoreMessages);
 
         // Resize handle + config persistence
         const resizeHandle = document.getElementById('socialResizeHandle');
@@ -4177,25 +3533,652 @@
         }
     });
 
-    async function loadMoreMessages() {
-        if (!activeChatFriendship || !chatEarliestTimestamp) return;
-        try {
-            const res = await api().social_get_messages(activeChatFriendship.id, chatEarliestTimestamp);
-            if (!res || !res.success || !res.messages.length) return;
-            chatEarliestTimestamp = res.messages[0].timestamp;
-            const container = document.getElementById('chatMessages');
-            if (!container) return;
-            const myUid = socialAuth ? socialAuth.uid : '';
-            let html = '';
-            for (const msg of res.messages) {
-                const isMine = msg.senderId === myUid;
-                const cls = isMine ? 'chat-msg chat-msg-mine' : 'chat-msg chat-msg-other';
-                html += `<div class="${cls}"><div class="chat-msg-bubble"><span class="chat-msg-text">${escapeHtml(msg.content)}</span><span class="chat-msg-time">${formatTime(msg.timestamp)}</span></div></div>`;
+    let currentInboxTab = 'received';
+
+    window.switchInboxTab = function(tab) {
+        currentInboxTab = (tab === 'sent') ? 'sent' : 'received';
+        const btnRecv = document.getElementById('inboxTabReceived');
+        const btnSent = document.getElementById('inboxTabSent');
+        if (btnRecv) btnRecv.classList.toggle('active', currentInboxTab === 'received');
+        if (btnSent) btnSent.classList.toggle('active', currentInboxTab === 'sent');
+        loadInboxMessages(true);
+    };
+
+    window.openInbox = function(targetTab = 'received') {
+        currentInboxTab = (targetTab === 'sent') ? 'sent' : 'received';
+        const panel = document.getElementById('socialPanelInbox');
+        if (panel) panel.style.display = 'flex';
+        const btnRecv = document.getElementById('inboxTabReceived');
+        const btnSent = document.getElementById('inboxTabSent');
+        if (btnRecv) btnRecv.classList.toggle('active', currentInboxTab === 'received');
+        if (btnSent) btnSent.classList.toggle('active', currentInboxTab === 'sent');
+        loadInboxMessages(true);
+    };
+
+    window.closeInbox = function() {
+        const panel = document.getElementById('socialPanelInbox');
+        if (panel) panel.style.display = 'none';
+    };
+
+    window.handleInboxHover = function(el) {
+        if (!el) return;
+        el.style.background = 'rgba(255, 255, 255, 0.04)';
+        const dot = el.querySelector('.inbox-unread-dot');
+        const msgId = el.dataset.msgId;
+        if (dot || el.classList.contains('is-unread')) {
+            if (dot) dot.remove();
+            el.classList.remove('is-unread');
+            if (msgId && api() && typeof api().social_inbox_mark_read === 'function') {
+                api().social_inbox_mark_read(msgId).then(() => {
+                    if (typeof updateBadge === 'function') updateBadge();
+                }).catch(() => {});
             }
-            const prev = container.scrollHeight;
-            container.insertAdjacentHTML('afterbegin', html);
-            container.scrollTop = container.scrollHeight - prev;
-        } catch (e) {}
+        }
+    };
+
+    async function loadInboxMessages(initial = false) {
+        if (!socialAuth) return;
+        try {
+            const isSentTab = currentInboxTab === 'sent';
+            if (isSentTab) {
+                const res = (api() && typeof api().social_inbox_get_sent === 'function')
+                    ? await api().social_inbox_get_sent()
+                    : { success: true, messages: [] };
+                if (res && res.success && res.messages) {
+                    renderInboxMessages(res.messages, initial, null, true);
+                }
+            } else {
+                const res = await api().social_inbox_get();
+                if (res && res.success && res.messages) {
+                    renderInboxMessages(res.messages, initial, res.lastRead, false);
+                }
+            }
+        } catch(e) {
+            console.error('[Social] Error loading inbox messages:', e);
+        }
     }
+
+    function renderInboxMessages(messages, scrollToBottom, lastRead, isSentTab = false) {
+        const container = document.getElementById('inboxMessages');
+        if (!container) return;
+
+        const displayMessages = isSentTab
+            ? (messages || [])
+            : (messages || []).filter(msg => {
+                if (msg.isSentCopy) return false;
+                if (socialAuth && msg.senderId === socialAuth.uid) return false;
+                return true;
+            });
+
+        if (displayMessages.length === 0) {
+            let noMsgText = isSentTab ? 'No sent messages yet.' : 'No messages yet.';
+            if (window.t) {
+                if (isSentTab) {
+                    const tSent = window.t('social.no_sent_messages_yet');
+                    if (tSent && tSent !== 'social.no_sent_messages_yet') noMsgText = tSent;
+                } else {
+                    const t1 = window.t('social.no_messages_yet');
+                    if (t1 && t1 !== 'social.no_messages_yet') noMsgText = t1;
+                    else {
+                        const t2 = window.t('social.no_messages');
+                        if (t2 && t2 !== 'social.no_messages') noMsgText = t2;
+                    }
+                }
+            }
+            container.innerHTML = `<div style="text-align:center;color:#888;padding:32px 20px;font-size:13px;"><i class="fas ${isSentTab ? 'fa-paper-plane' : 'fa-inbox'}" style="display:block;font-size:26px;margin-bottom:12px;opacity:0.35;color:#4facfe;"></i>${escapeHtml(noMsgText)}</div>`;
+            return;
+        }
+
+        displayMessages.sort((a, b) => {
+            const ta = typeof a.timestamp === 'string' ? new Date(a.timestamp).getTime() : (Number(a.timestamp) || 0);
+            const tb = typeof b.timestamp === 'string' ? new Date(b.timestamp).getTime() : (Number(b.timestamp) || 0);
+            return tb - ta;
+        });
+
+        const viewText = (window.t && window.t('social.view') !== 'social.view') ? window.t('social.view') : 'View';
+        const installText = (window.t && window.t('social.install') !== 'social.install') ? window.t('social.install') : 'Install';
+        const copyText = (window.t && window.t('social.copy') !== 'social.copy') ? window.t('social.copy') : 'Copy';
+
+        container.innerHTML = '';
+        displayMessages.forEach(msg => {
+            let contentHtml = escapeHtml(msg.content);
+            let realSenderName = escapeHtml(msg.senderName || 'User');
+            if (socialAuth && msg.senderId === socialAuth.uid) {
+                const youText = window.t ? (window.t('social.you') || 'You') : 'You';
+                realSenderName = (youText && youText !== 'social.you') ? youText : 'You';
+            } else if (cachedFriends) {
+                const f = cachedFriends.find(cf => !cf.isGroup && cf.profile && cf.profile.uid === msg.senderId);
+                if (f && f.profile && f.profile.username) {
+                    realSenderName = escapeHtml(f.profile.username);
+                }
+            }
+
+            // In Sent mode, header format requested by user:
+            // "ENVIADOR (icono flecha) ENVIADO"
+            let titleHtml = '';
+            if (isSentTab) {
+                const youText = (window.t && window.t('social.you') && window.t('social.you') !== 'social.you') ? window.t('social.you') : 'Tú';
+                const senderDisplay = escapeHtml(msg.senderName || youText);
+
+                let recipientDisplay = '';
+                if (Array.isArray(msg.recipientNames) && msg.recipientNames.length > 0) {
+                    recipientDisplay = msg.recipientNames.map(n => escapeHtml(n)).join(', ');
+                } else if (msg.recipientNames && typeof msg.recipientNames === 'string') {
+                    recipientDisplay = escapeHtml(msg.recipientNames);
+                } else {
+                    const rUids = Array.isArray(msg.recipientUids) ? msg.recipientUids : (msg.recipientUid ? [msg.recipientUid] : []);
+                    const rNames = rUids.map(uid => {
+                        if (cachedFriends) {
+                            const f = cachedFriends.find(cf => !cf.isGroup && cf.profile && cf.profile.uid === uid);
+                            if (f && f.profile && f.profile.username) return f.profile.username;
+                        }
+                        return uid;
+                    });
+                    recipientDisplay = rNames.length > 0 ? rNames.map(n => escapeHtml(n)).join(', ') : 'Destinatario';
+                }
+
+                titleHtml = `<span style="color: #4facfe; font-weight: 700;">${senderDisplay}</span> <i class="fas fa-arrow-right" style="font-size: 11px; margin: 0 6px; color: #60a5fa; opacity: 0.85;"></i> <span style="color: #93c5fd; font-weight: 600;">${recipientDisplay}</span>`;
+            } else {
+                titleHtml = `<span style="color: #4facfe; font-weight: 600;">${realSenderName}</span>`;
+            }
+
+            // Format profile share
+            if (msg.type === 'profile_share' || (typeof msg.content === 'string' && msg.content.startsWith('$$PROFILE_SHARE$$'))) {
+                try {
+                    const profileData = msg.type === 'profile_share' ? JSON.parse(msg.content) : JSON.parse(msg.content.replace('$$PROFILE_SHARE$$', ''));
+                    const p = profileData.profile;
+                    
+                    let modsHtml = '';
+                    if (p.addons && p.addons.length > 0) {
+                        const mods = p.addons.filter(a => a && (a.type === 'mod' || a.type === 'file' || (!a.type && a.filename && a.filename.endsWith('.jar')) || (!a.type && a.project_id)));
+                        const resourcepacks = p.addons.filter(a => a && (a.type === 'resourcepack' || (!a.type && a.filename && a.filename.endsWith('.zip'))));
+                        const shaders = p.addons.filter(a => a && a.type === 'shader');
+                        let summary = [];
+                        if (mods.length > 0) summary.push(`<span style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; margin-right: 5px;">${mods.length} Mods</span>`);
+                        if (resourcepacks.length > 0) summary.push(`<span style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; margin-right: 5px;">${resourcepacks.length} Resource Packs</span>`);
+                        if (shaders.length > 0) summary.push(`<span style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; margin-right: 5px;">${shaders.length} Shaders</span>`);
+                        if (summary.length > 0) {
+                            modsHtml = `<div style="font-size: 11px; color: #b0b8c6; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px;">${summary.join('')}</div>`;
+                        }
+                    }
+
+                    // Flat UI for installation share
+                    const defaultIcon = 'img/icon.png';
+                    contentHtml = `
+                        <div style="margin-top: 8px; display: flex; align-items: flex-start; gap: 15px;">
+                            <img src="${defaultIcon}" data-async-icon="${escapeHtml(p.icon || '')}" style="width: 48px; height: 48px; border-radius: 8px; object-fit: cover;">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; font-size: 14px; color: #fff;">${escapeHtml(p.name)}</div>
+                                <div style="font-size: 12px; color: #aaa; margin-top: 2px;">Version ${escapeHtml(formatVersionString(p.version))}</div>
+                                ${modsHtml}
+                                <div style="margin-top: 10px; display: flex; gap: 10px;">
+                                    <button onclick="viewSharedProfile('${escapeHtml(msg.content)}')" style="background: rgba(255,255,255,0.1); border: none; color: #fff; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">${escapeHtml(viewText)}</button>
+                                    <button onclick="installSharedProfile('${escapeHtml(msg.content)}')" style="background: rgba(79, 172, 254, 0.2); border: 1px solid rgba(79, 172, 254, 0.45); color: #4facfe; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.background='rgba(79, 172, 254, 0.32)'; this.style.borderColor='rgba(79, 172, 254, 0.7)';" onmouseout="this.style.background='rgba(79, 172, 254, 0.2)'; this.style.borderColor='rgba(79, 172, 254, 0.45)';">${escapeHtml(installText)}</button>
+                                </div>
+                            </div>
+                        </div>`;
+                } catch(e) {}
+            }
+            // Format seed share
+            else if (msg.type === 'seed' || (typeof msg.content === 'string' && msg.content.startsWith('$$SEED_SHARE$$'))) {
+                try {
+                    const seedData = JSON.parse(msg.content.replace('$$SEED_SHARE$$', ''));
+                    contentHtml = `
+                        <div style="margin-top: 8px; display: flex; align-items: center; gap: 12px; background: rgba(0,0,0,0.15); padding: 12px; border-radius: 8px;">
+                            <div style="background: rgba(79, 172, 254, 0.2); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #4facfe;">
+                                <i class="fas fa-seedling"></i>
+                            </div>
+                            <div style="flex: 1;">
+                                <div style="font-size: 12px; color: #aaa;">${window.t ? window.t('social.seed') || 'Minecraft Seed' : 'Minecraft Seed'}</div>
+                                <div style="font-size: 14px; color: #fff; font-family: monospace; letter-spacing: 1px;">${escapeHtml(seedData.seed)}</div>
+                            </div>
+                            <button onclick="copySeedToClipboard('${escapeHtml(seedData.seed)}', this)" style="background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='transparent'">${escapeHtml(copyText)}</button>
+                        </div>`;
+                } catch(e) {}
+            }
+            // Format server share
+            else if (msg.type === 'server' || (typeof msg.content === 'string' && msg.content.startsWith('$$SERVER_SHARE$$'))) {
+                try {
+                    const serverData = JSON.parse(msg.content.replace('$$SERVER_SHARE$$', ''));
+                    contentHtml = `
+                        <div style="margin-top: 8px; display: flex; align-items: center; gap: 12px; background: rgba(0,0,0,0.15); padding: 12px; border-radius: 8px;">
+                            <div style="background: rgba(79, 172, 254, 0.2); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #4facfe;">
+                                <i class="fas fa-server"></i>
+                            </div>
+                            <div style="flex: 1;">
+                                <div style="font-size: 12px; color: #aaa;">${window.t ? window.t('social.server_invite_title') || 'Server Invite' : 'Server Invite'}</div>
+                                <div style="font-size: 14px; color: #fff; font-weight: 600;">${escapeHtml(serverData.ip)}</div>
+                            </div>
+                            <button onclick="socialJoinServer('${escapeHtml(serverData.ip)}', '${escapeHtml(msg.senderName || realSenderName)}')" style="background: #4facfe; border: none; color: #fff; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; transition: background 0.2s;" onmouseover="this.style.background='#3b9cf0'" onmouseout="this.style.background='#4facfe'">${window.t ? window.t('social.join_server') || 'Join' : 'Join'}</button>
+                        </div>`;
+                } catch(e) {}
+            }
+            // Format link share
+            else if (msg.type === 'link' || (typeof msg.content === 'string' && msg.content.startsWith('$$LINK$$'))) {
+                try {
+                    const linkData = JSON.parse(msg.content.replace('$$LINK$$', ''));
+                    const typeIcon = typeof getLinkTypeIcon === 'function' ? getLinkTypeIcon(linkData.type) : 'fas fa-link';
+                    const linkTitle = linkData.title || linkData.url || 'Shared Link';
+                    const linkType = linkData.typeName || 'Link';
+                    const openText = window.t ? (window.t('social.open_link') || 'Open Link') : 'Open Link';
+                    contentHtml = `
+                        <div style="margin-top: 8px; display: flex; align-items: center; gap: 12px; background: rgba(0,0,0,0.15); padding: 12px; border-radius: 8px;">
+                            <div style="background: rgba(79, 172, 254, 0.2); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #4facfe;">
+                                <i class="${escapeHtml(typeIcon)}"></i>
+                            </div>
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-size: 14px; color: #fff; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(linkTitle)}</div>
+                                <div style="font-size: 12px; color: #aaa;">${escapeHtml(linkType)}</div>
+                            </div>
+                            <a href="${escapeHtml(linkData.url)}" target="_blank" style="background: #4facfe; border: none; color: #fff; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; transition: background 0.2s;" onmouseover="this.style.background='#3b9cf0'" onmouseout="this.style.background='#4facfe'"><i class="fas fa-external-link-alt"></i> ${escapeHtml(openText)}</a>
+                        </div>`;
+                } catch(e) {}
+            } else {
+                contentHtml = parseBBCodes(contentHtml);
+            }
+            
+            const isUnread = !isSentTab && (msg.read === false || msg.read === 'false') && (!socialAuth || msg.senderId !== socialAuth.uid);
+            let unreadDot = isUnread ? `<div class="inbox-unread-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #4facfe; margin-right: 8px; flex-shrink: 0;"></div>` : '';
+            
+            // Render as flat inbox item (email style)
+            const html = `
+            <div class="inbox-item ${isUnread ? 'is-unread' : ''}" data-msg-id="${escapeHtml(msg.id)}" style="padding: 16px 24px; border-bottom: 1px solid rgba(255,255,255,0.05); width: 100%; box-sizing: border-box; background: transparent; transition: background 0.2s; cursor: default;" onmouseover="handleInboxHover(this)" onmouseout="this.style.background='transparent'">
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 2px;">
+                        ${unreadDot}
+                        ${titleHtml}
+                    </div>
+                    <span style="font-size: 11px; color: #6b7280; flex-shrink: 0; margin-left: 8px;">${formatTime(msg.timestamp)}</span>
+                </div>
+                <div style="color: #e5e7eb; font-size: 14px; line-height: 1.5; word-break: break-word;">
+                    ${contentHtml}
+                </div>
+            </div>`;
+            container.insertAdjacentHTML('beforeend', html);
+        });
+
+        // Load missing icons asynchronously
+        container.querySelectorAll('img[data-async-icon]').forEach(async img => {
+            const iconName = img.dataset.asyncIcon;
+            if (!iconName) return;
+            try {
+                const rawIcon = await api().get_profile_icon(iconName);
+                if (rawIcon) img.src = window.resolveImageSource ? window.resolveImageSource(rawIcon) : rawIcon;
+            } catch (e) {}
+        });
+
+        container.scrollTop = 0;
+    }
+    let selectedBroadcastFriends = [];
+
+    window.openBroadcastModal = async function() {
+        document.getElementById('broadcastStep1').style.display = 'block';
+        document.getElementById('broadcastStep2').style.display = 'none';
+        selectedBroadcastFriends = [];
+        
+        const modal = document.getElementById('broadcastModal');
+        if (modal) {
+            modal.style.display = 'flex';
+            modal.classList.add('show');
+        }
+
+        const list = document.getElementById('broadcastFriendsList');
+        if (!cachedFriends) {
+            if (list) {
+                const loadingText = window.t ? (window.t('workshop.loading') || 'Loading...') : 'Loading...';
+                list.innerHTML = `<div class="social-empty"><div class="spinner" style="width:20px;height:20px;border:2px solid rgba(79,172,254,0.2);border-top-color:#4facfe;border-radius:50%;margin:0 auto 8px auto;"></div>${loadingText}</div>`;
+            }
+            try {
+                const res = await api().social_get_friends();
+                if (res && res.success) {
+                    cachedFriends = res.friends || [];
+                }
+            } catch (e) {
+                console.error('Error fetching friends for broadcast:', e);
+            }
+        }
+        renderBroadcastFriends();
+    };
+
+    window.closeBroadcastModal = function() {
+        const modal = document.getElementById('broadcastModal');
+        if (modal) {
+            modal.classList.remove('show');
+            modal.style.display = 'none';
+        }
+    };
+
+    function renderBroadcastFriends() {
+        const list = document.getElementById('broadcastFriendsList');
+        if (!cachedFriends || cachedFriends.length === 0) {
+            const emptyText = window.t ? window.t('social.no_friends_found') : 'No friends found.';
+            list.innerHTML = `<div class="social-empty">${emptyText}</div>`;
+            return;
+        }
+        const friends = cachedFriends;
+        
+        let html = '';
+        friends.forEach(f => {
+            if (f.isGroup) return;
+            const checked = selectedBroadcastFriends.includes(f.profile.uid) ? 'checked' : '';
+            html += `
+            <label class="social-user-item" style="cursor:pointer; display: flex; align-items: center; margin-bottom: 5px; padding: 8px; border-radius: 8px; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+                <div style="position: relative; margin-right: 15px; display: flex; align-items: center;">
+                    <input type="checkbox" onchange="toggleBroadcastFriend('${f.profile.uid}', this.parentNode.parentNode)" ${checked} style="appearance: none; -webkit-appearance: none; width: 22px; height: 22px; border: 2px solid rgba(255,255,255,0.2); border-radius: 6px; background: rgba(0,0,0,0.2); cursor: pointer; transition: all 0.2s; outline: none;" onchange="this.style.background=this.checked?'#4facfe':'rgba(0,0,0,0.2)';this.style.borderColor=this.checked?'#4facfe':'rgba(255,255,255,0.2)'">
+                    <i class="fas fa-check" style="position: absolute; left: 5px; top: 5px; color: white; font-size: 12px; pointer-events: none; opacity: ${selectedBroadcastFriends.includes(f.profile.uid) ? 1 : 0}; transition: opacity 0.2s;"></i>
+                </div>
+                <div class="social-item-avatar" style="margin-right: 12px;">${getAvatarHtml(f.profile, 36)}</div>
+                <div class="social-item-info">
+                    <div class="social-item-name">${escapeHtml(f.profile.username)}</div>
+                </div>
+            </label>`;
+        });
+        list.innerHTML = html;
+        updateBroadcastNextBtn();
+    }
+
+    window.toggleBroadcastFriend = function(uid, el) {
+        const idx = selectedBroadcastFriends.indexOf(uid);
+        if (idx === -1) {
+            if (selectedBroadcastFriends.length >= 10) return; // Max 10
+            selectedBroadcastFriends.push(uid);
+        } else {
+            selectedBroadcastFriends.splice(idx, 1);
+        }
+        
+        const cb = el.querySelector('input[type="checkbox"]');
+        const icon = el.querySelector('.fa-check');
+        if(cb) {
+            cb.checked = selectedBroadcastFriends.includes(uid);
+            cb.style.background = cb.checked ? '#4facfe' : 'rgba(0,0,0,0.2)';
+            cb.style.borderColor = cb.checked ? '#4facfe' : 'rgba(255,255,255,0.2)';
+        }
+        if(icon) {
+            icon.style.opacity = selectedBroadcastFriends.includes(uid) ? 1 : 0;
+        }
+        
+        updateBroadcastNextBtn();
+    };
+    function updateBroadcastNextBtn() {
+        const btn = document.getElementById('nextBroadcastBtn');
+        if(btn) {
+            btn.disabled = selectedBroadcastFriends.length === 0;
+            const nextText = window.t ? window.t('social.next_btn') : 'Next';
+            btn.textContent = `${nextText} (${selectedBroadcastFriends.length}/10)`;
+        }
+    }
+
+    async function broadcastContent(contentStr, type) {
+        if (!selectedBroadcastFriends || selectedBroadcastFriends.length === 0) {
+            showToast('No friends selected', 'warning');
+            return;
+        }
+        try {
+            const recipientNames = selectedBroadcastFriends.map(uid => {
+                if (cachedFriends) {
+                    const f = cachedFriends.find(cf => !cf.isGroup && cf.profile && cf.profile.uid === uid);
+                    if (f && f.profile && f.profile.username) return f.profile.username;
+                }
+                return uid;
+            });
+
+            const res = await api().social_inbox_send(selectedBroadcastFriends, contentStr, type, recipientNames);
+            if (res.success) {
+                let toastMsg = 'Sent successfully!'; if(window.t) { const res = window.t('social.sent_success'); if(res && res !== 'social.sent_success') toastMsg = res; }
+                showToast(toastMsg, 'success');
+                closeBroadcastModal();
+                selectedBroadcastFriends = [];
+                if (typeof loadInboxMessages === 'function') loadInboxMessages(false);
+            } else {
+                showToast('Failed to send: ' + res.error, 'error');
+            }
+        } catch(e) {
+            showToast('Error: ' + e.message, 'error');
+        }
+    }
+
+    function initBroadcastAndSubmodals() {
+        const inboxBtn = document.getElementById('inboxBroadcastBtn');
+        if(inboxBtn) inboxBtn.addEventListener('click', openBroadcastModal);
+        
+        const nextBroadcastBtn = document.getElementById('nextBroadcastBtn');
+        if(nextBroadcastBtn) nextBroadcastBtn.addEventListener('click', () => {
+            document.getElementById('broadcastStep1').style.display = 'none';
+            document.getElementById('broadcastStep2').style.display = 'block';
+        });
+
+        const cancelBroadcastBtn = document.getElementById('cancelBroadcastBtn');
+        if(cancelBroadcastBtn) cancelBroadcastBtn.addEventListener('click', closeBroadcastModal);
+
+        const backBroadcastBtn = document.getElementById('backBroadcastBtn');
+        if(backBroadcastBtn) backBroadcastBtn.addEventListener('click', () => {
+            document.getElementById('broadcastStep1').style.display = 'block';
+            document.getElementById('broadcastStep2').style.display = 'none';
+        });
+        
+        document.querySelectorAll('#broadcastStep2 .chat-grid-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const type = e.currentTarget.getAttribute('data-type');
+                closeBroadcastModal();
+                if (type === 'installation') openShareProfileModal();
+                else if (type === 'seed') openShareSeedModal();
+                else if (type === 'server') openShareServerModal();
+                else if (type === 'link') openShareLinkModal();
+            });
+        });
+
+        // Backdrop click handling for social submodals
+        const socialSubmodals = [
+            { id: 'broadcastModal', close: closeBroadcastModal },
+            { id: 'shareProfileModal', close: closeShareProfileModal },
+            { id: 'shareSeedModal', close: closeShareSeedModal },
+            { id: 'shareServerModal', close: () => { if (window.closeShareServerModal) window.closeShareServerModal(); } },
+            { id: 'shareLinkModal', close: closeShareLinkModal },
+            { id: 'joinServerModal', close: closeJoinServerModal },
+            { id: 'viewProfileModal', close: closeViewProfileModal },
+            { id: 'installProfileModal', close: closeInstallProfileModal },
+            { id: 'groupSettingsModal', close: () => { const m = document.getElementById('groupSettingsModal'); if (m) { m.classList.remove('show'); m.style.display = 'none'; } } },
+            { id: 'userProfileModal', close: () => {
+                const m = document.getElementById('userProfileModal');
+                if (m) m.classList.remove('show');
+                if (profileRefreshInterval) {
+                    clearInterval(profileRefreshInterval);
+                    profileRefreshInterval = null;
+                }
+                currentProfileUid = null;
+            }}
+        ];
+        socialSubmodals.forEach(({ id, close }) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('click', (e) => {
+                    if (e.target === el) close();
+                });
+            }
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initBroadcastAndSubmodals);
+    } else {
+        initBroadcastAndSubmodals();
+    }
+
+    // --- Share Server Modal ---
+    function isValidServerAddress(addr) {
+        if (!addr || !addr.trim()) return false;
+        const trimmed = addr.trim();
+        // Split host:port
+        const lastColon = trimmed.lastIndexOf(':');
+        let host = trimmed;
+        let port = null;
+        if (lastColon > 0) {
+            const possiblePort = trimmed.slice(lastColon + 1);
+            if (/^\d+$/.test(possiblePort)) {
+                port = parseInt(possiblePort, 10);
+                host = trimmed.slice(0, lastColon);
+                if (port < 1 || port > 65535) return false;
+            }
+        }
+        // IPv4
+        if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) {
+            return host.split('.').every(n => parseInt(n) <= 255);
+        }
+        // Hostname: labels separated by dots, each label is alphanumeric+hyphens, not starting/ending with hyphen
+        const hostnameRe = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+        if (hostnameRe.test(host) && host.length <= 253) return true;
+        return false;
+    }
+
+    let _shareServerDetectedIp = '';
+
+    window.openShareServerModal = async function() {
+        const modal = document.getElementById('shareServerModal');
+        if (!modal) return;
+
+        // Reset state
+        const input = document.getElementById('shareServerIpInput');
+        const detectedTag = document.getElementById('shareServerDetectedTag');
+        const errorDiv = document.getElementById('shareServerError');
+        const clearBtn = document.getElementById('shareServerClearBtn');
+        const wrapper = document.getElementById('shareServerIpWrapper');
+        const historySection = document.getElementById('shareServerHistorySection');
+        const historyList = document.getElementById('shareServerHistoryList');
+
+        if (input) input.value = '';
+        if (detectedTag) detectedTag.style.display = 'none';
+        if (errorDiv) errorDiv.style.display = 'none';
+        if (clearBtn) clearBtn.style.display = 'none';
+        if (historySection) historySection.style.display = 'none';
+        if (historyList) historyList.innerHTML = '';
+        _shareServerDetectedIp = '';
+
+        // Load server history and auto-detect in parallel
+        const [presenceRes, historyRes] = await Promise.allSettled([
+            api().get_my_presence_server().catch(() => null),
+            api().get_server_history().catch(() => null)
+        ]);
+
+        // Auto-detect current server
+        const presenceData = presenceRes.status === 'fulfilled' ? presenceRes.value : null;
+        if (presenceData && presenceData.serverIp && presenceData.serverIp.trim()) {
+            _shareServerDetectedIp = presenceData.serverIp.trim();
+            if (input) input.value = _shareServerDetectedIp;
+            if (detectedTag) detectedTag.style.display = 'flex';
+            if (clearBtn) clearBtn.style.display = 'inline-flex';
+        }
+
+        // Show server history as clickable pills
+        const historyData = historyRes.status === 'fulfilled' ? historyRes.value : null;
+        if (historyData && historyData.history && historyData.history.length > 0) {
+            const currentIp = _shareServerDetectedIp;
+            // Show up to 5 recent servers (excluding current auto-detected one)
+            const suggestions = historyData.history.filter(s => s !== currentIp).slice(0, 5);
+            if (suggestions.length > 0 && historySection && historyList) {
+                historyList.innerHTML = suggestions.map(s => `
+                    <button onclick="window._selectShareServerHistory('${escapeHtml(s)}')" style="background: rgba(79,172,254,0.1); border: 1px solid rgba(79,172,254,0.25); color: #9ca3af; padding: 4px 10px; border-radius: 20px; cursor: pointer; font-size: 11px; font-family: 'Consolas', monospace; transition: all 0.2s; white-space: nowrap;" onmouseover="this.style.background='rgba(79,172,254,0.2)';this.style.color='#fff';this.style.borderColor='rgba(79,172,254,0.5)'" onmouseout="this.style.background='rgba(79,172,254,0.1)';this.style.color='#9ca3af';this.style.borderColor='rgba(79,172,254,0.25)'">${escapeHtml(s)}</button>
+                `).join('');
+                historySection.style.display = 'block';
+            }
+        }
+
+        modal.classList.add('show');
+        if (input) setTimeout(() => input.focus(), 100);
+    };
+
+    // Helper to select a history suggestion
+    window._selectShareServerHistory = function(ip) {
+        const input = document.getElementById('shareServerIpInput');
+        const clearBtn = document.getElementById('shareServerClearBtn');
+        const detectedTag = document.getElementById('shareServerDetectedTag');
+        const errorDiv = document.getElementById('shareServerError');
+        const wrapper = document.getElementById('shareServerIpWrapper');
+        if (input) { input.value = ip; input.focus(); }
+        if (clearBtn) clearBtn.style.display = 'inline-flex';
+        if (detectedTag) detectedTag.style.display = 'none';
+        if (errorDiv) errorDiv.style.display = 'none';
+        if (wrapper) wrapper.style.borderColor = 'rgba(79,172,254,0.5)';
+    };
+
+    window.closeShareServerModal = function() {
+        const modal = document.getElementById('shareServerModal');
+        if (modal) modal.classList.remove('show');
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Share Server Modal listeners
+        const closeBtn = document.getElementById('closeShareServerBtn');
+        const cancelBtn = document.getElementById('cancelShareServerBtn');
+        const confirmBtn = document.getElementById('confirmShareServerBtn');
+        const input = document.getElementById('shareServerIpInput');
+        const clearBtn = document.getElementById('shareServerClearBtn');
+        const wrapper = document.getElementById('shareServerIpWrapper');
+        const errorDiv = document.getElementById('shareServerError');
+        const errorText = document.getElementById('shareServerErrorText');
+        const detectedTag = document.getElementById('shareServerDetectedTag');
+
+        if (closeBtn) closeBtn.addEventListener('click', window.closeShareServerModal);
+        if (cancelBtn) cancelBtn.addEventListener('click', window.closeShareServerModal);
+
+        // Input events
+        if (input) {
+            input.addEventListener('input', () => {
+                const val = input.value.trim();
+                if (clearBtn) clearBtn.style.display = val ? 'inline-flex' : 'none';
+                // Hide auto-detected tag if user changed the value
+                if (val !== _shareServerDetectedIp && detectedTag) detectedTag.style.display = 'none';
+                if (val === _shareServerDetectedIp && _shareServerDetectedIp && detectedTag) detectedTag.style.display = 'flex';
+                // Hide error on typing
+                if (errorDiv) errorDiv.style.display = 'none';
+                if (wrapper) wrapper.style.borderColor = 'rgba(255,255,255,0.12)';
+            });
+            input.addEventListener('focus', () => {
+                if (wrapper) wrapper.style.borderColor = 'rgba(79,172,254,0.5)';
+            });
+            input.addEventListener('blur', () => {
+                if (wrapper) wrapper.style.borderColor = 'rgba(255,255,255,0.12)';
+            });
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') confirmBtn && confirmBtn.click();
+                if (e.key === 'Escape') window.closeShareServerModal();
+            });
+        }
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                if (input) { input.value = ''; input.focus(); }
+                clearBtn.style.display = 'none';
+                if (detectedTag) detectedTag.style.display = 'none';
+                if (errorDiv) errorDiv.style.display = 'none';
+                if (wrapper) wrapper.style.borderColor = 'rgba(255,255,255,0.12)';
+            });
+        }
+
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', async () => {
+                const ip = input ? input.value.trim() : '';
+                // Validate
+                if (!ip) {
+                    if (errorText) errorText.textContent = window.t ? window.t('social.server_invite_enter_ip') || 'Please enter a server address.' : 'Please enter a server address.';
+                    if (errorDiv) errorDiv.style.display = 'block';
+                    if (wrapper) wrapper.style.borderColor = 'rgba(248,113,113,0.5)';
+                    if (input) input.focus();
+                    return;
+                }
+                if (!isValidServerAddress(ip)) {
+                    if (errorText) errorText.textContent = window.t ? window.t('social.server_invite_invalid_ip') || 'Invalid server address. Use a valid hostname or IP (e.g. hypixel.net, 1.2.3.4:25565).' : 'Invalid server address. Use a valid hostname or IP (e.g. hypixel.net, 1.2.3.4:25565).';
+                    if (errorDiv) errorDiv.style.display = 'block';
+                    if (wrapper) wrapper.style.borderColor = 'rgba(248,113,113,0.5)';
+                    if (input) input.focus();
+                    return;
+                }
+
+                // Send
+                const contentStr = '$$SERVER_SHARE$$' + JSON.stringify({ ip });
+                window.closeShareServerModal();
+                broadcastContent(contentStr, 'server');
+            });
+        }
+    });
 
 })();

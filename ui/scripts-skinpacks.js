@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // Validate file type
             if (!file.type.match('image/png')) {
-                showToast('Please select a PNG file');
+                showToast(window.t('toasts.select_png') || 'Please select a PNG file');
                 skinFileInput.value = '';
                 return;
             }
@@ -150,7 +150,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     triggerPreviewUpdate();
                 } else {
-                    showToast('Invalid skin dimensions! Skin must be exactly 64x64 or 64x32 pixels.');
+                    showToast(window.t('toasts.invalid_skin_dim') || 'Invalid skin dimensions! Skin must be exactly 64x64 or 64x32 pixels.');
                     skinFileInput.value = '';
                 }
             };
@@ -236,12 +236,12 @@ function handlePackSubmit() {
     const createPackConfirmBtn = document.getElementById('createPackBtn');
 
     if (!name) {
-        showToast('Please enter a pack name');
+        showToast(window.t('toasts.enter_pack_name') || 'Please enter a pack name');
         return;
     }
 
     if (!editingPackId && !currentSkinFile) {
-        showToast('Please upload a skin file');
+        showToast(window.t('toasts.upload_skin_file') || 'Please upload a skin file');
         return;
     }
 
@@ -260,7 +260,7 @@ function handlePackSubmit() {
     }
 
     createPackConfirmBtn.disabled = true;
-    createPackConfirmBtn.textContent = editingPackId ? 'Saving...' : 'Creating...';
+    createPackConfirmBtn.textContent = editingPackId ? (window.t('global.saving') || 'Saving...') : (window.t('global.creating') || 'Creating...');
 
     const processSubmission = (skinBase64) => {
         if (editingPackId) {
@@ -278,20 +278,20 @@ function handlePackSubmit() {
 
     const handleResponse = (response) => {
         createPackConfirmBtn.disabled = false;
-        createPackConfirmBtn.innerHTML = editingPackId ? '<i class="fas fa-save"></i> Save Changes' : '<i class="fas fa-plus"></i> Create Pack';
+        createPackConfirmBtn.innerHTML = editingPackId ? `<i class="fas fa-save"></i> ${window.t('global.save_changes') || 'Save Changes'}` : `<i class="fas fa-plus"></i> ${window.t('skins.create_pack_short') || 'Create Pack'}`;
 
         if (response.success) {
             clearSkinPackModal();
             if (window.loadSkinPacks) window.loadSkinPacks();
         } else {
-            showToast('Error: ' + (response.error || 'Unknown error'));
+            showToast(window.t('toasts.error_prefix', {msg: response.error || 'Unknown error'}) || ('Error: ' + (response.error || 'Unknown error')));
         }
     };
 
     const handleError = (err) => {
         createPackConfirmBtn.disabled = false;
-        createPackConfirmBtn.innerHTML = editingPackId ? '<i class="fas fa-save"></i> Save Changes' : '<i class="fas fa-plus"></i> Create Pack';
-        showToast('Error calling backend: ' + err);
+        createPackConfirmBtn.innerHTML = editingPackId ? `<i class="fas fa-save"></i> ${window.t('global.save_changes') || 'Save Changes'}` : `<i class="fas fa-plus"></i> ${window.t('skins.create_pack_short') || 'Create Pack'}`;
+        showToast(window.t('toasts.error_backend', {err: err}) || ('Error calling backend: ' + err));
     };
 
     if (currentSkinFile) {
@@ -319,9 +319,9 @@ window.editPack = function (packId) {
     const fileName = document.getElementById('skinFileName');
 
     modal.classList.add('show');
-    if (title) title.textContent = 'Edit Skin Pack';
+    if (title) title.textContent = (window.t ? window.t('skins.edit_pack') : null) || 'Edit Skin Pack';
     if (confirmBtn) {
-        confirmBtn.innerHTML = '<i class="fas fa-save"></i> Save Changes';
+        confirmBtn.innerHTML = `<i class="fas fa-save"></i> ${(window.t ? window.t('global.save_changes') : null) || 'Save Changes'}`;
     }
 
     if (nameInput) nameInput.value = pack.name;
@@ -459,21 +459,22 @@ window.loadSkinPacks = function () {
 
             card.innerHTML = `
                 ${viewerHTML}
+                <div class="active-badge" data-i18n="skins.btn_active" style="display: none; position: absolute; top: 10px; right: 10px; background-color: #4facfe; color: #fff; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; z-index: 2; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);">${_t('skins.btn_active', 'Active')}</div>
                 <div class="pack-info" style="padding: 8px 15px 5px 15px;">
                     <h3 style="margin: 0; font-size: 18px; color: #fff;">${pack.name}</h3>
                     <div class="pack-meta" style="margin-top: 5px; font-size: 13px; color: #aaa;">
-                        <span>${isSlim ? 'Slim' : 'Classic'}</span>
-                        ${hasCape && pack.cape_alias ? `<span>• Cape: ${pack.cape_alias}</span>` : ''}
+                        <span data-i18n="${isSlim ? 'skins.model_slim' : 'skins.model_classic'}">${isSlim ? _t('skins.model_slim', 'Slim') : _t('skins.model_classic', 'Classic')}</span>
+                        ${hasCape && pack.cape_alias ? `<span>• ${_t('skins.cape', 'Cape')}: ${pack.cape_alias}</span>` : ''}
                     </div>
                 </div>
                 <div class="skin-pack-actions" style="display: flex; gap: 10px; padding: 0 15px 15px 15px;">
-                    <button class="${isActive ? 'btn-small btn-secondary' : 'btn-small btn-blue'}" style="flex: 1; padding: 10px; border-radius: 8px;" onclick="activatePack('${id}')" title="Activate" ${isActive ? 'disabled' : ''}>
-                        <i class="fas fa-check"></i> ${isActive ? 'Active' : 'Use'}
+                    <button class="${isActive ? 'btn-small btn-skin-active' : 'btn-small btn-skin-use'}" style="flex: 1; padding: 10px; border-radius: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" onclick="activatePack('${id}')" title="${_t('skins.btn_activate', 'Activate')}" ${isActive ? 'disabled' : ''}>
+                        <i class="${isActive ? 'fas fa-check-circle' : 'fas fa-check'}"></i> <span data-i18n="${isActive ? 'skins.btn_active' : 'skins.btn_use'}">${isActive ? _t('skins.btn_active', 'Active') : _t('skins.btn_use', 'Use')}</span>
                     </button>
-                    <button class="btn-small btn-secondary" style="padding: 10px 15px; border-radius: 8px;" onclick="editPack('${id}')" title="Edit">
+                    <button class="btn-secondary" style="width: 42px; height: 42px; min-width: 42px; max-width: 42px; flex: none !important; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px;" onclick="editPack('${id}')" title="${_t('global.edit', 'Edit')}">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button class="btn-small btn-danger" style="padding: 10px 15px; border-radius: 8px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444;" onclick="deletePack('${id}')" title="Delete">
+                    <button class="btn-danger" style="width: 42px; height: 42px; min-width: 42px; max-width: 42px; flex: none !important; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444;" onclick="deletePack('${id}')" title="${_t('global.delete', 'Delete')}">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -488,7 +489,7 @@ window.loadSkinPacks = function () {
     }).catch(e => {
         console.error("Error loading skin packs", e);
         const grid = document.getElementById('skinPacksGrid');
-        if (grid) grid.innerHTML = '<div style="color: #d9534f; padding: 20px;">Error loading skin packs</div>';
+        if (grid) grid.innerHTML = `<div style="color: #d9534f; padding: 20px;">${_t('skins.err_load_packs', 'Error loading skin packs')}</div>`;
     });
 };
 
@@ -550,38 +551,30 @@ let remainingCooldown = 0;
 function updateCooldownVisuals() {
     if (!activationCooldown) return;
 
-    const allUseBtns = document.querySelectorAll('.btn-blue');
+    // Only target Use buttons inside skin pack cards
+    const allUseBtns = document.querySelectorAll('.skin-pack-card .btn-skin-use, .skin-pack-card .btn-blue');
     allUseBtns.forEach(btn => {
         btn.classList.add('disabled-cooldown');
-        btn.textContent = `Use in ${remainingCooldown}s`;
+        btn.textContent = `${_t('skins.btn_use', 'Use')} (${remainingCooldown}s)`;
     });
 }
 
 function resetCooldownVisuals() {
-    const disabledBtns = document.querySelectorAll('.disabled-cooldown');
+    // Only reset buttons inside skin pack cards
+    const disabledBtns = document.querySelectorAll('.skin-pack-card .disabled-cooldown');
     disabledBtns.forEach(btn => {
         btn.classList.remove('disabled-cooldown');
-        if (btn.classList.contains('btn-blue')) {
-            btn.innerHTML = '<i class="fas fa-check"></i> Use';
+        if (btn.classList.contains('btn-skin-use') || btn.classList.contains('btn-blue')) {
+            btn.innerHTML = `<i class="fas fa-check"></i> <span data-i18n="skins.btn_use">${_t('skins.btn_use', 'Use')}</span>`;
         }
     });
 }
 
-// Activate a skin pack
-window.activatePack = function (packId) {
-    if (!window.pywebview || !window.pywebview.api) return;
-
-    if (activationCooldown) {
-        console.log("Cooldown active, ignoring click");
-        return;
-    }
-
-    // Set cooldown (3 seconds)
+function startCooldown() {
     activationCooldown = true;
     remainingCooldown = 3;
     updateCooldownVisuals();
 
-    // Start Countdown
     if (cooldownTimer) clearInterval(cooldownTimer);
     cooldownTimer = setInterval(() => {
         remainingCooldown--;
@@ -593,6 +586,15 @@ window.activatePack = function (packId) {
             updateCooldownVisuals();
         }
     }, 1000);
+}
+
+// Global activate pack function with optimistic UI updates
+window.activatePack = function (packId) {
+    if (activationCooldown) return;
+    if (!window.pywebview || !window.pywebview.api) return;
+
+    // Start Cooldown immediately
+    startCooldown();
 
     // Optimistic UI Update
     // 1. Update Large Preview
@@ -610,12 +612,12 @@ window.activatePack = function (packId) {
         const prevActive = container.querySelector('.skin-pack-card.active');
         if (prevActive) {
             prevActive.classList.remove('active');
-            const prevBtn = prevActive.querySelector('.btn-secondary[disabled]');
+            const prevBtn = prevActive.querySelector('.btn-skin-active, .btn-secondary[disabled]');
             if (prevBtn) {
                 const prevId = prevActive.dataset.packId;
-                prevBtn.className = 'btn-small btn-blue';
+                prevBtn.className = 'btn-small btn-skin-use';
                 prevBtn.disabled = false;
-                prevBtn.innerHTML = '<i class="fas fa-check"></i> Use';
+                prevBtn.innerHTML = `<i class="fas fa-check"></i> <span data-i18n="skins.btn_use">${_t('skins.btn_use', 'Use')}</span>`;
                 if (prevId) {
                     prevBtn.setAttribute('onclick', `activatePack('${prevId}')`);
                 }
@@ -629,9 +631,9 @@ window.activatePack = function (packId) {
         if (card) {
             card.classList.add('active');
         }
-        clickedBtn.className = 'btn-small btn-secondary';
+        clickedBtn.className = 'btn-small btn-skin-active';
         clickedBtn.disabled = true;
-        clickedBtn.innerHTML = '<i class="fas fa-check"></i> Active';
+        clickedBtn.innerHTML = `<i class="fas fa-check-circle"></i> <span data-i18n="skins.btn_active">${_t('skins.btn_active', 'Active')}</span>`;
     }
 
     // Force update visuals
@@ -646,7 +648,7 @@ window.activatePack = function (packId) {
             console.log('Skin activated successfully');
         }
     }).catch(err => {
-        showToast('Error calling backend: ' + err);
+        showToast(window.t('toasts.error_backend', {err: err}) || ('Error calling backend: ' + err));
         loadSkinPacks();
     });
 };
@@ -655,7 +657,7 @@ window.activatePack = function (packId) {
 window.deletePack = function (packId) {
     if (!window.pywebview || !window.pywebview.api) return;
 
-    window.pywebview.api.confirm('Are you sure you want to delete this skin pack?').then(confirmed => {
+    window.pywebview.api.confirm(window.t('toasts.confirm_delete_skinpack') || 'Are you sure you want to delete this skin pack?').then(confirmed => {
         if (!confirmed) return;
 
         window.pywebview.api.delete_skin_pack(packId).then(response => {
@@ -669,6 +671,13 @@ window.deletePack = function (packId) {
 };
 
 let capeLoadLock = false;
+
+function _t(key, fallback) {
+    if (typeof window.t !== "function") return fallback;
+    let res = window.t(key);
+    return (res === key || !res) ? fallback : res;
+}
+
 
 // Load User Capes Dynamically
 window.loadUserCapes = function () {
@@ -713,7 +722,7 @@ window.loadUserCapes = function () {
             <div class="cape-preview-box no-cape">
                 <i class="fas fa-ban"></i>
             </div>
-            <span>None</span>
+            <span data-i18n="global.none">${_t('global.none', 'None')}</span>
         `;
         noneOption.addEventListener('click', function () { handleCapeSelection(this); });
         grid.appendChild(noneOption);
@@ -761,7 +770,7 @@ window.loadUserCapes = function () {
         }
     }).catch(e => {
         console.error("Error loading capes", e);
-        grid.innerHTML = '<div style="color: #d9534f; padding: 20px;">Error loading capes</div>';
+        grid.innerHTML = `<div style="color: #d9534f; padding: 20px;">${_t('skins.err_load_capes', 'Error loading capes')}</div>`;
     }).finally(() => {
         capeLoadLock = false;
     });

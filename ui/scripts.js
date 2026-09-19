@@ -168,9 +168,7 @@ const versionCache = {
 
     forge: null,
 
-    neoforge: null,
-
-    quilt: null
+    neoforge: null
 
 };
 
@@ -254,13 +252,16 @@ async function saveSettings() {
 
     try {
 
+        // Save Language
+        if (window.applyPendingLanguage) await window.applyPendingLanguage();
+
         const username = document.getElementById("nickname").value;
 
         const mcdir = document.getElementById("mcdir").value;
 
         const addonsPerPage = document.getElementById("addonsPerPage")?.value || 20;
 
-
+        const uiScale = parseInt(document.getElementById("uiScaleSlider")?.value || 100, 10);
 
         const devMode = document.getElementById("devModeCheckbox")?.checked || false;
 
@@ -283,19 +284,26 @@ async function saveSettings() {
 
 
 
+        // Transitions apply instantly without restart
+        document.body.classList.toggle('disable-transitions', !enableTransitions);
+
         const restartRequired =
-
             currentData.dev_mode !== devMode ||
-
-            currentData.hw_accel !== hwAccel ||
-
-            currentData.enable_transitions !== enableTransitions;
+            currentData.hw_accel !== hwAccel;
 
 
 
         // 1. Save core user info
 
-        await window.pywebview.api.save_user_json(username, mcdir);
+        if (window.pywebview.api.save_user_settings) {
+            const payload = { username, mcdir, ui_scale: uiScale };
+            if (typeof window.currentLanguage !== 'undefined') {
+                payload.language = window.currentLanguage;
+            }
+            await window.pywebview.api.save_user_settings(payload);
+        } else {
+            await window.pywebview.api.save_user_json(username, mcdir);
+        }
 
 
 
@@ -324,18 +332,14 @@ async function saveSettings() {
 
 
         // UI Feedback: Success mark
-
         if (btn) {
-
             btn.classList.add('btn-success');
-
-            btn.innerHTML = '<i class="fas fa-check"></i> Saved!';
-
+            const savedText = window.t('settings.saved_button') !== 'settings.saved_button' ? window.t('settings.saved_button') : 'Saved!';
+            btn.innerHTML = `<i class="fas fa-check"></i> ${savedText}`;
             setTimeout(() => {
-
                 btn.classList.remove('btn-success');
 
-                btn.innerHTML = originalContent;
+                btn.innerHTML = (window.t && window.t('settings.save_btn')) ? window.t('settings.save_btn') : originalContent;
 
             }, 2000);
 
@@ -347,7 +351,7 @@ async function saveSettings() {
 
         if (restartRequired) {
 
-            window.pywebview.api.info('Settings saved. One or more changes (Dev Mode, Transitions, or Hardware Acceleration) require a launcher restart to be applied.');
+            window.pywebview.api.info(window.t('toasts.settings_saved_restart') || 'Settings saved. One or more changes (Dev Mode or Hardware Acceleration) require a launcher restart to be applied.');
 
         }
 
@@ -372,9 +376,7 @@ async function saveSettings() {
             setTimeout(() => {
 
                 btn.classList.remove('btn-red');
-
-                btn.innerHTML = originalContent;
-
+                btn.innerHTML = window.t ? window.t('settings.save_btn') : originalContent;
             }, 2000);
 
         }
@@ -420,7 +422,7 @@ const initLauncher = async () => {
         if (pct) pct.textContent = `${percent}%`;
         if (txt && text) txt.textContent = text;
     };
-    updateLoaderProgress(15, "Checking connection...");
+    updateLoaderProgress(15, window.t('loader.checking_connection') || "Checking connection...");
 
     // Check internet connection first
     try {
@@ -486,8 +488,18 @@ const initLauncher = async () => {
     try {
 
         // Load initial user data
-        updateLoaderProgress(35, "Downloading account data...");
+        updateLoaderProgress(35, window.t('loader.downloading_account') || "Downloading account data...");
         const data = await window.pywebview.api.get_user_json();
+
+        // Load saved language
+        const langToUse = data.language || window.currentLanguage || 'en';
+        if (window.setLanguage) {
+            window.setLanguage(langToUse);
+            if (typeof window.pendingLanguage !== 'undefined') {
+                window.pendingLanguage = langToUse;
+                if (window.updateDropdownUI) window.updateDropdownUI();
+            }
+        }
 
         console.log('[Init] User data loaded:', data.account_type, data.username);
 
@@ -501,7 +513,12 @@ const initLauncher = async () => {
 
         if (document.getElementById("addonsPerPage")) document.getElementById("addonsPerPage").value = data.addons_per_page || 20;
 
-
+        if (data.ui_scale) {
+            applyUiScale(data.ui_scale, true);
+        } else {
+            const savedScale = localStorage.getItem('hw_launcher_scale_percent');
+            if (savedScale) applyUiScale(savedScale, false);
+        }
 
         const devModeCheckbox = document.getElementById("devModeCheckbox");
 
@@ -529,9 +546,15 @@ const initLauncher = async () => {
 
         const transitionsCheckbox = document.getElementById("enableTransitionsCheckbox");
 
-        if (transitionsCheckbox) transitionsCheckbox.checked = (data.enable_transitions !== false);
-
-
+        if (transitionsCheckbox) {
+            transitionsCheckbox.checked = (data.enable_transitions !== false);
+            if (!transitionsCheckbox._hasTransitionsListener) {
+                transitionsCheckbox._hasTransitionsListener = true;
+                transitionsCheckbox.addEventListener('change', () => {
+                    document.body.classList.toggle('disable-transitions', !transitionsCheckbox.checked);
+                });
+            }
+        }
 
         const hwAccelCheckbox = document.getElementById("hwAccelCheckbox");
 
@@ -540,22 +563,16 @@ const initLauncher = async () => {
         const privacyModeCheckbox = document.getElementById("privacyModeCheckbox");
         if (privacyModeCheckbox) privacyModeCheckbox.checked = data.privacy_mode || false;
 
-
         // Apply visual settings that don't need restart (on load)
-
         if (data.enable_transitions === false) {
-
             document.body.classList.add('disable-transitions');
-
         } else {
-
             document.body.classList.remove('disable-transitions');
-
         }
 
 
         // Update UI immediately with local state
-        updateLoaderProgress(55, "Preparing application...");
+        updateLoaderProgress(55, window.t('loader.preparing_app') || "Preparing application...");
         await updateUserInterface(data);
 
         if (data.username && window.hasInternet) {
@@ -572,13 +589,15 @@ const initLauncher = async () => {
         }
 
         // Load fast local app data and news concurrently
-        updateLoaderProgress(75, "Fetching latest news & app data...");
+        updateLoaderProgress(75, window.t('loader.fetching_news') || "Fetching latest news & app data...");
         await Promise.all([
             loadOptions(),
             loadProfiles(),
             loadVersions(),
             checkReviewReminder(),
-            loadMinecraftNews().catch(err => console.error("Failed to load Minecraft News:", err))
+            loadMinecraftNews().catch(err => console.error("Failed to load Minecraft News:", err)),
+            loadVersionManifestInfo().catch(err => console.error("Failed to load Version Manifest:", err)),
+            loadMinecraftPatchNotes().catch(err => console.error("Failed to load Patch Notes:", err))
         ]);
 
         // Load launcher version
@@ -588,8 +607,36 @@ const initLauncher = async () => {
             if (vEl) vEl.textContent = version;
         } catch (err) { }
 
-        // Hide loader/splash once app data and news have finished loading
-        updateLoaderProgress(100, "Ready to play!");
+        // Resolver estado del sponsor antes de cerrar la pantalla de carga
+        try {
+            await initSidebarSponsor();
+        } catch (e) {
+            console.warn("[Init] Sponsor error:", e);
+        }
+
+        // Inicializar ajuste de escala
+        try {
+            initUiScale();
+        } catch (e) {
+            console.warn("[Init] UI Scale error:", e);
+        }
+
+        // Inicializar promoción de compra de Minecraft Premium
+        try {
+            initBuyMinecraftPromo();
+        } catch (e) {
+            console.warn("[Init] Buy MC promo error:", e);
+        }
+
+        // Ensure user badges are loaded if connected to internet before closing the loading screen
+        if (window.hasInternet && data && data.username && (data.account_type === 'microsoft' || data.account_type === 'helloworld')) {
+            if (_ownBadgesLoadedFor !== data.username) {
+                await loadOwnBadges(data);
+            }
+        }
+
+        // Hide loader/splash once app data, news, and badges have finished loading
+        updateLoaderProgress(100, window.t('loader.ready_to_play') || "Ready to play!");
         await new Promise(r => setTimeout(r, 400));
         const loader = document.getElementById('initialLoader');
         if (loader) {
@@ -609,7 +656,7 @@ const initLauncher = async () => {
                         loadSkinData();
                     } else if (res.expired && currentData.account_type === 'microsoft') {
                         console.warn("[Init] Session expired");
-                        window.pywebview.api.info("Your Microsoft session has expired. Please log in again.");
+                        window.pywebview.api.info(window.t("toasts.session_expired") || "Your Microsoft session has expired. Please log in again.");
                         const offlineData = await window.pywebview.api.save_user_json(currentData.username, currentData.mcdir, 'offline');
                         await updateUserInterface(offlineData);
                         loadSkinData();
@@ -634,9 +681,26 @@ const initLauncher = async () => {
             });
         }
 
+        // Listen for auto-launch profile from shortcuts
+        const onAutoLaunch = (profileId) => {
+            if (!profileId) return;
+            console.log('[AutoLaunch] Received auto launch event for profile:', profileId);
+            if (window.isLauncherReady) {
+                launchProfileById(profileId);
+            } else {
+                window.pendingLaunchProfileId = profileId;
+            }
+        };
+
+        if (window.hwlAPI && window.hwlAPI.onAutoLaunchProfile) {
+            window.hwlAPI.onAutoLaunchProfile(onAutoLaunch);
+        } else if (window.pywebview && window.pywebview.api && window.pywebview.api.on_auto_launch_profile) {
+            window.pywebview.api.on_auto_launch_profile(onAutoLaunch);
+        }
+
     } catch (error) {
         console.error("[Init] Error during initialization:", error);
-        updateLoaderProgress(100, "Ready!");
+        updateLoaderProgress(100, window.t('loader.ready') || "Ready!");
         setTimeout(() => {
             const loader = document.getElementById('initialLoader');
             if (loader) {
@@ -647,6 +711,18 @@ const initLauncher = async () => {
     }
 
     console.log('[Init] Initialization complete');
+    window.isLauncherReady = true;
+
+    // Check for pending launch from shortcut
+    if (window.pendingLaunchProfileId) {
+        const pid = window.pendingLaunchProfileId;
+        window.pendingLaunchProfileId = null;
+        setTimeout(() => { launchProfileById(pid); }, 350);
+    } else if (window.pywebview && window.pywebview.api && window.pywebview.api.get_pending_launch_profile) {
+        window.pywebview.api.get_pending_launch_profile().then(pid => {
+            if (pid) setTimeout(() => { launchProfileById(pid); }, 350);
+        }).catch(() => {});
+    }
 };
 
 if (document.readyState === 'loading') {
@@ -656,13 +732,341 @@ if (document.readyState === 'loading') {
 }
 window.addEventListener('pywebviewready', initLauncher);
 
+// Re-render dynamic elements when language changes
+window.addEventListener('language-changed', () => {
+    if (typeof window.loadProfiles === 'function') {
+        window.loadProfiles(false);
+    }
+    if (typeof window.loadOptions === 'function') {
+        window.loadOptions();
+    }
+    if (typeof renderSidebarSponsor === 'function') {
+        renderSidebarSponsor(currentSponsorConfig);
+    }
+});
 
+// --- SPONSOR / PROMO (Apex Hosting) ---
+const SPONSOR_GIST_URL = 'https://gist.githubusercontent.com/abeloskyyy/ae6861843152ced82beb7f5135ac3863/raw/hwlauncher-promo.json';
+const SPONSOR_CACHE_KEY = 'hw_sponsor_promo_data';
+const SPONSOR_CACHE_TIME_KEY = 'hw_sponsor_promo_time';
+const SPONSOR_CACHE_TTL = 12 * 60 * 60 * 1000; // 12 horas
+
+const DEFAULT_SPONSOR_CONFIG = {
+    active: false,
+    code: "HWLAUNCHER",
+    discount: "25",
+    url: "https://billing.apexminecrafthosting.com/aff.php?aff=17119"
+};
+
+let currentSponsorConfig = { ...DEFAULT_SPONSOR_CONFIG };
+
+function renderSidebarSponsor(config) {
+    currentSponsorConfig = config || DEFAULT_SPONSOR_CONFIG;
+    const card = document.getElementById('sidebarSponsorCard');
+    if (!card) return;
+
+    if (!currentSponsorConfig || currentSponsorConfig.active !== true) {
+        card.classList.add('is-hidden');
+        card.style.display = 'none';
+        return;
+    }
+
+    card.classList.remove('is-hidden');
+    card.style.display = '';
+
+    // Discount badge
+    const badge = document.getElementById('sponsorDiscountBadge');
+    if (badge) {
+        let disc = String(currentSponsorConfig.discount || '25').trim();
+        if (!disc.endsWith('%')) {
+            disc = `${disc}%`;
+        }
+        badge.innerText = disc;
+    }
+
+    // Subtitle translation
+    const subtitle = document.getElementById('sponsorSubtitle');
+    if (subtitle) {
+        subtitle.innerText = (window.t ? window.t('sidebar.sponsor_subtitle') : '') || 'Crea tu servidor con un 25% de descuento';
+    }
+
+    // Action button: Copiar código (solo icono)
+    const copyBtn = document.getElementById('sponsorCopyBtn');
+    if (copyBtn) {
+        copyBtn.title = (window.t ? window.t('sidebar.sponsor_copy_hint') : '') || 'Copiar código';
+        copyBtn.onclick = (e) => {
+            e.stopPropagation();
+            const code = (currentSponsorConfig.code || 'HWLAUNCHER').trim();
+            navigator.clipboard.writeText(code).then(() => {
+                const copyMsg = (window.t ? window.t('sidebar.sponsor_code_copied', { code }) : '') || `Código ${code} copiado al portapapeles`;
+                if (typeof showToast === 'function') {
+                    showToast(copyMsg, 'success');
+                }
+                const originalHtml = copyBtn.innerHTML;
+                copyBtn.innerHTML = '<i class="fas fa-check" style="color: #C0FF1E;"></i>';
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalHtml;
+                }, 2000);
+            }).catch((err) => {
+                console.warn('[Sponsor] Error copying code to clipboard:', err);
+            });
+        };
+    }
+
+    // Action button: Abrir enlace (solo icono)
+    const openBtn = document.getElementById('sponsorOpenBtn');
+    if (openBtn) {
+        openBtn.title = (window.t ? window.t('sidebar.sponsor_open_hint') : '') || 'Abrir enlace';
+        openBtn.onclick = (e) => {
+            e.stopPropagation();
+            const targetUrl = currentSponsorConfig.url || DEFAULT_SPONSOR_CONFIG.url;
+            if (window.api && typeof window.api.openExternal === 'function') {
+                window.api.openExternal(targetUrl);
+            } else {
+                window.open(targetUrl, '_blank');
+            }
+        };
+    }
+}
+
+async function initSidebarSponsor() {
+    const card = document.getElementById('sidebarSponsorCard');
+    if (!card) return;
+
+    const cachedStr = localStorage.getItem(SPONSOR_CACHE_KEY);
+
+    // 1. Carga inmediata desde caché o valores por defecto (0ms de retraso)
+    if (cachedStr) {
+        try {
+            renderSidebarSponsor(JSON.parse(cachedStr));
+        } catch (e) {
+            renderSidebarSponsor(DEFAULT_SPONSOR_CONFIG);
+        }
+    } else {
+        renderSidebarSponsor(DEFAULT_SPONSOR_CONFIG);
+    }
+
+    // 2. Actualización en segundo plano: consulta la última versión del Gist
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1500);
+        const res = await fetch(`${SPONSOR_GIST_URL}?t=${Date.now()}`, {
+            signal: controller.signal,
+            cache: 'no-cache'
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+            const data = await res.json();
+            localStorage.setItem(SPONSOR_CACHE_KEY, JSON.stringify(data));
+            localStorage.setItem(SPONSOR_CACHE_TIME_KEY, Date.now().toString());
+            renderSidebarSponsor(data);
+        }
+    } catch (err) {
+        console.warn('[Sponsor] No se pudo obtener promo remota, usando local:', err.message);
+    }
+}
+
+// --- BUY MINECRAFT PREMIUM PROMO ---
+const MINECRAFT_STORE_URL = 'https://www.minecraft.net/es-es/store/minecraft-java-bedrock-edition-pc';
+
+function updateBuyMinecraftVisibility(userData) {
+    const card = document.getElementById('sidebarBuyMinecraftCard');
+    if (!card) return;
+
+    // Show ONLY for non-premium accounts: no account logged in, helloworld account, or offline
+    // Hide ONLY for official Microsoft accounts (Minecraft Premium)
+    const isMicrosoftPremium = Boolean(
+        userData &&
+        userData.username &&
+        userData.username.trim() !== '' &&
+        userData.account_type === 'microsoft'
+    );
+
+    if (isMicrosoftPremium) {
+        card.classList.add('is-hidden');
+        card.style.display = 'none';
+    } else {
+        card.classList.remove('is-hidden');
+        card.style.display = '';
+    }
+}
+window.updateBuyMinecraftVisibility = updateBuyMinecraftVisibility;
+
+function initBuyMinecraftPromo() {
+    const link = document.getElementById('sidebarBuyMcLink');
+    if (!link) return;
+
+    link.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (window.hwlAPI && typeof window.hwlAPI.openExternal === 'function') {
+            window.hwlAPI.openExternal(MINECRAFT_STORE_URL);
+        } else if (window.api && typeof window.api.openExternal === 'function') {
+            window.api.openExternal(MINECRAFT_STORE_URL);
+        } else {
+            window.open(MINECRAFT_STORE_URL, '_blank');
+        }
+    };
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initBuyMinecraftPromo);
+} else {
+    initBuyMinecraftPromo();
+}
+
+// --- UI SCALE SYSTEM (50% - 150%) ---
+function applyUiScale(percent, save = true) {
+    const p = Math.max(50, Math.min(150, Math.round(Number(percent) || 100)));
+    const factor = p / 100;
+
+    if (window.hwlAPI && typeof window.hwlAPI.setZoomFactor === 'function') {
+        window.hwlAPI.setZoomFactor(factor);
+    } else if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.setZoomFactor === 'function') {
+        window.pywebview.api.setZoomFactor(factor);
+    } else if (window.electronAPI && typeof window.electronAPI.setZoomFactor === 'function') {
+        window.electronAPI.setZoomFactor(factor);
+    } else {
+        document.documentElement.style.zoom = factor;
+    }
+
+    const badge = document.getElementById('uiScaleValueBadge');
+    if (badge) badge.textContent = `${p}%`;
+    const slider = document.getElementById('uiScaleSlider');
+    if (slider && Number(slider.value) !== p) slider.value = p;
+
+    if (save) {
+        localStorage.setItem('hw_launcher_scale', factor.toString());
+        localStorage.setItem('hw_launcher_scale_percent', p.toString());
+    }
+}
+window.applyUiScale = applyUiScale;
+
+function initUiScale() {
+    const slider = document.getElementById('uiScaleSlider');
+    const decBtn = document.getElementById('scaleDecreaseBtn');
+    const incBtn = document.getElementById('scaleIncreaseBtn');
+    const resetBtn = document.getElementById('scaleResetBtn');
+
+    if (!slider) return;
+
+    const savedPercentStr = localStorage.getItem('hw_launcher_scale_percent');
+    let currentPercent = savedPercentStr ? parseInt(savedPercentStr, 10) : 100;
+    if (isNaN(currentPercent) || currentPercent < 50 || currentPercent > 150) {
+        currentPercent = 100;
+    }
+
+    applyUiScale(currentPercent, false);
+
+    slider.addEventListener('input', (e) => {
+        applyUiScale(e.target.value, true);
+    });
+
+    if (decBtn) {
+        decBtn.onclick = (e) => {
+            e.preventDefault();
+            const current = parseInt(slider.value, 10) || 100;
+            const next = Math.max(50, current - 5);
+            applyUiScale(next, true);
+        };
+    }
+
+    if (incBtn) {
+        incBtn.onclick = (e) => {
+            e.preventDefault();
+            const current = parseInt(slider.value, 10) || 100;
+            const next = Math.min(150, current + 5);
+            applyUiScale(next, true);
+        };
+    }
+
+    if (resetBtn) {
+        resetBtn.onclick = (e) => {
+            e.preventDefault();
+            applyUiScale(100, true);
+        };
+    }
+}
+window.initUiScale = initUiScale;
+
+let _ownBadgesLoadedFor = null;
+
+async function loadOwnBadges(userData) {
+    const badgesDisplay = document.getElementById('userBadgesDisplay');
+    if (!badgesDisplay) return;
+
+    // Offline account or not logged in: clear badges and return immediately
+    if (!userData || !userData.username || userData.account_type === 'offline') {
+        badgesDisplay.innerHTML = '';
+        _ownBadgesLoadedFor = null;
+        return;
+    }
+
+    // Anti-offline system: If no internet, badges never load; do not wait or block
+    if (!window.hasInternet) {
+        badgesDisplay.innerHTML = '';
+        _ownBadgesLoadedFor = userData.username;
+        return;
+    }
+
+    try {
+        let badges = [];
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.get_own_badges) {
+            // Fetch own badges from backend with a safety timeout of 3.5s so loader is never stuck
+            const res = await Promise.race([
+                window.pywebview.api.get_own_badges(),
+                new Promise((resolve) => setTimeout(() => resolve({ success: false, badges: [] }), 3500))
+            ]);
+            if (res && res.success && Array.isArray(res.badges)) {
+                badges = res.badges;
+            }
+        }
+
+        // Fallback: if badges is empty but user is verified Microsoft, include premium badge
+        if (badges.length === 0 && userData.account_type === 'microsoft' && userData.firebase_ms_uid) {
+            badges = ['premium'];
+        }
+
+        _ownBadgesLoadedFor = userData.username;
+
+        if (badges.length === 0) {
+            badgesDisplay.innerHTML = '';
+            return;
+        }
+
+        // Render compact rosette badge(s)
+        if (typeof window.renderBadgesHtml === 'function') {
+            badgesDisplay.innerHTML = window.renderBadgesHtml(badges, false);
+        } else {
+            const BADGE_ROSETTE_SVG = '<svg class="hw-badge-shape" viewBox="0 0 22 22" aria-hidden="true"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.887-1.692-.474-.45-1.058-.756-1.692-.887-.633-.13-1.29-.083-1.897.14-.274-.586-.706-1.084-1.246-1.438C12.275 1.808 11.646 1.61 11 1.628c-.646.018-1.275.215-1.816.57-.54.354-.972.852-1.246 1.438-.607-.223-1.264-.27-1.897-.14-.634.131-1.218.437-1.692.887-.45.474-.756 1.058-.887 1.692-.13.633-.083 1.29.14 1.897-.586.274-1.084.706-1.438 1.246C1.808 9.725 1.61 10.354 1.628 11c.018.646.215 1.275.57 1.816.354.54.852.972 1.438 1.246-.223.607-.27 1.264-.14 1.897.131.634.437 1.218.887 1.692.474.45 1.058.756 1.692.887-.633.13-1.29-.083-1.897-.14-.274-.586-.706-1.084-1.246-1.438.541.355 1.17.552 1.816.57.646-.018 1.275-.215 1.816-.57.54-.354.972-.852 1.246-1.438.607.223 1.264.27 1.897.14.634-.131 1.218-.437 1.692-.887.45-.474.756-1.058.887-1.692.13-.633-.083-1.29-.14-1.897.586-.274 1.084-.706 1.438-1.246.355-.541.552-1.17.57-1.816z"/></svg>';
+            const defs = {
+                premium:   { cls: 'hw-badge-premium', title: 'Cuenta Premium' },
+                moderator: { cls: 'hw-badge-moderator', title: 'Moderador' },
+                creator:   { cls: 'hw-badge-creator', title: 'Creador' }
+            };
+            const parts = (badges || []).filter(b => defs[b]).map(b => {
+                return `<span class="hw-badge ${defs[b].cls}" title="${defs[b].title}">${BADGE_ROSETTE_SVG}</span>`;
+            });
+            badgesDisplay.innerHTML = parts.length ? `<span class="hw-badges-row">${parts.join('')}</span>` : '';
+        }
+    } catch (err) {
+        console.warn('[Badges] Error loading own badges:', err);
+        _ownBadgesLoadedFor = userData.username;
+    }
+}
+window.loadOwnBadges = loadOwnBadges;
 
 // --- NEW AUTH FUNCTIONS ---
 
 
 
 async function updateUserInterface(userData) {
+    if (!userData || !userData.username) {
+        if (typeof window.onSocialLogout === 'function') {
+            window.onSocialLogout();
+        }
+    }
 
     const badge = document.getElementById('userBadge');
 
@@ -681,6 +1085,9 @@ async function updateUserInterface(userData) {
         if (badge) badge.style.display = 'flex';
 
         if (name) name.textContent = userData.username;
+
+        // Load and render user badges in the account button
+        await loadOwnBadges(userData);
 
         if (loginBtn) loginBtn.style.display = 'none';
 
@@ -711,112 +1118,124 @@ async function updateUserInterface(userData) {
 
 
         const editProfileBtn = document.getElementById('editProfileBtn');
+        const viewOwnProfileBtn = document.getElementById('viewOwnProfileBtn');
 
-        if (editProfileBtn) {
+        if (userData.account_type === 'microsoft') {
 
-            if (userData.account_type === 'microsoft') {
+            // Premium account
 
-                // Premium account
+            const isVerified = !!(userData.firebase_ms_uid);
 
-                const isVerified = !!(userData.firebase_ms_uid);
-
+            if (editProfileBtn) {
                 editProfileBtn.style.display = 'block';
 
                 if (isVerified) {
-
                     editProfileBtn.disabled = false;
-
                     editProfileBtn.classList.remove('btn-disabled');
-
                     editProfileBtn.style.removeProperty('cursor');
-
                     editProfileBtn.style.removeProperty('opacity');
-
                     editProfileBtn.title = 'Edit Profile';
-
                 } else {
-
                     editProfileBtn.disabled = false; // Don't use disabled attribute, use class instead
-
                     editProfileBtn.classList.add('btn-disabled');
-
                     editProfileBtn.style.cursor = 'default';
-
                     editProfileBtn.style.opacity = '0.5';
-
                     editProfileBtn.title = 'Verify your Microsoft account to edit profile';
-
                 }
+            }
+
+            if (viewOwnProfileBtn) {
+                viewOwnProfileBtn.style.display = 'block';
+
+                if (isVerified) {
+                    viewOwnProfileBtn.disabled = false;
+                    viewOwnProfileBtn.classList.remove('btn-disabled');
+                    viewOwnProfileBtn.style.removeProperty('cursor');
+                    viewOwnProfileBtn.style.removeProperty('opacity');
+                    viewOwnProfileBtn.title = (window.t ? window.t('user_menu.view_profile') : '') || 'View Profile';
+                } else {
+                    viewOwnProfileBtn.disabled = false;
+                    viewOwnProfileBtn.classList.add('btn-disabled');
+                    viewOwnProfileBtn.style.cursor = 'default';
+                    viewOwnProfileBtn.style.opacity = '0.5';
+                    viewOwnProfileBtn.title = (window.t ? window.t('user_menu.verify_to_view_profile') : '') || 'Verify your Microsoft account to view profile';
+                }
+            }
                 
-                const statsBtn = document.getElementById('statsBtn');
-                if (statsBtn) {
-                    statsBtn.style.display = 'inline-flex';
-                    statsBtn.classList.remove('locked-feature');
-                    statsBtn.title = 'Stats';
-                }
-                const wkPublishBtn = document.getElementById('wkPublishBtn');
-                if (wkPublishBtn) {
-                    wkPublishBtn.classList.remove('locked-feature');
-                    wkPublishBtn.title = 'Create Workshop Item';
-                }
-                // Reload stats for Microsoft accounts
-                if (window.loadMyStats) {
-                    window.loadMyStats();
-                }
+            const statsBtn = document.getElementById('statsBtn');
+            if (statsBtn) {
+                statsBtn.style.display = 'inline-flex';
+                statsBtn.classList.remove('locked-feature');
+                statsBtn.title = 'Stats';
+            }
+            const wkPublishBtn = document.getElementById('wkPublishBtn');
+            if (wkPublishBtn) {
+                wkPublishBtn.classList.remove('locked-feature');
+                wkPublishBtn.title = 'Create Workshop Item';
+            }
+            // Reload stats for Microsoft accounts
+            if (window.loadMyStats) {
+                window.loadMyStats();
+            }
 
-            } else if (userData.account_type === 'helloworld') {
+        } else if (userData.account_type === 'helloworld') {
 
-                // HelloWorld accounts can always edit profile
+            // HelloWorld accounts can always edit profile & view profile
 
+            if (editProfileBtn) {
                 editProfileBtn.style.display = 'block';
-
                 editProfileBtn.disabled = false;
-
                 editProfileBtn.classList.remove('btn-disabled');
-
                 editProfileBtn.style.removeProperty('cursor');
-
                 editProfileBtn.style.removeProperty('opacity');
-
                 editProfileBtn.title = 'Edit Profile';
+            }
+
+            if (viewOwnProfileBtn) {
+                viewOwnProfileBtn.style.display = 'block';
+                viewOwnProfileBtn.disabled = false;
+                viewOwnProfileBtn.classList.remove('btn-disabled');
+                viewOwnProfileBtn.style.removeProperty('cursor');
+                viewOwnProfileBtn.style.removeProperty('opacity');
+                viewOwnProfileBtn.title = (window.t ? window.t('user_menu.view_profile') : '') || 'View Profile';
+            }
                 
-                const statsBtn = document.getElementById('statsBtn');
-                if (statsBtn) {
-                    statsBtn.style.display = 'inline-flex';
-                    statsBtn.classList.remove('locked-feature');
-                    statsBtn.title = 'Stats';
-                }
-                const wkPublishBtn = document.getElementById('wkPublishBtn');
-                if (wkPublishBtn) {
-                    wkPublishBtn.classList.remove('locked-feature');
-                    wkPublishBtn.title = 'Create Workshop Item';
-                }
-                // Reload stats for HelloWorld accounts
-                if (window.loadMyStats) {
-                    window.loadMyStats();
-                }
+            const statsBtn = document.getElementById('statsBtn');
+            if (statsBtn) {
+                statsBtn.style.display = 'inline-flex';
+                statsBtn.classList.remove('locked-feature');
+                statsBtn.title = 'Stats';
+            }
+            const wkPublishBtn = document.getElementById('wkPublishBtn');
+            if (wkPublishBtn) {
+                wkPublishBtn.classList.remove('locked-feature');
+                wkPublishBtn.title = 'Create Workshop Item';
+            }
+            // Reload stats for HelloWorld accounts
+            if (window.loadMyStats) {
+                window.loadMyStats();
+            }
 
-            } else {
+        } else {
 
-                // Offline accounts cannot edit profile
+            // Offline accounts cannot edit profile or view profile
 
-                editProfileBtn.style.display = 'none';
+            if (editProfileBtn) editProfileBtn.style.display = 'none';
+            if (viewOwnProfileBtn) viewOwnProfileBtn.style.display = 'none';
                 
-                const streakBadgeContainer = document.getElementById('streakBadgeContainer');
-                if (streakBadgeContainer) streakBadgeContainer.style.display = 'none';
+            const streakBadgeContainer = document.getElementById('streakBadgeContainer');
+            if (streakBadgeContainer) streakBadgeContainer.style.display = 'none';
                 
-                const statsBtn = document.getElementById('statsBtn');
-                if (statsBtn) {
-                    statsBtn.style.display = 'inline-flex';
-                    statsBtn.classList.add('locked-feature');
-                    statsBtn.title = 'Stats (Account Required)';
-                }
-                const wkPublishBtn = document.getElementById('wkPublishBtn');
-                if (wkPublishBtn) {
-                    wkPublishBtn.classList.add('locked-feature');
-                    wkPublishBtn.title = 'Create Workshop Item (Account Required)';
-                }
-
+            const statsBtn = document.getElementById('statsBtn');
+            if (statsBtn) {
+                statsBtn.style.display = 'inline-flex';
+                statsBtn.classList.add('locked-feature');
+                statsBtn.title = 'Stats (Account Required)';
+            }
+            const wkPublishBtn = document.getElementById('wkPublishBtn');
+            if (wkPublishBtn) {
+                wkPublishBtn.classList.add('locked-feature');
+                wkPublishBtn.title = 'Create Workshop Item (Account Required)';
             }
 
         }
@@ -856,11 +1275,8 @@ async function updateUserInterface(userData) {
                 await window.renderUserHead(avatarUrl);
 
             } else if (userData.account_type === 'microsoft') {
-
-                // Use mc-heads for avatar. If they have a premium name it will show, otherwise Steve.
-
-                const skinUrl = window.hasInternet ? `https://mc-heads.net/avatar/${userData.username}` : null;
-
+                const id = userData.uuid || (userData.username ? encodeURIComponent(userData.username) : null);
+                const skinUrl = window.hasInternet ? (id ? `https://crafthead.net/helm/${id}/64` : null) : null;
                 await window.renderUserHead(skinUrl);
 
             } else {
@@ -877,6 +1293,9 @@ async function updateUserInterface(userData) {
 
         if (badge) badge.style.display = 'none';
 
+        const userBadgesDisplay = document.getElementById('userBadgesDisplay');
+        if (userBadgesDisplay) userBadgesDisplay.innerHTML = '';
+
         if (loginBtn) loginBtn.style.display = 'flex';
 
         if (skinsBtn) {
@@ -891,14 +1310,16 @@ async function updateUserInterface(userData) {
 
         if (editProfileBtn) editProfileBtn.style.display = 'none';
 
+        const viewOwnProfileBtn = document.getElementById('viewOwnProfileBtn');
+
+        if (viewOwnProfileBtn) viewOwnProfileBtn.style.display = 'none';
+
         const streakBadgeContainer = document.getElementById('streakBadgeContainer');
         if (streakBadgeContainer) streakBadgeContainer.style.display = 'none';
         
         const statsBtn = document.getElementById('statsBtn');
         if (statsBtn) {
-            statsBtn.style.display = 'inline-flex';
-            statsBtn.classList.add('locked-feature');
-            statsBtn.title = 'Stats (Account Required)';
+            statsBtn.style.display = 'none';
         }
         const wkPublishBtn = document.getElementById('wkPublishBtn');
         if (wkPublishBtn) {
@@ -914,14 +1335,11 @@ async function updateUserInterface(userData) {
     const socialBtnEl = document.getElementById('socialBtn');
 
     if (socialBtnEl) {
-
-        const showSocial = userData.username && userData.username !== '' &&
-
+        const hasAccount = userData && userData.username && userData.username !== '';
+        const showSocial = hasAccount &&
             (userData.account_type === 'helloworld' || userData.account_type === 'microsoft');
 
-        socialBtnEl.style.display = 'flex';
-
-
+        socialBtnEl.style.display = hasAccount ? 'flex' : 'none';
 
         if (showSocial) {
 
@@ -979,7 +1397,7 @@ async function updateUserInterface(userData) {
 
             if (typeof window.initSocial === 'function') {
 
-                window.initSocial().catch(() => {});
+                window.initSocial(true).catch(() => {});
 
             }
 
@@ -1034,6 +1452,13 @@ async function updateUserInterface(userData) {
 
     }
 
+    if (typeof window.checkWkAdminAccess === 'function') {
+        window.checkWkAdminAccess();
+    }
+
+    if (typeof updateBuyMinecraftVisibility === 'function') {
+        updateBuyMinecraftVisibility(userData);
+    }
 }
 
 
@@ -1384,7 +1809,7 @@ window.addEventListener('login-error', (event) => {
 
 window.onLoginError = function (err) {
 
-    window.pywebview.api.error("Login failed: " + err);
+    window.pywebview.api.error(window.t("toasts.login_failed", {err: err}) || ("Login failed: " + err));
 
     // Reset button state
 
@@ -1450,7 +1875,7 @@ window.cancelLaunch = function() {
 
         playButton.style.opacity = '1';
 
-        playButton.innerHTML = playButton.dataset.originalHtml || 'Play';
+        playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
 
     }
 
@@ -1468,60 +1893,73 @@ window.cancelLaunch = function() {
 
 
 
-    // Call API to cancel launch in background without blocking UI
-
+    // Call API to cancel launch immediately
     window.pywebview.api.cancel_launch().catch(err => console.error("Cancel launch error:", err));
-
 };
 
 
 
 async function launchGame() {
-
+    window.launchGame = launchGame;
     console.log('[Frontend] launchGame called');
 
     const profileSelectElement = document.getElementById("profileSelect");
-
-
-
     if (!profileSelectElement || !profileSelectElement.value) {
-
-        window.pywebview.api.error("You must select an installation before playing");
-
+        window.pywebview.api.error(window.t("toasts.select_installation_play") || "You must select an installation before playing");
         return;
-
     }
 
+    // Prevent double-launch
+    if (window.isLaunching) return;
+    window.isLaunching = true;
 
+    // Show loading state immediately so UI feels fast and responsive
+    const playButton = document.querySelector('.play-button');
+    if (playButton) {
+        if (!playButton.dataset.originalHtml) {
+            playButton.dataset.originalHtml = playButton.innerHTML;
+        }
+        playButton.disabled = true;
+        playButton.style.cursor = 'not-allowed';
+        playButton.style.opacity = '0.7';
+        playButton.innerHTML = '<span class="spinner"></span> ' + (window.t('play.starting') || 'Starting...');
+    }
+
+    const cancelBtn = document.getElementById('cancelLaunchBtn');
+    if (cancelBtn) {
+        cancelBtn.classList.add('visible');
+    }
+
+    const revertPlayState = () => {
+        window.isLaunching = false;
+        if (playButton) {
+            playButton.disabled = false;
+            playButton.style.cursor = 'pointer';
+            playButton.style.opacity = '1';
+            playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
+        }
+        if (cancelBtn) cancelBtn.classList.remove('visible');
+    };
+
+    // Ensure browser renders the spinner and cancel button with fully responsive input states
+    await new Promise(r => setTimeout(r, 25));
 
     const selectedProfile = profileSelectElement.value;
 
-
-
-    // Get nickname from user data instead of the login modal
-
+    // Get nickname from user data
     const userData = await window.pywebview.api.get_user_json();
-
     const nickname = userData.username || "";
 
-
-
     if (!nickname) {
-
-        window.pywebview.api.error("You must log in before playing");
-
+        revertPlayState();
+        window.pywebview.api.error(window.t("toasts.login_before_play") || "You must log in before playing");
         return;
-
     }
 
-
-
     // Block Microsoft accounts if offline (verification requires internet)
-
     if (userData.account_type === 'microsoft' && !window.hasInternet) {
-
-        window.pywebview.api.error("You cannot play with a Microsoft account without an internet connection. Please use an Offline account to play offline.");
-
+        revertPlayState();
+        window.pywebview.api.error(window.t("toasts.microsoft_offline_error") || "You cannot play with a Microsoft account without an internet connection. Please use an Offline account to play offline.");
         return;
     }
 
@@ -1535,58 +1973,31 @@ async function launchGame() {
             const isUsingDefaultDir = (!profDir || profDir === defaultMcDir);
 
             let isOldVersion = false;
-            const mcVerMatch = (profile.version || "").match(/\b(?:1\.(\d+)(?:\.(\d+))?|([ab]\d+\.\d+)|\b(\d{2})w\d+[a-z]\b)/i);
+            const mcVerMatch = (profile.version || "").match(/\b(?:1\.(\d+)(?:\.(\d+))?|([ab]\d+\.\d+)|\b(\d{2})w(\d{2})[a-z]\b)/i);
             if (mcVerMatch) {
                 if (mcVerMatch[1]) {
                     if (parseInt(mcVerMatch[1], 10) <= 14) isOldVersion = true;
+                } else if (mcVerMatch[4]) {
+                    const year = parseInt(mcVerMatch[4], 10);
+                    const week = parseInt(mcVerMatch[5] || "0", 10);
+                    if (year < 19 || (year === 19 && week < 34)) {
+                        isOldVersion = true;
+                    }
                 } else {
                     isOldVersion = true;
                 }
             }
 
             if (isUsingDefaultDir && isOldVersion) {
-                const continueOld = await window.pywebview.api.confirm(
-                    "You are launching an older version of Minecraft (1.14 or older) in the main launcher directory.\n\nSharing this folder with modern versions will likely cause errors or crashes.\n\nIt is strongly recommended to edit the installation and set a custom 'Game Directory'.\n\nDo you want to launch anyway?"
-                );
-                if (!continueOld) return;
+                const continueOld = await window.pywebview.api.confirm(window.t("toasts.old_version_warning") || "You are launching an older version of Minecraft (1.14 or older) in the main launcher directory.\n\nSharing this folder with modern versions will likely cause errors or crashes.\n\nIt is strongly recommended to edit the installation and set a custom 'Game Directory'.\n\nDo you want to launch anyway?");
+                if (!continueOld) {
+                    revertPlayState();
+                    return;
+                }
             }
         }
     } catch (err) {
         console.error("Error checking old version directory warning:", err);
-    }
-
-    // Prevent double-launch
-    if (window.isLaunching) return;
-    window.isLaunching = true;
-
-
-
-    // Show loading state BEFORE async call so it's immediate
-
-    const playButton = document.querySelector('.play-button');
-
-    if (playButton) {
-
-        // Save original in case of error
-
-        playButton.dataset.originalHtml = playButton.innerHTML;
-
-        playButton.disabled = true;
-
-        playButton.style.cursor = 'not-allowed';
-
-        playButton.style.opacity = '0.6';
-
-        playButton.innerHTML = '<span class="spinner"></span> Starting...';
-
-    }
-
-    const cancelBtn = document.getElementById('cancelLaunchBtn');
-
-    if (cancelBtn) {
-
-        cancelBtn.classList.add('visible');
-
     }
 
 
@@ -1597,17 +2008,29 @@ async function launchGame() {
         if (window.logIdleTimer) clearTimeout(window.logIdleTimer);
         window.logIdleTimer = setTimeout(() => {
             if (window.isLaunching && !window.isSyncing) {
-                console.log("[Launch] 20 seconds without logs passed, considering Minecraft ready.");
+                console.log("[Launch] 45 seconds without logs passed, considering Minecraft ready.");
                 onMinecraftReady();
             }
-        }, 20000);
+        }, 45000);
     };
     window._resetLogIdleTimer = resetLogIdleTimer;
 
     // Try to launch the game
     const serverParam = window.pendingServerParam || null;
+    await new Promise(r => setTimeout(r, 10));
     const result = await pywebview.api.start_game(selectedProfile, nickname, false, serverParam);
     
+    if (!window.isLaunching || (result && result.status === 'cancelled')) {
+        console.log('[Launch] Launch was cancelled by user, ignoring start_game result.');
+        window.isLaunching = false;
+        return;
+    }
+
+    if (result && result.status === 'already_launching') {
+        console.log('[Launch] Launch already in progress, ignoring duplicate trigger.');
+        return;
+    }
+
     if (result.status !== "missing_files" && result.status !== "already_running") {
         window.pendingServerParam = null;
         if (result.status !== "error") {
@@ -1617,9 +2040,7 @@ async function launchGame() {
 
     // Handle duplicate instance
     if (result.status === "already_running") {
-        const confirm = await window.pywebview.api.confirm(
-            "Minecraft is already open. Do you want to open another instance?"
-        );
+        const confirm = await window.pywebview.api.confirm(window.t("toasts.already_open_warning") || "Minecraft is already open. Do you want to open another instance?");
         if (confirm) {
             // Force launch
             const forceResult = await pywebview.api.start_game(selectedProfile, nickname, true, serverParam);
@@ -1630,7 +2051,7 @@ async function launchGame() {
                     playButton.disabled = false;
                     playButton.style.cursor = 'pointer';
                     playButton.style.opacity = '1';
-                    playButton.innerHTML = playButton.dataset.originalHtml || 'Play';
+                    playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
                 }
                 if (cancelBtn) cancelBtn.classList.remove('visible');
                 return;
@@ -1644,7 +2065,7 @@ async function launchGame() {
                 playButton.disabled = false;
                 playButton.style.cursor = 'pointer';
                 playButton.style.opacity = '1';
-                playButton.innerHTML = playButton.dataset.originalHtml || 'Play';
+                playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
             }
             if (cancelBtn) cancelBtn.classList.remove('visible');
             return;
@@ -1661,7 +2082,7 @@ async function launchGame() {
             playButton.disabled = false;
             playButton.style.cursor = 'pointer';
             playButton.style.opacity = '1';
-            playButton.innerHTML = playButton.dataset.originalHtml || 'Play';
+            playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
         }
         if (cancelBtn) cancelBtn.classList.remove('visible');
         return;
@@ -1674,8 +2095,10 @@ window.addEventListener('info-message', (e) => {
     if (msg === "Game Closed" || msg.includes("Game Crashed") || msg.includes("has exited") || msg.includes("Game process closed")) {
         // Always re-enable button when game closes, regardless of sync state
         onMinecraftClosed();
+    } else if (msg === "Game Ready") {
+        onMinecraftReady();
     } else {
-        // Reset 10s idle timer on any game log while launching
+        // Reset 45s idle timer on any game log while launching
         if (window.isLaunching && !window.isSyncing && window._resetLogIdleTimer) {
             window._resetLogIdleTimer();
         }
@@ -1699,7 +2122,7 @@ window.addEventListener('error', (e) => {
 
             playButton.style.opacity = '1';
 
-            playButton.innerHTML = playButton.dataset.originalHtml || 'Play';
+            playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
 
         }
 
@@ -1715,7 +2138,7 @@ window.addEventListener('error', (e) => {
 
 function formatVersionName(versionId) {
     if (!versionId) return 'Unknown Version';
-    if (/^(?:Fabric|Forge|NeoForge|Quilt|Vanilla|OptiFine)\b/i.test(versionId)) {
+    if (/^(?:Fabric|Forge|NeoForge|Vanilla|OptiFine)\b/i.test(versionId)) {
         return versionId;
     }
     const lower = versionId.toLowerCase();
@@ -1723,7 +2146,6 @@ function formatVersionName(versionId) {
     if (lower.includes('neoforge')) software = 'NeoForge';
     else if (lower.includes('forge')) software = 'Forge';
     else if (lower.includes('fabric')) software = 'Fabric';
-    else if (lower.includes('quilt')) software = 'Quilt';
     else if (lower.includes('optifine')) software = 'OptiFine';
 
     if (software === 'Vanilla') return `Vanilla ${versionId.replace(/^vanilla\s+/i, '').trim()}`;
@@ -1949,10 +2371,9 @@ async function startSynchronizationQueue(syncData, profileId) {
 
         
 
-        updateTaskStatus(i, '<i class="fas fa-spinner fa-spin"></i>', 'Downloading...', 'downloading');
-
-        progressText.textContent = `Downloading ${task.displayName || task.name}...`;
-
+        const taskName = task.displayName || task.name;
+        updateTaskStatus(i, '<i class="fas fa-spinner fa-spin"></i>', window.t('loader.downloading_simple') || 'Downloading...', 'downloading');
+        progressText.textContent = window.t('loader.downloading_name', { name: taskName }) || `Downloading ${taskName}...`;
         progressBar.style.width = '0%';
 
         
@@ -1987,7 +2408,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
                         }
 
-                        progressText.textContent = `${e.detail.task || 'Downloading'}...`;
+                        progressText.textContent = window.translateTask ? window.translateTask(e.detail.task) : `${e.detail.task || 'Downloading'}...`;
 
                     }
 
@@ -2065,7 +2486,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
             window.onDownloadComplete = savedOnDownloadComplete;
 
-            window.pywebview.api.error(`Failed to download: ${err.message}`);
+            window.pywebview.api.error(window.t("toasts.download_failed", {err: err.message}) || `Failed to download: ${err.message}`);
 
             modal.classList.remove('show');
 
@@ -2081,7 +2502,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
                 playBtn.style.opacity = '1';
 
-                playBtn.innerHTML = playBtn.dataset.originalHtml || 'Play';
+                playBtn.innerHTML = playBtn.dataset.originalHtml || window.t('play.play_btn') || 'Play';
 
             }
 
@@ -2115,7 +2536,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
     
 
-    progressText.textContent = "All done! Launching game...";
+    progressText.textContent = window.t('loader.all_done') || "All done! Launching game...";
 
     progressBar.style.width = '100%';
 
@@ -2148,7 +2569,7 @@ function onMinecraftReady() {
 
     if (playButton) {
 
-        playButton.innerHTML = 'Playing';
+        playButton.innerHTML = window.t('play.playing') || 'Playing';
 
         playButton.disabled = false;
 
@@ -2175,7 +2596,7 @@ function onMinecraftClosed() {
 
     if (playButton) {
 
-        playButton.innerHTML = 'Play';
+        playButton.innerHTML = window.t('play.play_btn') || 'Play';
 
         playButton.disabled = false;
 
@@ -2215,25 +2636,25 @@ function timeAgo(dateString) {
 
     let interval = seconds / 31536000;
 
-    if (interval > 1) return Math.floor(interval) + " years ago";
+    if (interval > 1) return window.t('time.years_ago').replace('{n}', Math.floor(interval));
 
     interval = seconds / 2592000;
 
-    if (interval > 1) return Math.floor(interval) + " months ago";
+    if (interval > 1) return window.t('time.months_ago').replace('{n}', Math.floor(interval));
 
     interval = seconds / 86400;
 
-    if (interval > 1) return Math.floor(interval) + " days ago";
+    if (interval > 1) return window.t('time.days_ago').replace('{n}', Math.floor(interval));
 
     interval = seconds / 3600;
 
-    if (interval > 1) return Math.floor(interval) + " hours ago";
+    if (interval > 1) return window.t('time.hours_ago').replace('{n}', Math.floor(interval));
 
     interval = seconds / 60;
 
-    if (interval > 1) return Math.floor(interval) + " minutes ago";
+    if (interval > 1) return window.t('time.minutes_ago').replace('{n}', Math.floor(interval));
 
-    return "A few seconds ago";
+    return window.t('time.few_seconds');
 
 }
 
@@ -2251,7 +2672,7 @@ async function loadVersions() {
 
 
 
-async function loadOptions() {
+window.loadOptions = async function loadOptions() {
 
     const seq = ++loadOptionsSeq;
 
@@ -2310,8 +2731,6 @@ async function loadOptions() {
 
             else if (versionLower.includes('fabric') || p.type === 'fabric') type = 'fabric';
 
-            else if (versionLower.includes('quilt') || p.type === 'quilt') type = 'quilt';
-
 
 
             return type === activeProfileFilter;
@@ -2338,9 +2757,17 @@ async function loadOptions() {
 
         }
 
-        if (document.getElementById('selectedTitle')) document.getElementById('selectedTitle').textContent = "No installations found";
+        if (document.getElementById('selectedTitle')) {
+            const titleEl = document.getElementById('selectedTitle');
+            titleEl.textContent = window.t ? window.t('play.no_installations') : "No installations found";
+            titleEl.setAttribute('data-i18n', 'play.no_installations');
+        }
 
-        if (document.getElementById('selectedSubtitle')) document.getElementById('selectedSubtitle').textContent = "Create an installation to play";
+        if (document.getElementById('selectedSubtitle')) {
+            const subtitleEl = document.getElementById('selectedSubtitle');
+            subtitleEl.textContent = window.t ? window.t('play.create_installation') : "Create an installation to play";
+            subtitleEl.setAttribute('data-i18n', 'play.create_installation');
+        }
 
 
 
@@ -2356,9 +2783,9 @@ async function loadOptions() {
 
                 <div class="option-content">
 
-                    <div class="option-title">Create New Installation</div>
+                    <div class="option-title" data-i18n="global.create_installation">${(window.t ? window.t('global.create_installation') : '') || 'Create New Installation'}</div>
 
-                    <div class="option-subtitle">Click to get started</div>
+                    <div class="option-subtitle" data-i18n="play.create_installation">${(window.t ? window.t('play.create_installation') : '') || 'Click to get started'}</div>
 
                 </div>
 
@@ -2404,7 +2831,10 @@ async function loadOptions() {
 
                 emptyMsg.style.color = '#aaa';
 
-                emptyMsg.innerHTML = `<i class="fas fa-filter"></i> No ${activeProfileFilter} installations found`;
+                let translationKey = 'installations.no_installations_found';
+                if (activeProfileFilter === 'vanilla') translationKey = 'installations.no_vanilla_installations_found';
+                else if (activeProfileFilter === 'modded') translationKey = 'installations.no_modded_installations_found';
+                emptyMsg.innerHTML = `<i class="fas fa-filter"></i> ${window.t(translationKey) || `No ${activeProfileFilter} installations found`}`;
 
 
 
@@ -2484,12 +2914,9 @@ async function loadOptions() {
 
                 else if (versionLower.includes('fabric') || profile.type === 'fabric') type = 'fabric';
 
-                else if (versionLower.includes('quilt') || profile.type === 'quilt') type = 'quilt';
-
 
 
                 const isNeoForgeActive = activeProfileFilter === 'neoforge' ? 'active' : '';
-                const isQuiltActive = activeProfileFilter === 'quilt' ? 'active' : '';
                 const isForgeActive = activeProfileFilter === 'forge' ? 'active' : '';
                 const isFabricActive = activeProfileFilter === 'fabric' ? 'active' : '';
                 const isVanillaActive = activeProfileFilter === 'vanilla' ? 'active' : '';
@@ -2497,8 +2924,6 @@ async function loadOptions() {
 
 
                 if (type === 'neoforge') tags = `<span class="option-tag neoforge ${isNeoForgeActive}" onclick="filterProfiles('neoforge', event)">NEOFORGE</span>`;
-
-                else if (type === 'quilt') tags = `<span class="option-tag quilt ${isQuiltActive}" onclick="filterProfiles('quilt', event)">QUILT</span>`;
 
                 else if (type === 'forge') tags = `<span class="option-tag forge ${isForgeActive}" onclick="filterProfiles('forge', event)">FORGE</span>`;
 
@@ -2518,7 +2943,7 @@ async function loadOptions() {
 
 
 
-                const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Never';
+                const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : (window.t('time.never') || 'Never');
 
 
 
@@ -2530,7 +2955,7 @@ async function loadOptions() {
 
                         <div class="option-title">${profile.name}</div>
 
-                        <div class="option-subtitle">Version ${profile.version} • ${lastPlayedText}</div>
+                        <div class="option-subtitle">${profile.version} • ${window.t('play.last_played')}: ${lastPlayedText}</div>
 
                         <div class="option-tags">${tags}</div>
 
@@ -2564,13 +2989,27 @@ async function loadOptions() {
             if (profileToSelect) {
                 if (existingProfile) {
                     if (originalSelect) originalSelect.value = profileToSelect.id;
-                    const lastPlayedText = profileToSelect.last_played ? timeAgo(profileToSelect.last_played) : 'Never';
+                    const lastPlayedText = profileToSelect.last_played ? timeAgo(profileToSelect.last_played) : (window.t('time.never') || 'Never');
                     if (document.getElementById('selectedIcon')) {
-                        document.getElementById('selectedIcon').src = profileToSelect.iconUrl || profileToSelect.icon;
-                        document.getElementById('selectedIcon').style.display = 'block';
+                        const iconEl = document.getElementById('selectedIcon');
+                        const iconSrc = profileToSelect.iconUrl || (window.resolveImageSource ? window.resolveImageSource(profileToSelect.icon) : null);
+                        if (iconSrc && (iconSrc.startsWith('data:') || iconSrc.startsWith('http') || iconSrc.startsWith('launcher://'))) {
+                            iconEl.src = iconSrc;
+                            iconEl.style.display = 'block';
+                        } else {
+                            iconEl.style.display = 'none';
+                        }
                     }
-                    if (document.getElementById('selectedTitle')) document.getElementById('selectedTitle').textContent = profileToSelect.name;
-                    if (document.getElementById('selectedSubtitle')) document.getElementById('selectedSubtitle').textContent = `Version ${profileToSelect.version} • ${lastPlayedText}`;
+                    if (document.getElementById('selectedTitle')) {
+                        const titleEl = document.getElementById('selectedTitle');
+                        titleEl.textContent = profileToSelect.name;
+                        titleEl.removeAttribute('data-i18n');
+                    }
+                    if (document.getElementById('selectedSubtitle')) {
+                        const subtitleEl = document.getElementById('selectedSubtitle');
+                        subtitleEl.textContent = `${profileToSelect.version} \u2022 ${window.t('play.last_played')}: ${lastPlayedText}`;
+                        subtitleEl.removeAttribute('data-i18n');
+                    }
                     document.querySelectorAll('.select-option').forEach(opt => opt.classList.remove('selected'));
                     const selectedOpt = document.querySelector(`[data-value="${profileToSelect.id}"]`);
                     if (selectedOpt) selectedOpt.classList.add('selected');
@@ -2720,49 +3159,107 @@ window.copyErrorLog = function () {
 
 
 
-function selectOption(id, profile) {
-
+async function selectOption(id, profile) {
+    if (!profile) return;
     if (originalSelect) originalSelect.value = id;
     if (typeof lastUserSelectedAddonProfile !== 'undefined') lastUserSelectedAddonProfile = id;
     if (typeof currentModsProfile !== 'undefined') currentModsProfile = id;
 
+    const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : (window.t('time.never') || 'Never');
 
+    const iconEl = document.getElementById('selectedIcon');
+    if (iconEl) {
+        if (!profile.iconUrl && profile.icon) {
+            try {
+                const iconData = await window.pywebview.api.get_profile_icon(profile.icon);
+                if (iconData) {
+                    profile.iconUrl = window.resolveImageSource ? window.resolveImageSource(iconData) : iconData;
+                }
+            } catch (_) {}
+        }
 
-    const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Never';
-
-
-
-    if (document.getElementById('selectedIcon')) {
-
-        document.getElementById('selectedIcon').src = profile.iconUrl || profile.icon;
-
-        document.getElementById('selectedIcon').style.display = 'block';
-
+        const resolved = profile.iconUrl || (window.resolveImageSource ? window.resolveImageSource(profile.icon) : null);
+        if (resolved && (resolved.startsWith('data:') || resolved.startsWith('http') || resolved.startsWith('launcher://'))) {
+            iconEl.src = resolved;
+            iconEl.style.display = 'block';
+        } else {
+            iconEl.style.display = 'none';
+        }
     }
 
-    if (document.getElementById('selectedTitle')) document.getElementById('selectedTitle').textContent = profile.name;
+    if (document.getElementById('selectedTitle')) {
+        const titleEl = document.getElementById('selectedTitle');
+        titleEl.textContent = profile.name;
+        titleEl.removeAttribute('data-i18n');
+    }
 
-    if (document.getElementById('selectedSubtitle')) document.getElementById('selectedSubtitle').textContent = `Version ${profile.version} • ${lastPlayedText}`;
-
-
+    if (document.getElementById('selectedSubtitle')) {
+        const subtitleEl = document.getElementById('selectedSubtitle');
+        subtitleEl.textContent = `${profile.version} \u2022 ${window.t('play.last_played')}: ${lastPlayedText}`;
+        subtitleEl.removeAttribute('data-i18n');
+    }
 
     document.querySelectorAll('.select-option').forEach(opt => {
-
         opt.classList.remove('selected');
-
     });
 
     const selectedOpt = document.querySelector(`[data-value="${id}"]`);
-
     if (selectedOpt) selectedOpt.classList.add('selected');
 
-
-
     closeSelect();
-
     if (originalSelect) originalSelect.dispatchEvent(new Event('change'));
-
 }
+window.selectOption = selectOption;
+window.launchGame = launchGame;
+
+async function launchProfileById(profileId) {
+    if (!profileId) return;
+    console.log('[AutoLaunch] Launching profile by id:', profileId);
+
+    if (typeof showSection === 'function') {
+        showSection('play');
+    }
+
+    try {
+        let profilesData = await window.pywebview.api.get_profiles();
+        let profile = profilesData && profilesData.profiles ? profilesData.profiles[profileId] : null;
+
+        if (!profile && typeof loadProfiles === 'function') {
+            await loadProfiles();
+            profilesData = await window.pywebview.api.get_profiles();
+            profile = profilesData && profilesData.profiles ? profilesData.profiles[profileId] : null;
+        }
+
+        if (profile) {
+            if (!profile.iconUrl && profile.icon) {
+                try {
+                    const iconData = await window.pywebview.api.get_profile_icon(profile.icon);
+                    if (iconData) {
+                        profile.iconUrl = window.resolveImageSource ? window.resolveImageSource(iconData) : iconData;
+                    }
+                } catch (_) {}
+            }
+
+            await selectOption(profileId, profile);
+
+            if (window.isLaunching) {
+                console.log('[AutoLaunch] Launcher is already launching a game, ignoring duplicate launch');
+                return;
+            }
+            setTimeout(() => {
+                if (typeof launchGame === 'function') {
+                    launchGame();
+                }
+            }, 250);
+        } else {
+            console.warn('[AutoLaunch] Profile not found:', profileId);
+        }
+    } catch (err) {
+        console.error('[AutoLaunch] Error launching profile:', err);
+    }
+}
+window.launchProfileById = launchProfileById;
+
 
 
 
@@ -2920,7 +3417,7 @@ async function loadProfiles() {
 
         const iconUrl = window.resolveImageSource(iconUrlRaw);
 
-        const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : 'Never';
+        const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : (window.t('time.never') || 'Never');
 
 
 
@@ -2940,67 +3437,68 @@ async function loadProfiles() {
 
                 <h3>${profile.name}</h3>
 
-                <p>Version: ${profile.version} | Last played: ${lastPlayedText}</p>
+                <p>${profile.version} &bull; ${window.t('play.last_played')}: ${lastPlayedText}</p>
 
             </div>
 
             <div class="profile-actions">
-
-                <button class="btn-secondary btn-small edit-btn" ${isReserved ? 'disabled title="Managed automatically"' : ''}><i class="fas fa-edit"></i> Edit</button>
-
-                <button class="btn-danger btn-small delete-btn" ${isReserved ? 'disabled title="Managed automatically"' : ''}><i class="fas fa-trash"></i> Delete</button>
-
+                <button class="btn-secondary btn-small btn-action-square shortcut-btn" title="${window.t('installations.shortcut_btn') || 'Crear acceso directo en Escritorio e Inicio'}"><i class="fas fa-desktop"></i></button>
+                ${isReserved ? '' : `
+                <button class="btn-secondary btn-small btn-action-square edit-btn" title="${window.t('installations.edit_btn') || 'Editar'}"><i class="fas fa-edit"></i></button>
+                <button class="btn-danger btn-small btn-action-square delete-btn" title="${window.t('installations.delete_btn') || 'Eliminar'}"><i class="fas fa-trash"></i></button>
+                `}
             </div>
-
         `;
 
-
-
+        const shortcutBtn = item.querySelector('.shortcut-btn');
         const editBtn = item.querySelector('.edit-btn');
-
         const deleteBtn = item.querySelector('.delete-btn');
 
-
-
-        editBtn.onclick = (e) => {
-
-            e.stopPropagation();
-
-            openEditProfileModal(id, profile);
-
-        };
-
-
-
-        deleteBtn.onclick = async (e) => {
-
-            e.stopPropagation();
-
-
-
-            const confirmed = await window.pywebview.api.confirm(`Are you sure you want to delete the installation "${profile.name}"?`);
-
-            if (confirmed) {
-
-                const result = await window.pywebview.api.delete_profile(id);
-
-                if (result.success) {
-
-                    await loadProfiles();
-
-                    await loadOptions();
-
-                    await loadModdableProfiles();
-
-                } else {
-
-                    window.pywebview.api.error(result.error || "Failed to delete installation");
-
+        if (shortcutBtn) {
+            shortcutBtn.onclick = async (e) => {
+                e.stopPropagation();
+                try {
+                    shortcutBtn.disabled = true;
+                    shortcutBtn.style.opacity = '0.6';
+                    const res = await window.pywebview.api.create_profile_shortcut(id, profile.name, profile.icon);
+                    if (res && res.success) {
+                        showToast(window.t('installations.shortcut_created') || 'Acceso directo creado en el Escritorio y Menú Inicio', 'success');
+                    } else {
+                        showToast((res && res.error) || window.t('installations.shortcut_failed') || 'Error al crear el acceso directo', 'error');
+                    }
+                } catch (err) {
+                    console.error('Error creating profile shortcut:', err);
+                    showToast(err.message || window.t('installations.shortcut_failed') || 'Error al crear el acceso directo', 'error');
+                } finally {
+                    shortcutBtn.disabled = false;
+                    shortcutBtn.style.opacity = '1';
                 }
+            };
+        }
 
-            }
+        if (editBtn) {
+            editBtn.onclick = (e) => {
+                e.stopPropagation();
+                openEditProfileModal(id, profile);
+            };
+        }
 
-        };
+        if (deleteBtn) {
+            deleteBtn.onclick = async (e) => {
+                e.stopPropagation();
+                const confirmed = await window.pywebview.api.confirm(window.t('installations.delete_confirm', { name: profile.name }));
+                if (confirmed) {
+                    const result = await window.pywebview.api.delete_profile(id);
+                    if (result.success) {
+                        await loadProfiles();
+                        await loadOptions();
+                        await loadModdableProfiles();
+                    } else {
+                        window.pywebview.api.error(result.error || window.t('installations.delete_failed'));
+                    }
+                }
+            };
+        }
 
 
 
@@ -3101,13 +3599,25 @@ async function resetProfileModal() {
 
 
     try {
+        let basePath = '';
+        if (window.hwlAPI && window.hwlAPI.getDocumentsPath) {
+            basePath = await window.hwlAPI.getDocumentsPath();
+        } else if (window.pywebview && window.pywebview.api && window.pywebview.api.getDocumentsPath) {
+            basePath = await window.pywebview.api.getDocumentsPath();
+        }
 
-        const userData = await window.pywebview.api.get_user_json();
-
-        if (document.getElementById('profileDir')) document.getElementById('profileDir').value = userData.mcdir || '';
-
+        if (document.getElementById('profileDir')) {
+            if (basePath) {
+                // Ensure proper slash direction for the system path, fallback to forward slash
+                const separator = basePath.includes('\\') ? '\\' : '/';
+                const uuid = crypto.randomUUID();
+                document.getElementById('profileDir').value = `${basePath}${separator}MinecraftDirectories${separator}${uuid}`;
+            } else {
+                const userData = await window.pywebview.api.get_user_json();
+                document.getElementById('profileDir').value = userData.mcdir || '';
+            }
+        }
     } catch (e) {
-
         console.error("Error fetching default directory:", e);
 
     }
@@ -3144,9 +3654,16 @@ async function resetProfileModal() {
 
     editingProfileId = null;
 
-    if (acceptProfileBtn) acceptProfileBtn.textContent = "Create Installation";
+    if (acceptProfileBtn) {
+        acceptProfileBtn.textContent = (window.t ? window.t('installations.create_btn') : 'Create');
+        acceptProfileBtn.setAttribute('data-i18n', 'installations.create_btn');
+    }
 
-    if (document.querySelector('#modal h2')) document.querySelector('#modal h2').textContent = "Create New Installation";
+    const modalTitleEl = document.getElementById('modalTitleText') || document.querySelector('#modal span[data-i18n*="title"], #modal h2');
+    if (modalTitleEl) {
+        modalTitleEl.textContent = (window.t ? window.t('installations.create_title') : 'Create New Installation');
+        modalTitleEl.setAttribute('data-i18n', 'installations.create_title');
+    }
 
 }
 
@@ -3154,13 +3671,13 @@ async function resetProfileModal() {
 
 async function openEditProfileModal(id, profile) {
 
-    await resetProfileModal();
-
     editingProfileId = id;
 
 
 
-    if (document.getElementById('profileName')) document.getElementById('profileName').value = profile.name;
+    // 1. Immediately set all inputs synchronously to profile data (no default/UUID glitches during animation)
+
+    if (document.getElementById('profileName')) document.getElementById('profileName').value = profile.name || '';
 
     if (document.getElementById('profileJVMArgs')) document.getElementById('profileJVMArgs').value = profile.jvm_args || '';
 
@@ -3170,7 +3687,25 @@ async function openEditProfileModal(id, profile) {
 
 
 
-    // Parse version string into software / MC version / loader version
+    if (acceptProfileBtn) {
+
+        acceptProfileBtn.textContent = (window.t ? window.t('global.save_changes') : 'Save Changes');
+
+        acceptProfileBtn.setAttribute('data-i18n', 'global.save_changes');
+
+    }
+
+
+
+    const editModalTitleEl = document.getElementById('modalTitleText') || document.querySelector('#modal span[data-i18n*="title"], #modal h2');
+    if (editModalTitleEl) {
+        editModalTitleEl.textContent = (window.t ? window.t('installations.edit_title') : 'Edit Installation');
+        editModalTitleEl.setAttribute('data-i18n', 'installations.edit_title');
+    }
+
+
+
+    // 2. Parse version string into software / MC version / loader version
 
     const ver = profile.version || '';
 
@@ -3180,50 +3715,90 @@ async function openEditProfileModal(id, profile) {
 
     let loaderVersion = '';
 
+
+
     const lowerVer = ver.toLowerCase();
-    const prefixMatch = ver.match(/^(Vanilla|Fabric|Forge|NeoForge|Quilt|OptiFine)\b/i);
+
+    const prefixMatch = ver.match(/^(Vanilla|Fabric|Forge|NeoForge|OptiFine)\b/i);
+
     if (prefixMatch) {
+
         software = prefixMatch[1].toLowerCase();
+
         if (software === 'neoforge') software = 'neoforge';
+
         if (software === 'optifine') software = 'optifine';
+
         const parenMatch = ver.match(/^([^\s]+)\s+([^\s(]+)(?:\s+\(([^)]+)\))?/i);
+
         if (parenMatch) {
+
             mcVersion = parenMatch[2].trim();
+
             loaderVersion = parenMatch[3] ? parenMatch[3].trim() : '';
+
         }
+
     } else if (lowerVer.includes('neoforge')) {
+
         software = 'neoforge';
+
         const parts = ver.replace(/neoforge-?/i, '').split('-');
+
         mcVersion = parts[0] || '';
+
         loaderVersion = parts.slice(1).join('-');
+
     } else if (lowerVer.includes('forge')) {
+
         software = 'forge';
+
         const parts = ver.replace(/forge-?/i, '').split('-');
+
         mcVersion = parts[0] || '';
+
         loaderVersion = parts.slice(1).join('-');
+
     } else if (lowerVer.includes('fabric')) {
+
         software = 'fabric';
+
         if (lowerVer.startsWith('fabric-loader-')) {
+
             const parts = ver.split('-');
+
             if (parts.length >= 4) { loaderVersion = parts[2]; mcVersion = parts[3]; }
+
         } else {
+
             const parts = ver.replace(/fabric-?/i, '').split('-');
+
             mcVersion = parts[0] || '';
+
             loaderVersion = parts.slice(1).join('-');
+
         }
-    } else if (lowerVer.includes('quilt')) {
-        software = 'quilt';
-        const parts = ver.replace(/quilt-?(?:loader-?)?/i, '').split('-');
-        if (parts.length >= 2) { loaderVersion = parts[0]; mcVersion = parts[1]; }
-        else { mcVersion = parts[0] || ''; }
+
     } else if (lowerVer.includes('optifine')) {
+
         software = 'optifine';
-        const parts = ver.replace(/optifine-?/i, '').split(/[-_]/);
-        mcVersion = parts[0] || '';
-        loaderVersion = parts.slice(1).join('_');
+
+        const parts = ver.replace(/optifine-?(?:hd-?)?(?:u-?)?/i, '').split('_');
+
+        if (parts.length >= 2) {
+
+            mcVersion = parts[0].trim();
+
+            loaderVersion = parts.slice(1).join('_').trim();
+
+        }
+
     } else {
+
         software = 'vanilla';
+
         mcVersion = ver.replace(/^vanilla\s+/i, '').trim();
+
     }
 
 
@@ -3232,53 +3807,45 @@ async function openEditProfileModal(id, profile) {
 
     currentProfileSoftware = software;
 
-    await loadProfileMcVersions(software);
-
-    if (profileMcVersionSelect) profileMcVersionSelect.value = mcVersion;
 
 
+    // Immediately pre-populate selectors with the current version so they never show empty or 'vanilla' defaults
 
-    if (software !== 'vanilla') {
+    if (profileMcVersionSelect) {
 
-        if (profileLoaderVersionSelect) profileLoaderVersionSelect.disabled = false;
+        profileMcVersionSelect.innerHTML = `<option value="${mcVersion}">${mcVersion}</option>`;
 
-        await loadProfileLoaderVersions(software, mcVersion);
-
-        if (profileLoaderVersionSelect) profileLoaderVersionSelect.value = loaderVersion;
-
-    } else {
-
-        if (profileLoaderVersionSelect) profileLoaderVersionSelect.disabled = true;
+        profileMcVersionSelect.value = mcVersion;
 
     }
 
+    if (software !== 'vanilla') {
 
+        if (profileLoaderVersionSelect) {
 
-    // Guardar el icono actual del perfil para edición
+            profileLoaderVersionSelect.disabled = false;
 
-    selectedImageData = profile.icon;
+            if (loaderVersion) {
 
+                profileLoaderVersionSelect.innerHTML = `<option value="${loaderVersion}">${loaderVersion}</option>`;
 
+                profileLoaderVersionSelect.value = loaderVersion;
 
-    if (profile.icon && profile.icon !== 'default.png') {
+            } else {
 
-        try {
-
-            const url = await window.pywebview.api.get_profile_icon(profile.icon);
-
-            if (iconPreview) {
-
-                iconPreview.src = url;
-
-                iconPreview.style.display = 'block';
+                profileLoaderVersionSelect.innerHTML = '<option value="">Select a loader...</option>';
 
             }
 
-            if (placeholderIcon) placeholderIcon.style.display = 'none';
+        }
 
-        } catch (e) {
+    } else {
 
-            console.error("Error loading profile icon:", e);
+        if (profileLoaderVersionSelect) {
+
+            profileLoaderVersionSelect.innerHTML = '<option value="">Select a loader...</option>';
+
+            profileLoaderVersionSelect.disabled = true;
 
         }
 
@@ -3286,12 +3853,43 @@ async function openEditProfileModal(id, profile) {
 
 
 
-    if (acceptProfileBtn) acceptProfileBtn.textContent = "Save Changes";
+    // 3. Immediately set current icon preview
+    selectedImageData = profile.icon || 'default.png';
+    const iconToLoad = profile.icon || 'default.png';
 
-    if (document.querySelector('#modal h2')) document.querySelector('#modal h2').textContent = "Edit Installation";
+    if (iconToLoad.startsWith('data:') || iconToLoad.startsWith('http')) {
+        if (iconPreview) {
+            iconPreview.src = iconToLoad;
+            iconPreview.style.display = 'block';
+        }
+        if (placeholderIcon) placeholderIcon.style.display = 'none';
+    } else {
+        window.pywebview.api.get_profile_icon(iconToLoad).then(url => {
+            if (iconPreview && editingProfileId === id && url) {
+                iconPreview.src = url;
+                iconPreview.style.display = 'block';
+                if (placeholderIcon) placeholderIcon.style.display = 'none';
+            }
+        }).catch(() => {});
+    }
 
+    // 4. Open modal now with all profile values completely set
     if (profileModal) profileModal.classList.add('show');
 
+    // 5. Populate dropdown options in the background without disturbing the selected values
+    try {
+        await loadProfileMcVersions(software);
+        if (profileMcVersionSelect) profileMcVersionSelect.value = mcVersion;
+
+        if (software !== 'vanilla') {
+            await loadProfileLoaderVersions(software, mcVersion);
+            if (profileLoaderVersionSelect && loaderVersion) {
+                profileLoaderVersionSelect.value = loaderVersion;
+            }
+        }
+    } catch (e) {
+        console.error("Error loading background profile options:", e);
+    }
 }
 
 
@@ -3316,8 +3914,6 @@ if (cancelModalBtn) {
 
         if (profileModal) profileModal.classList.remove('show');
 
-        resetProfileModal();
-
     });
 
 }
@@ -3336,7 +3932,7 @@ if (acceptProfileBtn) {
 
         if (!profileName) {
 
-            window.pywebview.api.error("Installation name is required");
+            window.pywebview.api.error(window.t("toasts.install_name_required") || "Installation name is required");
 
             return;
 
@@ -3346,7 +3942,7 @@ if (acceptProfileBtn) {
 
         if (isReservedProfileName(profileName)) {
 
-            window.pywebview.api.error("This name is reserved for automatic installations.");
+            window.pywebview.api.error(window.t("toasts.name_reserved") || "This name is reserved for automatic installations.");
 
             return;
 
@@ -3380,8 +3976,6 @@ if (acceptProfileBtn) {
             profileVersion = `Fabric ${mcVersion} (${loaderVersion})`;
         } else if (software === 'neoforge' && loaderVersion) {
             profileVersion = `NeoForge ${mcVersion} (${loaderVersion})`;
-        } else if (software === 'quilt' && loaderVersion) {
-            profileVersion = `Quilt ${mcVersion} (${loaderVersion})`;
         } else if (software === 'optifine' && loaderVersion) {
             profileVersion = `OptiFine ${mcVersion} (${loaderVersion})`;
         }
@@ -3402,7 +3996,7 @@ if (acceptProfileBtn) {
 
         } else if (trimmedName.length < 2) {
 
-            window.pywebview.api.error('Installation name must be at least 2 characters');
+            window.pywebview.api.error(window.t('toasts.name_too_short') || 'Installation name must be at least 2 characters');
 
             return;
 
@@ -3418,7 +4012,7 @@ if (acceptProfileBtn) {
 
         if (missingFields.length > 0) {
 
-            window.pywebview.api.error(`You cannot leave these fields empty:\n- ${missingFields.join('\n- ')}`);
+            window.pywebview.api.error(window.t('toasts.fields_empty', {fields: '- ' + missingFields.join('\n- ')}) || `You cannot leave these fields empty:\n- ${missingFields.join('\n- ')}`);
 
             return;
 
@@ -3464,8 +4058,6 @@ if (acceptProfileBtn) {
 
             if (profileModal) profileModal.classList.remove('show');
 
-            resetProfileModal();
-
         } else {
 
             // Create new profile
@@ -3488,8 +4080,6 @@ if (acceptProfileBtn) {
 
                     if (profileModal) profileModal.classList.remove('show');
 
-                    resetProfileModal();
-
                 } else {
 
                     window.pywebview.api.error(result.message);
@@ -3500,7 +4090,7 @@ if (acceptProfileBtn) {
 
                 console.error('Error creating installation:', error);
 
-                window.pywebview.api.error('Error creating installation');
+                window.pywebview.api.error(window.t('toasts.error_creating_installation') || 'Error creating installation');
 
             }
 
@@ -4079,12 +4669,13 @@ async function loadProfileMcVersions(type) {
 
                 versions = await window.pywebview.api.get_neoforge_mc_versions();
 
-            } else if (type === 'quilt') {
-
-                versions = await window.pywebview.api.get_quilt_mc_versions();
-
+            } else if (type === 'optifine') {
+                if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.get_optifine_versions === 'function') {
+                    versions = await window.pywebview.api.get_optifine_versions();
+                } else {
+                    versions = [];
+                }
             }
-
             versionCache[type] = versions;
 
         }
@@ -4095,7 +4686,7 @@ async function loadProfileMcVersions(type) {
 
         if (versions.length === 0) {
 
-            profileMcVersionSelect.innerHTML = '<option value="">No versions found</option>';
+            profileMcVersionSelect.innerHTML = `<option value="">${window.t('installations.no_versions_found') || 'No versions found'}</option>`;
 
         } else {
 
@@ -4255,8 +4846,39 @@ function closeDownloadProgress() {
 
 
 
-// Function to update background download progress (mini floating popup only)
+// Function to translate dynamic progress tasks from Python
+window.translateTask = function(task) {
+    if (!task) return window.t('loader.downloading_simple') || 'Downloading...';
+    // Remove trailing dots for matching
+    let baseTask = task;
+    if (task.endsWith('...')) baseTask = task.slice(0, -3);
+    
+    const map = {
+        'Downloading assets': 'loader.downloading_assets',
+        'Downloading libraries': 'loader.downloading_libraries',
+        'Downloading natives': 'loader.downloading_natives',
+        'Downloading Fabric installation': 'loader.downloading_fabric',
+        'Downloading Forge installer': 'loader.downloading_forge',
+        'Downloading NeoForge installer': 'loader.downloading_neoforge',
+        'Downloading OptiFine installation': 'loader.downloading_optifine',
+        'Downloading': 'loader.downloading_simple',
+        'Extracting': 'loader.extracting'
+    };
+    
+    if (map[baseTask]) {
+        return (window.t(map[baseTask]) || baseTask) + '...';
+    }
+    
+    // If it starts with Downloading but doesn't match above, we can try to inject it
+    if (baseTask.startsWith('Downloading ')) {
+        const item = baseTask.replace('Downloading ', '');
+        return window.t('loader.downloading_name', { name: item }) || `${baseTask}...`;
+    }
+    
+    return task + (task.endsWith('...') ? '' : '...');
+};
 
+// Function to update background download progress (mini floating popup only)
 window.updateBackgroundDownloadProgress = function (version, MathPercentage, status, data) {
 
     const percentage = MathPercentage || 0;
@@ -4285,11 +4907,11 @@ window.updateBackgroundDownloadProgress = function (version, MathPercentage, sta
 
 
 
-        if (gdpTitle) gdpTitle.textContent = `Downloading ${version}...`;
+        if (gdpTitle) gdpTitle.textContent = window.t('loader.downloading_name', { name: version }) || `Downloading ${version}...`;
 
         if (gdpProgressBar) gdpProgressBar.style.width = `${percentage}%`;
 
-        if (gdpTask) gdpTask.textContent = status || 'Downloading...';
+        if (gdpTask) gdpTask.textContent = window.translateTask ? window.translateTask(status) : (status || 'Downloading...');
 
         if (gdpPercent) gdpPercent.textContent = `${percentage}%`;
 
@@ -4337,7 +4959,7 @@ window.onDownloadComplete = async function (version) {
 
     setTimeout(() => {
 
-        window.pywebview.api.info(`Version ${version} installed successfully.`);
+        window.pywebview.api.info(window.t("toasts.version_installed_success", {version: version}) || `Version ${version} installed successfully.`);
 
     }, 1000);
 
@@ -4398,12 +5020,13 @@ if (closeLoginModal) {
 // Screen navigation
 
 const loginHelloWorldScreen = document.getElementById('loginHelloWorldScreen');
+const loginForgotPasswordScreen = document.getElementById('loginForgotPasswordScreen');
 
 
 
 function clearLoginFields() {
 
-    const fields = ['hwEmail', 'hwPassword', 'nickname'];
+    const fields = ['hwEmail', 'hwPassword', 'nickname', 'hwForgotEmail'];
 
     fields.forEach(id => {
 
@@ -4416,6 +5039,10 @@ function clearLoginFields() {
     const errorEl = document.getElementById('hwLoginError');
 
     if (errorEl) errorEl.style.display = 'none';
+
+    const forgotMsgEl = document.getElementById('hwForgotMsg');
+
+    if (forgotMsgEl) forgotMsgEl.style.display = 'none';
 
 }
 
@@ -4431,6 +5058,8 @@ function showLoginMethodScreen() {
 
     if (loginHelloWorldScreen) loginHelloWorldScreen.classList.remove('active');
 
+    if (loginForgotPasswordScreen) loginForgotPasswordScreen.classList.remove('active');
+
 }
 
 
@@ -4442,6 +5071,8 @@ function showLoginOfflineScreen() {
     if (loginOfflineScreen) loginOfflineScreen.classList.add('active');
 
     if (loginHelloWorldScreen) loginHelloWorldScreen.classList.remove('active');
+
+    if (loginForgotPasswordScreen) loginForgotPasswordScreen.classList.remove('active');
 
 }
 
@@ -4455,9 +5086,61 @@ function showLoginHelloWorldScreen() {
 
     if (loginHelloWorldScreen) loginHelloWorldScreen.classList.add('active');
 
+    if (loginForgotPasswordScreen) loginForgotPasswordScreen.classList.remove('active');
+
 }
 
 
+
+function showLoginForgotPasswordScreen() {
+
+    clearLoginFields();
+
+    if (loginMethodScreen) loginMethodScreen.classList.remove('active');
+
+    if (loginOfflineScreen) loginOfflineScreen.classList.remove('active');
+
+    if (loginHelloWorldScreen) loginHelloWorldScreen.classList.remove('active');
+
+    if (loginForgotPasswordScreen) loginForgotPasswordScreen.classList.add('active');
+
+}
+
+
+
+// View Own Profile
+const viewOwnProfileBtn = document.getElementById('viewOwnProfileBtn');
+
+if (viewOwnProfileBtn) {
+    viewOwnProfileBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+
+        const badge = document.getElementById('userBadge');
+        if (badge) badge.classList.remove('active');
+
+        // Check if button is disabled (unverified account)
+        if (viewOwnProfileBtn.disabled || viewOwnProfileBtn.classList.contains('btn-disabled')) {
+            e.preventDefault();
+            return;
+        }
+
+        if (typeof window.viewOwnProfile === 'function') {
+            await window.viewOwnProfile();
+        } else if (typeof window.viewUserProfile === 'function') {
+            try {
+                const apiObj = (window.pywebview && window.pywebview.api) || window.electronAPI;
+                if (apiObj && apiObj.social_get_auth) {
+                    const auth = await apiObj.social_get_auth();
+                    if (auth && auth.success && auth.uid) {
+                        await window.viewUserProfile(auth.uid, auth.username);
+                    }
+                }
+            } catch (err) {
+                console.error('Error viewing own profile:', err);
+            }
+        }
+    });
+}
 
 // Edit Profile (Dashboard) redirect
 
@@ -4479,7 +5162,7 @@ if (editProfileBtn) {
 
         }
 
-        const dashboardUrl = "https://abeloskyyy.github.io/HelloWorld-Launcher/?edit_profile=true";
+        const dashboardUrl = "https://abeloskyyy.github.io/HelloWorld-Launcher/settings/";
 
         if (window.electronAPI && window.electronAPI.openUrl) {
 
@@ -4561,7 +5244,7 @@ if (saveOfflineBtn) {
 
         } else {
 
-            window.pywebview.api.error('Username must be 3-16 characters and contain only letters, numbers, and underscores.');
+            window.pywebview.api.error(window.t('toasts.username_invalid') || 'Username must be 3-16 characters and contain only letters, numbers, and underscores.');
 
         }
 
@@ -4594,6 +5277,122 @@ if (hwBackBtn) {
     hwBackBtn.addEventListener('click', () => {
 
         showLoginMethodScreen();
+
+    });
+
+}
+
+
+
+const hwForgotPasswordLink = document.getElementById('hwForgotPasswordLink');
+
+if (hwForgotPasswordLink) {
+
+    hwForgotPasswordLink.addEventListener('click', (e) => {
+
+        e.preventDefault();
+
+        showLoginForgotPasswordScreen();
+
+    });
+
+}
+
+
+
+const hwForgotBackBtn = document.getElementById('hwForgotBackBtn');
+
+if (hwForgotBackBtn) {
+
+    hwForgotBackBtn.addEventListener('click', () => {
+
+        showLoginHelloWorldScreen();
+
+    });
+
+}
+
+
+
+const hwForgotSubmitBtn = document.getElementById('hwForgotSubmitBtn');
+
+const hwForgotMsg = document.getElementById('hwForgotMsg');
+
+if (hwForgotSubmitBtn) {
+
+    hwForgotSubmitBtn.addEventListener('click', async () => {
+
+        const email = document.getElementById('hwForgotEmail').value.trim();
+
+        if (!email) {
+
+            hwForgotMsg.textContent = window.t ? window.t('settings.fill_fields') || "Please enter your email." : "Please enter your email.";
+
+            hwForgotMsg.style.display = 'block';
+
+            hwForgotMsg.style.color = '#ff4444';
+
+            hwForgotMsg.style.background = 'rgba(255, 68, 68, 0.1)';
+
+            return;
+
+        }
+
+        
+
+        hwForgotMsg.style.display = 'none';
+
+        hwForgotSubmitBtn.disabled = true;
+
+        hwForgotSubmitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
+
+        
+
+        try {
+
+            if (window._launcherFirebase && window._launcherFirebase.sendPasswordResetEmail && window._launcherFirebase.fbAuth) {
+
+                await window._launcherFirebase.sendPasswordResetEmail(window._launcherFirebase.fbAuth, email);
+
+                hwForgotMsg.textContent = window.t ? window.t('toasts.success') || "A password reset link has been sent to your email." : "A password reset link has been sent to your email.";
+
+                hwForgotMsg.style.color = '#4CAF50';
+
+                hwForgotMsg.style.background = 'rgba(76, 175, 80, 0.1)';
+
+                hwForgotMsg.style.display = 'block';
+
+            } else {
+
+                throw new Error("Firebase auth not available in launcher context.");
+
+            }
+
+        } catch (e) {
+
+            let msg = e.message || "Error sending reset email.";
+
+            if (e.code === 'auth/user-not-found') msg = "No user found with this email.";
+
+            else if (e.code === 'auth/invalid-email') msg = "Invalid email format.";
+
+            
+
+            hwForgotMsg.textContent = msg;
+
+            hwForgotMsg.style.color = '#ff4444';
+
+            hwForgotMsg.style.background = 'rgba(255, 68, 68, 0.1)';
+
+            hwForgotMsg.style.display = 'block';
+
+        } finally {
+
+            hwForgotSubmitBtn.disabled = false;
+
+            hwForgotSubmitBtn.innerHTML = 'Send Link';
+
+        }
 
     });
 
@@ -4681,6 +5480,52 @@ if (hwLoginBtn) {
 
     });
 
+}
+
+
+
+// Enter key navigation for login screens
+
+const _hwEmail = document.getElementById('hwEmail');
+const _hwPassword = document.getElementById('hwPassword');
+const _nickInput = document.getElementById('nickname');
+const _hwForgotEmailInput = document.getElementById('hwForgotEmail');
+
+if (_hwEmail) {
+    _hwEmail.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (_hwPassword) _hwPassword.focus();
+        }
+    });
+}
+
+if (_hwPassword) {
+    _hwPassword.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (hwLoginBtn) hwLoginBtn.click();
+        }
+    });
+}
+
+if (_nickInput) {
+    _nickInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const _saveOfflineBtn = document.getElementById('saveOfflineBtn');
+            if (_saveOfflineBtn) _saveOfflineBtn.click();
+        }
+    });
+}
+
+if (_hwForgotEmailInput) {
+    _hwForgotEmailInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (hwForgotSubmitBtn) hwForgotSubmitBtn.click();
+        }
+    });
 }
 
 
@@ -4808,7 +5653,7 @@ window.logout = async function () {
 
         if (window.pywebview && window.pywebview.api && window.pywebview.api.error) {
 
-            window.pywebview.api.error('Error logging out');
+            window.pywebview.api.error(window.t('toasts.logout_error') || 'Error logging out');
 
         }
 
@@ -4826,8 +5671,9 @@ const switchAccountBtn = document.getElementById('switchAccountBtn');
 
 // Helper: get avatar URL for an account (for use in the switcher UI)
 function getAccountAvatarUrl(acc) {
-    if (acc.type === 'microsoft' && acc.username) {
-        return `https://mc-heads.net/avatar/${encodeURIComponent(acc.username)}/44`;
+    if (acc.type === 'microsoft') {
+        const id = acc.uuid || (acc.username ? encodeURIComponent(acc.username) : null);
+        if (id) return `https://crafthead.net/helm/${id}/64`;
     }
     if (acc.type === 'helloworld' && acc.avatarUrl) {
         return acc.avatarUrl;
@@ -4970,18 +5816,19 @@ async function renderAccountSwitcherList() {
             removeBtn.classList.add('disabled');
             removeBtn.style.opacity = '0.3';
             removeBtn.style.cursor = 'not-allowed';
-            removeBtn.setAttribute('data-tooltip', 'Selecciona otra cuenta primero para cerrar esta');
+            const disabledTooltip = window.t ? window.t('user_menu.remove_disabled_tooltip') : 'Select another account first to remove this one';
+            removeBtn.setAttribute('data-tooltip', disabledTooltip);
             removeBtn.addEventListener('mouseenter', () => {
                 const rect = removeBtn.getBoundingClientRect();
-                showTooltip(removeBtn, 'Selecciona otra cuenta primero para cerrar esta', rect.left + rect.width / 2, rect.top);
+                showTooltip(removeBtn, disabledTooltip, rect.left + rect.width / 2, rect.top);
             });
             removeBtn.addEventListener('mouseleave', () => hideTooltip());
             removeBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                showToast('Selecciona otra cuenta primero para cerrar esta', 'info');
+                showToast(disabledTooltip, 'info');
             });
         } else {
-            removeBtn.title = 'Remove account';
+            removeBtn.title = window.t ? window.t('user_menu.remove_account') : 'Remove account';
             removeBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 await removeAccountFromSwitcher(acc.id, acc.username, item);
@@ -5004,19 +5851,9 @@ async function renderAccountSwitcherList() {
 }
 
 // Switch to an account from the modal
-async function switchToAccountFromSwitcher(accountId, accountType, username, email, itemEl) {
-    if (!itemEl) return;
-
-    // Show spinner
-    const removeBtn = itemEl.querySelector('.account-item-remove');
-    if (removeBtn) removeBtn.style.display = 'none';
-    const spinner = document.createElement('div');
-    spinner.className = 'account-item-spinner';
-    itemEl.classList.add('switching');
-    itemEl.appendChild(spinner);
-
+window.performAccountSwitch = async function (accountId, openInboxAfter = false, optionalEmail = '', optionalUsername = '', optionalType = '') {
     try {
-        const res = await window.pywebview.api.switch_account(accountId);
+        const res = await window.pywebview.api.switch_account(accountId, optionalType);
 
         if (res && res.success && res.newData) {
             // Close modal and refresh UI
@@ -5028,27 +5865,32 @@ async function switchToAccountFromSwitcher(accountId, accountType, username, ema
             await loadVersions();
             await loadOptions();
 
-            if (window.renderUserHead) {
-                if (res.newData.account_type === 'helloworld') {
-                    const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(res.newData.username)}&background=random&color=fff&rounded=true&bold=true&format=svg`;
-                    await window.renderUserHead(res.newData.last_avatar_url || fallbackUrl).catch(() => {});
-                } else if (res.newData.account_type === 'microsoft') {
-                    await window.renderUserHead(`https://mc-heads.net/avatar/${res.newData.username}`).catch(() => {});
-                } else {
-                    await window.renderUserHead(null).catch(() => {});
-                }
-            }
-
             // Trigger skin reload if needed
             if (res.newData.username && window.hasInternet) loadSkinData();
             if (res.newData.account_type === 'microsoft') {
                 silentMicrosoftVerify(res.newData.username, res.newData.uuid).catch(() => {});
             }
+            if (typeof window.initSocial === 'function') {
+                await window.initSocial(true).catch(() => {});
+            }
 
-            showToast(`Switched to ${username}`, 'success');
+            const prefix = window.t ? window.t('auth.switched_to') : 'Switched to';
+            showToast(`${prefix} ${res.newData.username}`, 'success');
             if (typeof showSection === 'function') {
                 showSection('play');
             }
+
+            if (openInboxAfter) {
+                setTimeout(async () => {
+                    if (typeof window.openSocialModal === 'function') {
+                        await window.openSocialModal('received');
+                    }
+                    if (typeof window.openInbox === 'function') {
+                        window.openInbox('received');
+                    }
+                }, 400);
+            }
+            return { success: true };
         } else if (res && res.needsRelogin) {
             // Close switcher modal
             const modal = document.getElementById('accountSwitcherModal');
@@ -5061,7 +5903,7 @@ async function switchToAccountFromSwitcher(accountId, accountType, username, ema
                 const hwPassword = document.getElementById('hwPassword');
                 const hwLoginError = document.getElementById('hwLoginError');
 
-                if (hwEmail) hwEmail.value = email || username || '';
+                if (hwEmail) hwEmail.value = res.email || optionalEmail || res.username || optionalUsername || '';
                 if (hwPassword) hwPassword.value = '';
                 if (hwLoginError) { hwLoginError.style.display = 'none'; hwLoginError.textContent = ''; }
 
@@ -5073,9 +5915,8 @@ async function switchToAccountFromSwitcher(accountId, accountType, username, ema
 
                 if (loginModal) {
                     loginModal.classList.add('show');
-                    showToast('Session expired. Please log in again.', 'error');
+                    showToast((window.t ? window.t('toasts.session_expired') : '') || 'Session expired. Please log in again.', 'error');
                 }
-
             } else if (res.type === 'microsoft') {
                 // Trigger MS login flow directly
                 showToast('Reconnecting Microsoft account...', 'success');
@@ -5088,6 +5929,16 @@ async function switchToAccountFromSwitcher(accountId, accountType, username, ema
                     const msRes = await window.pywebview.api.login_microsoft();
                     if (msRes && msRes.success && msRes.profile) {
                         if (window.onLoginSuccess) window.onLoginSuccess();
+                        if (openInboxAfter) {
+                            setTimeout(async () => {
+                                if (typeof window.openSocialModal === 'function') {
+                                    await window.openSocialModal('received');
+                                }
+                                if (typeof window.openInbox === 'function') {
+                                    window.openInbox('received');
+                                }
+                            }, 350);
+                        }
                     } else {
                         showToast('Microsoft login failed.', 'error');
                     }
@@ -5103,25 +5954,117 @@ async function switchToAccountFromSwitcher(accountId, accountType, username, ema
             } else {
                 showToast('Could not switch account.', 'error');
             }
+            return { success: false, needsRelogin: true };
         } else {
             showToast(res?.error || 'Could not switch account.', 'error');
-            // Restore item
-            itemEl.classList.remove('switching');
-            spinner.remove();
-            if (removeBtn) removeBtn.style.display = '';
+            return { success: false, error: res?.error };
         }
     } catch (e) {
         console.error('[AccountSwitcher] switch error:', e);
         showToast('Error switching account.', 'error');
+        return { success: false, error: e.message };
+    }
+};
+
+async function switchToAccountFromSwitcher(accountId, accountType, username, email, itemEl) {
+    if (!itemEl) return;
+
+    // Show spinner
+    const removeBtn = itemEl.querySelector('.account-item-remove');
+    if (removeBtn) removeBtn.style.display = 'none';
+    const spinner = document.createElement('div');
+    spinner.className = 'account-item-spinner';
+    itemEl.classList.add('switching');
+    itemEl.appendChild(spinner);
+
+    try {
+        const res = await window.performAccountSwitch(accountId, false, email, username);
+        if (!res || !res.success) {
+            itemEl.classList.remove('switching');
+            spinner.remove();
+            if (removeBtn) removeBtn.style.display = '';
+        }
+    } catch (_) {
         itemEl.classList.remove('switching');
         spinner.remove();
         if (removeBtn) removeBtn.style.display = '';
     }
 }
 
+window.addEventListener('switch-to-account-and-open-inbox', async (event) => {
+    const detail = event.detail || {};
+    console.log('[Notification] switch-to-account-and-open-inbox received:', detail);
+    const targetId = detail.accountId || detail.recipientUid;
+    if (targetId) {
+        await window.performAccountSwitch(targetId, true, '', detail.recipientUsername || detail.username || '', detail.recipientType || '');
+    } else {
+        if (typeof window.openSocialModal === 'function') await window.openSocialModal('received');
+        if (typeof window.openInbox === 'function') window.openInbox('received');
+    }
+});
+
+window.addEventListener('quick-launch-profile', async (event) => {
+    const detail = event.detail || {};
+    const profileId = detail.profileId;
+    if (!profileId) return;
+    console.log('[Tray] quick-launch-profile received for profile:', profileId);
+
+    // Switch to play section
+    if (typeof showSection === 'function') {
+        showSection('play');
+    }
+
+    // Reset profile filter if active so the requested profile is selectable
+    if (typeof activeProfileFilter !== 'undefined' && activeProfileFilter !== null) {
+        activeProfileFilter = null;
+    }
+
+    try {
+        const profilesData = await window.pywebview.api.get_profiles();
+        const profile = profilesData && profilesData.profiles ? profilesData.profiles[profileId] : null;
+        if (profile) {
+            profile.id = profileId;
+            if (typeof selectOption === 'function') {
+                const iconUrl = await window.pywebview.api.get_profile_icon(profile.icon);
+                profile.iconUrl = iconUrl;
+                selectOption(profileId, profile);
+            } else if (originalSelect) {
+                originalSelect.value = profileId;
+                originalSelect.dispatchEvent(new Event('change'));
+            }
+
+            // Trigger launch after allowing UI state to settle
+            setTimeout(() => {
+                const playBtn = document.querySelector('.play-button');
+                if (playBtn && !playBtn.disabled) {
+                    playBtn.click();
+                } else if (typeof launchGame === 'function') {
+                    launchGame();
+                }
+            }, 300);
+        }
+    } catch (err) {
+        console.error('[Tray] Error launching profile from quick-launch-profile:', err);
+    }
+});
+
+window.addEventListener('tray-switch-account', async (event) => {
+    const detail = event.detail || {};
+    const targetId = detail.accountId;
+    if (targetId && typeof window.performAccountSwitch === 'function') {
+        await window.performAccountSwitch(targetId, false, '', detail.username || '', detail.targetType || '');
+    }
+});
+
+window.addEventListener('open-account-switcher', async () => {
+    if (typeof window.openAccountSwitcher === 'function') {
+        await window.openAccountSwitcher();
+    }
+});
+
 // Remove an account from the switcher
 async function removeAccountFromSwitcher(accountId, username, itemEl) {
-    const confirmed = await window.pywebview.api.confirm(`Remove "${username}" from saved accounts?`);
+    const confirmed = await window.pywebview.api.confirm(window.t("toasts.remove_account_confirm", {username: username}) || `Remove "${username}" from saved accounts?`);
     if (!confirmed) return;
 
     try {
@@ -5226,7 +6169,7 @@ function initAccountSwitcherEvents() {
     if (signOutAll && !signOutAll._asInit) {
         signOutAll._asInit = true;
         signOutAll.addEventListener('click', async (e) => {
-            const confirmed = await window.pywebview.api.confirm('Sign out of all accounts? This will remove all saved accounts.');
+            const confirmed = await window.pywebview.api.confirm(window.t("toasts.signout_all_confirm") || "Sign out of all accounts? This will remove all saved accounts.");
             if (!confirmed) return;
 
             try {
@@ -5244,7 +6187,7 @@ function initAccountSwitcherEvents() {
                         showSection('play');
                     }
                     if (document.getElementById('nickname')) document.getElementById('nickname').value = '';
-                    showToast('Signed out of all accounts.', 'success');
+                    showToast((window.t ? window.t('toasts.signout_all_confirm') : '') || 'Signed out of all accounts.', 'success');
                 } else {
                     showToast('Error signing out all accounts.', 'error');
                 }
@@ -5299,7 +6242,7 @@ function hideMsVerifyBanner(verified = false) {
 
         if (typeof window.initSocial === 'function') {
 
-            window.initSocial().catch(() => {});
+            window.initSocial(true).catch(() => {});
 
         }
 
@@ -5327,7 +6270,7 @@ if (msVerifyBannerBtn) {
 
         } else {
 
-            window.pywebview.api.error('Verification failed: ' + res.error);
+            window.pywebview.api.error(window.t('toasts.verify_failed', {err: res.error}) || ('Verification failed: ' + res.error));
 
             msVerifyBannerBtn.disabled = false;
 
@@ -5713,14 +6656,17 @@ const installedModsList = document.getElementById('installedModsList');
 function toggleModsMenu() {
     const submenu = document.getElementById('modsSubmenu');
     const arrow = document.getElementById('modsMenuArrow');
+    
+    if (!submenu) return;
+    
     const isVisible = submenu.classList.contains('active');
 
     if (isVisible) {
         submenu.classList.remove('active');
-        arrow.style.transform = 'rotate(0deg)';
+        if (arrow) arrow.style.transform = 'rotate(0deg)';
     } else {
         submenu.classList.add('active');
-        arrow.style.transform = 'rotate(180deg)';
+        if (arrow) arrow.style.transform = 'rotate(180deg)';
     }
 }
 
@@ -5838,10 +6784,10 @@ function updateModsSectionUI() {
     if (profileHelpIcon) {
 
         const tooltips = {
-            'mod': 'Select an installation with Forge, Fabric, NeoForge, or Quilt to manage mods',
+            'mod': 'Select an installation with Forge, Fabric, or NeoForge to manage mods',
             'resourcepack': 'Select an installation to manage resource packs',
             'datapack': 'Select an installation and a world to manage data packs',
-            'shader': 'Select an installation with shader support. Forge/NeoForge: Optifine/Oculus. Fabric/Quilt: Sodium + Iris',
+            'shader': 'Select an installation with shader support. Forge/NeoForge: Optifine/Oculus. Fabric: Sodium + Iris',
             'modpack': 'Select an installation to install Modrinth modpacks (.mrpack)'
         };
 
@@ -5921,7 +6867,10 @@ function updateModsCustomSelectDisplay(id, profile) {
     const modsCustomSelect = document.getElementById('modsCustomSelect');
 
     if (!profile || !id) {
-        if (modsSelectedTitle) modsSelectedTitle.textContent = "No installations found";
+        if (modsSelectedTitle) {
+            modsSelectedTitle.textContent = window.t ? window.t('play.no_installations') : "No installations found";
+            modsSelectedTitle.setAttribute('data-i18n', 'play.no_installations');
+        }
         if (modsSelectedSubtitle) modsSelectedSubtitle.style.display = 'none';
         if (modsSelectedIcon) modsSelectedIcon.style.display = 'none';
         if (modsCustomSelect) modsCustomSelect.classList.add('disabled');
@@ -5929,10 +6878,13 @@ function updateModsCustomSelectDisplay(id, profile) {
     }
 
     if (modsCustomSelect) modsCustomSelect.classList.remove('disabled');
-    if (modsSelectedTitle) modsSelectedTitle.textContent = profile.name || id;
+    if (modsSelectedTitle) {
+        modsSelectedTitle.textContent = profile.name || id;
+        modsSelectedTitle.removeAttribute('data-i18n');
+    }
     if (modsSelectedSubtitle) {
-        const lastPlayedText = profile.last_played ? (typeof timeAgo === 'function' ? timeAgo(profile.last_played) : profile.last_played) : 'Never';
-        modsSelectedSubtitle.textContent = `Version ${profile.version || 'Unknown'} • ${lastPlayedText}`;
+        const lastPlayedText = profile.last_played ? (typeof timeAgo === 'function' ? timeAgo(profile.last_played) : profile.last_played) : (window.t('time.never') || 'Never');
+        modsSelectedSubtitle.textContent = `${profile.version || 'Unknown'} \u2022 ${window.t('play.last_played')}: ${lastPlayedText}`;
         modsSelectedSubtitle.style.display = 'block';
     }
     if (modsSelectedIcon) {
@@ -5964,15 +6916,21 @@ function updateWorldCustomSelectDisplay(worldName) {
     const worldSelectedSubtitle = document.getElementById('worldSelectedSubtitle');
     const worldCustomSelect = document.getElementById('worldCustomSelect');
     if (!worldName) {
-        if (worldSelectedTitle) worldSelectedTitle.textContent = "Select a world...";
+        if (worldSelectedTitle) {
+            worldSelectedTitle.textContent = window.t ? window.t('social.select_world') : "Select a world...";
+            worldSelectedTitle.removeAttribute('data-i18n');
+        }
         if (worldSelectedSubtitle) worldSelectedSubtitle.style.display = 'none';
         if (worldCustomSelect) worldCustomSelect.classList.add('disabled');
         return;
     }
     if (worldCustomSelect) worldCustomSelect.classList.remove('disabled');
-    if (worldSelectedTitle) worldSelectedTitle.textContent = worldName;
+    if (worldSelectedTitle) {
+        worldSelectedTitle.textContent = worldName;
+        worldSelectedTitle.removeAttribute('data-i18n');
+    }
     if (worldSelectedSubtitle) {
-        worldSelectedSubtitle.textContent = 'Minecraft World';
+        worldSelectedSubtitle.textContent = window.t ? window.t('mods_menu.minecraft_world') : 'Minecraft World';
         worldSelectedSubtitle.style.display = 'block';
     }
     document.querySelectorAll('#worldSelectOptions .select-option').forEach(opt => {
@@ -6044,7 +7002,7 @@ async function loadModdableProfiles(skipSearch = false) {
 
         if (Object.keys(targetProfiles).length === 0) {
 
-            modsProfileSelect.innerHTML = '<option value="">No compatible installations found</option>';
+            modsProfileSelect.innerHTML = `<option value="">${window.t('installations.no_compatible_found') || 'No compatible installations found'}</option>`;
 
             modsProfileSelect.disabled = true;
 
@@ -6058,11 +7016,9 @@ async function loadModdableProfiles(skipSearch = false) {
 
                 let msg = "";
 
-                if (currentContentType === 'mod') msg = "No installations with Forge, Fabric, NeoForge, or Quilt found.";
-
-                else if (currentContentType === 'shader') msg = "No installations with Shaders support found. (Requires Forge/NeoForge OR Fabric/Quilt installed).";
-
-                else msg = "No installations found.";
+                if (currentContentType === 'mod') msg = window.t('installations.no_mod_profiles') || "No installations with Forge, Fabric, or NeoForge found.";
+                else if (currentContentType === 'shader') msg = window.t('installations.no_shader_profiles') || "No installations with Shaders support found. (Requires Forge/NeoForge OR Fabric installed).";
+                else msg = window.t('installations.no_profiles') || "No installations found.";
 
 
 
@@ -6100,13 +7056,12 @@ async function loadModdableProfiles(skipSearch = false) {
             let label = profile.name;
             const verLower = (profile.version || '').toLowerCase();
             const typeLabel = (profile.type === 'neoforge' || verLower.includes('neoforge')) ? 'NEOFORGE' :
-                (profile.type === 'quilt' || verLower.includes('quilt')) ? 'QUILT' :
                 (profile.type === 'forge' || verLower.includes('forge')) ? 'FORGE' :
                 (profile.type === 'fabric' || verLower.includes('fabric')) ? 'FABRIC' : 'VANILLA';
 
             const formattedVer = window.formatVersionString ? window.formatVersionString(profile.version) : profile.version;
             let displayVer = formattedVer;
-            if (!/^(?:Forge|Fabric|NeoForge|Quilt|Vanilla)\b/i.test(formattedVer)) {
+            if (!/^(?:Forge|Fabric|NeoForge|Vanilla)\b/i.test(formattedVer)) {
                 displayVer = `${typeLabel} - ${formattedVer}`;
             }
             option.textContent = `${label} (${displayVer})`;
@@ -6117,7 +7072,7 @@ async function loadModdableProfiles(skipSearch = false) {
 
             if (currentContentType === 'shader') {
 
-                if (typeLabel === 'FORGE' || typeLabel === 'FABRIC' || typeLabel === 'NEOFORGE' || typeLabel === 'QUILT') {
+                if (typeLabel === 'FORGE' || typeLabel === 'FABRIC' || typeLabel === 'NEOFORGE') {
 
                     option.title = "Installation ready for shaders";
 
@@ -6151,13 +7106,9 @@ async function loadModdableProfiles(skipSearch = false) {
 
                 else if (verLower.includes('fabric') || profile.type === 'fabric') type = 'fabric';
 
-                else if (verLower.includes('quilt') || profile.type === 'quilt') type = 'quilt';
-
 
 
                 if (type === 'neoforge') tags = `<span class="option-tag neoforge">NEOFORGE</span>`;
-
-                else if (type === 'quilt') tags = `<span class="option-tag quilt">QUILT</span>`;
 
                 else if (type === 'forge') tags = `<span class="option-tag forge">FORGE</span>`;
 
@@ -6177,7 +7128,7 @@ async function loadModdableProfiles(skipSearch = false) {
 
 
 
-                const lastPlayedText = profile.last_played ? (typeof timeAgo === 'function' ? timeAgo(profile.last_played) : profile.last_played) : 'Never';
+                const lastPlayedText = profile.last_played ? (typeof timeAgo === 'function' ? timeAgo(profile.last_played) : profile.last_played) : (window.t('time.never') || 'Never');
 
 
 
@@ -6189,7 +7140,7 @@ async function loadModdableProfiles(skipSearch = false) {
 
                         <div class="option-title">${profile.name}</div>
 
-                        <div class="option-subtitle">Version ${profile.version} • ${lastPlayedText}</div>
+                        <div class="option-subtitle">${profile.version} • ${window.t('play.last_played')}: ${lastPlayedText}</div>
 
                         <div class="option-tags">${tags}</div>
 
@@ -6292,7 +7243,7 @@ window.installedAddonsCache = new Set();
 function setButtonInstalledState(btn, projectId) {
     if (!btn) return;
     btn.classList.add('is-installed');
-    btn.innerHTML = '<i class="fas fa-check"></i> Installed';
+    btn.innerHTML = `<i class="fas fa-check"></i> ${window.t('workshop.modal.installed') || 'Installed'}`;
     btn.style.background = '';
     btn.style.opacity = '';
     btn.style.cursor = '';
@@ -6304,7 +7255,7 @@ function setButtonInstalledState(btn, projectId) {
 function setButtonNormalState(btn, projectId) {
     if (!btn) return;
     btn.classList.remove('is-installed');
-    btn.innerHTML = '<i class="fas fa-download"></i> Download';
+    btn.innerHTML = `<i class="fas fa-download"></i> ${window.t('workshop.modal.download') || 'Download'}`;
     btn.style.background = '';
     btn.style.opacity = '';
     btn.style.cursor = '';
@@ -6388,7 +7339,8 @@ async function refreshInstalledAddonsCache() {
 function updateInstalledAddonsTotal(count) {
     const label = document.getElementById('installedAddonsTotalLabel');
     if (label) {
-        label.textContent = `Total: ${count !== undefined && count !== null ? count : 0}`;
+        const c = count !== undefined && count !== null ? count : 0;
+        label.textContent = (window.t && window.t('mods_menu.total_addons', {count: c})) || `Total: ${c}`;
     }
 }
 
@@ -6422,7 +7374,7 @@ async function loadInstalledAddons(silent = false) {
 
                     <i class="fas fa-globe"></i>
 
-                    <p>Select a world to view Data Packs</p>
+                    <p>${window.t('mods_menu.select_world') || 'Select a world to view Data Packs'}</p>
                 </div>`;
 
             updateInstalledAddonsTotal(0);
@@ -6468,7 +7420,7 @@ async function loadInstalledAddons(silent = false) {
 
                     <i class="fas fa-box-open"></i>
 
-                    <p>No ${currentContentType}s installed</p>
+                    <p>${window.t('mods_menu.no_installed', {type: currentContentType}) || `No ${currentContentType}s installed`}</p>
                 </div>`;
 
             updateInstalledAddonsTotal(0);
@@ -6497,7 +7449,7 @@ async function loadInstalledAddons(silent = false) {
 
         console.error('Error loading installed addons:', error);
 
-        installedModsList.innerHTML = '<p style="color:red; text-align:center;">Error loading items</p>';
+        installedModsList.innerHTML = `<p style="color:red; text-align:center;">${window.t('mods_menu.error_loading') || 'Error loading items'}</p>`;
 
         updateInstalledAddonsTotal(0);
 
@@ -6557,7 +7509,7 @@ async function importLocalAddonFile() {
 
     if (!currentModsProfile) {
 
-        window.pywebview.api.error("Please select an installation first.");
+        window.pywebview.api.error(window.t("toasts.select_installation_first") || "Please select an installation first.");
 
         return;
 
@@ -6567,7 +7519,7 @@ async function importLocalAddonFile() {
 
     if (currentContentType === 'datapack' && (!worldSelect || !worldSelect.value)) {
 
-        window.pywebview.api.error("Please select a world first.");
+        window.pywebview.api.error(window.t("toasts.select_world_first") || "Please select a world first.");
 
         return;
 
@@ -6581,13 +7533,13 @@ async function importLocalAddonFile() {
 
         if (result.success) {
 
-            window.pywebview.api.info("Addon imported successfully!");
+            window.pywebview.api.info(window.t("toasts.addon_imported_success") || "Addon imported successfully!");
 
             await loadInstalledAddons(true); // Refresh list silently
 
         } else if (result.error) {
 
-            window.pywebview.api.error("Import failed: " + result.error);
+            window.pywebview.api.error(window.t("toasts.import_failed", {err: result.error}) || ("Import failed: " + result.error));
 
         }
 
@@ -6637,7 +7589,7 @@ function createInstalledItem(itemData) {
 
     // Type label
 
-    const typeLabel = itemData.type === 'folder' ? 'Folder' : 'File';
+    const typeLabel = itemData.type === 'folder' ? (window.t('mods_menu.folder') || 'Folder') : (window.t('mods_menu.file') || 'File');
 
     
 
@@ -6645,10 +7597,12 @@ function createInstalledItem(itemData) {
     const actionsDisabled = itemData.missing ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : '';
     const toggleDisabled = itemData.missing ? 'disabled' : '';
 
-    let detailsDisplay = itemData.missing ? 'Missing file' : `${itemData.size_mb} MB • ${itemData.enabled ? 'Enabled' : 'Disabled'} • ${typeLabel}`;
+    let detailsDisplay = itemData.missing
+        ? (window.t('mods_menu.missing_file') || 'Missing file')
+        : `${itemData.size_mb} MB • ${itemData.enabled ? (window.t('mods_menu.enabled') || 'Enabled') : (window.t('mods_menu.disabled') || 'Disabled')} • ${typeLabel}`;
     let actionsHtml = `
         <div class="mod-list-actions">
-            <button class="mod-delete-btn" ${actionsDisabled} onclick="deleteAddon('${itemData.filename}')"><i class="fas fa-trash"></i> Delete</button>
+            <button class="mod-delete-btn" ${actionsDisabled} onclick="deleteAddon('${itemData.filename}')"><i class="fas fa-trash"></i> ${window.t('mods_menu.delete') || 'Delete'}</button>
             <div class="mod-toggle ${itemData.enabled ? 'active' : ''}" ${toggleDisabled} onclick="window.toggleAddon('${itemData.filename}', ${!itemData.enabled})">
                 <div class="mod-toggle-slider"></div>
             </div>
@@ -6674,79 +7628,85 @@ function createInstalledItem(itemData) {
 
 
     // Fetch and display Modrinth rich data if project_id exists
-
-    if (itemData.project_id) {
-
+    const projectId = itemData.project_id || itemData.projectId;
+    if (projectId) {
       const iconContainer = div.querySelector('.mod-list-icon');
-
       const nameContainer = div.querySelector('.mod-list-name');
 
+      const viewDetailsText = (window.t && window.t('mods_menu.view_details')) || 'View details';
 
-
-      // Show spinner while fetching
-
-      iconContainer.innerHTML = `<div class="spinner" style="width: 24px; height: 24px; border-width: 2px;"></div>`;
-
-      nameContainer.innerHTML = `<span style="color: #888;">Loading ${itemData.display_name}...</span>`;
-
-
-
-      const loadRichData = async () => {
-
-        let details = modrinthDetailsCache[itemData.project_id];
-
-        if (!details) {
-
-          try {
-
-            const result = await window.pywebview.api.get_mod_details(itemData.project_id);
-
-            if (result.success && result.details) {
-
-              details = result.details;
-
-              modrinthDetailsCache[itemData.project_id] = details;
-
-            }
-
-          } catch (e) {
-
-            console.error("Failed fetching addon details", e);
-
-          }
-
+      const openDetails = (e) => {
+        if (e) {
+          e.stopPropagation();
+          e.preventDefault();
         }
-
-
-
-        if (details) {
-
-          iconContainer.innerHTML = details.icon_url 
-
-            ? `<img src="${details.icon_url}" style="width: 100%; height: 100%; border-radius: 8px; object-fit: cover;">` 
-
-            : `<i class="${iconClass}"></i>`;
-
-          nameContainer.textContent = details.title || itemData.display_name;
-
-          nameContainer.title = details.description || '';
-
-        } else {
-
-          // Fallback on error
-
-          iconContainer.innerHTML = `<i class="${iconClass}"></i>`;
-
-          nameContainer.textContent = itemData.display_name;
-
+        if (typeof window.openModDetails === 'function') {
+          window.openModDetails(projectId);
         }
-
       };
 
+      if (iconContainer) {
+        iconContainer.classList.add('clickable');
+        iconContainer.setAttribute('tabindex', '0');
+        iconContainer.setAttribute('role', 'button');
+        iconContainer.title = viewDetailsText;
+        iconContainer.addEventListener('click', openDetails);
+        iconContainer.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') openDetails(e);
+        });
+      }
 
+      if (nameContainer) {
+        nameContainer.classList.add('clickable');
+        nameContainer.setAttribute('tabindex', '0');
+        nameContainer.setAttribute('role', 'button');
+        nameContainer.title = viewDetailsText;
+        nameContainer.addEventListener('click', openDetails);
+        nameContainer.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') openDetails(e);
+        });
+      }
+
+      // Show spinner while fetching
+      if (iconContainer) {
+        iconContainer.innerHTML = `<div class="spinner" style="width: 24px; height: 24px; border-width: 2px;"></div>`;
+      }
+      if (nameContainer) {
+        nameContainer.innerHTML = `<span style="color: #888;">Loading ${itemData.display_name}...</span>`;
+      }
+
+      const loadRichData = async () => {
+        let details = modrinthDetailsCache[projectId];
+        if (!details) {
+          try {
+            const result = await window.pywebview.api.get_mod_details(projectId);
+            if (result.success && result.details) {
+              details = result.details;
+              modrinthDetailsCache[projectId] = details;
+            }
+          } catch (e) {
+            console.error("Failed fetching addon details", e);
+          }
+        }
+
+        if (details) {
+          if (iconContainer) {
+            iconContainer.innerHTML = details.icon_url 
+              ? `<img src="${details.icon_url}" style="width: 100%; height: 100%; border-radius: 8px; object-fit: cover;">` 
+              : `<i class="${iconClass}"></i>`;
+          }
+          if (nameContainer) {
+            nameContainer.textContent = details.title || itemData.display_name;
+            nameContainer.title = details.description ? `${details.description}\n\n• ${viewDetailsText}` : viewDetailsText;
+          }
+        } else {
+          // Fallback on error
+          if (iconContainer) iconContainer.innerHTML = `<i class="${iconClass}"></i>`;
+          if (nameContainer) nameContainer.textContent = itemData.display_name;
+        }
+      };
 
       loadRichData();
-
     }
 
 
@@ -6763,7 +7723,7 @@ window.deleteAddon = async function (filename) {
 
     // Use Python API confirm dialog
 
-    const confirmed = await window.pywebview.api.confirm(`Are you sure you want to delete ${filename}?`);
+    const confirmed = await window.pywebview.api.confirm(window.t("toasts.delete_file_confirm", {filename: filename}) || `Are you sure you want to delete ${filename}?`);
 
     if (!confirmed) return;
 
@@ -6787,7 +7747,7 @@ window.deleteAddon = async function (filename) {
 
             console.error("Delete failed:", res.error);
 
-            window.pywebview.api.error("Failed to delete: " + (res.error || 'Unknown error'));
+            window.pywebview.api.error(window.t("toasts.delete_failed", {err: res.error || "Unknown error"}) || ("Failed to delete: " + (res.error || "Unknown error")));
 
         }
 
@@ -6825,7 +7785,7 @@ window.toggleAddon = async function (filename, enabled) {
 
         } else {
 
-            window.pywebview.api.error('Error toggling addon: ' + (res.error || 'Unknown error'));
+            window.pywebview.api.error(window.t('toasts.toggle_addon_error', {err: res.error || 'Unknown error'}) || ('Error toggling addon: ' + (res.error || 'Unknown error')));
 
         }
 
@@ -6891,11 +7851,8 @@ async function loadWorlds(profileId) {
 
                         <div class="option-icon compact-option-icon" style="display:flex;align-items:center;justify-content:center;color:#4facfe;background:rgba(79,172,254,0.15);font-size:16px;width:32px;height:32px;border-radius:6px;flex-shrink:0;"><i class="fas fa-globe-americas"></i></div>
 
-                        <div class="option-content">
-
                             <div class="option-title">${w.name}</div>
-
-                            <div class="option-subtitle">Minecraft World</div>
+                            <div class="option-subtitle">${window.t ? window.t('mods_menu.minecraft_world') : 'Minecraft World'}</div>
 
                         </div>
 
@@ -6917,11 +7874,19 @@ async function loadWorlds(profileId) {
 
 
 
-            if (worldSelect.options.length > 0) {
+            if (worldSelect.options.length > 1) {
 
-                worldSelect.selectedIndex = 0;
+                // Auto-select the first actual world (skip the empty placeholder at index 0)
+                worldSelect.selectedIndex = 1;
+
+                // Remove disabled state from custom select
+                const worldCustomSelectEl = document.getElementById('worldCustomSelect');
+                if (worldCustomSelectEl) worldCustomSelectEl.classList.remove('disabled');
 
                 updateWorldCustomSelectDisplay(worldSelect.value);
+
+                // Trigger change event to update installed addons list
+                worldSelect.dispatchEvent(new Event('change'));
 
             }
 
@@ -6929,7 +7894,7 @@ async function loadWorlds(profileId) {
 
             const opt = document.createElement('option');
 
-            opt.textContent = "No worlds found";
+            opt.textContent = window.t ? window.t('social.no_worlds_found') : 'No worlds found';
 
             worldSelect.appendChild(opt);
 
@@ -6937,7 +7902,7 @@ async function loadWorlds(profileId) {
 
             const worldSelectedTitle = document.getElementById('worldSelectedTitle');
 
-            if (worldSelectedTitle) worldSelectedTitle.textContent = "No worlds found";
+            if (worldSelectedTitle) worldSelectedTitle.textContent = window.t ? window.t('social.no_worlds_found') : 'No worlds found';
 
         }
 
@@ -7151,7 +8116,7 @@ async function loadModCategories() {
 
         const gridContainer = document.createElement('div');
 
-        gridContainer.className = 'categories-list collapsed';
+        gridContainer.className = 'categories-list';
 
         gridContainer.id = 'categoriesGrid';
 
@@ -7231,64 +8196,6 @@ async function loadModCategories() {
 
 
 
-        // Add expand/collapse toggle if there are many categories
-
-        if (relevantCategories.length > 5) {
-
-            const toggleBtn = document.createElement('div');
-
-            toggleBtn.className = 'categories-expand-toggle';
-
-            toggleBtn.innerHTML = `
-
-                <div class="toggle-line"></div>
-
-                <span class="toggle-text">Show More</span>
-
-                <i class="fas fa-chevron-down" style="font-size: 10px; color: #888; transition: transform 0.3s;"></i>
-
-                <div class="toggle-line"></div>
-
-            `;
-
-
-
-            toggleBtn.addEventListener('click', () => {
-
-                const isCollapsed = gridContainer.classList.contains('collapsed');
-
-                if (isCollapsed) {
-
-                    gridContainer.classList.remove('collapsed');
-
-                    gridContainer.classList.add('expanded');
-
-                    toggleBtn.querySelector('.toggle-text').textContent = 'Show Less';
-
-                    toggleBtn.querySelector('.fa-chevron-down').style.transform = 'rotate(180deg)';
-
-                } else {
-
-                    gridContainer.classList.remove('expanded');
-
-                    gridContainer.classList.add('collapsed');
-
-                    toggleBtn.querySelector('.toggle-text').textContent = 'Show More';
-
-                    toggleBtn.querySelector('.fa-chevron-down').style.transform = 'rotate(0deg)';
-
-                }
-
-            });
-
-
-
-            container.appendChild(toggleBtn);
-
-        }
-
-
-
         // Trigger initial default search
 
         searchMods(1);
@@ -7363,6 +8270,7 @@ function toggleCategoryFilter(catName, type, rowElement, includeBtn, excludeBtn)
 
 
 
+
 // Apply Filters Button Listener
 
 const applyFiltersBtn = document.getElementById('applyFiltersBtn');
@@ -7378,6 +8286,81 @@ if (applyFiltersBtn) {
     });
 
 }
+
+
+
+// --- Custom Sort Dropdown Logic ---
+
+(function initSortCustomSelect() {
+
+    const sortTrigger = document.getElementById('sortTrigger');
+    const sortOptions = document.getElementById('sortOptions');
+    const sortLabel = document.getElementById('sortLabel');
+    const sortIcon = document.getElementById('sortIcon');
+    const sortArrow = document.getElementById('sortArrow');
+    const modSortSelect = document.getElementById('modSortSelect');
+    const sortCustomSelect = document.getElementById('sortCustomSelect');
+
+    if (!sortTrigger || !sortOptions) return;
+
+    // Toggle open/close
+    sortTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = sortOptions.classList.contains('open');
+        sortOptions.classList.toggle('open', !isOpen);
+        sortTrigger.classList.toggle('open', !isOpen);
+    });
+
+    // Handle option selection
+    sortOptions.querySelectorAll('.sort-option').forEach(opt => {
+        opt.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const value = opt.dataset.value;
+            const iconClass = opt.dataset.icon;
+            const labelText = opt.querySelector('span').textContent;
+
+            // Update trigger label & icon
+            if (sortLabel) sortLabel.textContent = labelText;
+            if (sortIcon && iconClass) {
+                sortIcon.className = iconClass + ' sort-trigger-icon';
+            }
+
+            // Update selection highlight
+            sortOptions.querySelectorAll('.sort-option').forEach(o => o.classList.remove('selected'));
+            opt.classList.add('selected');
+
+            // Sync native select
+            if (modSortSelect) {
+                modSortSelect.value = value;
+                modSortSelect.dispatchEvent(new Event('change'));
+            }
+
+            // Close dropdown
+            sortOptions.classList.remove('open');
+            sortTrigger.classList.remove('open');
+
+            // Trigger search
+            searchMods(1);
+        });
+    });
+
+    // Close when clicking outside
+    document.addEventListener('click', (e) => {
+        if (sortCustomSelect && !sortCustomSelect.contains(e.target)) {
+            sortOptions.classList.remove('open');
+            sortTrigger.classList.remove('open');
+        }
+    });
+
+    // Update label text after i18n is applied
+    window.addEventListener('i18nApplied', () => {
+        const selected = sortOptions.querySelector('.sort-option.selected');
+        if (selected && sortLabel) {
+            sortLabel.textContent = selected.querySelector('span').textContent;
+        }
+    });
+
+})();
 
 
 
@@ -7506,22 +8489,31 @@ async function searchMods(page = 1) {
     try {
 
         const queryOptions = {
-
             projectType: currentContentType,
-
             index: sortIndex,
-
             filters: {
-
                 categories: includedCats.length > 0 ? includedCats : undefined,
-
-                excludeCategories: excludedCats.length > 0 ? excludedCats : undefined
-
+                excludeCategories: excludedCats.length > 0 ? excludedCats : undefined,
+                loader: undefined
             },
-
             offset: (currentModPage - 1) * 20
-
         };
+
+        if (currentModsProfile && currentContentType === 'mod') {
+            try {
+                const profilesData = await window.pywebview.api.get_profiles();
+                if (profilesData && profilesData.profiles && profilesData.profiles[currentModsProfile]) {
+                    const vStr = profilesData.profiles[currentModsProfile].version || '';
+                    let parsedLoader = undefined;
+                    if (vStr.toLowerCase().includes('fabric')) parsedLoader = 'fabric';
+                    else if (vStr.toLowerCase().includes('neoforge')) parsedLoader = 'neoforge';
+                    else if (vStr.toLowerCase().includes('forge')) parsedLoader = 'forge';
+                    queryOptions.filters.loader = parsedLoader;
+                }
+            } catch (e) {
+                console.warn("Failed to fetch profiles for loader filtering:", e);
+            }
+        }
 
 
 
@@ -7577,7 +8569,7 @@ async function searchMods(page = 1) {
 
                     <i class="fas fa-search"></i>
 
-                    <p>No mods found for "${query}"</p>
+                    <p>${window.t('mods_menu.no_mods_found', {query: query}) || `No mods found for "${query}"`}</p>
 
                 </div>
 
@@ -7717,7 +8709,8 @@ function createModCard(mod, forcedType) {
 
 
 
-    const categories = mod.categories.slice(0, 3).map(cat =>
+    const modCategoriesArray = Array.isArray(mod.categories) ? mod.categories : [];
+    const categories = modCategoriesArray.slice(0, 3).map(cat =>
 
         `<span class="mod-category-badge">${cat}</span>`
 
@@ -7736,7 +8729,9 @@ function createModCard(mod, forcedType) {
     const modId = mod.project_id;
     const isInstalled = window.installedAddonsCache && window.installedAddonsCache.has(modId);
     const btnClass = isInstalled ? 'btn-primary is-installed' : 'btn-primary';
-    const btnText = isInstalled ? '<i class="fas fa-check"></i> Installed' : '<i class="fas fa-download"></i> Download';
+    const installedTxt = (window.t && window.t('workshop.modal.installed')) || 'Installed';
+    const downloadTxt = (window.t && window.t('workshop.modal.download')) || 'Download';
+    const btnText = isInstalled ? `<i class="fas fa-check"></i> ${installedTxt}` : `<i class="fas fa-download"></i> ${downloadTxt}`;
     const dataInstalled = isInstalled ? 'data-installed="true"' : '';
 
 
@@ -7802,8 +8797,16 @@ function createModCard(mod, forcedType) {
 window.openModDetails = async function (projectId) {
 
     const modal = document.getElementById('modDetailsModal');
-
     if (!modal) return;
+
+    if (!modal._backdropInit) {
+        modal._backdropInit = true;
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                window.closeModDetails();
+            }
+        });
+    }
 
 
 
@@ -8016,10 +9019,17 @@ window.onModDownloadProgress = function (projectId, percentage, status) {
     if (detailBtn && detailBtn.getAttribute('data-project-id') === projectId) {
         btns.push(detailBtn);
     }
+    
+    // Update Mod Dependency Modal Progress Bar (if exists)
+    const depProg = document.getElementById(`dep-progress-${projectId}`);
+    if (depProg) {
+        depProg.style.width = percentage + '%';
+    }
+
     btns.forEach(b => {
         if (b) {
             b.classList.remove('is-installed');
-            const originalText = b.getAttribute('data-original-text') || 'Download';
+            const originalText = b.getAttribute('data-original-text') || window.t('workshop.modal.download') || 'Download';
             if (!b.getAttribute('data-original-text')) {
                 b.setAttribute('data-original-text', originalText);
             }
@@ -8107,7 +9117,7 @@ window.onModDownloadError = function (projectId, errorMsg) {
         }
     });
 
-    window.pywebview.api.error(`Error: ${errorMsg}`);
+    window.pywebview.api.error(window.t("toasts.error_prefix", {msg: errorMsg}) || `Error: ${errorMsg}`);
 
 };
 
@@ -8132,7 +9142,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
                                (detailBtn && detailBtn.getAttribute('data-installed') === 'true' && detailBtn.getAttribute('data-project-id') === projectId);
 
     if (isAlreadyInstalled) {
-        const confirmed = await window.pywebview.api.confirm("This addon is already installed in the current profile. Do you want to reinstall it?");
+        const confirmed = await window.pywebview.api.confirm(window.t("toasts.reinstall_addon_confirm") || "This addon is already installed in the current profile. Do you want to reinstall it?");
         if (!confirmed) {
             return;
         }
@@ -8169,9 +9179,9 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
             }
 
             if (!version || !version.id) {
-                window.pywebview.api.error('No downloadable versions found for this modpack');
+                window.pywebview.api.error(window.t('toasts.no_downloadable_versions') || 'No downloadable versions found for this modpack');
                 if (btn) {
-                    btn.innerHTML = '<i class="fas fa-download"></i> Download';
+                    btn.innerHTML = `<i class="fas fa-download"></i> ${window.t('workshop.modal.download') || 'Download'}`;
                     btn.disabled = false;
                 }
                 return;
@@ -8199,14 +9209,14 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
                 console.error("openModrinthModpackInstallModal is not defined");
             }
             if (btn) {
-                btn.innerHTML = '<i class="fas fa-download"></i> Download';
+                btn.innerHTML = `<i class="fas fa-download"></i> ${window.t('workshop.modal.download') || 'Download'}`;
                 btn.disabled = false;
             }
             return;
         }
 
         if (!currentModsProfile) {
-            window.pywebview.api.error('Select an installation first');
+            window.pywebview.api.error(window.t('toasts.select_installation_short') || 'Select an installation first');
             restoreButtonState(projectId);
             return;
         }
@@ -8227,7 +9237,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
 
         if (!profile) {
 
-            window.pywebview.api.error('Installation not found');
+            window.pywebview.api.error(window.t('toasts.installation_not_found') || 'Installation not found');
 
             restoreButtonState(projectId);
 
@@ -8243,13 +9253,12 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
 
         // while our internal ID is "forge-1.20.1-47.4.10". Both must be detected as Forge.
 
-        const versionStr = (profile.version || '').toLowerCase();
+        const versionStr = String(profile.version || '').toLowerCase();
         const isNeoForgeProfile = profile.type === 'neoforge' || versionStr.includes('neoforge');
-        const isQuiltProfile = !isNeoForgeProfile && (profile.type === 'quilt' || versionStr.includes('quilt'));
-        const isForgeProfile = !isNeoForgeProfile && !isQuiltProfile && (profile.type === 'forge' || versionStr.includes('forge'));
-        const isFabricProfile = !isForgeProfile && !isNeoForgeProfile && !isQuiltProfile && (profile.type === 'fabric' || versionStr.includes('fabric'));
+        const isForgeProfile = !isNeoForgeProfile && (profile.type === 'forge' || versionStr.includes('forge'));
+        const isFabricProfile = !isForgeProfile && !isNeoForgeProfile && (profile.type === 'fabric' || versionStr.includes('fabric'));
 
-        const loader = isFabricProfile ? 'fabric' : isNeoForgeProfile ? 'neoforge' : isQuiltProfile ? 'quilt' : isForgeProfile ? 'forge' : 'fabric';
+        const loader = isFabricProfile ? 'fabric' : isNeoForgeProfile ? 'neoforge' : isForgeProfile ? 'forge' : 'fabric';
 
         const matches = String(profile.version || '').match(/\b\d+\.\d+(?:\.\d+)?\b/g) || [];
         let gameVersion = matches.find(m => m.startsWith('1.')) || matches[0] || profile.version;
@@ -8277,10 +9286,8 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
 
             // For shaders, Modrinth usually expects 'iris' or 'optifine'
 
-            if (loader === 'fabric' || loader === 'quilt') searchLoader = 'iris';
-
+            if (loader === 'fabric') searchLoader = 'iris';
             else if (loader === 'forge' || loader === 'neoforge') searchLoader = 'optifine';
-
             else searchLoader = null; // Fallback
 
         }
@@ -8313,8 +9320,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
             if (currentContentType === 'resourcepack' || currentContentType === 'datapack') {
 
                 // For resourcepacks and datapacks, allow installation anyway with confirmation
-                const confirmMsg = `No compatible versions found for Minecraft ${gameVersion}. Do you want to install anyway?`;
-                const confirmed = await window.pywebview.api.confirm(confirmMsg);
+                const confirmed = await window.pywebview.api.confirm(window.t("toasts.install_anyway_confirm", {version: gameVersion}) || `No compatible versions found for Minecraft ${gameVersion}. Do you want to install anyway?`);
 
                 if (!confirmed) {
                     restoreButtonState(projectId);
@@ -8325,7 +9331,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
                 const allVersionsResult = await window.pywebview.api.get_mod_versions(projectId, null, null);
 
                 if (!allVersionsResult.success || allVersionsResult.versions.length === 0) {
-                    window.pywebview.api.error('No versions available for this project');
+                    window.pywebview.api.error(window.t('toasts.no_versions_project') || 'No versions available for this project');
                     restoreButtonState(projectId);
                     return;
                 }
@@ -8337,7 +9343,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
 
                 // Mention mapped loader
 
-                const shaderLoader = (loader === 'fabric' || loader === 'quilt') ? 'Iris' : 'Optifine';
+                const shaderLoader = (loader === 'fabric') ? 'Iris' : 'Optifine';
 
                 msg = `No compatible versions for ${shaderLoader} on Minecraft ${gameVersion}`;
 
@@ -8380,7 +9386,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
 
             if (!worldName) {
 
-                window.pywebview.api.error('Please select a world first');
+                window.pywebview.api.error(window.t('toasts.select_world_first_no_dot') || 'Please select a world first');
 
                 restoreButtonState(projectId);
 
@@ -8389,8 +9395,81 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
             }
 
         }
+        // For mods: check and handle dependencies BEFORE downloading the main mod
+        if (currentContentType === 'mod') {
+            btnsToLoad.forEach(b => { if (b) b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ...'; });
+            try {
+                const depsResult = await window.pywebview.api.resolve_mod_dependencies(
+                    version.id,
+                    gameVersion,
+                    loader,
+                    currentModsProfile
+                );
 
+                const hasDepsToInstall = depsResult && depsResult.success &&
+                    ((depsResult.required && depsResult.required.length > 0) ||
+                     (depsResult.optional && depsResult.optional.length > 0));
 
+                if (hasDepsToInstall) {
+                    // Restore button text while modal is open
+                    btnsToLoad.forEach(b => { if (b) { b.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${window.t && window.t('workshop.deps.resolving') || 'Resolving...'}`; b.disabled = true; } });
+
+                    // Open deps modal and wait for user choice
+                    const depChoice = await window.openModDepsModal(depsResult, {
+                        projectId,
+                        versionId: version.id,
+                        profileId: currentModsProfile,
+                        contentType: currentContentType,
+                        worldName
+                    });
+
+                    // depChoice: 'all' | 'required' | 'cancel'
+                    if (!depChoice || depChoice === 'cancel') {
+                        // User skipped deps — just install the main mod
+                    } else {
+                        // Install selected deps first (silently, no button state changes needed)
+                        const depsToInstall = depChoice === 'all'
+                            ? [...(depsResult.required || []), ...(depsResult.optional || [])]
+                            : [...(depsResult.required || [])];
+
+                        for (const dep of depsToInstall) {
+                            if (!dep.resolved_version) continue;
+                            const depFile = (dep.resolved_version.files || []).find(f => f.primary) || dep.resolved_version.files[0];
+                            if (!depFile) continue;
+                            
+                            const depCard = document.getElementById(`dep-card-${dep.project_id}`);
+                            if (depCard) depCard.classList.add('is-downloading');
+                            
+                            try {
+                                await window.pywebview.api.install_project(
+                                    dep.project_id,
+                                    dep.resolved_version.id,
+                                    currentModsProfile,
+                                    'mod',
+                                    null,
+                                    false
+                                );
+                            } catch (depErr) {
+                                console.warn('[deps] Failed to install dep', dep.project_id, depErr);
+                            }
+                            
+                            if (depCard) {
+                                depCard.classList.remove('is-downloading');
+                                depCard.classList.add('is-installed');
+                                const progFill = document.getElementById(`dep-progress-${dep.project_id}`);
+                                if (progFill) progFill.style.width = '100%';
+                            }
+                        }
+                        if (window.showToast) window.showToast(window.t && window.t('workshop.deps.toast_dep_done') || 'Dependencies installed!', 'success');
+                        if (window.closeModDepsModal) window.closeModDepsModal(); // Close modal only when done
+                    }
+                }
+            } catch (depErr) {
+                console.warn('[deps] Dependency resolution error (non-critical):', depErr);
+            }
+            // Reset button text to downloading state
+            btnsToLoad.forEach(b => { if (b) { b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ...'; } });
+        }
 
         // Start Download (Now Async) - New "install_project" method
         const downloadResult = await window.pywebview.api.install_project(projectId, version.id, currentModsProfile, currentContentType, worldName, isAlreadyInstalled);
@@ -8494,7 +9573,7 @@ window.toggleModEnabled = async function (filename, enabled) {
 
         } else {
 
-            window.pywebview.api.error(`Error: ${result.error}`);
+            window.pywebview.api.error(window.t('toasts.error_prefix', {msg: result.error}) || `Error: ${result.error}`);
 
         }
 
@@ -8502,7 +9581,7 @@ window.toggleModEnabled = async function (filename, enabled) {
 
         console.error('Error toggling mod:', error);
 
-        window.pywebview.api.error('Error changing mod state');
+        window.pywebview.api.error(window.t('toasts.change_mod_state_error') || 'Error changing mod state');
 
     }
 
@@ -8714,7 +9793,7 @@ window.deleteModFile = async function (filename) {
 
 
 
-    const confirmed = await window.pywebview.api.confirm(`Delete the mod "${filename.replace('.jar.disabled', '').replace('.jar', '')}"?`);
+    const confirmed = await window.pywebview.api.confirm(window.t("toasts.delete_mod_confirm", {mod: filename.replace('.jar.disabled', '').replace('.jar', '')}) || `Delete the mod "${filename.replace('.jar.disabled', '').replace('.jar', '')}"?`);
 
 
 
@@ -8734,7 +9813,7 @@ window.deleteModFile = async function (filename) {
 
         } else {
 
-            window.pywebview.api.error(`Error: ${result.error}`);
+            window.pywebview.api.error(window.t('toasts.error_prefix', {msg: result.error}) || `Error: ${result.error}`);
 
         }
 
@@ -8742,7 +9821,7 @@ window.deleteModFile = async function (filename) {
 
         console.error('Error deleting mod:', error);
 
-        window.pywebview.api.error('Error deleting mod');
+        window.pywebview.api.error(window.t('toasts.delete_mod_error') || 'Error deleting mod');
 
     }
 
@@ -9062,340 +10141,206 @@ window.cropHeadFromSkin = function(img) {
 // Function to render head image in user badge
 
 window.renderUserHead = function(skinUrl) {
-
     return new Promise((resolve) => {
-
         const container = document.getElementById('userAvatarHead');
-
         if (!container) {
-
             resolve();
-
             return;
-
         }
-
-
 
         if (!skinUrl) {
-
             container.innerHTML = '<i class="fas fa-user"></i>';
-
             resolve();
-
             return;
-
         }
 
-
+        const isAvatarProvider = skinUrl.includes('crafthead.net') || skinUrl.includes('mc-heads.net') || skinUrl.includes('minotar.net') || skinUrl.includes('ui-avatars.com') || skinUrl.startsWith('data:image/');
 
         const img = new Image();
-
-        img.crossOrigin = "Anonymous";
+        if (!isAvatarProvider) {
+            img.crossOrigin = "Anonymous";
+        }
 
         img.onload = () => {
-
-            // Logic to detect if it's a full skin texture or a pre-cropped avatar
-
-            // Known avatar providers usually provide square images that are NOT 64x64 or 64x32 textures.
-
-            // Full skins are almost always 64, 128, 256... px wide and 1:1 or 2:1 ratio.
-
-            const isAvatarProvider = skinUrl.includes('mc-heads.net') || skinUrl.includes('minotar.net') || skinUrl.includes('ui-avatars.com') || skinUrl.startsWith('data:image/');
-
             const isFullSkin = !isAvatarProvider &&
-
                                (img.width === img.height || img.width === img.height * 2) &&
-
-                               (img.width % 64 === 0 || img.width === 32); 
-
-
+                               (img.width % 64 === 0 || img.width === 32);
 
             if (isFullSkin) {
-
-                // It's a full skin texture, we need to crop the head (8,8, 8x8)
-
-                const headDataUrl = window.cropHeadFromSkin(img);
-
-
-
-                container.innerHTML = '';
-
-                const headImg = new Image();
-
-                headImg.src = headDataUrl;
-
-                headImg.style.width = '100%';
-
-                headImg.style.height = '100%';
-
-                headImg.style.borderRadius = '50%';
-
-                headImg.style.imageRendering = 'pixelated';
-
-                container.appendChild(headImg);
-
+                const headDataUrl = window.cropHeadFromSkin ? window.cropHeadFromSkin(img) : null;
+                if (headDataUrl) {
+                    container.innerHTML = '';
+                    const headImg = new Image();
+                    headImg.src = headDataUrl;
+                    headImg.style.width = '100%';
+                    headImg.style.height = '100%';
+                    headImg.style.borderRadius = '50%';
+                    headImg.style.imageRendering = 'pixelated';
+                    container.appendChild(headImg);
+                }
             } else {
-
-                // It's already an avatar (like from mc-heads.net)
-
                 container.innerHTML = '';
-
                 img.style.width = '100%';
-
                 img.style.height = '100%';
-
                 img.style.objectFit = 'cover';
-
                 img.style.borderRadius = '50%';
-
                 img.style.imageRendering = 'pixelated';
-
                 container.appendChild(img);
-
             }
-
             resolve();
-
         };
 
         img.onerror = () => {
-            container.innerHTML = '<i class="fas fa-user"></i>';
+            if (!container.querySelector('img')) {
+                container.innerHTML = '<i class="fas fa-user"></i>';
+            }
             resolve();
         };
+
         img.src = skinUrl;
     });
-}
-
-// IPC listener for in-app notifications
-if (window.electronAPI && window.electronAPI.on) {
-    window.electronAPI.on('show-in-app-notification', (data) => {
-        let container = document.getElementById('in-app-notification');
-        if (!container) {
-            container = document.createElement('div');
-            container.id = 'in-app-notification';
-            document.body.appendChild(container);
-        }
-        
-        container.innerHTML = `
-            <div class="notification-icon">
-                <i class="fas fa-bell"></i>
-            </div>
-            <div class="notification-content">
-                <h4>${data.title}</h4>
-                <p>${data.message}</p>
-            </div>
-            <div class="notification-close" onclick="document.getElementById('in-app-notification').classList.remove('show')">
-                <i class="fas fa-times"></i>
-            </div>
-        `;
-        
-        // Reset animation if it's already showing
-        container.classList.remove('show');
-        
-        // Force reflow
-        void container.offsetWidth;
-        
-        container.classList.add('show');
-        
-        if (window.inAppNotificationTimeout) {
-            clearTimeout(window.inAppNotificationTimeout);
-        }
-        
-        window.inAppNotificationTimeout = setTimeout(() => {
-            container.classList.remove('show');
-        }, data.duration || 10000);
-    });
-}
-
-
-
-
-
-// Helper function to extract the 2D front face of a skin as a Base64 data URL
-
-window.cropHeadFromSkin = function(img) {
-
-    const canvas = document.createElement('canvas');
-
-    canvas.width = 64; // High res for head
-
-    canvas.height = 64;
-
-    const ctx = canvas.getContext('2d');
-
-    ctx.imageSmoothingEnabled = false;
-
-
-
-    // 1. Draw Head Base (8,8 -> 8x8)
-
-    const s = img.width / 8;
-
-    ctx.drawImage(img, s, s, s, s, 0, 0, 64, 64);
-
-
-
-    // 2. Draw Hat Overlay (40,8 -> 8x8)
-
-    ctx.drawImage(img, s * 5, s, s, s, 0, 0, 64, 64);
-
-
-
-    return canvas.toDataURL();
-
 };
 
-
-
-// Function to render head image in user badge
-
-window.renderUserHead = function(skinUrl) {
-
-    return new Promise((resolve) => {
-
-        const container = document.getElementById('userAvatarHead');
-
-        if (!container) {
-
-            resolve();
-
-            return;
-
-        }
-
-
-
-        if (!skinUrl) {
-
-            container.innerHTML = '<i class="fas fa-user"></i>';
-
-            resolve();
-
-            return;
-
-        }
-
-
-
-        const img = new Image();
-
-        img.crossOrigin = "Anonymous";
-
-        img.onload = () => {
-
-            // Logic to detect if it's a full skin texture or a pre-cropped avatar
-
-            // Known avatar providers usually provide square images that are NOT 64x64 or 64x32 textures.
-
-            // Full skins are almost always 64, 128, 256... px wide and 1:1 or 2:1 ratio.
-
-            const isAvatarProvider = skinUrl.includes('mc-heads.net') || skinUrl.includes('minotar.net') || skinUrl.includes('ui-avatars.com') || skinUrl.startsWith('data:image/');
-
-            const isFullSkin = !isAvatarProvider &&
-
-                               (img.width === img.height || img.width === img.height * 2) &&
-
-                               (img.width % 64 === 0 || img.width === 32); 
-
-
-
-            if (isFullSkin) {
-
-                // It's a full skin texture, we need to crop the head (8,8, 8x8)
-
-                const headDataUrl = window.cropHeadFromSkin(img);
-
-
-
-                container.innerHTML = '';
-
-                const headImg = new Image();
-
-                headImg.src = headDataUrl;
-
-                headImg.style.width = '100%';
-
-                headImg.style.height = '100%';
-
-                headImg.style.borderRadius = '50%';
-
-                headImg.style.imageRendering = 'pixelated';
-
-                container.appendChild(headImg);
-
-            } else {
-
-                // It's already an avatar (like from mc-heads.net)
-
-                container.innerHTML = '';
-
-                img.style.width = '100%';
-
-                img.style.height = '100%';
-
-                img.style.objectFit = 'cover';
-
-                img.style.borderRadius = '50%';
-
-                img.style.imageRendering = 'pixelated';
-
-                container.appendChild(img);
-
-            }
-
-            resolve();
-
-        };
-
-        img.onerror = () => {
-            container.innerHTML = '<i class="fas fa-user"></i>';
-            resolve();
-        };
-        img.src = skinUrl;
-    });
-}
-
 // IPC listener for in-app notifications
 if (window.electronAPI && window.electronAPI.on) {
-    window.electronAPI.on('show-in-app-notification', (data) => {
-        let container = document.getElementById('in-app-notification');
-        if (!container) {
-            container = document.createElement('div');
-            container.id = 'in-app-notification';
-            document.body.appendChild(container);
+    window.electronAPI.on('show-in-app-notification', async (data) => {
+        let stack = document.getElementById('in-app-notifications-stack');
+        if (!stack) {
+            stack = document.createElement('div');
+            stack.id = 'in-app-notifications-stack';
+            document.body.appendChild(stack);
         }
-        
-        container.innerHTML = `
+
+        // Ensure translations are loaded before trying to translate the notification keys
+        if (window.loadLocale && window.currentLanguage) {
+            await window.loadLocale(window.currentLanguage);
+        }
+
+        const title = data.titleKey ? (window.t ? window.t(data.titleKey, data.variables || {}) : data.titleKey) : data.title;
+        const message = data.messageKey ? (window.t ? window.t(data.messageKey, data.variables || {}) : data.messageKey) : data.message;
+
+        // Cap at 3 visible notifications in the stack — dismiss the oldest if exceeding
+        const activeItems = Array.from(stack.querySelectorAll('.in-app-notif-item:not(.closing)'));
+        if (activeItems.length >= 3) {
+            const oldest = activeItems[0];
+            if (oldest) {
+                oldest.classList.add('closing');
+                setTimeout(() => { try { oldest.remove(); } catch (_) {} }, 300);
+            }
+        }
+
+        const notifItem = document.createElement('div');
+        notifItem.className = 'in-app-notif-item';
+
+        const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+        notifItem.innerHTML = `
             <div class="notification-icon">
                 <i class="fas fa-bell"></i>
             </div>
             <div class="notification-content">
-                <h4>${data.title}</h4>
-                <p>${data.message}</p>
+                <h4>${esc(title)}</h4>
+                <p>${esc(message)}</p>
             </div>
-            <div class="notification-close" onclick="document.getElementById('in-app-notification').classList.remove('show')">
+            <div class="notification-close" title="Close">
                 <i class="fas fa-times"></i>
             </div>
         `;
-        
-        // Reset animation if it's already showing
-        container.classList.remove('show');
-        
-        // Force reflow
-        void container.offsetWidth;
-        
-        container.classList.add('show');
-        
-        if (window.inAppNotificationTimeout) {
-            clearTimeout(window.inAppNotificationTimeout);
+
+        let isDismissed = false;
+        const dismissItem = () => {
+            if (isDismissed) return;
+            isDismissed = true;
+            notifItem.classList.add('closing');
+            notifItem.addEventListener('animationend', () => {
+                try { notifItem.remove(); } catch (_) {}
+            }, { once: true });
+            setTimeout(() => {
+                try { notifItem.remove(); } catch (_) {}
+            }, 350);
+        };
+
+        let autoDismissTimer = setTimeout(dismissItem, data.duration || 6000);
+
+        // Pause timer on hover so user can easily read and click
+        notifItem.addEventListener('mouseenter', () => {
+            clearTimeout(autoDismissTimer);
+        });
+        notifItem.addEventListener('mouseleave', () => {
+            if (!isDismissed) {
+                autoDismissTimer = setTimeout(dismissItem, 2500);
+            }
+        });
+
+        // Close button click
+        const closeBtn = notifItem.querySelector('.notification-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                clearTimeout(autoDismissTimer);
+                dismissItem();
+            });
         }
-        
-        window.inAppNotificationTimeout = setTimeout(() => {
-            container.classList.remove('show');
-        }, data.duration || 10000);
+
+        // Notification body click
+        notifItem.addEventListener('click', async (e) => {
+            if (e.target.closest('.notification-close')) return;
+            clearTimeout(autoDismissTimer);
+            dismissItem();
+
+            // Delegate to main process navigation (same behavior as native Windows notifications)
+            if (window.electronAPI && typeof window.electronAPI.notificationClickNavigate === 'function') {
+                try {
+                    await window.electronAPI.notificationClickNavigate(data);
+                    return;
+                } catch (err) {
+                    console.warn('[InAppNotif] notificationClickNavigate error, falling back:', err);
+                }
+            } else if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.notification_click_navigate === 'function') {
+                try {
+                    await window.pywebview.api.notification_click_navigate(data);
+                    return;
+                } catch (err) {
+                    console.warn('[InAppNotif] pywebview notification_click_navigate error:', err);
+                }
+            }
+
+            const targetId = data.accountId || data.recipientAccountId || data.recipientUid;
+            if (targetId && window.performAccountSwitch) {
+                try {
+                    const userData = await window.pywebview.api.get_user_json();
+                    const currentActiveUid = userData?.account_type === 'microsoft'
+                        ? (userData?.firebase_ms_uid || null)
+                        : (userData?.account_type === 'helloworld' ? (userData?.firebase_uid || null) : null);
+                    let isTargetActive = false;
+                    if (data.recipientUid && currentActiveUid) {
+                        isTargetActive = currentActiveUid === data.recipientUid;
+                    } else if (data.recipientType) {
+                        isTargetActive = userData?.account_type === data.recipientType && (
+                            !(data.recipientUsername || data.username) || (userData?.username && userData.username.toLowerCase() === (data.recipientUsername || data.username).toLowerCase())
+                        );
+                    }
+                    if (!isTargetActive) {
+                        await window.performAccountSwitch(targetId, true, '', data.recipientUsername || data.username || '', data.recipientType || '');
+                        return;
+                    }
+                } catch (_) {}
+            }
+            if (typeof window.openSocialModal === 'function') await window.openSocialModal('received');
+            if (typeof window.openInbox === 'function') window.openInbox('received');
+        });
+
+        stack.appendChild(notifItem);
     });
 }
+
+
+
+
+
+
+
+
 
 // --- Minecraft News Fetching ---
 
@@ -9409,7 +10354,7 @@ async function loadMinecraftNews() {
     }
 
     try {
-        const response = await fetch('https://launchercontent.mojang.com/v2/news.json', { signal: AbortSignal.timeout(4000) });
+        const response = await fetch('https://launchercontent.mojang.com/v2/news.json', { signal: AbortSignal.timeout(10000) });
         if (!response.ok) throw new Error('News fetch failed');
         const data = await response.json();
         
@@ -9460,6 +10405,294 @@ async function loadMinecraftNews() {
     }
 }
 
+// --- Version Manifest & Patch Notes Logic ---
+let globalLatestRelease = '';
+let globalLatestSnapshot = '';
+let allPatchNotesEntries = [];
+let cachedManifestVersions = [];
+let currentPatchFilter = 'release';
+const patchNotesCache = {};
+
+async function loadVersionManifestInfo() {
+    try {
+        const response = await fetch('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json', { signal: AbortSignal.timeout(8000) });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data && data.latest) {
+            globalLatestRelease = data.latest.release || '';
+            globalLatestSnapshot = data.latest.snapshot || '';
+            if (data.versions) {
+                cachedManifestVersions = data.versions;
+            }
+
+            const relEl = document.getElementById('latestReleaseVer');
+            const snapEl = document.getElementById('latestSnapshotVer');
+            if (relEl && globalLatestRelease && !relEl.textContent) relEl.textContent = globalLatestRelease;
+            if (snapEl && globalLatestSnapshot && !snapEl.textContent) snapEl.textContent = globalLatestSnapshot;
+        }
+    } catch (err) {
+        console.warn("[PatchNotes] Failed to fetch version manifest:", err);
+    }
+}
+
+async function loadMinecraftPatchNotes() {
+    const container = document.getElementById('minecraftPatchNotesContainer');
+    if (!container) return;
+
+    if (!window.hasInternet) {
+        container.innerHTML = `<p style="color: #888; font-size: 13px; text-align: center; padding: 20px;">${window.t('play.error_loading_patchnotes') || 'No internet connection'}</p>`;
+        return;
+    }
+
+    try {
+        const response = await fetch('https://launchercontent.mojang.com/v2/javaPatchNotes.json', { signal: AbortSignal.timeout(10000) });
+        if (!response.ok) throw new Error('Patch notes fetch failed');
+        const data = await response.json();
+
+        if (!data || !data.entries || data.entries.length === 0) {
+            container.innerHTML = '<p style="color: #888; font-size: 13px; text-align: center; padding: 20px;">No patch notes available.</p>';
+            return;
+        }
+
+        // Keep ONLY entries with a valid changelog contentPath from official Mojang patch notes
+        allPatchNotesEntries = data.entries.filter(e => e && e.contentPath);
+
+        // Extract precise Release and Snapshot version names from patch notes entries
+        const latestRelEntry = allPatchNotesEntries.find(e => e.type === 'release');
+        const latestSnapEntry = allPatchNotesEntries.find(e => e.type === 'snapshot');
+
+        const relEl = document.getElementById('latestReleaseVer');
+        const snapEl = document.getElementById('latestSnapshotVer');
+
+        if (relEl && latestRelEntry) {
+            relEl.textContent = latestRelEntry.version || latestRelEntry.title.replace('Minecraft: Java Edition ', '').replace('Minecraft ', '');
+        }
+        if (snapEl && latestSnapEntry) {
+            const snapName = latestSnapEntry.version || latestSnapEntry.title.replace('Minecraft ', '');
+            snapEl.textContent = snapName;
+        }
+
+        renderPatchNotesList();
+    } catch (err) {
+        console.error("Error loading patch notes:", err);
+        container.innerHTML = `<p style="color: #888; font-size: 13px; text-align: center; padding: 20px;">${window.t('play.error_loading_patchnotes') || 'Failed to load patch notes.'}</p>`;
+    }
+}
+
+let currentSearchQuery = '';
+
+function onPatchNotesSearchInput(query) {
+    currentSearchQuery = (query || '').toLowerCase().trim();
+    renderPatchNotesList();
+}
+
+function renderPatchNotesList() {
+    const container = document.getElementById('minecraftPatchNotesContainer');
+    if (!container) return;
+
+    let filtered = allPatchNotesEntries;
+    if (currentPatchFilter === 'release') {
+        filtered = allPatchNotesEntries.filter(e => e.type === 'release');
+    } else if (currentPatchFilter === 'snapshot') {
+        filtered = allPatchNotesEntries.filter(e => e.type === 'snapshot');
+    }
+
+    if (currentSearchQuery) {
+        filtered = filtered.filter(e => 
+            (e.title && e.title.toLowerCase().includes(currentSearchQuery)) ||
+            (e.version && e.version.toLowerCase().includes(currentSearchQuery)) ||
+            (e.shortText && e.shortText.toLowerCase().includes(currentSearchQuery))
+        );
+    }
+
+    const displayEntries = filtered;
+
+    if (displayEntries.length === 0) {
+        container.innerHTML = '<p style="color: #888; font-size: 13px; text-align: center; padding: 20px;">No se encontraron versiones para esta búsqueda.</p>';
+        return;
+    }
+
+    let html = '';
+    displayEntries.forEach(item => {
+        const dateObj = item.date ? new Date(item.date) : null;
+        const formattedDate = dateObj ? dateObj.toLocaleDateString(window.currentLanguage === 'es' ? 'es-ES' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+        
+        let imgUrl = item.image && item.image.url ? item.image.url : '';
+        if (imgUrl && imgUrl.startsWith('/')) {
+            imgUrl = 'https://launchercontent.mojang.com' + imgUrl;
+        } else if (!imgUrl) {
+            imgUrl = 'img/icon/icon.png';
+        }
+
+        const isRelease = item.type === 'release';
+        const badgeClass = isRelease ? 'release' : 'snapshot';
+        const badgeText = isRelease ? (window.t('play.release_badge') || 'Release') : (window.t('play.snapshot_badge') || 'Snapshot');
+        
+        const safeTitle = (item.title || '').replace(/'/g, "\\'").replace(/"/g, "&quot;");
+        const contentPath = item.contentPath || '';
+
+        html += `
+            <div class="patch-note-card" onclick="openPatchNotesDetail('${contentPath}', '${safeTitle}', '${formattedDate}', '${item.type}', '${imgUrl}')">
+                <img src="${imgUrl}" alt="${safeTitle}" class="patch-note-img-thumb" onerror="this.onerror=null; this.src='img/icon/icon.png';">
+                <div class="patch-note-card-content">
+                    <div>
+                        <div class="patch-note-card-header">
+                            <span class="patch-note-badge ${badgeClass}">${badgeText} ${item.version ? item.version : ''}</span>
+                            <span class="patch-note-card-date"><i class="far fa-calendar-alt"></i> ${formattedDate}</span>
+                        </div>
+                        <div class="patch-note-card-title">${item.title}</div>
+                        <div class="patch-note-card-excerpt">${item.shortText || ''}</div>
+                    </div>
+                    <div class="patch-note-read-link">
+                        <span>${window.t('play.read_changelog') || 'Ver changelog completo'}</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+function filterPatchNotes(filterType) {
+    currentPatchFilter = filterType;
+    document.querySelectorAll('.patch-filter-btn').forEach(btn => {
+        if (btn.getAttribute('data-filter') === filterType || btn.id === 'filterBtn' + filterType.charAt(0).toUpperCase() + filterType.slice(1)) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+    renderPatchNotesList();
+}
+
+function switchNewsTab(tabName) {
+    const slider = document.getElementById('newsPatchPanelsSlider');
+    const indicator = document.getElementById('newsPatchTabIndicator');
+    const btnNews = document.getElementById('tabBtnNews');
+    const btnPatch = document.getElementById('tabBtnPatchNotes');
+
+    if (tabName === 'news') {
+        if (slider) {
+            slider.classList.remove('tab-1-active');
+            slider.classList.add('tab-0-active');
+        }
+        if (indicator) {
+            indicator.classList.remove('tab-1-active');
+            indicator.classList.add('tab-0-active');
+        }
+        if (btnNews) btnNews.classList.add('active');
+        if (btnPatch) btnPatch.classList.remove('active');
+    } else {
+        if (slider) {
+            slider.classList.remove('tab-0-active');
+            slider.classList.add('tab-1-active');
+        }
+        if (indicator) {
+            indicator.classList.remove('tab-0-active');
+            indicator.classList.add('tab-1-active');
+        }
+        if (btnNews) btnNews.classList.remove('active');
+        if (btnPatch) btnPatch.classList.add('active');
+
+        if (allPatchNotesEntries.length === 0) {
+            loadMinecraftPatchNotes();
+        }
+    }
+}
+
+async function openPatchNotesDetail(contentPath, title, dateStr, type, imgUrl) {
+    const modal = document.getElementById('patchNotesModal');
+    const modalTitle = document.getElementById('patchNotesModalTitle');
+    const modalBadge = document.getElementById('patchNotesModalBadge');
+    const modalDate = document.getElementById('patchNotesModalDate');
+    const modalBody = document.getElementById('patchNotesModalBody');
+
+    if (!modal || !modalBody) return;
+
+    modal.classList.remove('closing');
+    if (modalTitle) modalTitle.textContent = title || 'Minecraft Patch Notes';
+    if (modalDate) modalDate.innerHTML = `<i class="far fa-calendar-alt"></i> ${dateStr || ''}`;
+    
+    if (modalBadge) {
+        const isRelease = type === 'release';
+        modalBadge.className = `patch-note-badge ${isRelease ? 'release' : 'snapshot'}`;
+        modalBadge.textContent = isRelease ? (window.t('play.release_badge') || 'Release') : (window.t('play.snapshot_badge') || 'Snapshot');
+    }
+
+    modalBody.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; gap: 15px; color: #a855f7;">
+            <i class="fas fa-spinner fa-spin" style="font-size: 32px;"></i>
+            <span style="font-size: 14px; color: #ccc;">${window.t('play.loading_patchnotes') || 'Cargando changelog...'}</span>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+
+    // Check if fallback manifest entry
+    if (contentPath.startsWith('manifest:')) {
+        const verId = contentPath.replace('manifest:', '');
+        modalBody.innerHTML = `
+            <div style="padding: 10px 0;">
+                <h3 style="color: #c084fc; font-size: 17px; margin-bottom: 12px;">Minecraft Java Edition ${verId}</h3>
+                <p style="color: #ccc; line-height: 1.6; margin-bottom: 16px;">
+                    Esta es una versión oficial de Minecraft (${type === 'release' ? 'Release' : 'Snapshot/Alpha/Beta'}) lanzada el <strong>${dateStr}</strong>.
+                </p>
+                <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+                    <div><i class="fas fa-cube" style="color: #34d399; margin-right: 8px;"></i> <strong>Versión:</strong> ${verId}</div>
+                    <div><i class="far fa-calendar-alt" style="color: #60a5fa; margin-right: 8px;"></i> <strong>Fecha de lanzamiento:</strong> ${dateStr}</div>
+                    <div><i class="fas fa-tag" style="color: #c084fc; margin-right: 8px;"></i> <strong>Tipo de compilación:</strong> ${type.toUpperCase()}</div>
+                    <div><i class="fas fa-info-circle" style="color: #fbbf24; margin-right: 8px;"></i> <strong>Información:</strong> Esta versión está disponible para instalar y jugar directamente desde la sección de Instalaciones de HelloWorld Launcher.</div>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    try {
+        let htmlBody = '';
+        if (patchNotesCache[contentPath]) {
+            htmlBody = patchNotesCache[contentPath];
+        } else {
+            const url = 'https://launchercontent.mojang.com/v2/' + contentPath;
+            const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+            if (!res.ok) throw new Error('Failed to load detail');
+            const data = await res.json();
+            htmlBody = data.body || '<p>No content available for this patch.</p>';
+            
+            // Remove redundant leading H1 title if present in HTML body
+            htmlBody = htmlBody.replace(/^\s*<h1[^>]*>.*?<\/h1>/i, '');
+            // Fix relative images in HTML body if any
+            htmlBody = htmlBody.replace(/src="\/v2\//g, 'src="https://launchercontent.mojang.com/v2/');
+            patchNotesCache[contentPath] = htmlBody;
+        }
+
+        modalBody.innerHTML = htmlBody;
+    } catch (err) {
+        console.error("Error opening patch notes detail:", err);
+        modalBody.innerHTML = `<p style="color: #ef4444; padding: 20px; text-align: center;">${window.t('play.error_loading_patchnotes') || 'Error al cargar las notas de actualización.'}</p>`;
+    }
+}
+
+function closePatchNotesModal() {
+    const modal = document.getElementById('patchNotesModal');
+    if (!modal || modal.style.display === 'none' || modal.classList.contains('closing')) return;
+
+    modal.classList.add('closing');
+    setTimeout(() => {
+        modal.style.display = 'none';
+        modal.classList.remove('closing');
+    }, 200);
+}
+
+// Close modal on Escape key press
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closePatchNotesModal();
+    }
+});
+
 // Global UI Transition Interceptor
 function initTransitionInterceptors() {
     const attachToElements = () => {
@@ -9476,13 +10709,18 @@ function initTransitionInterceptors() {
                 if (el._closingTimeout) {
                     clearTimeout(el._closingTimeout);
                     el._closingTimeout = null;
-                    origRemove('closing');
                 }
+                origRemove('closing');
                 return origAdd(...tokens);
             };
 
             el.classList.remove = function(...tokens) {
-                if (document.body.classList.contains('disable-transitions')) {
+                if (document.body.classList.contains('disable-transitions') || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+                    if (el._closingTimeout) {
+                        clearTimeout(el._closingTimeout);
+                        el._closingTimeout = null;
+                    }
+                    origRemove('closing');
                     return origRemove(...tokens);
                 }
                 const transitionClasses = ['show', 'active', 'visible'];
@@ -9568,3 +10806,287 @@ document.addEventListener('mousedown', (e) => {
         setTimeout(() => input.focus(), 10);
     }
 }, true);
+
+// HW Services Down Banner
+window.showServicesDownBanner = function() {
+    const hwBanner = document.getElementById('hwServicesDownBanner');
+    if (hwBanner) {
+        hwBanner.style.display = 'flex';
+        const msBanner = document.getElementById('msVerifyBanner');
+        if (msBanner) msBanner.style.display = 'none';
+    }
+};
+
+// Close button removed intentionally
+
+if (window.hwlAPI && window.hwlAPI.onServicesDown429) {
+    window.hwlAPI.onServicesDown429(() => {
+        window.showServicesDownBanner();
+    });
+}
+
+// =======================================================
+// MOD DEPENDENCIES MODAL CONTROLLER
+// =======================================================
+
+(function () {
+    'use strict';
+
+    let _modDepsResolve = null; // Promise resolver for user choice
+    let _modDepsData = null;    // Cached deps result
+
+    function t(key, params) {
+        if (window.t) return window.t(key, params);
+        return key;
+    }
+
+    function esc(s) {
+        return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function buildDepCard(dep, badgeClass, badgeText, isInstalled) {
+        const p = dep.project || {};
+        const name = esc(p.title || dep.project_id);
+        const authors = (p.team || (p.author ? [p.author] : []));
+        const author = esc(authors && authors.length > 0 ? authors[0] : '');
+        const desc = esc(p.description || '');
+        const iconUrl = p.icon_url || '';
+        const iconHtml = iconUrl
+            ? `<img class="mod-dep-icon" src="${esc(iconUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="mod-dep-icon-placeholder" style="display:none"><i class="fas fa-puzzle-piece"></i></div>`
+            : `<div class="mod-dep-icon-placeholder"><i class="fas fa-puzzle-piece"></i></div>`;
+
+        const authorStr = author ? (t('workshop.deps.author', { author }) || `by ${author}`) : '';
+
+        return `<div id="dep-card-${dep.project_id}" class="mod-dep-card${isInstalled ? ' is-installed' : ''}">
+            ${iconHtml}
+            <div class="mod-dep-info">
+                <div class="mod-dep-name">${name}</div>
+                ${authorStr ? `<div class="mod-dep-author">${esc(authorStr)}</div>` : ''}
+                ${desc ? `<div class="mod-dep-desc">${desc}</div>` : ''}
+            </div>
+            <span class="mod-dep-badge ${badgeClass}">${badgeText}</span>
+            <div class="mod-dep-progress-bg">
+                <div id="dep-progress-${dep.project_id}" class="mod-dep-progress-fill"></div>
+            </div>
+        </div>`;
+    }
+
+    function renderSection(listEl, countEl, sectionEl, deps, badgeClass, badgeText, isInstalled) {
+        if (!deps || deps.length === 0) {
+            if (sectionEl) sectionEl.style.display = 'none';
+            return;
+        }
+        if (sectionEl) sectionEl.style.display = '';
+        if (countEl) countEl.textContent = deps.length;
+        if (listEl) {
+            listEl.innerHTML = deps.map(d => buildDepCard(d, badgeClass, badgeText, isInstalled)).join('');
+        }
+    }
+
+    window.openModDepsModal = function (depsResult, _ctx) {
+        _modDepsData = depsResult;
+
+        const modal = document.getElementById('modDepsModal');
+        const loadingEl = document.getElementById('modDepsLoading');
+        const contentEl = document.getElementById('modDepsContent');
+        const footerEl = document.getElementById('modDepsFooter');
+        const emptyEl = document.getElementById('modDepsEmpty');
+
+        if (!modal) return Promise.resolve('cancel');
+
+        // Reset state
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (contentEl) contentEl.style.display = 'block';
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        const required = depsResult.required || [];
+        const optional = depsResult.optional || [];
+        const alreadyInstalled = depsResult.alreadyInstalled || [];
+
+        const reqText = t('workshop.deps.required_section') || 'Required';
+        const optText = t('workshop.deps.optional_section') || 'Optional';
+        const instText = t('workshop.deps.installed_section') || 'Installed';
+
+        renderSection(
+            document.getElementById('modDepsRequiredList'),
+            document.getElementById('modDepsRequiredCount'),
+            document.getElementById('modDepsRequiredSection'),
+            required, 'mod-dep-badge-required', reqText, false
+        );
+        renderSection(
+            document.getElementById('modDepsOptionalList'),
+            document.getElementById('modDepsOptionalCount'),
+            document.getElementById('modDepsOptionalSection'),
+            optional, 'mod-dep-badge-optional', optText, false
+        );
+        renderSection(
+            document.getElementById('modDepsInstalledList'),
+            document.getElementById('modDepsInstalledCount'),
+            document.getElementById('modDepsInstalledSection'),
+            alreadyInstalled, 'mod-dep-badge-installed', instText, true
+        );
+
+        const hasAny = required.length > 0 || optional.length > 0 || alreadyInstalled.length > 0;
+        if (!hasAny && emptyEl) {
+            emptyEl.style.display = 'flex';
+        }
+
+        // Show/hide Required Only button
+        if (footerEl) {
+            footerEl.style.display = 'flex';
+            if (required.length === 0) {
+                footerEl.classList.add('no-required');
+            } else {
+                footerEl.classList.remove('no-required');
+            }
+        }
+
+        // Update footer button labels with i18n and reset states
+        const cancelBtn = document.getElementById('modDepsCancelBtn');
+        const reqBtn = document.getElementById('modDepsRequiredBtn');
+        const allBtn = document.getElementById('modDepsAllBtn');
+        
+        if (cancelBtn) { 
+            cancelBtn.disabled = false;
+            cancelBtn.innerHTML = `<i class="fas fa-times"></i> <span data-i18n="workshop.deps.btn_cancel">${t('workshop.deps.btn_cancel') || 'Skip'}</span>`;
+        }
+        if (reqBtn) { 
+            reqBtn.style.display = '';
+            reqBtn.disabled = false;
+            reqBtn.innerHTML = `<i class="fas fa-exclamation-circle"></i> <span data-i18n="workshop.deps.btn_required">${t('workshop.deps.btn_required') || 'Required Only'}</span>`;
+        }
+        if (allBtn) { 
+            allBtn.disabled = false;
+            let btnText = t('workshop.deps.btn_all') || 'Download All';
+            if (optional.length === 0 && required.length > 0) {
+                // No optionals: rename "Download All" to "Download Required"
+                btnText = t('workshop.deps.btn_required') || 'Required Only';
+                if (reqBtn) reqBtn.style.display = 'none';
+            }
+            allBtn.innerHTML = `<i class="fas fa-download"></i> <span data-i18n="workshop.deps.btn_all">${btnText}</span>`;
+        }
+
+        modal.classList.add('show');
+
+        // Apply i18n translation to newly rendered elements
+        if (window.applyI18n) window.applyI18n(modal);
+
+        // Return a Promise that resolves when user clicks a button
+        return new Promise((resolve) => {
+            _modDepsResolve = resolve;
+        });
+    };
+
+    window.closeModDepsModal = function (cancel = false) {
+        const modal = document.getElementById('modDepsModal');
+        if (modal) modal.classList.remove('show');
+        if (_modDepsResolve) {
+            _modDepsResolve(cancel ? 'cancel' : null);
+            _modDepsResolve = null;
+        }
+    };
+
+    window.installModDeps = function (mode) {
+        // Disable buttons
+        const reqBtn = document.getElementById('modDepsRequiredBtn');
+        const allBtn = document.getElementById('modDepsAllBtn');
+        const cancelBtn = document.getElementById('modDepsCancelBtn');
+        
+        const optCount = document.getElementById('modDepsOptionalCount')?.textContent || '0';
+        const reqCount = document.getElementById('modDepsRequiredCount')?.textContent || '0';
+        const hasDownloads = mode === 'all' ? (parseInt(optCount) + parseInt(reqCount) > 0) : (parseInt(reqCount) > 0);
+
+        if (reqBtn) reqBtn.disabled = true;
+        if (allBtn) {
+            allBtn.disabled = true;
+            if (hasDownloads) {
+                const originalText = allBtn.querySelector('span') ? allBtn.querySelector('span').textContent : allBtn.textContent;
+                allBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + originalText;
+            }
+        }
+        if (cancelBtn) cancelBtn.disabled = true;
+
+        if (_modDepsResolve) {
+            _modDepsResolve(mode); // 'all' or 'required'
+            _modDepsResolve = null;
+            // DO NOT close modal immediately. The caller will handle it.
+        }
+    };
+
+    // Close when clicking backdrop
+    document.addEventListener('click', (e) => {
+        const modal = document.getElementById('modDepsModal');
+        if (modal && modal.classList.contains('show') && e.target === modal) {
+            window.closeModDepsModal(true);
+        }
+    });
+
+})();
+
+// --- Modal Backdrop Click Dismissal for Global Modals ---
+document.addEventListener('click', (e) => {
+    ['errorModal', 'statsModal', 'loginModal', 'featureLockedHWModal', 'featureLockedSkinsModal'].forEach(id => {
+        const modal = document.getElementById(id);
+        if (modal && modal.classList.contains('show') && e.target === modal) {
+            if (id === 'errorModal' && window.closeErrorModal) window.closeErrorModal();
+            else modal.classList.remove('show');
+        }
+    });
+});
+
+// --- Global Escape Key Handling for Modals and Submodals ---
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+
+    // Ordered list of submodals first (high priority to close without closing base modal)
+    const submodals = [
+        { id: 'errorModal', close: () => window.closeErrorModal && window.closeErrorModal() },
+        { id: 'broadcastModal', close: () => window.closeBroadcastModal && window.closeBroadcastModal() },
+        { id: 'shareProfileModal', close: () => window.closeShareProfileModal && window.closeShareProfileModal() },
+        { id: 'shareSeedModal', close: () => window.closeShareSeedModal && window.closeShareSeedModal() },
+        { id: 'shareServerModal', close: () => window.closeShareServerModal && window.closeShareServerModal() },
+        { id: 'shareLinkModal', close: () => { const m = document.getElementById('shareLinkModal'); if (m) m.classList.remove('show'); } },
+        { id: 'joinServerModal', close: () => { const m = document.getElementById('joinServerModal'); if (m) m.classList.remove('show'); } },
+        { id: 'viewProfileModal', close: () => window.closeViewProfileModal && window.closeViewProfileModal() },
+        { id: 'installProfileModal', close: () => window.closeInstallProfileModal && window.closeInstallProfileModal() },
+        { id: 'userProfileModal', close: () => { const m = document.getElementById('userProfileModal'); if (m) m.classList.remove('show'); } },
+        { id: 'wkProfileSelectModal', close: () => window.closeWkProfileSelectModal && window.closeWkProfileSelectModal() },
+        { id: 'wkRejectModal', close: () => window.closeWkRejectModal && window.closeWkRejectModal() },
+        { id: 'modDepsModal', close: () => window.closeModDepsModal && window.closeModDepsModal(true) },
+        { id: 'imageModal', close: () => { const m = document.getElementById('imageModal'); if (m) m.classList.remove('show'); } }
+    ];
+
+    for (const sm of submodals) {
+        const el = document.getElementById(sm.id);
+        if (el && (el.classList.contains('show') || (el.style.display && el.style.display !== 'none'))) {
+            sm.close();
+            e.stopPropagation();
+            return;
+        }
+    }
+
+    // Next, check base modals
+    const baseModals = [
+        { id: 'wkCreateModal', close: () => window.closeWkCreateModal && window.closeWkCreateModal() },
+        { id: 'wkItemModal', close: () => window.closeWkItemModal && window.closeWkItemModal() },
+        { id: 'modDetailsModal', close: () => { const m = document.getElementById('modDetailsModal'); if (m) m.classList.remove('show'); } },
+        { id: 'statsModal', close: () => { const m = document.getElementById('statsModal'); if (m) m.classList.remove('show'); } },
+        { id: 'socialModal', close: () => window.closeSocialModal && window.closeSocialModal() },
+        { id: 'loginModal', close: () => { const m = document.getElementById('loginModal'); if (m) m.classList.remove('show'); } },
+        { id: 'accountSwitcherModal', close: () => { const m = document.getElementById('accountSwitcherModal'); if (m) m.classList.remove('show'); } },
+        { id: 'donationModal', close: () => { const m = document.getElementById('donationModal'); if (m) m.classList.remove('show'); } },
+        { id: 'featureLockedHWModal', close: () => { const m = document.getElementById('featureLockedHWModal'); if (m) m.classList.remove('show'); } },
+        { id: 'featureLockedSkinsModal', close: () => { const m = document.getElementById('featureLockedSkinsModal'); if (m) m.classList.remove('show'); } }
+    ];
+
+    for (const bm of baseModals) {
+        const el = document.getElementById(bm.id);
+        if (el && (el.classList.contains('show') || (el.style.display && el.style.display !== 'none'))) {
+            bm.close();
+            e.stopPropagation();
+            return;
+        }
+    }
+});
+
+

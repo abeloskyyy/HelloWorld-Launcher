@@ -4,9 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HelloWorld Launcher</title>
+    <title data-i18n="updater.title">HelloWorld Launcher</title>
     <link rel="stylesheet" href="updater_styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="i18n.js"></script>
 </head>
 
 <body>
@@ -25,8 +26,8 @@
                         <i class="fas fa-sync-alt"></i>
                     </div>
                 </div>
-                <p class="status-text">Checking for updates...</p>
-                <p class="version-text" id="currentVersion">Loading...</p>
+                <p class="status-text" data-i18n="updater.checking">Checking for updates...</p>
+                <p class="version-text" id="currentVersion" data-i18n="updater.loading_changelog">Loading...</p>
             </div>
 
             <!-- State: Downloading -->
@@ -42,16 +43,16 @@
                         <span id="downloadPercentage">0%</span>
                     </div>
                 </div>
-                <p class="status-text">Downloading update...</p>
+                <p class="status-text" data-i18n="updater.downloading">Downloading update...</p>
                 <div class="download-info">
-                    <span id="downloadSpeed">0 MB/s</span>
-                    <span id="downloadSize">0 MB / 0 MB</span>
+                    <span id="downloadSpeed" data-i18n="updater.speed_zero">0 MB/s</span>
+                    <span id="downloadSize" data-i18n="updater.progress_zero">0 MB / 0 MB</span>
                 </div>
                 <div class="progress-bar-container">
                     <div class="progress-bar-fill" id="downloadProgressBar"></div>
                 </div>
                 <button class="btn-cancel" id="cancelBtn">
-                    <i class="fas fa-forward"></i> Skip Update
+                    <i class="fas fa-forward"></i> <span data-i18n="updater.skip">Skip Update</span>
                 </button>
             </div>
 
@@ -60,8 +61,8 @@
                 <div class="success-icon">
                     <i class="fas fa-check-circle"></i>
                 </div>
-                <p class="status-text success">Update completed!</p>
-                <p class="status-subtext">Starting setup...</p>
+                <p class="status-text success" data-i18n="updater.completed">Update completed!</p>
+                <p class="status-subtext" data-i18n="updater.starting">Starting setup...</p>
                 <p class="version-update" id="versionUpdate">v1.0.0 → v1.1.0</p>
             </div>
 
@@ -70,14 +71,14 @@
                 <div class="error-icon">
                     <i class="fas fa-exclamation-triangle"></i>
                 </div>
-                <p class="status-text error">Update Error</p>
-                <p class="error-message" id="errorMessage">Could not download update</p>
+                <p class="status-text error" data-i18n="updater.error">Update Error</p>
+                <p class="error-message" id="errorMessage" data-i18n="updater.could_not_dl">Could not download update</p>
                 <div class="button-group" style="display: flex; gap: 10px; margin-top: 20px;">
                     <button class="btn-retry" id="retryBtn" style="flex: 1;">
-                        <i class="fas fa-redo"></i> Retry
+                        <i class="fas fa-redo"></i> <span data-i18n="updater.retry">Retry</span>
                     </button>
                     <button class="btn-cancel" id="skipErrorBtn" style="flex: 1; padding: 12px; background: rgba(255, 255, 255, 0.1); border: none; border-radius: 8px; color: white; cursor: pointer; font-weight: bold;">
-                        <i class="fas fa-forward"></i> Skip Update
+                        <i class="fas fa-forward"></i> <span data-i18n="updater.skip">Skip Update</span>
                     </button>
                 </div>
             </div>
@@ -87,8 +88,8 @@
                 <div class="warning-icon">
                     <i class="fas fa-wifi-slash"></i>
                 </div>
-                <p class="status-text warning">No internet connection</p>
-                <p class="status-subtext">Continuing without update...</p>
+                <p class="status-text warning" data-i18n="updater.no_internet">No internet connection</p>
+                <p class="status-subtext" data-i18n="updater.continuing">Continuing without update...</p>
             </div>
 
             <!-- State: Update Available -->
@@ -96,17 +97,17 @@
                 <div class="success-icon" style="background: rgba(92, 184, 92, 0.1); border-color: #5cb85c; width: 80px; height: 80px; margin-bottom: 15px;">
                     <i class="fas fa-rocket" style="color: #5cb85c; font-size: 38px;"></i>
                 </div>
-                <p class="status-text success" style="font-size: 22px; margin-bottom: 5px;">New Version Available!</p>
+                <p class="status-text success" style="font-size: 22px; margin-bottom: 5px;" data-i18n="updater.new_version">New Version Available!</p>
                 <p class="version-update" id="availableVersion" style="margin-top: 0; font-size: 15px;">v1.0.0 → v1.1.0</p>
 
                 <div class="changelog-box">
-                    <div class="changelog-header"><i class="fas fa-list-ul"></i> Release Notes & Changelog</div>
-                    <div class="changelog-content" id="changelogContent">Loading changelog...</div>
+                    <div class="changelog-header"><i class="fas fa-list-ul"></i> <span data-i18n="updater.release_notes">Release Notes & Changelog</span></div>
+                    <div class="changelog-content" id="changelogContent" data-i18n="updater.loading_changelog">Loading changelog...</div>
                 </div>
 
                 <div class="button-group" style="margin-top: 20px; display: flex; justify-content: center;">
                     <button class="btn-retry" id="downloadBtn" style="min-width: 240px;">
-                        <i class="fas fa-download"></i> Download Update
+                        <i class="fas fa-download"></i> <span data-i18n="updater.download">Download Update</span>
                     </button>
                 </div>
             </div>
@@ -114,8 +115,16 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             const api = window.hwlAPI;
+
+            if (typeof window.applyTranslations === 'function') {
+                try {
+                    await window.applyTranslations();
+                } catch (e) {
+                    console.error("Error applying translations in updater:", e);
+                }
+            }
 
             // Helper to set state
             const setState = (state) => {
@@ -164,7 +173,8 @@
                             }
                             notes = String(notes).trim();
                             if (!notes) {
-                                changelogEl.innerHTML = '<p style="color: #aaa;">No detailed release notes provided for this version.</p>';
+                                const fallbackNote = (window.t ? window.t('updater.no_changelog') : '') || 'No detailed release notes provided for this version.';
+                                changelogEl.innerHTML = `<p style="color: #aaa;">${fallbackNote}</p>`;
                             } else {
                                 let html = notes
                                     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -189,7 +199,8 @@
                         // Setup download button
                         elements.downloadBtn.onclick = () => {
                             elements.downloadBtn.classList.add('btn-loading');
-                            elements.downloadBtn.innerHTML = 'Starting Download...';
+                            const startingText = (window.t ? window.t('updater.starting_download') : '') || 'Starting Download...';
+                            elements.downloadBtn.innerHTML = startingText;
                             api.startDownloadUpdate();
                         };
                         break;
@@ -252,7 +263,7 @@
             api.checkForUpdates();
 
             elements.cancelBtn.onclick = () => {
-                window.close();
+                window.location.href = "index.html";
             };
         });
     </script>

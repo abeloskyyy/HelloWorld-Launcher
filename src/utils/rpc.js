@@ -1,4 +1,8 @@
 const client = require('discord-rich-presence')('1464624951578595368');
+// Avoid uncaught exception when Discord is not running
+client.on('error', (err) => {
+    console.warn('[Discord RPC] Connection or presence error:', err.message || err);
+});
 
 class RPCManager {
     constructor() {
@@ -57,9 +61,10 @@ class RPCManager {
 
     setPlaying({ version, profileName, ign, worldName } = {}) {
         this.startTimestamp = new Date();
+        const cleanWorld = (worldName || '').replace(/ServerLevel\[([^\]]+)\]/i, '$1').trim();
         this.updatePresence({
             ...this.basePresence(),
-            state: worldName ? `Playing ${worldName}` : 'Playing Minecraft',
+            state: cleanWorld ? `Playing ${cleanWorld}` : 'Playing Minecraft',
             details: this.buildDetails(version, profileName, ign),
             smallImageKey: 'minecraft_icon',
             smallImageText: version || 'Minecraft'

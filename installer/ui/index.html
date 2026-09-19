@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://cdnjs.cloudflare.com; script-src 'self' 'unsafe-inline';" />
+  <title data-i18n="welcome.title">HelloWorld Launcher Setup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+  LAYOUT ROOT
+════════════════════════════════════════════════════════════════════════════ -->
+<div id="app">
+
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div id="slideshow">
+      <!-- Images injected by JS -->
+    </div>
+    <!-- Gradients -->
+    <div class="sidebar-gradient-bottom"></div>
+    <div class="sidebar-gradient-right"></div>
+
+    <!-- Sidebar brand -->
+    <div class="sidebar-brand">
+      <div class="sidebar-logo">
+        <img src="../build/icon.png" id="sidebar-logo-img" alt="HelloWorld Launcher" />
+      </div>
+      <div class="sidebar-text">
+        <img src="assets/title.png" class="sidebar-title-img" alt="HelloWorld Launcher Setup" />
+      </div>
+    </div>
+
+    <!-- Slide dots -->
+    <div id="slide-dots" class="slide-dots"></div>
+  </aside>
+
+  <!-- Main content -->
+  <main id="content">
+
+    <!-- Titlebar (drag region + window controls) -->
+    <div id="titlebar">
+      <div class="titlebar-drag"></div>
+      <div class="titlebar-controls">
+        
+        <div class="custom-select" id="lang-select-container">
+          <div class="custom-select-trigger" onclick="App.toggleLangMenu(event)">
+            <img id="lang-select-flag" src="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/7.1.0/flags/4x3/us.svg" alt="flag" class="lang-flag" />
+            <span id="lang-select-label">EN</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="custom-select-menu" id="lang-select-menu">
+            <div class="custom-select-item" onclick="window.I18n.setLocale('en')">
+              <img src="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/7.1.0/flags/4x3/us.svg" class="lang-flag" /> EN
+            </div>
+            <div class="custom-select-item" onclick="window.I18n.setLocale('es')">
+              <img src="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/7.1.0/flags/4x3/es.svg" class="lang-flag" /> ES
+            </div>
+            <div class="custom-select-item" onclick="window.I18n.setLocale('fr')">
+              <img src="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/7.1.0/flags/4x3/fr.svg" class="lang-flag" /> FR
+            </div>
+            <div class="custom-select-item" onclick="window.I18n.setLocale('de')">
+              <img src="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/7.1.0/flags/4x3/de.svg" class="lang-flag" /> DE
+            </div>
+            <div class="custom-select-item" onclick="window.I18n.setLocale('ja')">
+              <img src="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/7.1.0/flags/4x3/jp.svg" class="lang-flag" /> JA
+            </div>
+            <div class="custom-select-item" onclick="window.I18n.setLocale('zh')">
+              <img src="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/7.1.0/flags/4x3/cn.svg" class="lang-flag" /> ZH
+            </div>
+          </div>
+        </div>
+        <button id="btn-minimize" class="wc-btn" title="Minimizar" onclick="window.setup.minimize()" data-i18n-title="common.minimize">
+          <svg width="10" height="2" viewBox="0 0 10 2"><rect width="10" height="2" rx="1" fill="currentColor"/></svg>
+        </button>
+        <button id="btn-close" class="wc-btn wc-close" title="Cerrar" onclick="window.setup.close()" data-i18n-title="common.close">
+          <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Pages container -->
+    <div id="pages">
+
+      <!-- ── PAGE: Loading ── -->
+      <div id="page-loading" class="page active">
+        <div class="loading-center">
+          <div class="spinner"></div>
+          <p class="loading-text" data-i18n="loading.connecting">Connecting...</p>
+        </div>
+      </div>
+
+      <!-- ── PAGE: Welcome / Mode select ── -->
+      <div id="page-welcome" class="page">
+        <div class="page-header">
+          <h1 class="page-title" data-i18n="welcome.title">HelloWorld Launcher Setup</h1>
+          <p class="page-subtitle" id="welcome-subtitle" data-i18n="welcome.subtitle">What would you like to do?</p>
+        </div>
+
+        <div class="mode-grid">
+          <!-- Always visible: Install -->
+          <button class="mode-card" id="mode-install" onclick="App.goInstall()">
+            <div class="mode-icon install-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </div>
+            <div class="mode-label">
+              <span class="mode-name" data-i18n="welcome.install.title">Install</span>
+              <span class="mode-desc" data-i18n="welcome.install.desc">Set up HelloWorld Launcher on this PC</span>
+            </div>
+            <svg class="mode-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+
+          <!-- Visible only when launcher is installed -->
+          <div id="installed-modes" style="display:none; flex-direction:column; gap:8px;">
+            <button class="mode-card" id="mode-update" onclick="App.goUpdate()">
+              <div class="mode-icon update-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+              </div>
+              <div class="mode-label">
+                <span class="mode-name" data-i18n="welcome.update.title">Update</span>
+                <span class="mode-desc" data-i18n="welcome.update.desc">Update to the latest version</span>
+              </div>
+              <svg class="mode-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+
+            <button class="mode-card" id="mode-repair" onclick="App.goReinstall()">
+              <div class="mode-icon repair-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                </svg>
+              </div>
+              <div class="mode-label">
+                <span class="mode-name" data-i18n="welcome.reinstall.title">Reinstall</span>
+                <span class="mode-desc" data-i18n="welcome.reinstall.desc">Force a fresh reinstallation of all files</span>
+              </div>
+              <svg class="mode-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+
+            <button class="mode-card mode-card-danger" id="mode-uninstall" onclick="App.goUninstall()">
+              <div class="mode-icon uninstall-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                </svg>
+              </div>
+              <div class="mode-label">
+                <span class="mode-name" data-i18n="welcome.uninstall.title">Uninstall</span>
+                <span class="mode-desc" data-i18n="welcome.uninstall.desc">Remove HelloWorld Launcher from this PC</span>
+              </div>
+              <svg class="mode-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+
+          <!-- Advanced toggle (shown only when NOT installed) -->
+          <div id="advanced-toggle" style="display:none">
+            <button class="advanced-btn" id="btn-advanced" onclick="App.toggleAdvanced()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+              <span id="advanced-btn-label" data-i18n="welcome.advanced">Advanced options</span>
+              <svg id="advanced-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="transition:transform 0.2s"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div id="advanced-modes" style="display:none; flex-direction:column; gap:8px; margin-top:8px;">
+              <button class="mode-card mode-card-muted" onclick="App.goUpdate()">
+                <div class="mode-icon update-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></div>
+                <div class="mode-label"><span class="mode-name" data-i18n="welcome.update.title">Update</span><span class="mode-desc" data-i18n="welcome.advanced.update.desc">Specify a custom installation path to update</span></div>
+                <svg class="mode-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+              <button class="mode-card mode-card-muted" onclick="App.goReinstall()">
+                <div class="mode-icon repair-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
+                <div class="mode-label"><span class="mode-name" data-i18n="welcome.reinstall.title">Reinstall</span><span class="mode-desc" data-i18n="welcome.advanced.reinstall.desc">Reinstall files at a custom path</span></div>
+                <svg class="mode-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+              <button class="mode-card mode-card-muted mode-card-danger" onclick="App.goUninstall()">
+                <div class="mode-icon uninstall-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div>
+                <div class="mode-label"><span class="mode-name" data-i18n="welcome.uninstall.title">Uninstall</span><span class="mode-desc" data-i18n="welcome.advanced.uninstall.desc">Remove from a custom path</span></div>
+                <svg class="mode-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="version-info" class="version-info"></div>
+      </div>
+
+      <!-- ── PAGE: Install ── -->
+      <div id="page-install" class="page">
+        <div class="page-header">
+          <button class="back-btn" onclick="App.goWelcome()" data-i18n="common.back">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <h1 class="page-title" data-i18n="install.title">Install HelloWorld Launcher</h1>
+          <p class="page-subtitle" data-i18n="install.subtitle">Choose your installation options</p>
+        </div>
+
+        <div class="form-section">
+          <label class="field-label" data-i18n="install.folder">Installation folder</label>
+          <div class="path-row">
+            <input type="text" id="install-path-input" class="path-input" placeholder="Select folder..." data-i18n="common.select_folder" />
+            <button class="browse-btn" onclick="App.browseInstallPath()" data-i18n="common.browse">Browse</button>
+          </div>
+          <div id="path-warning" class="path-warning hidden" data-i18n="install.warning_admin">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            This folder requires administrator permissions. The installer will request elevation.
+          </div>
+        </div>
+
+        <div class="form-section">
+          <label class="field-label" data-i18n="install.options">Options</label>
+          <div class="checkbox-list">
+            <label class="checkbox-row">
+              <input type="checkbox" id="opt-desktop" checked />
+              <span class="checkbox-mark"></span>
+              <span class="checkbox-label" data-i18n="install.opt_desktop">Create desktop shortcut</span>
+            </label>
+            <label class="checkbox-row">
+              <input type="checkbox" id="opt-startmenu" checked />
+              <span class="checkbox-mark"></span>
+              <span class="checkbox-label" id="label-startmenu" data-i18n="install.opt_startmenu">Create Start Menu shortcut</span>
+            </label>
+            <label class="checkbox-row">
+              <input type="checkbox" id="opt-launch" checked />
+              <span class="checkbox-mark"></span>
+              <span class="checkbox-label" data-i18n="install.opt_launch">Launch HelloWorld Launcher after installation</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="action-row">
+          <div id="install-size-info" class="size-info"></div>
+          <button class="btn-primary" id="btn-install" onclick="App.startInstall()" data-i18n="install.btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Install
+          </button>
+        </div>
+      </div>
+
+      <!-- ── PAGE: Update ── -->
+      <div id="page-update" class="page">
+        <div class="page-header">
+          <button class="back-btn" onclick="App.goWelcome()" data-i18n="common.back">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <h1 class="page-title" data-i18n="update.title">Update HelloWorld Launcher</h1>
+          <p class="page-subtitle" id="update-subtitle" data-i18n="welcome.update.desc">Update to the latest version</p>
+        </div>
+
+        <div class="form-section">
+          <label class="field-label" data-i18n="install.folder">Installation folder</label>
+          <div class="path-row">
+            <input type="text" id="update-path-input" class="path-input" placeholder="Detecting..." data-i18n="common.detecting" />
+            <button class="browse-btn" onclick="App.browseUpdatePath()" data-i18n="common.browse">Browse</button>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <label class="checkbox-row">
+            <input type="checkbox" id="opt-launch-update" checked />
+            <span class="checkbox-mark"></span>
+            <span class="checkbox-label" data-i18n="update.opt_launch">Launch HelloWorld Launcher after update</span>
+          </label>
+        </div>
+
+        <div class="update-notes" id="update-notes"></div>
+
+        <div class="info-box">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <p data-i18n="update.info">Your worlds, mods, progress and accounts will not be lost when updating.</p>
+        </div>
+
+        <div class="action-row">
+          <button class="btn-primary" id="btn-update" onclick="App.startUpdate()" data-i18n="update.btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Update Now
+          </button>
+        </div>
+      </div>
+
+      <!-- ── PAGE: Reinstall ── -->
+      <div id="page-repair" class="page">
+        <div class="page-header">
+          <button class="back-btn" onclick="App.goWelcome()" data-i18n="common.back">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <h1 class="page-title" data-i18n="reinstall.title">Reinstall HelloWorld Launcher</h1>
+          <p class="page-subtitle" data-i18n="reinstall.subtitle">Redownload and replace all launcher files</p>
+        </div>
+
+        <div class="form-section">
+          <label class="field-label" data-i18n="install.folder">Installation folder</label>
+          <div class="path-row">
+            <input type="text" id="repair-path-input" class="path-input" placeholder="Detecting..." data-i18n="common.detecting" />
+            <button class="browse-btn" onclick="App.browseRepairPath()" data-i18n="common.browse">Browse</button>
+          </div>
+        </div>
+
+        <div class="info-box">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <p data-i18n="reinstall.info">Reinstall will forcefully redownload and extract all files over the existing installation. Your worlds, accounts and game data will not be lost.</p>
+        </div>
+
+        <div class="action-row">
+          <button class="btn-primary" id="btn-repair" onclick="App.startReinstall()" data-i18n="reinstall.btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            Start Reinstall
+          </button>
+        </div>
+      </div>
+
+      <!-- ── PAGE: Uninstall ── -->
+      <div id="page-uninstall" class="page">
+        <div class="page-header">
+          <button class="back-btn" onclick="App.goWelcome()" data-i18n="common.back">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <h1 class="page-title" data-i18n="uninstall.title">Uninstall HelloWorld Launcher</h1>
+          <p class="page-subtitle" data-i18n="uninstall.subtitle">Remove the application from this PC</p>
+        </div>
+
+        <div class="form-section">
+          <label class="field-label" data-i18n="install.folder">Installation folder</label>
+          <div class="path-row">
+            <input type="text" id="uninstall-path-input" class="path-input" placeholder="Detecting..." data-i18n="common.detecting" />
+            <button class="browse-btn" onclick="App.browseUninstallPath()" data-i18n="common.browse">Browse</button>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <label class="field-label" data-i18n="uninstall.options">Additional options</label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="opt-userdata" />
+            <span class="checkbox-mark"></span>
+            <span class="checkbox-label" data-i18n="uninstall.opt_userdata">Also remove user data, configuration and cache</span>
+          </label>
+        </div>
+
+        <div class="warning-box">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <p data-i18n="uninstall.warning">Your worlds, mods and game content will not be lost. However, if you choose to remove user data, your launcher profiles, accounts and configuration will be deleted.</p>
+        </div>
+
+        <div class="action-row">
+          <button class="btn-danger" id="btn-uninstall" onclick="App.startUninstall()" data-i18n="uninstall.btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            Uninstall
+          </button>
+        </div>
+      </div>
+
+      <!-- ── PAGE: Progress ── -->
+      <div id="page-progress" class="page">
+        <div class="page-header">
+          <h1 class="page-title" id="progress-title" data-i18n="progress.installing">Installing...</h1>
+          <p class="page-subtitle" id="progress-subtitle"></p>
+        </div>
+
+        <div class="progress-section">
+          <div class="progress-bar-wrap">
+            <div id="progress-bar" class="progress-bar">
+              <div id="progress-fill" class="progress-fill" style="width:0%"></div>
+            </div>
+            <span id="progress-pct" class="progress-pct">0%</span>
+          </div>
+          <p id="progress-msg" class="progress-msg" data-i18n="progress.initializing">Initializing...</p>
+        </div>
+
+        <div class="log-section">
+          <div class="log-header">
+            <span class="log-label" data-i18n="progress.log">Log</span>
+          </div>
+          <div id="log-output" class="log-output"></div>
+        </div>
+      </div>
+
+      <!-- ── PAGE: Complete ── -->
+      <div id="page-complete" class="page">
+        <div class="complete-center">
+          <div id="complete-icon" class="complete-icon success">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <h1 id="complete-title" class="complete-title" data-i18n="complete.title.install">Done!</h1>
+          <p id="complete-msg" class="complete-msg"></p>
+          <div id="complete-version" class="complete-version"></div>
+          <div class="complete-actions">
+            <button class="btn-ghost" id="btn-open-folder" onclick="App.openInstallFolder()" style="display:none" data-i18n="complete.open_folder">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              Open folder
+            </button>
+            <button class="btn-primary" id="btn-close-complete" onclick="window.setup.close()" data-i18n="common.close">Close</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /pages -->
+  </main>
+</div>
+
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

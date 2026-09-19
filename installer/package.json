@@ -1,0 +1,83 @@
+{
+  "name": "helloworld-launcher-setup",
+  "version": "1.0.0",
+  "description": "Universal installer for HelloWorld Launcher",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win -p never",
+    "build:linux": "electron-builder --linux -p never"
+  },
+  "build": {
+    "appId": "com.abelosky.helloworldlauncher.setup",
+    "productName": "HelloWorld Launcher Setup",
+    "directories": {
+      "output": "../dist/setup",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "ui/**/*",
+      "build/**/*",
+      "!ui/assets/sidebar/**",
+      "!dist"
+    ],
+    "extraResources": [
+      {
+        "from": "ui/assets/sidebar",
+        "to": "sidebar",
+        "filter": [
+          "**/*.jpg",
+          "**/*.jpeg",
+          "**/*.png",
+          "**/*.webp"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "HelloWorld-Launcher-Setup.${ext}",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "artifactName": "helloworld-launcher-setup-linux-${arch}.${ext}"
+    },
+    "npmRebuild": false
+  },
+  "author": {
+    "name": "Abelosky",
+    "email": "abelosky.dev@gmail.com"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^40.1.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "axios": "^1.13.4",
+    "fs-extra": "^11.3.3",
+    "marked": "^18.0.6"
+  }
+}

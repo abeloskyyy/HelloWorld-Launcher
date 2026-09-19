@@ -1,6 +1,6 @@
 {
   "name": "helloworld-launcher",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "The official custom Minecraft launcher for the HelloWorld community, featuring fast updates, rich presence, and smooth performance.",
   "repository": {
     "type": "git",
@@ -11,10 +11,14 @@
     "test": "electron .",
     "start": "electron .",
     "build": "electron-builder",
-    "build:win": "electron-builder --win -p never && node scripts/generate-win-yml.js",
-    "build:linux": "electron-builder --linux -p never && node scripts/generate-linux-yml.js && node scripts/patch-latest-linux.js",
+    "build:win": "electron-builder --win -p never --config.win.target=zip && node scripts/generate-manifest.js --platform=win --arch=x64",
+    "build:linux": "electron-builder --linux -p never && node scripts/generate-manifest.js --platform=linux --arch=x64",
+    "generate:manifest": "node scripts/generate-manifest.js",
     "generate:win-yml": "node scripts/generate-win-yml.js",
-    "generate:linux-yml": "node scripts/generate-linux-yml.js && node scripts/patch-latest-linux.js"
+    "generate:linux-yml": "node scripts/generate-linux-yml.js && node scripts/patch-latest-linux.js",
+    "build-script:win": "node scripts/build-win.js",
+    "build-script:linux": "node scripts/build-linux.js",
+    "build-script:all": "node scripts/build-all.js"
   },
   "build": {
     "appId": "com.abelosky.helloworldlauncher",
@@ -23,48 +27,30 @@
       "output": "dist",
       "buildResources": "build"
     },
+    "files": [
+      "**/*",
+      "!**/serviceAccountKey.json",
+      "!**/*-firebase-adminsdk-*.json",
+      "!scripts/set-admin.js",
+      "!installer/**",
+      "!release/**",
+      "!dist/**"
+    ],
     "win": {
       "target": [
         {
-          "target": "nsis",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
           "target": "zip",
           "arch": [
-            "x64",
-            "arm64"
+            "x64"
           ]
         }
       ],
       "icon": "build/icon.ico",
-      "verifyUpdateCodeSignature": false,
       "sign": null,
-      "artifactName": "HelloWorld-Launcher-portable-${arch}.${ext}"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "artifactName": "HelloWorld-Launcher-Installer-${arch}.${ext}",
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
-      "installerHeader": "build/installerHeader.bmp",
-      "installerSidebar": "build/installerSidebar.bmp",
-      "deleteAppDataOnUninstall": true,
-      "shortcutName": "HelloWorld Launcher"
+      "artifactName": "helloworld-launcher-win.${ext}"
     },
     "linux": {
       "target": [
-        {
-          "target": "AppImage",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
         {
           "target": "deb",
           "arch": [
@@ -75,7 +61,7 @@
       ],
       "icon": "build/icons",
       "category": "Game",
-      "artifactName": "HelloWorld-Launcher-Installer-${arch}.${ext}"
+      "artifactName": "helloworld-launcher-linux-${arch}.${ext}"
     },
     "publish": [
       {
@@ -94,7 +80,8 @@
   "license": "ISC",
   "devDependencies": {
     "electron": "^40.1.0",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "firebase-admin": "^14.2.0"
   },
   "dependencies": {
     "adm-zip": "^0.4.16",
@@ -102,6 +89,7 @@
     "discord-rich-presence": "^0.0.8",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.7.3",
+    "firebase": "^12.17.0",
     "form-data": "^4.0.5",
     "fs-extra": "^11.3.3",
     "graceful-fs": "^4.2.11",
