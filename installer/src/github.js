@@ -90,62 +90,73 @@ async function fetchRelease(version) {
 
 async function getLatestReleaseInfo(version = null) {
   const names = getExpectedAssetNames()
-
-  // ── LOCAL / DEV MODE ──
-  // When packaged as a portable exe, electron-builder sets PORTABLE_EXECUTABLE_DIR to the
-  // directory where the .exe lives (NOT the temp extraction folder where process.execPath points).
-  // In dev (npm start), look in installer/test-env/.
-  let localDir = null
   const { app } = require('electron')
-  if (app.isPackaged) {
-    // PORTABLE_EXECUTABLE_DIR = real folder where HelloWorld-Launcher-Setup.exe is
-    localDir = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath)
-  } else {
+
+  // ── DEV TEST-ENV (Only in development if test-env folder exists) ──
+  if (app && !app.isPackaged) {
     const testEnvPath = path.join(__dirname, '..', 'test-env')
-    if (fs.existsSync(testEnvPath)) localDir = testEnvPath
-  }
+    if (fs.existsSync(testEnvPath) && fs.existsSync(path.join(testEnvPath, names.launcher))) {
+      const launcherPath = path.join(testEnvPath, names.launcher)
+      const manifestPath = path.join(testEnvPath, names.manifest)
 
-  if (localDir) {
-    const launcherPath = path.join(localDir, names.launcher)
-    const manifestPath = path.join(localDir, names.manifest)
-
-    return {
-      version: version || '9.9.9-test',
-      tagName: 'v' + (version || '9.9.9-test'),
-      releaseNotes: '# Entorno de Pruebas (Local)\nEstás utilizando los archivos locales de la carpeta de instalación para probar el instalador de forma controlada sin conexión a GitHub.',
-      publishedAt: new Date().toISOString(),
-      launcher: fs.existsSync(launcherPath) ? { name: names.launcher, url: launcherPath, size: fs.statSync(launcherPath).size } : null,
-      setup: null,
-      manifest: fs.existsSync(manifestPath) ? { url: manifestPath } : null,
+      return {
+        version: version || '9.9.9-test',
+        tagName: 'v' + (version || '9.9.9-test'),
+        releaseNotes: '# Entorno de Pruebas (Local)\nEstás utilizando los archivos locales de la carpeta de instalación para probar el instalador de forma controlada sin conexión a GitHub.',
+        publishedAt: new Date().toISOString(),
+        launcher: { name: names.launcher, url: launcherPath, size: fs.statSync(launcherPath).size },
+        setup: null,
+        manifest: fs.existsSync(manifestPath) ? { url: manifestPath } : null,
+      }
     }
   }
 
-  const release = await fetchRelease(version)
+  // ── PRODUCTION: FETCH FROM GITHUB RELEASES ──
+  try {
+    const release = await fetchRelease(version)
 
-  const find = (name) => release.assets.find(a => a.name === name || (name && name.includes('-x64.deb') && a.name === name.replace('-x64.deb', '-amd64.deb')))
+    const find = (name) => release.assets.find(a => a.name === name || (name && name.includes('-x64.deb') && a.name === name.replace('-x64.deb', '-amd64.deb')))
 
-  const launcherAsset = find(names.launcher)
-  const setupAsset = find(names.setup)
-  const manifestAsset = find(names.manifest)
+    const launcherAsset = find(names.launcher)
+    const setupAsset = find(names.setup)
+    const manifestAsset = find(names.manifest)
 
-  return {
-    version: release.tag_name.replace(/^v/, ''),
-    tagName: release.tag_name,
-    releaseNotes: release.body || '',
-    publishedAt: release.published_at,
-    launcher: launcherAsset ? {
-      name: launcherAsset.name,
-      url: launcherAsset.browser_download_url,
-      size: launcherAsset.size,
-    } : null,
-    setup: setupAsset ? {
-      name: setupAsset.name,
-      url: setupAsset.browser_download_url,
-      size: setupAsset.size,
-    } : null,
-    manifest: manifestAsset ? {
-      url: manifestAsset.browser_download_url,
-    } : null,
+    return {
+      version: release.tag_name.replace(/^v/, ''),
+      tagName: release.tag_name,
+      releaseNotes: release.body || '',
+      publishedAt: release.published_at,
+      launcher: launcherAsset ? {
+        name: launcherAsset.name,
+        url: launcherAsset.browser_download_url,
+        size: launcherAsset.size,
+      } : null,
+      setup: setupAsset ? {
+        name: setupAsset.name,
+        url: setupAsset.browser_download_url,
+        size: setupAsset.size,
+      } : null,
+      manifest: manifestAsset ? {
+        url: manifestAsset.browser_download_url,
+      } : null,
+    }
+  } catch (err) {
+    // Offline fallback if local launcher asset exists next to the portable exe
+    const localDir = (app && app.isPackaged) ? (process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath)) : null
+    if (localDir && fs.existsSync(path.join(localDir, names.launcher))) {
+      const launcherPath = path.join(localDir, names.launcher)
+      const manifestPath = path.join(localDir, names.manifest)
+      return {
+        version: version || '2.1.0-offline',
+        tagName: 'v' + (version || '2.1.0-offline'),
+        releaseNotes: '# Modo sin conexión\nNo se pudo conectar a GitHub Releases. Utilizando el archivo del launcher encontrado junto al instalador.',
+        publishedAt: new Date().toISOString(),
+        launcher: { name: names.launcher, url: launcherPath, size: fs.statSync(launcherPath).size },
+        setup: null,
+        manifest: fs.existsSync(manifestPath) ? { url: manifestPath } : null,
+      }
+    }
+    throw err
   }
 }
 
