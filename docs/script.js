@@ -957,7 +957,7 @@ function changeLanguage(lang) {
     });
 
     document.querySelectorAll('[data-i18n]').forEach(el => {
-        if (el.id === 'navDownloadBtn' || el.id === 'heroDownloadBtn' || el.id === 'heroDownloadLinuxBtn') return;
+        if (el.id === 'navDownloadBtn' || el.id === 'heroDownloadBtn' || el.id === 'heroDownloadLinuxBtn' || el.id === 'osWarningContainer') return;
         const key = el.getAttribute('data-i18n');
         if (translations[lang] && translations[lang][key]) {
             el.innerHTML = translations[lang][key];
@@ -980,6 +980,7 @@ function changeLanguage(lang) {
 
     if (typeof window.updateNavDownloadBtn === 'function') window.updateNavDownloadBtn();
     if (typeof window.updateHeroButtons === 'function') window.updateHeroButtons();
+    if (typeof window.updateOSWarning === 'function') window.updateOSWarning();
     const badge = document.querySelector('.badge');
     if (badge && window.currentReleaseTag) {
         badge.textContent = `${window.currentReleaseTag} ${t('hero.badge_available', 'Now Available')}`;
@@ -2535,14 +2536,56 @@ async function init() {
 
     function detectOS() {
         const ua = window.navigator.userAgent.toLowerCase();
+        if (ua.includes("android")) return "Android";
+        if (ua.includes("iphone") || ua.includes("ipad") || ua.includes("ipod") || (ua.includes("mac") && navigator.maxTouchPoints > 1)) return "iOS";
         if (ua.includes("win")) return "Windows";
-        if ((ua.includes("linux") || ua.includes("x11") || ua.includes("ubuntu") || ua.includes("cros")) && !ua.includes("android")) return "Linux";
+        if ((ua.includes("linux") || ua.includes("x11") || ua.includes("ubuntu") || ua.includes("cros"))) return "Linux";
         if (ua.includes("mac")) return "MacOS";
-        if (ua.includes("android") || ua.includes("iphone") || ua.includes("ipad")) return "Mobile";
         return "Unknown";
     }
 
     const userOS = detectOS();
+    const isMobileOS = userOS === "Android" || userOS === "iOS";
+
+    function updateOSWarning() {
+        const container = document.getElementById('osWarningContainer');
+        if (!container) return;
+
+        const isDesktopSupported = userOS === "Windows" || userOS === "Linux";
+        if (isDesktopSupported) {
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = 'block';
+        if (heroButtonsContainer) heroButtonsContainer.style.flexWrap = 'wrap';
+
+        const isEs = (typeof currentLang !== 'undefined' && currentLang === 'es') || (localStorage.getItem('lang') === 'es');
+
+        if (isMobileOS) {
+            const osLabel = userOS;
+            if (isEs) {
+                container.innerHTML = `<i class="bi bi-phone" style="margin-right: 6px;"></i> Estás navegando desde un dispositivo móvil (<strong><span id="detectedOSName">${osLabel}</span></strong>). HelloWorld Launcher está diseñado para ordenadores (Windows y Linux) y los instaladores no son compatibles con dispositivos móviles.`;
+            } else {
+                container.innerHTML = `<i class="bi bi-phone" style="margin-right: 6px;"></i> You are browsing from a mobile device (<strong><span id="detectedOSName">${osLabel}</span></strong>). HelloWorld Launcher is designed for PC (Windows & Linux) and these installers are not compatible with mobile devices.`;
+            }
+        } else if (userOS === "MacOS") {
+            if (isEs) {
+                container.innerHTML = `<i class="bi bi-apple" style="margin-right: 6px;"></i> Estás navegando desde <strong><span id="detectedOSName">macOS</span></strong>. HelloWorld Launcher actualmente solo está disponible para Windows y Linux de escritorio.`;
+            } else {
+                container.innerHTML = `<i class="bi bi-apple" style="margin-right: 6px;"></i> You are browsing from <strong><span id="detectedOSName">macOS</span></strong>. HelloWorld Launcher is currently available for Windows and Linux desktop.`;
+            }
+        } else {
+            const unk = isEs ? 'un sistema operativo no compatible' : 'an unsupported operating system';
+            if (isEs) {
+                container.innerHTML = `<i class="bi bi-info-circle" style="margin-right: 6px;"></i> Estás navegando desde <strong><span id="detectedOSName">${unk}</span></strong>. Los siguientes instaladores están diseñados para Windows y Linux.`;
+            } else {
+                container.innerHTML = `<i class="bi bi-info-circle" style="margin-right: 6px;"></i> You are browsing from <strong><span id="detectedOSName">${unk}</span></strong>. The installers below are designed for Windows and Linux.`;
+            }
+        }
+    }
+
+    window.updateOSWarning = updateOSWarning;
 
     let latestTagName = '';
     window.currentReleaseTag = '';
@@ -2580,7 +2623,7 @@ async function init() {
         } else if (userOS === "Linux") {
             navBtn.innerHTML = `${iconLinux} ${downloadText}`;
             navBtn.style.display = 'inline-flex';
-        } else if (userOS === "Mobile" || userOS === "MacOS") {
+        } else if (isMobileOS || userOS === "MacOS") {
             navBtn.style.display = 'none';
         } else {
             navBtn.innerHTML = downloadText;
@@ -2594,6 +2637,7 @@ async function init() {
     // Initial render with current active language
     updateHeroButtons();
     updateNavDownloadBtn();
+    updateOSWarning();
 
     // Dropdown functionality
     function toggleDropdown(dropdown) {
@@ -2721,11 +2765,7 @@ async function init() {
                         heroButtonsContainer.insertBefore(heroLinuxBtnContainer, heroBtnContainer);
                     }
                 } else {
-                    if (osWarningContainer && detectedOSName) {
-                        detectedOSName.textContent = userOS === "Unknown" ? "an unknown operating system" : userOS;
-                        osWarningContainer.style.display = "block";
-                        heroButtonsContainer.style.flexWrap = "wrap";
-                    }
+                    updateOSWarning();
                 }
 
                 // Set default button href to recommended option
@@ -2834,70 +2874,105 @@ async function init() {
 
     // === Carousel Logic ===
     const track = document.getElementById('carouselTrack');
-    const slides = Array.from(track.children);
-    const nextButton = document.getElementById('nextBtn');
-    const prevButton = document.getElementById('prevBtn');
-    const nav = document.getElementById('carouselNav');
+    if (track) {
+        const slides = Array.from(track.children);
+        const nextButton = document.getElementById('nextBtn');
+        const prevButton = document.getElementById('prevBtn');
+        const nav = document.getElementById('carouselNav');
 
-    // Create indicators
-    slides.forEach((_, index) => {
-        const indicator = document.createElement('button');
-        indicator.classList.add('carousel-indicator');
-        if (index === 0) indicator.classList.add('current-slide');
-        nav.appendChild(indicator);
-        indicator.addEventListener('click', () => {
-            moveToSlide(index);
-        });
-    });
+        if (nav) {
+            nav.innerHTML = '';
+            // Create indicators
+            slides.forEach((_, index) => {
+                const indicator = document.createElement('button');
+                indicator.classList.add('carousel-indicator');
+                indicator.setAttribute('aria-label', `Slide ${index + 1}`);
+                if (index === 0) indicator.classList.add('current-slide');
+                nav.appendChild(indicator);
+                indicator.addEventListener('click', () => {
+                    moveToSlide(index);
+                });
+            });
+        }
 
-    const indicators = Array.from(nav.children);
-    let currentSlideIndex = 0;
+        const indicators = nav ? Array.from(nav.children) : [];
+        let currentSlideIndex = 0;
 
-    function moveToSlide(targetIndex) {
-        // Loop around
-        if (targetIndex < 0) targetIndex = slides.length - 1;
-        if (targetIndex >= slides.length) targetIndex = 0;
+        function moveToSlide(targetIndex) {
+            if (!slides.length) return;
+            // Loop around
+            if (targetIndex < 0) targetIndex = slides.length - 1;
+            if (targetIndex >= slides.length) targetIndex = 0;
 
-        // Update visuals
-        slides[currentSlideIndex].classList.remove('current-slide');
-        indicators[currentSlideIndex].classList.remove('current-slide');
+            // Update visuals
+            if (slides[currentSlideIndex]) slides[currentSlideIndex].classList.remove('current-slide');
+            if (indicators[currentSlideIndex]) indicators[currentSlideIndex].classList.remove('current-slide');
 
-        slides[targetIndex].classList.add('current-slide');
-        indicators[targetIndex].classList.add('current-slide');
+            if (slides[targetIndex]) slides[targetIndex].classList.add('current-slide');
+            if (indicators[targetIndex]) indicators[targetIndex].classList.add('current-slide');
 
-        currentSlideIndex = targetIndex;
+            currentSlideIndex = targetIndex;
+        }
+
+        if (nextButton) {
+            nextButton.addEventListener('click', () => {
+                moveToSlide(currentSlideIndex + 1);
+            });
+        }
+
+        if (prevButton) {
+            prevButton.addEventListener('click', () => {
+                moveToSlide(currentSlideIndex - 1);
+            });
+        }
+
+        // Auto-advance
+        let autoPlay = setInterval(() => moveToSlide(currentSlideIndex + 1), 5000);
+
+        // Pause on hover
+        const carouselContainer = document.querySelector('.carousel-container');
+        if (carouselContainer) {
+            carouselContainer.addEventListener('mouseenter', () => clearInterval(autoPlay));
+            carouselContainer.addEventListener('mouseleave', () => {
+                clearInterval(autoPlay);
+                autoPlay = setInterval(() => moveToSlide(currentSlideIndex + 1), 5000);
+            });
+
+            // Touch swipe support for mobile
+            let touchStartX = 0;
+            let touchStartY = 0;
+            carouselContainer.addEventListener('touchstart', (e) => {
+                if (e.touches && e.touches[0]) {
+                    touchStartX = e.touches[0].clientX;
+                    touchStartY = e.touches[0].clientY;
+                }
+            }, { passive: true });
+
+            carouselContainer.addEventListener('touchend', (e) => {
+                if (e.changedTouches && e.changedTouches[0]) {
+                    const diffX = e.changedTouches[0].clientX - touchStartX;
+                    const diffY = e.changedTouches[0].clientY - touchStartY;
+                    if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY)) {
+                        clearInterval(autoPlay);
+                        if (diffX < 0) {
+                            moveToSlide(currentSlideIndex + 1);
+                        } else {
+                            moveToSlide(currentSlideIndex - 1);
+                        }
+                        autoPlay = setInterval(() => moveToSlide(currentSlideIndex + 1), 5000);
+                    }
+                }
+            }, { passive: true });
+        }
     }
-
-    nextButton.addEventListener('click', () => {
-        moveToSlide(currentSlideIndex + 1);
-    });
-
-    prevButton.addEventListener('click', () => {
-        moveToSlide(currentSlideIndex - 1);
-    });
-
-    // Auto-advance
-    let autoPlay = setInterval(() => moveToSlide(currentSlideIndex + 1), 5000);
-
-    // Pause on hover
-    const carouselContainer = document.querySelector('.carousel-container');
-    carouselContainer.addEventListener('mouseenter', () => clearInterval(autoPlay));
-    carouselContainer.addEventListener('mouseleave', () => {
-        autoPlay = setInterval(() => moveToSlide(currentSlideIndex + 1), 5000);
-    });
-
 
     // === Scroll Effect for Navbar ===
     const navbar = document.querySelector('.navbar');
-    window.addEventListener('scroll', () => {
-        if (window.scrollY > 50) {
-            navbar.style.background = 'rgba(5, 5, 16, 0.9)';
-            navbar.style.padding = '1rem 0';
-        } else {
-            navbar.style.background = 'rgba(5, 5, 16, 0.7)';
-            navbar.style.padding = '1.5rem 0';
-        }
-    });
+    if (navbar) {
+        window.addEventListener('scroll', () => {
+            navbar.classList.toggle('scrolled', window.scrollY > 40);
+        });
+    }
 
     // === 3D Cube Rotation with Inertia ===
     const cube = document.getElementById('blockCube');

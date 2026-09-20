@@ -1140,6 +1140,29 @@ h4,
     transform: scale(1.2);
 }
 
+@media (max-width: 768px) {
+    .carousel-btn {
+        width: 38px;
+        height: 38px;
+        font-size: 1.1rem;
+    }
+    .prev {
+        left: 8px;
+    }
+    .next {
+        right: 8px;
+    }
+    .carousel-nav {
+        bottom: 8px;
+        padding: 4px 0;
+    }
+    .carousel-indicator {
+        width: 7px;
+        height: 7px;
+        margin: 0 4px;
+    }
+}
+
 .caption {
     position: absolute;
     bottom: 0;
@@ -2196,15 +2219,127 @@ select.form-control:focus {
 }
 
 @media (max-width: 850px) {
+    .settings-page-screen {
+        padding: 75px 0 40px;
+    }
+    .settings-container {
+        width: 95%;
+        padding: 0 0.5rem;
+    }
     .settings-layout {
         grid-template-columns: 1fr;
+        gap: 16px;
     }
     .settings-sidebar {
         flex-direction: row;
         overflow-x: auto;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .settings-sidebar::-webkit-scrollbar {
+        display: none;
+    }
+    .settings-tab-item {
+        padding: 8px 14px;
+        font-size: 0.88rem;
+        border-radius: 8px;
+        white-space: nowrap;
+    }
+    .settings-tab-arrow {
+        display: none;
     }
     .settings-content-panel {
-        padding: 20px;
+        padding: 20px 16px;
+        gap: 20px;
+        border-radius: 14px;
+    }
+}
+
+@media (max-width: 600px) {
+    .settings-header-nav {
+        margin-bottom: 14px;
+        gap: 10px;
+    }
+    .settings-title-group h1 {
+        font-size: 1.4rem;
+    }
+    .settings-back-btn {
+        padding: 6px 12px;
+        font-size: 0.85rem;
+    }
+    .settings-top-bar-actions {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding-bottom: 14px;
+    }
+    #saveAccountBtnTop {
+        display: none;
+    }
+    .settings-top-bar-actions h2 {
+        font-size: 1.25rem;
+    }
+    .launcher-profile-card-preview {
+        min-height: 180px;
+        padding: 16px 10px;
+        border-radius: 12px;
+    }
+    .launcher-profile-plate {
+        padding: 18px 14px 12px;
+        width: 100%;
+        max-width: 100%;
+        border-radius: 14px;
+        margin: 0 auto;
+    }
+    .launcher-profile-display-name {
+        font-size: 1.25rem;
+        word-break: break-word;
+        text-align: center;
+        justify-content: center;
+    }
+    #dashboardAvatarPreview {
+        width: 85px !important;
+        height: 85px !important;
+    }
+    .settings-avatar-controls {
+        flex-direction: column;
+    }
+    .settings-avatar-controls button,
+    .settings-avatar-controls select {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+    .form-single-column {
+        gap: 16px;
+    }
+    .form-group-single label {
+        font-size: 0.9rem;
+    }
+    .form-control {
+        font-size: 0.9rem;
+        padding: 10px 12px;
+    }
+    .link-field {
+        flex-wrap: wrap !important;
+    }
+    .link-field .link-title {
+        flex: 1 1 calc(100% - 50px) !important;
+    }
+    .link-field .link-url {
+        flex: 1 1 100% !important;
+    }
+    #cropperModal .review-modal-content {
+        width: 92vw;
+        max-width: 92vw;
+        padding: 18px 12px;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    #cropperModal .review-modal-content div[style*="height: 400px"] {
+        height: 250px !important;
     }
 }
 
@@ -2538,7 +2673,93 @@ select.form-control:focus {
 /* ===== SM-HIDDEN ===== */
 @media (max-width: 768px) {
     .sm-hidden { display: none !important; }
-    .nav-links { display: none; }
+    .nav-links { display: none !important; }
     .nav-username { display: none; }
+}
+
+/* ===== NAVBAR SCROLLED STATE ===== */
+.navbar.scrolled {
+    background: rgba(10, 10, 25, 0.96) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    border-bottom: 2px solid rgba(99, 102, 241, 0.35);
+}
+
+/* ===== MOBILE NAVBAR TWEAKS ===== */
+@media (max-width: 768px) {
+    .navbar {
+        padding: 0.65rem 0 !important;
+    }
+    .nav-container {
+        padding: 0 0.85rem;
+    }
+    .nav-logo-img {
+        height: 36px;
+    }
+    .nav-right-group {
+        gap: 8px;
+    }
+    .github-link {
+        height: 38px;
+        min-height: 38px;
+        max-height: 38px;
+        padding: 0 10px;
+        font-size: 0.95rem;
+    }
+    .nav-settings-btn {
+        width: 38px;
+        height: 38px;
+        min-height: 38px;
+        max-height: 38px;
+        font-size: 0.9rem;
+    }
+    .lang-btn {
+        height: 38px;
+        min-height: 38px;
+        padding: 0 10px;
+    }
+    .nav-user-inner {
+        height: 38px;
+        min-height: 38px;
+        padding: 0 10px;
+    }
+}
+
+@media (max-width: 520px) {
+    .navbar {
+        padding: 0.5rem 0 !important;
+    }
+    .nav-container {
+        padding: 0 0.6rem;
+    }
+    .nav-logo-img {
+        height: 32px;
+    }
+    .nav-right-group {
+        gap: 6px;
+    }
+    .github-link {
+        width: 38px;
+        height: 38px;
+        min-height: 38px;
+        max-height: 38px;
+        padding: 0;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .github-link .github-link-text {
+        display: none;
+    }
+    .lang-btn {
+        padding: 0 8px;
+        gap: 5px;
+    }
+    .lang-btn .lang-code {
+        font-size: 0.85rem;
+    }
+    .nav-user-inner {
+        padding: 0 8px;
+        gap: 6px;
+    }
 }
 

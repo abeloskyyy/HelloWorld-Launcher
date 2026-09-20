@@ -53,8 +53,8 @@
                     alt="HelloWorld Launcher" class="nav-logo-img">
             </a>
             <div class="nav-right-group">
-                <a href="https://github.com/abeloskyyy/HelloWorld-Launcher" target="_blank" class="github-link"><i
-                        class="bi bi-github"></i> GitHub</a>
+                <a href="https://github.com/abeloskyyy/HelloWorld-Launcher" target="_blank" class="github-link" aria-label="GitHub Repository"><i
+                        class="bi bi-github"></i> <span class="github-link-text">GitHub</span></a>
                 <a href="#" id="navDownloadBtn" class="btn btn-primary sm-hidden" data-i18n="nav.download">Download Now</a>
                 <a href="#" id="navLoginBtn" class="btn btn-secondary sm-hidden" style="display: none;" data-i18n="nav.login">Log In</a>
                 
@@ -286,8 +286,8 @@
                         </div>
                     </div>
                 </div>
-                <div id="osWarningContainer" style="display:none; margin-top: 15px; background: rgba(255, 59, 48, 0.15); border: 1px solid rgba(255, 59, 48, 0.3); border-radius: 8px; padding: 10px 15px; color: #ff8c82; font-weight: 500; font-size: 14px;" data-i18n="hero.os_warning">
-                    <i class="bi bi-info-circle" style="margin-right: 5px;"></i> You are browsing from <strong><span id="detectedOSName">OS</span></strong>. The following installers may not be compatible.
+                <div id="osWarningContainer" style="display:none; margin-top: 15px; background: rgba(255, 59, 48, 0.15); border: 1px solid rgba(255, 59, 48, 0.3); border-radius: 8px; padding: 10px 15px; color: #ff8c82; font-weight: 500; font-size: 14px;">
+                    <i class="bi bi-info-circle" style="margin-right: 5px;"></i> <span id="osWarningContent">You are browsing from <strong><span id="detectedOSName">OS</span></strong>. The following installers may not be compatible.</span>
                 </div>
                 <div class="hero-stats">
                     <div class="stat">
@@ -380,49 +380,42 @@
             </div>
 
             <div class="carousel-container">
-                <button class="carousel-btn prev" id="prevBtn"><i class="bi bi-chevron-left"></i></button>
+                <button class="carousel-btn prev" id="prevBtn" aria-label="Previous Slide"><i class="bi bi-chevron-left"></i></button>
                 <div class="carousel-track-container">
                     <ul class="carousel-track" id="carouselTrack">
-                        <!-- Las imágenes se cargarán dinámicamente o estáticamente aquí -->
                         <li class="carousel-slide current-slide">
-                            <img src="https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/screenshots/play.png"
+                            <img src="screenshots/play.png"
+                                onerror="this.src='https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/screenshots/play.png'"
                                 alt="Main Screen">
                         </li>
                         <li class="carousel-slide">
-                            <img src="https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/screenshots/version_download.png"
-                                alt="Version Download">
-                        </li>
-                        <li class="carousel-slide">
-                            <img src="https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/screenshots/profiles.png"
-                                alt="Installation Management">
-                        </li>
-                        <li class="carousel-slide">
-                            <img src="https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/screenshots/create_profile.png"
+                            <img src="screenshots/create-installation.png"
+                                onerror="this.src='https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/screenshots/create-installation.png'"
                                 alt="Create Installation">
                         </li>
                         <li class="carousel-slide">
-                            <img src="https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/screenshots/profile_icon_selector.png"
-                                alt="Installation Icon Selector">
-                        </li>
-                        <li class="carousel-slide">
-                            <img src="https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/screenshots/download_mods.png"
+                            <img src="screenshots/search-mods.png"
+                                onerror="this.src='https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/screenshots/search-mods.png'"
                                 alt="Mod Search">
                         </li>
                         <li class="carousel-slide">
-                            <img src="https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/screenshots/downloaded_mods.png"
-                                alt="Downloaded Mods">
+                            <img src="screenshots/skins.png"
+                                onerror="this.src='https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/screenshots/skins.png'"
+                                alt="Skins and Capes">
                         </li>
                         <li class="carousel-slide">
-                            <img src="https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/screenshots/nickname.png"
-                                alt="Nickname">
+                            <img src="screenshots/accounts.png"
+                                onerror="this.src='https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/screenshots/accounts.png'"
+                                alt="Account Management">
                         </li>
                         <li class="carousel-slide">
-                            <img src="https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/screenshots/settings.png"
-                                alt="Settings">
+                            <img src="screenshots/social.png"
+                                onerror="this.src='https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/screenshots/social.png'"
+                                alt="Community and Social">
                         </li>
                     </ul>
                 </div>
-                <button class="carousel-btn next" id="nextBtn"><i class="bi bi-chevron-right"></i></button>
+                <button class="carousel-btn next" id="nextBtn" aria-label="Next Slide"><i class="bi bi-chevron-right"></i></button>
                 <div class="carousel-nav" id="carouselNav">
                     <!-- Dots will be generated by JS -->
                 </div>
