@@ -897,7 +897,6 @@ h4,
 
 .hero-visual {
     position: relative;
-    perspective: 1000px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -912,6 +911,8 @@ h4,
     width: var(--cube-size);
     height: var(--cube-size);
     perspective: 1000px;
+    position: relative;
+    filter: drop-shadow(0 20px 30px rgba(0, 0, 0, 0.45));
 }
 
 .cube {
@@ -919,10 +920,12 @@ h4,
     height: 100%;
     position: relative;
     transform-style: preserve-3d;
+    -webkit-transform-style: preserve-3d;
     transform: rotateX(-20deg) rotateY(30deg);
     cursor: grab;
     user-select: none;
     -webkit-user-drag: none;
+    will-change: transform;
 }
 
 .cube:active {
@@ -938,7 +941,13 @@ h4,
     image-rendering: pixelated;
     pointer-events: none;
     /* Let clicks pass through to container */
-    backface-visibility: visible;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    /* Antialiasing on 3D edges & joints: border-radius + outline + edge feathering */
+    border-radius: 1.5px;
+    outline: 1px solid transparent;
+    box-shadow: 0 0 1.5px rgba(0, 0, 0, 0.4), inset 0 0 0.5px rgba(255, 255, 255, 0.08);
+    transform-origin: center center;
 }
 
 .top {
@@ -1261,10 +1270,6 @@ h4,
 }
 
 @media (max-width: 768px) {
-    .navbar {
-        padding: 1rem 0;
-    }
-
     .nav-links,
     .sm-hidden {
         display: none;
@@ -2685,81 +2690,198 @@ select.form-control:focus {
 }
 
 /* ===== MOBILE NAVBAR TWEAKS ===== */
+.nav-login-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    padding: 0 16px;
+    box-sizing: border-box;
+}
+
 @media (max-width: 768px) {
     .navbar {
-        padding: 0.65rem 0 !important;
+        padding: 0.4rem 0 !important;
     }
-    .nav-container {
-        padding: 0 0.85rem;
+    .navbar .container,
+    .navbar .nav-container {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 12px !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        flex-wrap: nowrap !important;
+        box-sizing: border-box !important;
+    }
+    .logo {
+        display: flex !important;
+        align-items: center !important;
+        flex-shrink: 0 !important;
     }
     .nav-logo-img {
-        height: 36px;
+        height: 26px !important;
+        max-width: 120px !important;
+        width: auto !important;
+        object-fit: contain !important;
     }
     .nav-right-group {
-        gap: 8px;
+        display: flex !important;
+        align-items: center !important;
+        gap: 5px !important;
+        flex-shrink: 0 !important;
+        flex-wrap: nowrap !important;
     }
     .github-link {
-        height: 38px;
-        min-height: 38px;
-        max-height: 38px;
-        padding: 0 10px;
-        font-size: 0.95rem;
+        width: 34px !important;
+        height: 34px !important;
+        min-height: 34px !important;
+        max-height: 34px !important;
+        padding: 0 !important;
+        justify-content: center !important;
+        border-radius: 8px !important;
+        font-size: 1.1rem !important;
+        background: rgba(255, 255, 255, 0.06) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        flex-shrink: 0 !important;
+        touch-action: manipulation;
     }
-    .nav-settings-btn {
-        width: 38px;
-        height: 38px;
-        min-height: 38px;
-        max-height: 38px;
-        font-size: 0.9rem;
+    .github-link .github-link-text {
+        display: none !important;
     }
-    .lang-btn {
-        height: 38px;
-        min-height: 38px;
-        padding: 0 10px;
+    .nav-login-btn {
+        width: 34px !important;
+        height: 34px !important;
+        min-height: 34px !important;
+        max-height: 34px !important;
+        padding: 0 !important;
+        justify-content: center !important;
+        border-radius: 8px !important;
+        font-size: 0.95rem !important;
+        box-sizing: border-box !important;
+        flex-shrink: 0 !important;
+        touch-action: manipulation;
+    }
+    .nav-login-btn .nav-login-text {
+        display: none !important;
+    }
+    .nav-user-badge-wrapper {
+        flex-shrink: 0 !important;
     }
     .nav-user-inner {
-        height: 38px;
-        min-height: 38px;
-        padding: 0 10px;
+        height: 34px !important;
+        min-height: 34px !important;
+        max-height: 34px !important;
+        padding: 0 6px !important;
+        gap: 4px !important;
+        border-radius: 8px !important;
+        flex-shrink: 0 !important;
+        touch-action: manipulation;
+    }
+    .nav-user-inner .nav-user-avatar {
+        width: 22px !important;
+        height: 22px !important;
+    }
+    .nav-user-inner .nav-username,
+    .nav-user-inner .hw-badges-row {
+        display: none !important;
+    }
+    .nav-user-inner .nav-user-chevron {
+        font-size: 0.55rem !important;
+    }
+    .nav-settings-btn {
+        width: 34px !important;
+        height: 34px !important;
+        min-height: 34px !important;
+        max-height: 34px !important;
+        padding: 0 !important;
+        font-size: 0.95rem !important;
+        border-radius: 8px !important;
+        justify-content: center !important;
+        flex-shrink: 0 !important;
+        touch-action: manipulation;
+    }
+    .lang-select-wrapper {
+        position: relative !important;
+        flex-shrink: 0 !important;
+    }
+    .lang-btn {
+        height: 34px !important;
+        min-height: 34px !important;
+        max-height: 34px !important;
+        padding: 0 6px !important;
+        gap: 3px !important;
+        border-radius: 8px !important;
+        flex-shrink: 0 !important;
+        touch-action: manipulation;
+    }
+    .lang-flag {
+        width: 16px !important;
+        height: 12px !important;
+    }
+    .lang-code {
+        font-size: 0.76rem !important;
+    }
+    .lang-chevron {
+        font-size: 0.55rem !important;
+        margin-left: 1px !important;
+    }
+    .lang-dropdown {
+        max-height: 75vh !important;
+        overflow-y: auto !important;
     }
 }
 
-@media (max-width: 520px) {
+@media (max-width: 480px) {
     .navbar {
-        padding: 0.5rem 0 !important;
+        padding: 0.35rem 0 !important;
     }
-    .nav-container {
-        padding: 0 0.6rem;
+    .navbar .container,
+    .navbar .nav-container {
+        padding: 0 8px !important;
     }
     .nav-logo-img {
-        height: 32px;
+        height: 23px !important;
+        max-width: 105px !important;
     }
     .nav-right-group {
-        gap: 6px;
+        gap: 4px !important;
     }
-    .github-link {
-        width: 38px;
-        height: 38px;
-        min-height: 38px;
-        max-height: 38px;
-        padding: 0;
-        justify-content: center;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-    .github-link .github-link-text {
-        display: none;
-    }
-    .lang-btn {
-        padding: 0 8px;
-        gap: 5px;
-    }
-    .lang-btn .lang-code {
-        font-size: 0.85rem;
+    .github-link,
+    .nav-login-btn,
+    .nav-settings-btn {
+        width: 32px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        max-height: 32px !important;
+        font-size: 0.9rem !important;
+        border-radius: 7px !important;
     }
     .nav-user-inner {
-        padding: 0 8px;
-        gap: 6px;
+        height: 32px !important;
+        min-height: 32px !important;
+        max-height: 32px !important;
+        padding: 0 5px !important;
+        gap: 3px !important;
+        border-radius: 7px !important;
+    }
+    .nav-user-inner .nav-user-avatar {
+        width: 20px !important;
+        height: 20px !important;
+    }
+    .lang-btn {
+        height: 32px !important;
+        min-height: 32px !important;
+        max-height: 32px !important;
+        padding: 0 5px !important;
+        gap: 3px !important;
+        border-radius: 7px !important;
+    }
+    .lang-code {
+        font-size: 0.72rem !important;
     }
 }
 
