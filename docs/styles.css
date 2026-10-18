@@ -742,6 +742,29 @@ h4,
     flex-wrap: wrap;
     gap: 1rem;
     margin-bottom: 3rem;
+    width: 100%;
+}
+
+.hero-buttons .dropdown-container {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    position: relative;
+}
+
+.hero-buttons .dropdown-btn {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    white-space: nowrap;
+    padding: 1rem 1.25rem;
+}
+
+.hero-buttons .dropdown-container:last-child .dropdown-menu {
+    left: auto;
+    right: 0;
 }
 
 /* Dropdown Styles */

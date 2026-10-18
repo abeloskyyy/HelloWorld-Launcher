@@ -18,6 +18,11 @@ on:
         required: false
         type: boolean
         default: true
+      build_setup:
+        description: 'Build Setup Bootstrapper (Windows Setup.exe)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -61,6 +66,7 @@ jobs:
         run: npm run build:win
 
       - name: Fetch Existing Setup.exe (SmartScreen Reputation)
+        if: ${{ github.event.inputs.build_setup != true && github.event.inputs.build_setup != 'true' }}
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -220,4 +226,52 @@ jobs:
         with:
           name: macos-artifacts
           path: dist-macos/*
+          retention-days: 14
+
+  # ─────────────────────────────────────────────────────────────
+  # 4. SETUP BOOTSTRAPPER (Windows Setup.exe)
+  # ─────────────────────────────────────────────────────────────
+  build-setup:
+    name: Build Setup Bootstrapper
+    if: ${{ github.event.inputs.build_setup == true || github.event.inputs.build_setup == 'true' }}
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies (Installer)
+        run: |
+          cd installer
+          npm ci || npm install
+          cd ..
+
+      - name: Build Setup Installer EXE
+        run: |
+          cd installer
+          npm run build:win
+          cd ..
+
+      - name: Stage Setup Executable
+        shell: bash
+        run: |
+          mkdir -p dist-setup
+          if [ -f "dist/setup/HelloWorld-Launcher-Setup.exe" ]; then
+            cp dist/setup/HelloWorld-Launcher-Setup.exe dist-setup/
+          else
+            echo "::error::HelloWorld-Launcher-Setup.exe was not generated."
+            exit 1
+          fi
+          ls -lh dist-setup
+
+      - name: Upload Setup Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: setup-artifact
+          path: dist-setup/*
           retention-days: 14
