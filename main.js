@@ -3080,6 +3080,8 @@ const createWindow = async () => {
     minHeight: 650
   })
 
+  win.maximize();
+
   if (process.platform === 'darwin') {
     const macMenuTemplate = [
       {
@@ -3154,6 +3156,7 @@ const createWindow = async () => {
   const showWindow = () => {
     if (hasShown) return;
     hasShown = true;
+    try { win.maximize(); } catch (_) {}
     win.show();
 
     // Check if dev mode is enabled
@@ -5243,19 +5246,43 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
 
     const destPath = path.join(targetDir, filename);
     const tempPath = destPath + '.tmp_' + Date.now();
-    const writer = fs.createWriteStream(tempPath);
+    // Support Google Drive links automatically
+    let targetUrl = downloadUrl;
+    try {
+      const urlObj = new URL(downloadUrl);
+      if (urlObj.hostname.includes('drive.google.com')) {
+        let fileId = null;
+        const matchPath = urlObj.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+        if (matchPath) {
+          fileId = matchPath[1];
+        } else if (urlObj.searchParams.has('id')) {
+          fileId = urlObj.searchParams.get('id');
+        }
+        if (fileId) {
+          targetUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`;
+        }
+      }
+    } catch (_) {}
 
-    console.log('[download-installer-file] Downloading from:', downloadUrl, 'to:', destPath);
+    const writer = fs.createWriteStream(tempPath);
 
     const res = await axios({
       method: 'get',
-      url: downloadUrl,
+      url: targetUrl,
       responseType: 'stream',
       timeout: 60000,
+      maxRedirects: 15,
       headers: {
-        'User-Agent': 'HelloWorld-Launcher-Direct-Updater'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }
     });
+
+    const contentType = (res.headers['content-type'] || '').toLowerCase();
+    if (contentType.includes('text/html')) {
+      try { writer.close(); } catch (_) {}
+      try { fs.unlinkSync(tempPath); } catch (_) {}
+      throw new Error('El enlace de descarga devolvió una página web HTML en lugar del archivo ejecutable. Asegúrate de que el enlace de Google Drive tenga permisos públicos ("Cualquier persona con el enlace").');
+    }
 
     const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
     let downloadedBytes = 0;
@@ -9401,7 +9428,7 @@ async function fetchRemoteConfigBackend() {
           return JSON.parse(data);
         } catch (e1) {
           try {
-            const fixed = data.replace(/([0-9]|true|false|null|"|\]|\})\s*\r?\n(\s*")/g, '$1,\n$2');
+            const fixed = data.replace(/([0-9]|true|false|null|"|\]|\})\s*(\r?\n)+\s*(")/g, '$1,\n$3');
             return JSON.parse(fixed);
           } catch (_) {
             return data;
@@ -9415,7 +9442,7 @@ async function fetchRemoteConfigBackend() {
         data = JSON.parse(data);
       } catch (e1) {
         try {
-          const fixed = data.replace(/([0-9]|true|false|null|"|\]|\})\s*\r?\n(\s*")/g, '$1,\n$2');
+          const fixed = data.replace(/([0-9]|true|false|null|"|\]|\})\s*(\r?\n)+\s*(")/g, '$1,\n$3');
           data = JSON.parse(fixed);
         } catch (_) {}
       }

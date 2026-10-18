@@ -113,7 +113,11 @@
     "show_snapshots_desc": "Accede a versiones experimentales de Minecraft que aún están en desarrollo. Espera errores e inestabilidad.",
     "show_old": "Mostrar Versiones Antiguas",
     "language": "Idioma",
-    "language_desc": "Selecciona tu idioma preferido."
+    "language_desc": "Selecciona tu idioma preferido.",
+    "placeholder_subtitle": "Tu Minecraft, sin límites y optimizado al máximo",
+    "chip_perf": "Alto Rendimiento",
+    "chip_safe": "100% Seguro",
+    "chip_mods": "Mods & Datapacks"
   },
   "play": {
     "play_btn": "Jugar",

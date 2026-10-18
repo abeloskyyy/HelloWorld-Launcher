@@ -100,7 +100,11 @@
     "show_snapshots_desc": "아직 개발 중인 Minecraft의 실험적인 버전에 액세스하세요. 버그와 불안정성이 있을 수 있습니다.",
     "show_old": "구버전 표시",
     "language": "언어 (Language)",
-    "language_desc": "원하는 언어를 선택하세요."
+    "language_desc": "원하는 언어를 선택하세요.",
+    "placeholder_subtitle": "한계 없이 완벽하게 최적화된 나만의 마인크래프트",
+    "chip_perf": "고성능",
+    "chip_safe": "100% 안전",
+    "chip_mods": "모드 & 데이터팩"
   },
   "play": {
     "play_btn": "플레이",

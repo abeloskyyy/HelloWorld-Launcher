@@ -100,7 +100,11 @@
     "show_snapshots_desc": "Sartu oraindik garatzen ari diren Minecraft-en bertsio esperimentaletara. Akatsak eta ezegonkortasuna espero.",
     "show_old": "Erakutsi Bertsio Zaharrak",
     "language": "Hizkuntza",
-    "language_desc": "Hautatu nahiago duzun hizkuntza."
+    "language_desc": "Hautatu nahiago duzun hizkuntza.",
+    "placeholder_subtitle": "Zure Minecraft, mugarik gabe eta guztiz optimizatuta",
+    "chip_perf": "Errendimendu Altua",
+    "chip_safe": "%100 Segurua",
+    "chip_mods": "Modak eta Datapackak"
   },
   "play": {
     "play_btn": "Jolastu",

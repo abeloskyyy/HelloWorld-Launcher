@@ -100,7 +100,11 @@
     "show_snapshots_desc": "访问仍在开发中的 Minecraft 实验性版本。请注意，这些版本可能存在错误和不稳定。",
     "show_old": "显示旧版本",
     "language": "语言",
-    "language_desc": "选择您的首选语言。"
+    "language_desc": "选择您的首选语言。",
+    "placeholder_subtitle": "你的 Minecraft，无限可能且极致优化",
+    "chip_perf": "高性能",
+    "chip_safe": "100% 安全",
+    "chip_mods": "模组与数据包"
   },
   "play": {
     "play_btn": "开始游戏",

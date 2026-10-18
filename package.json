@@ -1,6 +1,6 @@
 {
   "name": "helloworld-launcher",
-  "version": "2.2.0",
+  "version": "2.1.0",
   "description": "The official custom Minecraft launcher for the HelloWorld community, featuring fast updates, rich presence, and smooth performance.",
   "repository": {
     "type": "git",
@@ -23,13 +23,21 @@
       "buildResources": "build"
     },
     "files": [
-      "**/*",
-      "!**/serviceAccountKey.json",
-      "!**/*-firebase-adminsdk-*.json",
-      "!scripts/set-admin.js",
+      "main.js",
+      "preload.js",
+      "secrets.json",
+      "src/**/*",
+      "ui/**/*",
+      "!docs/**",
+      "!screenshots/**",
       "!installer/**",
+      "!scripts/**",
       "!release/**",
-      "!dist/**"
+      "!dist/**",
+      "!**/*.md",
+      "!.github/**",
+      "!**/serviceAccountKey.json",
+      "!**/*-firebase-adminsdk-*.json"
     ],
     "win": {
       "target": [

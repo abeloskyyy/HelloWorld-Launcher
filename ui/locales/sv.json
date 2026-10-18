@@ -100,7 +100,11 @@
     "show_snapshots_desc": "Få tillgång till experimentella versioner av Minecraft som fortfarande är under utveckling. Räkna med buggar och instabilitet.",
     "show_old": "Visa gamla versioner",
     "language": "Språk",
-    "language_desc": "Välj önskat språk."
+    "language_desc": "Välj önskat språk.",
+    "placeholder_subtitle": "Din Minecraft, utan gränser och fullt optimerad",
+    "chip_perf": "Hög Prestanda",
+    "chip_safe": "100% Säker",
+    "chip_mods": "Mods & Datapacks"
   },
   "play": {
     "play_btn": "Spela",

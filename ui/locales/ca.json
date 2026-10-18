@@ -100,7 +100,11 @@
     "show_snapshots_desc": "Accediu a versions experimentals de Minecraft que encara estan en desenvolupament. Espereu errors i inestabilitat.",
     "show_old": "Mostra les versions antigues",
     "language": "Llengua",
-    "language_desc": "Seleccioneu el vostre idioma preferit."
+    "language_desc": "Seleccioneu el vostre idioma preferit.",
+    "placeholder_subtitle": "El teu Minecraft, sense límits i optimitzat al màxim",
+    "chip_perf": "Alt Rendiment",
+    "chip_safe": "100% Segur",
+    "chip_mods": "Mods i Datapacks"
   },
   "play": {
     "play_btn": "Jugar",

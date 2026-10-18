@@ -100,7 +100,11 @@
     "show_snapshots_desc": "Accede a versións experimentais de Minecraft que aínda están en desenvolvemento. Agarda erros e inestabilidade.",
     "show_old": "Amosar Versións Antigas",
     "language": "Idioma",
-    "language_desc": "Selecciona o teu idioma preferido."
+    "language_desc": "Selecciona o teu idioma preferido.",
+    "placeholder_subtitle": "O teu Minecraft, sen límites e optimizado ao máximo",
+    "chip_perf": "Alto Rendemento",
+    "chip_safe": "100% Seguro",
+    "chip_mods": "Mods e Datapacks"
   },
   "play": {
     "play_btn": "Xogar",

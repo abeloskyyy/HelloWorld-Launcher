@@ -1332,15 +1332,15 @@
                     };
                     
                     const imageBackgrounds = {
-                        'minecraft1': 'url(img/backgrounds/minecraft1.png)',
-                        'minecraft2': 'url(img/backgrounds/minecraft2.png)',
-                        'minecraft3': 'url(img/backgrounds/minecraft3.png)',
-                        'minecraft4': 'url(img/backgrounds/minecraft4.png)',
-                        'minecraft5': 'url(img/backgrounds/minecraft5.png)',
-                        'minecraft6': 'url(img/backgrounds/minecraft6.png)',
-                        'minecraft7': 'url(img/backgrounds/minecraft7.png)',
-                        'minecraft8': 'url(img/backgrounds/minecraft8.png)',
-                        'minecraft9': 'url(img/backgrounds/minecraft9.png)'
+                        'minecraft1': 'url(img/backgrounds/minecraft1.webp)',
+                        'minecraft2': 'url(img/backgrounds/minecraft2.webp)',
+                        'minecraft3': 'url(img/backgrounds/minecraft3.webp)',
+                        'minecraft4': 'url(img/backgrounds/minecraft4.webp)',
+                        'minecraft5': 'url(img/backgrounds/minecraft5.webp)',
+                        'minecraft6': 'url(img/backgrounds/minecraft6.webp)',
+                        'minecraft7': 'url(img/backgrounds/minecraft7.webp)',
+                        'minecraft8': 'url(img/backgrounds/minecraft8.webp)',
+                        'minecraft9': 'url(img/backgrounds/minecraft9.webp)'
                     };
                     
                     const overlay = document.createElement('div');

@@ -4398,15 +4398,15 @@ async function init() {
         const bgPrefix = isSettingsPage ? '../backgrounds/' : 'backgrounds/';
 
         const imageBackgrounds = {
-            'minecraft1': `url("${bgPrefix}minecraft1.png")`,
-            'minecraft2': `url("${bgPrefix}minecraft2.png")`,
-            'minecraft3': `url("${bgPrefix}minecraft3.png")`,
-            'minecraft4': `url("${bgPrefix}minecraft4.png")`,
-            'minecraft5': `url("${bgPrefix}minecraft5.png")`,
-            'minecraft6': `url("${bgPrefix}minecraft6.png")`,
-            'minecraft7': `url("${bgPrefix}minecraft7.png")`,
-            'minecraft8': `url("${bgPrefix}minecraft8.png")`,
-            'minecraft9': `url("${bgPrefix}minecraft9.png")`
+            'minecraft1': `url("${bgPrefix}minecraft1.webp")`,
+            'minecraft2': `url("${bgPrefix}minecraft2.webp")`,
+            'minecraft3': `url("${bgPrefix}minecraft3.webp")`,
+            'minecraft4': `url("${bgPrefix}minecraft4.webp")`,
+            'minecraft5': `url("${bgPrefix}minecraft5.webp")`,
+            'minecraft6': `url("${bgPrefix}minecraft6.webp")`,
+            'minecraft7': `url("${bgPrefix}minecraft7.webp")`,
+            'minecraft8': `url("${bgPrefix}minecraft8.webp")`,
+            'minecraft9': `url("${bgPrefix}minecraft9.webp")`
         };
 
         if (gradients[backgroundValue]) {
@@ -4902,53 +4902,91 @@ async function init() {
         }
     });
 
+    const REMOTE_CONFIG_GIST_URL = "https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json";
+
     async function getLatestRelease() {
         try {
-            const response = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/releases/latest`);
-            if (!response.ok) throw new Error('Network response was not ok');
-            const data = await response.json();
+            let tagName = '';
+            let targetMap = {};
 
-            const tagName = data.tag_name; // e.g., "v1.0.4"
-            const baseUrl = `https://github.com/${repoOwner}/${repoName}/releases/download/${tagName}`;
-
-            // Match assets from release dynamically
-            const assets = Array.isArray(data.assets) ? data.assets : [];
-
-            function findAssetForTarget(target) {
-                const isArm = (n) => /arm/i.test(n) || /aarch64/i.test(n);
-                return assets.find(a => {
-                    const n = (a.name || '').toLowerCase();
-                    if (n.endsWith('.blockmap') || n.endsWith('.yml') || n.endsWith('.sha256')) return false;
-                    switch (target) {
-                        case 'win-setup-x64':
-                            return n.endsWith('.exe') && !isArm(n) && (n.includes('x64') || !assets.some(o => (o.name || '').toLowerCase().includes('installer-x64')));
-                        case 'win-setup-arm64':
-                            return n.endsWith('.exe') && isArm(n);
-                        case 'win-portable-x64':
-                            return n.endsWith('.zip') && n.includes('portable') && !isArm(n);
-                        case 'win-portable-arm64':
-                            return n.endsWith('.zip') && n.includes('portable') && isArm(n);
-                        case 'linux-deb-x64':
-                            return n.endsWith('.deb') && !isArm(n);
-                        case 'linux-deb-arm64':
-                            return n.endsWith('.deb') && isArm(n);
-                        case 'linux-appimage-x64':
-                            return n.endsWith('.appimage') && !isArm(n);
-                        case 'linux-appimage-arm64':
-                            return n.endsWith('.appimage') && isArm(n);
-                        default:
-                            return false;
+            // 1. Try to fetch from remote config Gist first
+            try {
+                const gistRes = await fetch(REMOTE_CONFIG_GIST_URL, { cache: 'no-cache' });
+                if (gistRes.ok) {
+                    const gistData = await gistRes.json();
+                    if (gistData && gistData.changelog) {
+                        const cl = gistData.changelog;
+                        const latestVer = cl.latestVersion;
+                        const vEntry = (cl.versions && cl.versions.find(v => v.version === latestVer)) || (cl.versions && cl.versions[0]);
+                        if (vEntry && vEntry.downloads) {
+                            tagName = vEntry.tag || (latestVer ? `v${latestVer}` : '');
+                            const d = vEntry.downloads;
+                            if (d.windows) {
+                                if (d.windows.setup) targetMap['win-setup-x64'] = d.windows.setup;
+                                if (d.windows.zip) targetMap['win-portable-x64'] = d.windows.zip;
+                            }
+                            if (d.linux) {
+                                if (d.linux.amd64 && d.linux.amd64.deb) targetMap['linux-deb-x64'] = d.linux.amd64.deb;
+                                if (d.linux.arm64 && d.linux.arm64.deb) targetMap['linux-deb-arm64'] = d.linux.arm64.deb;
+                                if (d.linux.amd64 && d.linux.amd64.appimage) targetMap['linux-appimage-x64'] = d.linux.amd64.appimage;
+                                if (d.linux.arm64 && d.linux.arm64.appimage) targetMap['linux-appimage-arm64'] = d.linux.arm64.appimage;
+                            }
+                        }
                     }
+                }
+            } catch (gistErr) {
+                console.warn('Gist fetch failed, falling back to GitHub API:', gistErr);
+            }
+
+            // 2. Fallback to GitHub API if Gist had no links
+            if (Object.keys(targetMap).length === 0) {
+                const response = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/releases/latest`);
+                if (!response.ok) throw new Error('GitHub API response was not ok');
+                const data = await response.json();
+                tagName = data.tag_name;
+                const assets = Array.isArray(data.assets) ? data.assets : [];
+
+                function findAssetForTarget(target) {
+                    const isArm = (n) => /arm/i.test(n) || /aarch64/i.test(n);
+                    return assets.find(a => {
+                        const n = (a.name || '').toLowerCase();
+                        if (n.endsWith('.blockmap') || n.endsWith('.yml') || n.endsWith('.sha256')) return false;
+                        switch (target) {
+                            case 'win-setup-x64':
+                                return n.endsWith('.exe') && !isArm(n) && (n.includes('x64') || !assets.some(o => (o.name || '').toLowerCase().includes('installer-x64')));
+                            case 'win-setup-arm64':
+                                return n.endsWith('.exe') && isArm(n);
+                            case 'win-portable-x64':
+                                return n.endsWith('.zip') && !isArm(n) && !n.includes('mac') && (n.includes('portable') || n.includes('win') || !assets.some(o => (o.name || '').toLowerCase().includes('portable')));
+                            case 'win-portable-arm64':
+                                return n.endsWith('.zip') && isArm(n) && !n.includes('mac');
+                            case 'linux-deb-x64':
+                                return n.endsWith('.deb') && !isArm(n);
+                            case 'linux-deb-arm64':
+                                return n.endsWith('.deb') && isArm(n);
+                            case 'linux-appimage-x64':
+                                return n.endsWith('.appimage') && !isArm(n);
+                            case 'linux-appimage-arm64':
+                                return n.endsWith('.appimage') && isArm(n);
+                            default:
+                                return false;
+                        }
+                    });
+                }
+
+                ['win-setup-x64', 'win-setup-arm64', 'win-portable-x64', 'win-portable-arm64', 'linux-deb-x64', 'linux-deb-arm64', 'linux-appimage-x64', 'linux-appimage-arm64'].forEach(target => {
+                    const m = findAssetForTarget(target);
+                    if (m && m.browser_download_url) targetMap[target] = m.browser_download_url;
                 });
             }
 
-            // Update dropdown links and dynamically hide items if the release lacks that asset
+            // Update dropdown links and dynamically hide items if the target is missing
             const dropdownItems = document.querySelectorAll('.dropdown-menu .dropdown-item[data-target]');
             dropdownItems.forEach(item => {
                 const target = item.getAttribute('data-target');
-                const matchedAsset = findAssetForTarget(target);
-                if (matchedAsset && matchedAsset.browser_download_url) {
-                    item.href = matchedAsset.browser_download_url;
+                const url = targetMap[target];
+                if (url) {
+                    item.href = url;
                     item.style.display = '';
                 } else {
                     item.style.display = 'none';
@@ -4956,22 +4994,18 @@ async function init() {
             });
 
             // Find primary downloads for Windows & Linux
-            const fallbackWinUrl = `https://github.com/${repoOwner}/${repoName}/releases/tag/${tagName}`;
-            const fallbackLinuxUrl = `https://github.com/${repoOwner}/${repoName}/releases/tag/${tagName}`;
-            const winAsset = findAssetForTarget('win-setup-x64') || findAssetForTarget('win-portable-x64') || findAssetForTarget('win-setup-arm64');
-            const linuxAsset = findAssetForTarget('linux-deb-x64') || findAssetForTarget('linux-appimage-x64') || findAssetForTarget('linux-deb-arm64');
+            const fallbackWinUrl = tagName ? `https://github.com/${repoOwner}/${repoName}/releases/tag/${tagName}` : `https://github.com/${repoOwner}/${repoName}/releases/latest`;
+            const fallbackLinuxUrl = fallbackWinUrl;
+            const winDownloadUrl = targetMap['win-setup-x64'] || targetMap['win-portable-x64'] || fallbackWinUrl;
+            const linuxDownloadUrl = targetMap['linux-deb-x64'] || targetMap['linux-appimage-x64'] || fallbackLinuxUrl;
 
-            const winDownloadUrl = winAsset ? winAsset.browser_download_url : fallbackWinUrl;
-            const linuxDownloadUrl = linuxAsset ? linuxAsset.browser_download_url : fallbackLinuxUrl;
-
-            latestTagName = tagName;
-            window.currentReleaseTag = tagName;
+            latestTagName = tagName || '';
+            window.currentReleaseTag = tagName || '';
 
             if (heroBtn && heroLinuxBtn) {
                 const heroBtnContainer = heroBtn.closest('.dropdown-container') || heroBtn;
                 const heroLinuxBtnContainer = heroLinuxBtn.closest('.dropdown-container') || heroLinuxBtn;
 
-                // Apply OS specific ordering and styles
                 if (userOS === "Windows") {
                     if (heroBtnContainer.parentNode === heroButtonsContainer && heroLinuxBtnContainer.parentNode === heroButtonsContainer) {
                         heroButtonsContainer.insertBefore(heroBtnContainer, heroLinuxBtnContainer);
@@ -4984,7 +5018,6 @@ async function init() {
                     updateOSWarning();
                 }
 
-                // Set default button href to recommended option
                 heroBtn.href = userOS === "Windows" ? winDownloadUrl : linuxDownloadUrl;
                 heroBtn.target = '_blank';
                 heroLinuxBtn.href = userOS === "Linux" ? linuxDownloadUrl : winDownloadUrl;
@@ -5004,11 +5037,10 @@ async function init() {
 
             // Update the badge text as well if it exists
             const badge = document.querySelector('.badge');
-            if (badge) badge.textContent = `${tagName} ${t('hero.badge_available', 'Now Available')}`;
+            if (badge && tagName) badge.textContent = `${tagName} ${t('hero.badge_available', 'Now Available')}`;
 
         } catch (error) {
             console.error('Error fetching release:', error);
-            // Fallback
             const fallbackUrl = `https://github.com/${repoOwner}/${repoName}/releases/latest`;
             if (heroBtn) heroBtn.href = fallbackUrl;
             if (heroLinuxBtn) heroLinuxBtn.href = fallbackUrl;

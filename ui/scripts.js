@@ -637,7 +637,7 @@ const initLauncher = async () => {
 
         // Hide loader/splash once app data, news, and badges have finished loading
         updateLoaderProgress(100, window.t('loader.ready_to_play') || "Ready to play!");
-        await new Promise(r => setTimeout(r, 400));
+        await new Promise(r => setTimeout(r, 650));
         const loader = document.getElementById('initialLoader');
         if (loader) {
             loader.classList.add('hidden');
@@ -2420,7 +2420,7 @@ async function showUpdateModal(updateData) {
 async function checkAppUpdates(changelog) {
     if (!changelog || !changelog.latestVersion) return;
 
-    let currentVersion = '2.2.0';
+    let currentVersion = window.APP_VERSION || '2.1.0';
     try {
         const api = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
         if (api && typeof api.get_launcher_version === 'function') {
@@ -2527,6 +2527,12 @@ async function applyRemoteConfig(data) {
         window.HW_CHANGELOG = data.changelog;
         checkAppUpdates(data.changelog).catch(err => console.warn('[UpdateCheck] Error:', err));
     }
+    if (data.trailerVideo) {
+        window.HW_TRAILER_VIDEO = data.trailerVideo;
+        if (typeof window.setupTrailerVideo === 'function') {
+            window.setupTrailerVideo(data.trailerVideo);
+        }
+    }
 }
 
 async function fetchAndApplyRemoteConfig(forceRefresh = false) {
@@ -2564,7 +2570,7 @@ async function fetchAndApplyRemoteConfig(forceRefresh = false) {
                     data = JSON.parse(text);
                 } catch (e1) {
                     try {
-                        const fixed = text.replace(/([0-9]|true|false|null|"|\]|\})\s*\r?\n(\s*")/g, '$1,\n$2');
+                        const fixed = text.replace(/([0-9]|true|false|null|"|\]|\})\s*(\r?\n)+\s*(")/g, '$1,\n$3');
                         data = JSON.parse(fixed);
                     } catch (_) {}
                 }

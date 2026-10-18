@@ -100,7 +100,11 @@
     "show_snapshots_desc": "Access experimental versions of Minecraft that are still in development. Expect bugs and instability.",
     "show_old": "Show Old Versions",
     "language": "Language",
-    "language_desc": "Select your preferred language."
+    "language_desc": "Select your preferred language.",
+    "placeholder_subtitle": "Dit Minecraft, uden grænser og fuldt optimeret",
+    "chip_perf": "Høj Ydeevne",
+    "chip_safe": "100% Sikker",
+    "chip_mods": "Mods & Datapacks"
   },
   "play": {
     "play_btn": "Play",

@@ -100,7 +100,11 @@
     "show_snapshots_desc": "Krijg toegang tot experimentele versies van Minecraft die nog in ontwikkeling zijn. Verwacht bugs en instabiliteit.",
     "show_old": "Toon oude versies",
     "language": "Taal",
-    "language_desc": "Selecteer uw voorkeurstaal."
+    "language_desc": "Selecteer uw voorkeurstaal.",
+    "placeholder_subtitle": "Jouw Minecraft, zonder grenzen en volledig geoptimaliseerd",
+    "chip_perf": "Hoge Prestaties",
+    "chip_safe": "100% Veilig",
+    "chip_mods": "Mods & Datapacks"
   },
   "play": {
     "play_btn": "Spelen",

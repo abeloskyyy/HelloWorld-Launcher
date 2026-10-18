@@ -100,7 +100,11 @@
     "show_snapshots_desc": "Uzyskaj dostęp do eksperymentalnych wersji gry Minecraft, które są wciąż w fazie rozwoju. Spodziewaj się błędów i niestabilności.",
     "show_old": "Pokaż stare wersje",
     "language": "Język",
-    "language_desc": "Wybierz preferowany język."
+    "language_desc": "Wybierz preferowany język.",
+    "placeholder_subtitle": "Twój Minecraft, bez granic i w pełni zoptymalizowany",
+    "chip_perf": "Wysoka wydajność",
+    "chip_safe": "100% Bezpieczny",
+    "chip_mods": "Mody i Datapacki"
   },
   "play": {
     "play_btn": "Zagraj",

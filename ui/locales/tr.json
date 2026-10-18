@@ -100,7 +100,11 @@
     "show_snapshots_desc": "Minecraft'ın halen geliştirilmekte olan deneysel sürümlerine erişin. Hatalar ve istikrarsızlık bekliyoruz.",
     "show_old": "Eski Sürümleri Göster",
     "language": "Dil",
-    "language_desc": "Tercih ettiğiniz dili seçin."
+    "language_desc": "Tercih ettiğiniz dili seçin.",
+    "placeholder_subtitle": "Sınırsız ve tamamen optimize edilmiş Minecraft deneyimin",
+    "chip_perf": "Yüksek Performans",
+    "chip_safe": "%100 Güvenli",
+    "chip_mods": "Modlar ve Datapackler"
   },
   "play": {
     "play_btn": "Oyna",

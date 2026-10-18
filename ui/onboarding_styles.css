@@ -173,9 +173,135 @@
     object-fit: cover;
 }
 
+.video-frame video.hw-accel-enabled {
+    transform: translateZ(0);
+    will-change: transform;
+    backface-visibility: hidden;
+}
+
+.video-frame video.hw-accel-disabled {
+    transform: none !important;
+    will-change: auto !important;
+    backface-visibility: visible !important;
+}
+
+.video-frame iframe {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100% !important;
+    height: 100% !important;
+    border: none !important;
+    pointer-events: none !important; /* Disables all YT hover UI, clicks, and branding overlays */
+    transform: translate(-50%, -50%) scale(1.42); /* Scales up by 42% to completely crop out YouTube's top title bar, share button, avatar and bottom logo */
+    transform-origin: center center;
+}
+
+/* Video Placeholder (Fallback when no video is configured) */
 .video-placeholder {
-    color: rgba(255, 255, 255, 0.3);
-    font-size: 14px;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at center, rgba(99, 102, 241, 0.16) 0%, rgba(15, 15, 26, 0.98) 75%);
+    position: relative;
+    padding: 24px;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+.placeholder-glow {
+    position: absolute;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(168, 85, 247, 0.28) 0%, transparent 70%);
+    filter: blur(45px);
+    pointer-events: none;
+}
+
+.placeholder-icon-wrap {
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    z-index: 1;
+}
+
+.placeholder-logo {
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+}
+
+.placeholder-title {
+    font-size: 19px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0 0 6px 0;
+    letter-spacing: 0.5px;
+    z-index: 1;
+}
+
+.placeholder-subtitle {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.65);
+    margin: 0 0 16px 0;
+    max-width: 400px;
+    line-height: 1.4;
+    z-index: 1;
+}
+
+.placeholder-features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    z-index: 1;
+}
+
+.placeholder-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    padding: 5px 12px;
+    font-size: 11.5px;
+    color: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(8px);
+}
+
+.placeholder-chip i {
+    color: #c084fc;
+    font-size: 11px;
+}
+
+/* Inline badge in onboarding text matching the replay button */
+.inline-replay-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
+    color: #ffffff;
+    font-size: 11px;
+    margin: 0 4px;
+    vertical-align: middle;
+    box-shadow: 0 2px 8px rgba(168, 85, 247, 0.4);
+    cursor: default;
+    pointer-events: none;
+    user-select: none;
 }
 
 /* Form Styles for Step 1 */

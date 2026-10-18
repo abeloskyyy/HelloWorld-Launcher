@@ -149,15 +149,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             nextBtn.classList.add('btn-finish');
 
             // Play video if on final step
-            const video = document.getElementById('tutorialFinalVideo');
-            if (video) video.play().catch(e => console.error("Could not play video:", e));
+            playTrailerVideo();
         } else {
             nextBtn.innerHTML = (window.t ? window.t('tutorial.next') : 'Next') + ' <i class="fas fa-arrow-right"></i>';
             nextBtn.classList.remove('btn-finish');
 
             // Pause video outside of final step
-            const video = document.getElementById('tutorialFinalVideo');
-            if (video) video.pause();
+            pauseTrailerVideo();
         }
 
         currentStep = step;
@@ -385,16 +383,223 @@ document.addEventListener('DOMContentLoaded', async () => {
         overlay.classList.add('active');
         if (startStep === 1) tutorialCompleted = false;
         loadConfig();
-        // playMusic(); // Disabled per user request
+        // Preload trailer video immediately so it is 100% buffered by Step 6
+        preloadTrailerVideo();
         showStep(startStep);
     }
 
     function closeWizard() {
         overlay.classList.remove('active');
+        pauseTrailerVideo();
+    }
 
-        // Ensure video is paused
-        const video = document.getElementById('tutorialFinalVideo');
-        if (video) video.pause();
+    // --- Trailer Video Controller (Gist "trailerVideo": { url, start, finish }) ---
+    let trailerConfig = { url: '', start: 0, finish: 0 };
+    let ytPollInterval = null;
+    let lastSeekTime = 0;
+    let hasAddedYtMessageListener = false;
+
+    function preloadTrailerVideo() {
+        if (!trailerConfig || !trailerConfig.url) return;
+        const ytId = getYouTubeId(trailerConfig.url);
+        const ytIframe = document.getElementById('tutorialYoutubeIframe');
+        const placeholder = document.getElementById('tutorialVideoPlaceholder');
+        if (ytId && ytIframe) {
+            const embedUrl = getTrailerEmbedUrl(ytId);
+            if (!ytIframe.src || ytIframe.src === 'about:blank' || !ytIframe.src.includes(ytId)) {
+                ytIframe.onload = () => {
+                    if (placeholder) placeholder.style.display = 'none';
+                    ytIframe.style.opacity = '1';
+                    try {
+                        ytIframe.contentWindow.postMessage(JSON.stringify({ event: 'listening' }), '*');
+                    } catch (_) {}
+                };
+                ytIframe.src = embedUrl;
+            }
+        }
+    }
+
+    function getYouTubeId(url) {
+        if (!url || typeof url !== 'string') return null;
+        const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
+        return match ? match[1] : null;
+    }
+
+    function seekTrailerToStart() {
+        const now = Date.now();
+        // Cooldown: at least 2.5s between seeks to prevent any rapid repeat loops
+        if (now - lastSeekTime < 2500) return;
+        lastSeekTime = now;
+
+        const ytIframe = document.getElementById('tutorialYoutubeIframe');
+        if (ytIframe && ytIframe.contentWindow) {
+            try {
+                // Only send seekTo - do not send playVideo/pauseVideo which displays the center bezel button
+                ytIframe.contentWindow.postMessage(JSON.stringify({
+                    event: 'command',
+                    func: 'seekTo',
+                    args: [trailerConfig.start, true]
+                }), '*');
+            } catch (_) {}
+        }
+    }
+
+    function startYtPolling() {
+        if (ytPollInterval) clearInterval(ytPollInterval);
+        ytPollInterval = setInterval(() => {
+            if (currentStep === totalSteps && trailerConfig.finish > trailerConfig.start) {
+                const ytIframe = document.getElementById('tutorialYoutubeIframe');
+                if (ytIframe && ytIframe.contentWindow) {
+                    try {
+                        ytIframe.contentWindow.postMessage(JSON.stringify({ event: 'listening' }), '*');
+                    } catch (_) {}
+                }
+            }
+        }, 400);
+    }
+
+    function stopYtPolling() {
+        if (ytPollInterval) {
+            clearInterval(ytPollInterval);
+            ytPollInterval = null;
+        }
+    }
+
+    function ensureYtMessageListener() {
+        if (hasAddedYtMessageListener) return;
+        hasAddedYtMessageListener = true;
+        window.addEventListener('message', (event) => {
+            try {
+                let msg = event.data;
+                if (typeof msg === 'string') msg = JSON.parse(msg);
+                if (!msg) return;
+
+                // When YouTube reports playback time
+                if (msg.event === 'infoDelivery' && msg.info && typeof msg.info.currentTime === 'number') {
+                    const cur = msg.info.currentTime;
+                    // ONLY seek when we have actually reached or exceeded the finish mark
+                    if (trailerConfig.finish > trailerConfig.start && cur >= trailerConfig.finish) {
+                        seekTrailerToStart();
+                    }
+                }
+            } catch (_) {}
+        });
+    }
+
+    function getTrailerEmbedUrl(ytId) {
+        const start = trailerConfig.start;
+        return `https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&mute=1&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&iv_load_policy=3&start=${start}&playsinline=1&enablejsapi=1`;
+    }
+
+    async function applyVideoGpuSettings(videoEl) {
+        if (!videoEl) return;
+        try {
+            let hwAccel = true;
+            if (api && api.getUserJson) {
+                const ud = await api.getUserJson();
+                if (ud && ud.hw_accel === false) hwAccel = false;
+            } else if (legacyApi && legacyApi.get_user_json) {
+                const ud = await legacyApi.get_user_json();
+                if (ud && ud.hw_accel === false) hwAccel = false;
+            }
+            if (hwAccel) {
+                videoEl.classList.add('hw-accel-enabled');
+                videoEl.classList.remove('hw-accel-disabled');
+            } else {
+                videoEl.classList.add('hw-accel-disabled');
+                videoEl.classList.remove('hw-accel-enabled');
+            }
+        } catch (_) {}
+    }
+
+    function setupTrailerVideo(config) {
+        const ytIframe = document.getElementById('tutorialYoutubeIframe');
+        const html5Video = document.getElementById('tutorialFinalVideo');
+        const placeholder = document.getElementById('tutorialVideoPlaceholder');
+
+        if (!config || !config.url) {
+            trailerConfig = { url: 'videos/tutorial-final.mp4', start: 0, finish: 0 };
+        } else {
+            trailerConfig = {
+                url: config.url,
+                start: Number(config.start) || 0,
+                finish: Number(config.finish) || 0
+            };
+        }
+
+        // Hide YouTube iframe since we are using native local video
+        stopYtPolling();
+        if (ytIframe) {
+            ytIframe.style.display = 'none';
+            ytIframe.src = '';
+        }
+        if (placeholder) placeholder.style.display = 'none';
+
+        if (html5Video) {
+            html5Video.style.display = 'block';
+            applyVideoGpuSettings(html5Video);
+            const ytId = getYouTubeId(trailerConfig.url);
+            // If URL is YouTube, fall back to the bundled local video
+            const targetSrc = (ytId || !trailerConfig.url) ? 'videos/tutorial-final.mp4' : trailerConfig.url;
+            if (!html5Video.src || !html5Video.src.includes('videos/tutorial-final.mp4')) {
+                html5Video.src = targetSrc;
+            }
+            html5Video.muted = true;
+            html5Video.loop = true;
+
+            if (trailerConfig.finish > trailerConfig.start) {
+                html5Video.ontimeupdate = () => {
+                    if (html5Video.currentTime >= trailerConfig.finish) {
+                        html5Video.currentTime = trailerConfig.start;
+                    }
+                };
+            } else {
+                html5Video.ontimeupdate = null;
+            }
+
+            if (currentStep === totalSteps) {
+                if (trailerConfig.start > 0) {
+                    html5Video.currentTime = trailerConfig.start;
+                }
+                html5Video.play().catch(() => {});
+            }
+        }
+    }
+
+    function playTrailerVideo() {
+        const html5Video = document.getElementById('tutorialFinalVideo');
+        const ytIframe = document.getElementById('tutorialYoutubeIframe');
+        const placeholder = document.getElementById('tutorialVideoPlaceholder');
+        if (ytIframe) ytIframe.style.display = 'none';
+        if (placeholder) placeholder.style.display = 'none';
+
+        if (html5Video) {
+            html5Video.style.display = 'block';
+            applyVideoGpuSettings(html5Video);
+            if (!html5Video.src || html5Video.src === '' || html5Video.src.endsWith('/')) {
+                html5Video.src = 'videos/tutorial-final.mp4';
+            }
+            if (trailerConfig.start > 0 && (html5Video.currentTime < trailerConfig.start || (trailerConfig.finish > 0 && html5Video.currentTime >= trailerConfig.finish))) {
+                html5Video.currentTime = trailerConfig.start;
+            }
+            html5Video.play().catch(() => {});
+        }
+    }
+
+    function pauseTrailerVideo() {
+        const html5Video = document.getElementById('tutorialFinalVideo');
+        if (html5Video) {
+            html5Video.pause();
+        }
+    }
+
+    window.setupTrailerVideo = setupTrailerVideo;
+
+    // Check if remote config was already fetched
+    if (window.HW_TRAILER_VIDEO) {
+        setupTrailerVideo(window.HW_TRAILER_VIDEO);
+    } else if (window.HW_REMOTE_CONFIG && window.HW_REMOTE_CONFIG.trailerVideo) {
+        setupTrailerVideo(window.HW_REMOTE_CONFIG.trailerVideo);
     }
 
     // --- Replay Button ---
@@ -405,7 +610,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Start
-    // Wait for pywebview to be ready if we need legacy API
     if (window.pywebview) {
         initWizard();
     } else {

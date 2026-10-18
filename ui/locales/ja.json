@@ -100,7 +100,11 @@
     "show_snapshots_desc": "まだ開発中の Minecraft の実験版にアクセスします。バグや不安定性が予想されます。",
     "show_old": "古いバージョンを表示",
     "language": "言語",
-    "language_desc": "希望の言語を選択してください。"
+    "language_desc": "希望の言語を選択してください。",
+    "placeholder_subtitle": "限界のない、完全に最適化されたマインクラフト",
+    "chip_perf": "ハイパフォーマンス",
+    "chip_safe": "100% 安全",
+    "chip_mods": "Mod & データパック"
   },
   "play": {
     "play_btn": "遊ぶ",

@@ -100,7 +100,11 @@
     "show_snapshots_desc": "Získejte přístup k experimentálním verzím Minecraftu, které jsou stále ve vývoji. Očekávejte chyby a nestabilitu.",
     "show_old": "Zobrazit staré verze",
     "language": "Jazyk",
-    "language_desc": "Vyberte preferovaný jazyk."
+    "language_desc": "Vyberte preferovaný jazyk.",
+    "placeholder_subtitle": "Tvůj Minecraft, bez hranic a plně optimalizovaný",
+    "chip_perf": "Vysoký výkon",
+    "chip_safe": "100% Bezpečný",
+    "chip_mods": "Mody a Datapacky"
   },
   "play": {
     "play_btn": "hrát",
