@@ -38,9 +38,9 @@ const translations = {
         "settings.saved_success": "Account settings updated successfully!",
         "hero.badge": "Download Now Available",
         "hero.badge_available": "Now Available",
-        "hero.download_win": "Download for Windows",
-        "hero.download_linux": "Download for Linux",
-        "hero.download_mac": "Download for macOS",
+        "hero.download_win": "Windows",
+        "hero.download_linux": "Linux",
+        "hero.download_mac": "macOS",
         "review.btn_title": "Leave a Review",
         "review.title": "Leave a Review",
         "review.subtitle": "Tell us what you think about HelloWorld Launcher!",
@@ -58,7 +58,7 @@ const translations = {
         "hero.install_ps": "Quick Install (PowerShell)",
         "hero.install_bash": "Quick Install (Bash)",
         "hero.install_note": "One-click install",
-        "hero.download_win_btn": "<i class=\"bi bi-windows\"></i> Download for Windows <i class=\"bi bi-chevron-down dropdown-arrow\"></i><div class=\"btn-shine\"></div>",
+        "hero.download_win_btn": "<i class=\"bi bi-windows\"></i> Windows <i class=\"bi bi-chevron-down dropdown-arrow\"></i><div class=\"btn-shine\"></div>",
         "hero.win_setup_title": "Setup x64",
         "hero.win_setup_sub": "Installer (Recommended)",
         "hero.best_option": "Best Option",
@@ -68,7 +68,7 @@ const translations = {
         "hero.win_port_sub": "ZIP archive",
         "hero.win_port_arm_title": "Portable ARM64",
         "hero.win_port_arm_sub": "ZIP archive for ARM",
-        "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Download for Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
+        "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
         "hero.lin_deb_sub": "Debian/Ubuntu (Recommended)",
         "hero.lin_deb_arm_title": "DEB ARM64",
@@ -77,7 +77,7 @@ const translations = {
         "hero.lin_app_sub": "Universal Linux",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "Universal Linux for ARM",
-        "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> Download for macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
+        "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.mac_dmg_arm_title": "DMG Apple Silicon",
         "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (Recommended)",
         "hero.mac_dmg_title": "DMG Intel",
@@ -269,9 +269,9 @@ const translations = {
         "settings.saved_success": "¡Ajustes de cuenta guardados correctamente!",
         "hero.badge": "Descarga ya disponible",
         "hero.badge_available": "Ya Disponible",
-        "hero.download_win": "Descargar para Windows",
-        "hero.download_linux": "Descargar para Linux",
-        "hero.download_mac": "Descargar para macOS",
+        "hero.download_win": "Windows",
+        "hero.download_linux": "Linux",
+        "hero.download_mac": "macOS",
         "review.btn_title": "Dejar una reseña",
         "review.title": "Deja una Reseña",
         "review.subtitle": "¡Cuéntanos qué te parece HelloWorld Launcher!",
@@ -289,7 +289,7 @@ const translations = {
         "hero.install_ps": "Instalación Rápida (PowerShell)",
         "hero.install_bash": "Instalación Rápida (Bash)",
         "hero.install_note": "Instala con un click",
-        "hero.download_win_btn": "<i class=\"bi bi-windows\"></i> Descargar para Windows <i class=\"bi bi-chevron-down dropdown-arrow\"></i><div class=\"btn-shine\"></div>",
+        "hero.download_win_btn": "<i class=\"bi bi-windows\"></i> Windows <i class=\"bi bi-chevron-down dropdown-arrow\"></i><div class=\"btn-shine\"></div>",
         "hero.win_setup_title": "Instalador x64",
         "hero.win_setup_sub": "Instalador (Recomendado)",
         "hero.best_option": "Mejor Opción",
@@ -299,7 +299,7 @@ const translations = {
         "hero.win_port_sub": "Archivo ZIP",
         "hero.win_port_arm_title": "Portable ARM64",
         "hero.win_port_arm_sub": "Archivo ZIP para ARM",
-        "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Descargar para Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
+        "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
         "hero.lin_deb_sub": "Debian/Ubuntu (Recomendado)",
         "hero.lin_deb_arm_title": "DEB ARM64",
@@ -308,7 +308,7 @@ const translations = {
         "hero.lin_app_sub": "Linux Universal",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "Linux Universal para ARM",
-        "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> Descargar para macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
+        "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.mac_dmg_arm_title": "DMG Apple Silicon",
         "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (Recomendado)",
         "hero.mac_dmg_title": "DMG Intel",
@@ -4825,9 +4825,9 @@ async function init() {
 
     function updateHeroButtons() {
         if (!heroBtn || !heroLinuxBtn) return;
-        const winTitle = t('hero.download_win', 'Download for Windows');
-        const linuxTitle = t('hero.download_linux', 'Download for Linux');
-        const macTitle = t('hero.download_mac', 'Download for macOS');
+        const winTitle = t('hero.download_win', 'Windows');
+        const linuxTitle = t('hero.download_linux', 'Linux');
+        const macTitle = t('hero.download_mac', 'macOS');
 
         // Reset all buttons to secondary style
         heroBtn.className = "btn btn-secondary btn-lg dropdown-btn";
