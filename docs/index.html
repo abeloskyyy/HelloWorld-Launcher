@@ -285,6 +285,51 @@
                             </a>
                         </div>
                     </div>
+                    <div class="dropdown-container">
+                        <button id="heroDownloadMacBtn" class="btn btn-secondary btn-lg dropdown-btn" data-i18n="hero.download_mac_btn">
+                            <i class="bi bi-apple"></i> Download for macOS
+                            <i class="bi bi-chevron-down dropdown-arrow"></i>
+                        </button>
+                        <div class="dropdown-menu" id="macDropdown">
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item recommended" data-target="mac-dmg-arm64">
+                                <div class="dropdown-item-content">
+                                    <i class="bi bi-apple"></i>
+                                    <div class="dropdown-item-text">
+                                        <span class="dropdown-item-title" data-i18n="hero.mac_dmg_arm_title">DMG Apple Silicon</span>
+                                        <span class="dropdown-item-subtitle" data-i18n="hero.mac_dmg_arm_sub">M1/M2/M3/M4 (Recommended)</span>
+                                    </div>
+                                    <span class="recommended-badge" data-i18n="hero.best_option">Best Option</span>
+                                </div>
+                            </a>
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="mac-dmg-x64">
+                                <div class="dropdown-item-content">
+                                    <i class="bi bi-apple"></i>
+                                    <div class="dropdown-item-text">
+                                        <span class="dropdown-item-title" data-i18n="hero.mac_dmg_title">DMG Intel</span>
+                                        <span class="dropdown-item-subtitle" data-i18n="hero.mac_dmg_sub">Intel x64</span>
+                                    </div>
+                                </div>
+                            </a>
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="mac-zip-arm64">
+                                <div class="dropdown-item-content">
+                                    <i class="bi bi-box-seam"></i>
+                                    <div class="dropdown-item-text">
+                                        <span class="dropdown-item-title" data-i18n="hero.mac_zip_arm_title">ZIP Apple Silicon</span>
+                                        <span class="dropdown-item-subtitle" data-i18n="hero.mac_zip_arm_sub">Archive for Apple Silicon</span>
+                                    </div>
+                                </div>
+                            </a>
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="mac-zip-x64">
+                                <div class="dropdown-item-content">
+                                    <i class="bi bi-box-seam"></i>
+                                    <div class="dropdown-item-text">
+                                        <span class="dropdown-item-title" data-i18n="hero.mac_zip_title">ZIP Intel</span>
+                                        <span class="dropdown-item-subtitle" data-i18n="hero.mac_zip_sub">Archive for Intel</span>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
                 </div>
                 <div id="osWarningContainer" style="display:none; margin-top: 15px; background: rgba(255, 59, 48, 0.15); border: 1px solid rgba(255, 59, 48, 0.3); border-radius: 8px; padding: 10px 15px; color: #ff8c82; font-weight: 500; font-size: 14px;">
                     <i class="bi bi-info-circle" style="margin-right: 5px;"></i> <span id="osWarningContent">You are browsing from <strong><span id="detectedOSName">OS</span></strong>. The following installers may not be compatible.</span>
@@ -658,7 +703,7 @@
             getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, deleteField, firestoreTimestamp
         };
     </script>
-    <script src="script.js" type="module"></script>
+    <script src="script.js?v=2.2.0" type="module"></script>
 </body>
 
 </html>

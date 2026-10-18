@@ -40,6 +40,7 @@ const translations = {
         "hero.badge_available": "Now Available",
         "hero.download_win": "Download for Windows",
         "hero.download_linux": "Download for Linux",
+        "hero.download_mac": "Download for macOS",
         "review.btn_title": "Leave a Review",
         "review.title": "Leave a Review",
         "review.subtitle": "Tell us what you think about HelloWorld Launcher!",
@@ -76,6 +77,15 @@ const translations = {
         "hero.lin_app_sub": "Universal Linux",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "Universal Linux for ARM",
+        "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> Download for macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
+        "hero.mac_dmg_arm_title": "DMG Apple Silicon",
+        "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (Recommended)",
+        "hero.mac_dmg_title": "DMG Intel",
+        "hero.mac_dmg_sub": "Intel x64",
+        "hero.mac_zip_arm_title": "ZIP Apple Silicon",
+        "hero.mac_zip_arm_sub": "Archive for Apple Silicon",
+        "hero.mac_zip_title": "ZIP Intel",
+        "hero.mac_zip_sub": "Archive for Intel",
         "hero.os_warning": "<i class=\"bi bi-info-circle\" style=\"margin-right: 5px;\"></i> You are browsing from <strong><span id=\"detectedOSName\">OS</span></strong>. The following installers may not be compatible.",
         "hero.stats_downloads": "Downloads",
         "hero.stats_rating": "<span style=\"font-size: 0.9rem; font-weight: 500; opacity: 0.9;\">/5 Rating</span>",
@@ -261,6 +271,7 @@ const translations = {
         "hero.badge_available": "Ya Disponible",
         "hero.download_win": "Descargar para Windows",
         "hero.download_linux": "Descargar para Linux",
+        "hero.download_mac": "Descargar para macOS",
         "review.btn_title": "Dejar una reseña",
         "review.title": "Deja una Reseña",
         "review.subtitle": "¡Cuéntanos qué te parece HelloWorld Launcher!",
@@ -297,6 +308,15 @@ const translations = {
         "hero.lin_app_sub": "Linux Universal",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "Linux Universal para ARM",
+        "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> Descargar para macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
+        "hero.mac_dmg_arm_title": "DMG Apple Silicon",
+        "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (Recomendado)",
+        "hero.mac_dmg_title": "DMG Intel",
+        "hero.mac_dmg_sub": "Intel x64",
+        "hero.mac_zip_arm_title": "ZIP Apple Silicon",
+        "hero.mac_zip_arm_sub": "Archivo ZIP para Apple Silicon",
+        "hero.mac_zip_title": "ZIP Intel",
+        "hero.mac_zip_sub": "Archivo ZIP para Intel",
         "hero.os_warning": "<i class=\"bi bi-info-circle\" style=\"margin-right: 5px;\"></i> Estás navegando desde <strong><span id=\"detectedOSName\">OS</span></strong>. Los siguientes instaladores podrían no ser compatibles.",
         "hero.stats_downloads": "Descargas",
         "hero.stats_rating": "<span style=\"font-size: 0.9rem; font-weight: 500; opacity: 0.9;\">/5 Puntuación</span>",
@@ -3157,7 +3177,7 @@ function changeLanguage(lang) {
     });
 
     document.querySelectorAll('[data-i18n]').forEach(el => {
-        if (el.id === 'navDownloadBtn' || el.id === 'heroDownloadBtn' || el.id === 'heroDownloadLinuxBtn' || el.id === 'osWarningContainer') return;
+        if (el.id === 'navDownloadBtn' || el.id === 'heroDownloadBtn' || el.id === 'heroDownloadLinuxBtn' || el.id === 'heroDownloadMacBtn' || el.id === 'osWarningContainer') return;
         const key = el.getAttribute('data-i18n');
         const val = (translations[lang] && translations[lang][key]) || (translations['en'] && translations['en'][key]);
         if (val) {
@@ -4741,14 +4761,17 @@ async function init() {
     const repoName = 'HelloWorld-Launcher';
     const heroBtn = document.getElementById('heroDownloadBtn');
     const heroLinuxBtn = document.getElementById('heroDownloadLinuxBtn');
+    const heroMacBtn = document.getElementById('heroDownloadMacBtn');
     const navBtn = document.getElementById('navDownloadBtn');
     const heroButtonsContainer = document.querySelector('.hero-buttons');
     const osWarningContainer = document.getElementById('osWarningContainer');
     const detectedOSName = document.getElementById('detectedOSName');
     const windowsDropdown = document.getElementById('windowsDropdown');
     const linuxDropdown = document.getElementById('linuxDropdown');
+    const macDropdown = document.getElementById('macDropdown');
 
     const iconLinux = `<i class="fa-brands fa-linux" style="font-size: 1.1rem; margin-right: 5px;"></i>`;
+    const iconMac = `<i class="bi bi-apple" style="font-size: 1.1rem; margin-right: 5px;"></i>`;
 
     function detectOS() {
         const ua = window.navigator.userAgent.toLowerCase();
@@ -4767,7 +4790,7 @@ async function init() {
         const container = document.getElementById('osWarningContainer');
         if (!container) return;
 
-        const isDesktopSupported = userOS === "Windows" || userOS === "Linux";
+        const isDesktopSupported = userOS === "Windows" || userOS === "Linux" || userOS === "MacOS";
         if (isDesktopSupported) {
             container.style.display = 'none';
             return;
@@ -4781,22 +4804,16 @@ async function init() {
         if (isMobileOS) {
             const osLabel = userOS;
             if (isEs) {
-                container.innerHTML = `<i class="bi bi-phone" style="margin-right: 6px;"></i> Estás navegando desde un dispositivo móvil (<strong><span id="detectedOSName">${osLabel}</span></strong>). HelloWorld Launcher está diseñado para ordenadores (Windows y Linux) y los instaladores no son compatibles con dispositivos móviles.`;
+                container.innerHTML = `<i class="bi bi-phone" style="margin-right: 6px;"></i> Estás navegando desde un dispositivo móvil (<strong><span id="detectedOSName">${osLabel}</span></strong>). HelloWorld Launcher está diseñado para ordenadores (Windows, Linux y macOS) y los instaladores no son compatibles con dispositivos móviles.`;
             } else {
-                container.innerHTML = `<i class="bi bi-phone" style="margin-right: 6px;"></i> You are browsing from a mobile device (<strong><span id="detectedOSName">${osLabel}</span></strong>). HelloWorld Launcher is designed for PC (Windows & Linux) and these installers are not compatible with mobile devices.`;
-            }
-        } else if (userOS === "MacOS") {
-            if (isEs) {
-                container.innerHTML = `<i class="bi bi-apple" style="margin-right: 6px;"></i> Estás navegando desde <strong><span id="detectedOSName">macOS</span></strong>. HelloWorld Launcher actualmente solo está disponible para Windows y Linux de escritorio.`;
-            } else {
-                container.innerHTML = `<i class="bi bi-apple" style="margin-right: 6px;"></i> You are browsing from <strong><span id="detectedOSName">macOS</span></strong>. HelloWorld Launcher is currently available for Windows and Linux desktop.`;
+                container.innerHTML = `<i class="bi bi-phone" style="margin-right: 6px;"></i> You are browsing from a mobile device (<strong><span id="detectedOSName">${osLabel}</span></strong>). HelloWorld Launcher is designed for PC (Windows, Linux & macOS) and these installers are not compatible with mobile devices.`;
             }
         } else {
             const unk = isEs ? 'un sistema operativo no compatible' : 'an unsupported operating system';
             if (isEs) {
-                container.innerHTML = `<i class="bi bi-info-circle" style="margin-right: 6px;"></i> Estás navegando desde <strong><span id="detectedOSName">${unk}</span></strong>. Los siguientes instaladores están diseñados para Windows y Linux.`;
+                container.innerHTML = `<i class="bi bi-info-circle" style="margin-right: 6px;"></i> Estás navegando desde <strong><span id="detectedOSName">${unk}</span></strong>. Los siguientes instaladores están diseñados para Windows, Linux y macOS.`;
             } else {
-                container.innerHTML = `<i class="bi bi-info-circle" style="margin-right: 6px;"></i> You are browsing from <strong><span id="detectedOSName">${unk}</span></strong>. The installers below are designed for Windows and Linux.`;
+                container.innerHTML = `<i class="bi bi-info-circle" style="margin-right: 6px;"></i> You are browsing from <strong><span id="detectedOSName">${unk}</span></strong>. The installers below are designed for Windows, Linux and macOS.`;
             }
         }
     }
@@ -4808,25 +4825,32 @@ async function init() {
 
     function updateHeroButtons() {
         if (!heroBtn || !heroLinuxBtn) return;
-        const tag = latestTagName ? ` ${latestTagName}` : '';
-        const winTitle = `${t('hero.download_win', 'Download for Windows')}${tag}`;
-        const linuxTitle = `${t('hero.download_linux', 'Download for Linux')}${tag}`;
+        const winTitle = t('hero.download_win', 'Download for Windows');
+        const linuxTitle = t('hero.download_linux', 'Download for Linux');
+        const macTitle = t('hero.download_mac', 'Download for macOS');
 
+        // Reset all buttons to secondary style
+        heroBtn.className = "btn btn-secondary btn-lg dropdown-btn";
+        heroBtn.innerHTML = `<i class="bi bi-windows"></i> ${winTitle}<i class="bi bi-chevron-down dropdown-arrow"></i>`;
+
+        heroLinuxBtn.className = "btn btn-secondary btn-lg dropdown-btn";
+        heroLinuxBtn.innerHTML = `${iconLinux} ${linuxTitle}<i class="bi bi-chevron-down dropdown-arrow"></i>`;
+
+        if (heroMacBtn) {
+            heroMacBtn.className = "btn btn-secondary btn-lg dropdown-btn";
+            heroMacBtn.innerHTML = `${iconMac} ${macTitle}<i class="bi bi-chevron-down dropdown-arrow"></i>`;
+        }
+
+        // Highlight matching OS button with primary style + shine
         if (userOS === "Windows") {
             heroBtn.className = "btn btn-primary btn-lg dropdown-btn";
             heroBtn.innerHTML = `<i class="bi bi-windows"></i> ${winTitle}<i class="bi bi-chevron-down dropdown-arrow"></i><div class="btn-shine"></div>`;
-            heroLinuxBtn.className = "btn btn-secondary btn-lg dropdown-btn";
-            heroLinuxBtn.innerHTML = `${iconLinux} ${linuxTitle}<i class="bi bi-chevron-down dropdown-arrow"></i>`;
         } else if (userOS === "Linux") {
             heroLinuxBtn.className = "btn btn-primary btn-lg dropdown-btn";
             heroLinuxBtn.innerHTML = `${iconLinux} ${linuxTitle}<i class="bi bi-chevron-down dropdown-arrow"></i><div class="btn-shine"></div>`;
-            heroBtn.className = "btn btn-secondary btn-lg dropdown-btn";
-            heroBtn.innerHTML = `<i class="bi bi-windows"></i> ${winTitle}<i class="bi bi-chevron-down dropdown-arrow"></i>`;
-        } else {
-            heroBtn.className = "btn btn-secondary btn-lg dropdown-btn";
-            heroBtn.innerHTML = `<i class="bi bi-windows"></i> ${winTitle}<i class="bi bi-chevron-down dropdown-arrow"></i>`;
-            heroLinuxBtn.className = "btn btn-secondary btn-lg dropdown-btn";
-            heroLinuxBtn.innerHTML = `${iconLinux} ${linuxTitle}<i class="bi bi-chevron-down dropdown-arrow"></i>`;
+        } else if (userOS === "MacOS" && heroMacBtn) {
+            heroMacBtn.className = "btn btn-primary btn-lg dropdown-btn";
+            heroMacBtn.innerHTML = `${iconMac} ${macTitle}<i class="bi bi-chevron-down dropdown-arrow"></i><div class="btn-shine"></div>`;
         }
     }
 
@@ -4839,7 +4863,10 @@ async function init() {
         } else if (userOS === "Linux") {
             navBtn.innerHTML = `${iconLinux} ${downloadText}`;
             navBtn.style.display = 'inline-flex';
-        } else if (isMobileOS || userOS === "MacOS") {
+        } else if (userOS === "MacOS") {
+            navBtn.innerHTML = `${iconMac} ${downloadText}`;
+            navBtn.style.display = 'inline-flex';
+        } else if (isMobileOS) {
             navBtn.style.display = 'none';
         } else {
             navBtn.innerHTML = downloadText;
@@ -4862,14 +4889,17 @@ async function init() {
         // Close all dropdowns first
         if (windowsDropdown) windowsDropdown.classList.remove('active');
         if (linuxDropdown) linuxDropdown.classList.remove('active');
+        if (macDropdown) macDropdown.classList.remove('active');
         if (heroBtn) heroBtn.classList.remove('active');
         if (heroLinuxBtn) heroLinuxBtn.classList.remove('active');
+        if (heroMacBtn) heroMacBtn.classList.remove('active');
         
         // Toggle the clicked dropdown
         if (!isActive) {
             dropdown.classList.add('active');
             if (dropdown === windowsDropdown && heroBtn) heroBtn.classList.add('active');
             if (dropdown === linuxDropdown && heroLinuxBtn) heroLinuxBtn.classList.add('active');
+            if (dropdown === macDropdown && heroMacBtn) heroMacBtn.classList.add('active');
         }
     }
 
@@ -4890,6 +4920,14 @@ async function init() {
         });
     }
 
+    if (heroMacBtn && macDropdown) {
+        heroMacBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleDropdown(macDropdown);
+        });
+    }
+
     // Close dropdowns when clicking outside
     document.addEventListener('click', (e) => {
         if (windowsDropdown && !windowsDropdown.contains(e.target) && e.target !== heroBtn) {
@@ -4899,6 +4937,10 @@ async function init() {
         if (linuxDropdown && !linuxDropdown.contains(e.target) && e.target !== heroLinuxBtn) {
             linuxDropdown.classList.remove('active');
             if (heroLinuxBtn) heroLinuxBtn.classList.remove('active');
+        }
+        if (macDropdown && !macDropdown.contains(e.target) && e.target !== heroMacBtn) {
+            macDropdown.classList.remove('active');
+            if (heroMacBtn) heroMacBtn.classList.remove('active');
         }
     });
 
@@ -4930,6 +4972,14 @@ async function init() {
                                 if (d.linux.arm64 && d.linux.arm64.deb) targetMap['linux-deb-arm64'] = d.linux.arm64.deb;
                                 if (d.linux.amd64 && d.linux.amd64.appimage) targetMap['linux-appimage-x64'] = d.linux.amd64.appimage;
                                 if (d.linux.arm64 && d.linux.arm64.appimage) targetMap['linux-appimage-arm64'] = d.linux.arm64.appimage;
+                            }
+                            const mac = d.macos || d.mac;
+                            if (mac) {
+                                if (mac.arm64 && mac.arm64.dmg) targetMap['mac-dmg-arm64'] = mac.arm64.dmg;
+                                if (mac.arm64 && mac.arm64.zip) targetMap['mac-zip-arm64'] = mac.arm64.zip;
+                                const mIntel = mac.amd64 || mac.x64;
+                                if (mIntel && mIntel.dmg) targetMap['mac-dmg-x64'] = mIntel.dmg;
+                                if (mIntel && mIntel.zip) targetMap['mac-zip-x64'] = mIntel.zip;
                             }
                         }
                     }
@@ -4968,17 +5018,31 @@ async function init() {
                                 return n.endsWith('.appimage') && !isArm(n);
                             case 'linux-appimage-arm64':
                                 return n.endsWith('.appimage') && isArm(n);
+                            case 'mac-dmg-arm64':
+                                return n.endsWith('.dmg') && isArm(n);
+                            case 'mac-dmg-x64':
+                                return n.endsWith('.dmg') && (!isArm(n) || !assets.some(o => (o.name || '').toLowerCase().includes('arm')));
+                            case 'mac-zip-arm64':
+                                return n.endsWith('.zip') && isArm(n) && (n.includes('mac') || n.includes('darwin'));
+                            case 'mac-zip-x64':
+                                return n.endsWith('.zip') && !isArm(n) && (n.includes('mac') || n.includes('darwin'));
                             default:
                                 return false;
                         }
                     });
                 }
 
-                ['win-setup-x64', 'win-setup-arm64', 'win-portable-x64', 'win-portable-arm64', 'linux-deb-x64', 'linux-deb-arm64', 'linux-appimage-x64', 'linux-appimage-arm64'].forEach(target => {
+                ['win-setup-x64', 'win-setup-arm64', 'win-portable-x64', 'win-portable-arm64',
+                 'linux-deb-x64', 'linux-deb-arm64', 'linux-appimage-x64', 'linux-appimage-arm64',
+                 'mac-dmg-arm64', 'mac-dmg-x64', 'mac-zip-arm64', 'mac-zip-x64'].forEach(target => {
                     const m = findAssetForTarget(target);
                     if (m && m.browser_download_url) targetMap[target] = m.browser_download_url;
                 });
             }
+
+            const fallbackWinUrl = tagName ? `https://github.com/${repoOwner}/${repoName}/releases/tag/${tagName}` : `https://github.com/${repoOwner}/${repoName}/releases/latest`;
+            const fallbackLinuxUrl = fallbackWinUrl;
+            const fallbackMacUrl = fallbackWinUrl;
 
             // Update dropdown links and dynamically hide items if the target is missing
             const dropdownItems = document.querySelectorAll('.dropdown-menu .dropdown-item[data-target]');
@@ -4988,40 +5052,51 @@ async function init() {
                 if (url) {
                     item.href = url;
                     item.style.display = '';
+                } else if (target === 'win-portable-x64') {
+                    // Always guarantee Portable x64 is accessible
+                    item.href = fallbackWinUrl;
+                    item.style.display = '';
                 } else {
                     item.style.display = 'none';
                 }
             });
 
-            // Find primary downloads for Windows & Linux
-            const fallbackWinUrl = tagName ? `https://github.com/${repoOwner}/${repoName}/releases/tag/${tagName}` : `https://github.com/${repoOwner}/${repoName}/releases/latest`;
-            const fallbackLinuxUrl = fallbackWinUrl;
+            // Find primary downloads for Windows, Linux & macOS
             const winDownloadUrl = targetMap['win-setup-x64'] || targetMap['win-portable-x64'] || fallbackWinUrl;
             const linuxDownloadUrl = targetMap['linux-deb-x64'] || targetMap['linux-appimage-x64'] || fallbackLinuxUrl;
+            const macDownloadUrl = targetMap['mac-dmg-arm64'] || targetMap['mac-dmg-x64'] || targetMap['mac-zip-arm64'] || targetMap['mac-zip-x64'] || fallbackMacUrl;
 
             latestTagName = tagName || '';
             window.currentReleaseTag = tagName || '';
 
-            if (heroBtn && heroLinuxBtn) {
+            if (heroBtn && heroLinuxBtn && heroButtonsContainer) {
                 const heroBtnContainer = heroBtn.closest('.dropdown-container') || heroBtn;
                 const heroLinuxBtnContainer = heroLinuxBtn.closest('.dropdown-container') || heroLinuxBtn;
+                const heroMacBtnContainer = heroMacBtn ? (heroMacBtn.closest('.dropdown-container') || heroMacBtn) : null;
 
+                // Put current OS container first
                 if (userOS === "Windows") {
-                    if (heroBtnContainer.parentNode === heroButtonsContainer && heroLinuxBtnContainer.parentNode === heroButtonsContainer) {
-                        heroButtonsContainer.insertBefore(heroBtnContainer, heroLinuxBtnContainer);
+                    if (heroBtnContainer && heroButtonsContainer.contains(heroBtnContainer)) {
+                        heroButtonsContainer.prepend(heroBtnContainer);
                     }
                 } else if (userOS === "Linux") {
-                    if (heroBtnContainer.parentNode === heroButtonsContainer && heroLinuxBtnContainer.parentNode === heroButtonsContainer) {
-                        heroButtonsContainer.insertBefore(heroLinuxBtnContainer, heroBtnContainer);
+                    if (heroLinuxBtnContainer && heroButtonsContainer.contains(heroLinuxBtnContainer)) {
+                        heroButtonsContainer.prepend(heroLinuxBtnContainer);
                     }
-                } else {
-                    updateOSWarning();
+                } else if (userOS === "MacOS") {
+                    if (heroMacBtnContainer && heroButtonsContainer.contains(heroMacBtnContainer)) {
+                        heroButtonsContainer.prepend(heroMacBtnContainer);
+                    }
                 }
 
-                heroBtn.href = userOS === "Windows" ? winDownloadUrl : linuxDownloadUrl;
+                heroBtn.href = winDownloadUrl;
                 heroBtn.target = '_blank';
-                heroLinuxBtn.href = userOS === "Linux" ? linuxDownloadUrl : winDownloadUrl;
+                heroLinuxBtn.href = linuxDownloadUrl;
                 heroLinuxBtn.target = '_blank';
+                if (heroMacBtn) {
+                    heroMacBtn.href = macDownloadUrl;
+                    heroMacBtn.target = '_blank';
+                }
 
                 updateHeroButtons();
             }
@@ -5031,6 +5106,8 @@ async function init() {
                     navBtn.href = winDownloadUrl;
                 } else if (userOS === "Linux") {
                     navBtn.href = linuxDownloadUrl;
+                } else if (userOS === "MacOS") {
+                    navBtn.href = macDownloadUrl;
                 }
                 updateNavDownloadBtn();
             }
@@ -5044,6 +5121,7 @@ async function init() {
             const fallbackUrl = `https://github.com/${repoOwner}/${repoName}/releases/latest`;
             if (heroBtn) heroBtn.href = fallbackUrl;
             if (heroLinuxBtn) heroLinuxBtn.href = fallbackUrl;
+            if (heroMacBtn) heroMacBtn.href = fallbackUrl;
             if (navBtn) navBtn.href = fallbackUrl;
         }
     }

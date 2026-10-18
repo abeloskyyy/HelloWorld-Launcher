@@ -739,6 +739,7 @@ h4,
 
 .hero-buttons {
     display: flex;
+    flex-wrap: wrap;
     gap: 1rem;
     margin-bottom: 3rem;
 }
