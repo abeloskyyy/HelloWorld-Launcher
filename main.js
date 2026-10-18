@@ -674,9 +674,10 @@ function buildFSFields(obj) {
   return fields;
 }
 
-// --- Maintenance State & Admin Bypass ---
+// --- Maintenance State, Mandatory Update State & Admin Bypass ---
 let _isMaintenanceActive = false;
 let _adminBypassGranted = false;
+let _isMandatoryUpdateActive = false;
 
 // --- Social Helper: Firestore REST calls ---
 async function fsGet(docPath, idToken) {
@@ -2823,6 +2824,7 @@ function showAndFocusWindow() {
   try {
     mainWindow.flashFrame(true);
   } catch (_) {}
+  try { updateTrayMenu(); } catch (_) {}
 }
 
 function getTrayIcon() {
@@ -2888,6 +2890,62 @@ function isAccountActive(acc, current) {
 
 function updateTrayMenu() {
   if (!tray || tray.isDestroyed()) return;
+
+  const isWindowVisible = Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible());
+  const isLocked = Boolean(_isMandatoryUpdateActive || (_isMaintenanceActive && !_adminBypassGranted));
+
+  // Fallo de seguridad corregido:
+  // Si la ventana del launcher está cerrada/oculta o si hay una actualización obligatoria o mantenimiento activo,
+  // NO permitir cambiar de cuenta ni abrir los últimos perfiles jugados desde el menú del tray.
+  if (!isWindowVisible || isLocked) {
+    const restrictedItems = [
+      {
+        label: getTranslation('tray.open', 'Abrir HelloWorld Launcher'),
+        click: () => showAndFocusWindow()
+      }
+    ];
+
+    if (_isMandatoryUpdateActive) {
+      restrictedItems.push({
+        label: `⚠️ ${getTranslation('updater.mandatory_title', 'Actualización obligatoria requerida')}`,
+        enabled: false
+      });
+    } else if (_isMaintenanceActive && !_adminBypassGranted) {
+      restrictedItems.push({
+        label: `🛠️ ${getTranslation('maintenance.title', 'Servidores en Mantenimiento')}`,
+        enabled: false
+      });
+    }
+
+    restrictedItems.push(
+      { type: 'separator' },
+      {
+        label: getTranslation('tray.discord', 'Discord de la comunidad'),
+        click: () => {
+          shell.openExternal('https://dsc.gg/helloworld-launcher');
+        }
+      },
+      { type: 'separator' },
+      {
+        label: getTranslation('tray.quit', 'Salir de HelloWorld Launcher'),
+        click: () => {
+          isQuitting = true;
+          if (tray && !tray.isDestroyed()) {
+            try { tray.destroy(); } catch (_) {}
+          }
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.destroy();
+          }
+          app.quit();
+        }
+      }
+    );
+
+    try {
+      tray.setContextMenu(Menu.buildFromTemplate(restrictedItems));
+    } catch (_) {}
+    return;
+  }
 
   let userLabel = getTranslation('tray.not_connected', 'No conectado');
   let tooltipText = 'HelloWorld Launcher';
@@ -3129,9 +3187,35 @@ const createWindow = async () => {
     try { win.webContents.invalidate(); } catch (_) {}
   });
 
+  // Synchronize tray menu on window lifecycle changes
+  win.on('show', () => {
+    try { updateTrayMenu(); } catch (_) {}
+  });
+  win.on('hide', () => {
+    try { updateTrayMenu(); } catch (_) {}
+  });
+  win.on('minimize', () => {
+    try { updateTrayMenu(); } catch (_) {}
+  });
+  win.on('restore', () => {
+    try { updateTrayMenu(); } catch (_) {}
+  });
+
   // Intercept window close (X button or Alt+F4) and hide to system tray instead of exiting
   win.on('close', (event) => {
     if (!isQuitting) {
+      if (_isMandatoryUpdateActive) {
+        // Si hay una actualización obligatoria pendiente, cerrar la ventana debe salir del launcher limpiamente
+        isQuitting = true;
+        if (tray && !tray.isDestroyed()) {
+          try { tray.destroy(); } catch (_) {}
+        }
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.destroy();
+        }
+        app.quit();
+        return;
+      }
       event.preventDefault();
       win.hide();
       if (!hasShownTrayBalloon && process.platform === 'win32' && tray && !tray.isDestroyed()) {
@@ -3144,6 +3228,7 @@ const createWindow = async () => {
           });
         } catch (_) {}
       }
+      try { updateTrayMenu(); } catch (_) {}
       return false;
     }
   });
@@ -9523,8 +9608,20 @@ ipcMain.handle('set-maintenance-state', (event, active) => {
   if (_isMaintenanceActive !== next) {
     _isMaintenanceActive = next;
     console.log('[Maintenance] State updated:', _isMaintenanceActive ? 'ACTIVE' : 'INACTIVE');
+    try { updateTrayMenu(); } catch (_) {}
   }
   return { success: true, isMaintenanceActive: _isMaintenanceActive };
+});
+
+ipcMain.handle('set-mandatory-update-state', (event, active) => {
+  _isMandatoryUpdateActive = Boolean(active);
+  console.log('[MandatoryUpdate] State updated:', _isMandatoryUpdateActive ? 'ACTIVE' : 'INACTIVE');
+  try { updateTrayMenu(); } catch (_) {}
+  return { success: true, isMandatoryUpdateActive: _isMandatoryUpdateActive };
+});
+
+ipcMain.handle('get-mandatory-update-state', () => {
+  return { isMandatoryUpdateActive: _isMandatoryUpdateActive };
 });
 
 ipcMain.handle('enable-admin-bypass', async () => {
@@ -9539,6 +9636,7 @@ ipcMain.handle('enable-admin-bypass', async () => {
     }
     _adminBypassGranted = true;
     console.log('[Maintenance] Admin bypass GRANTED for UID:', auth.uid);
+    try { updateTrayMenu(); } catch (_) {}
     return { success: true, adminBypassGranted: true };
   } catch (err) {
     return { success: false, error: err.message };

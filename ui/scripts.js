@@ -914,6 +914,8 @@ function renderSidebarSponsor(config) {
 }
 
 let maintenanceListenersInitialized = false;
+let _isMaintenanceActive = false;
+let _maintenanceAdminBypassed = false;
 
 function initMaintenanceUIListeners() {
     if (maintenanceListenersInitialized) return;
@@ -946,6 +948,7 @@ function initMaintenanceUIListeners() {
                 bypassBtn.disabled = true;
                 const res = await api.enable_admin_bypass();
                 if (res && res.success) {
+                    _maintenanceAdminBypassed = true;
                     const modal = document.getElementById('maintenanceModal');
                     if (modal) {
                         modal.classList.remove('show');
@@ -982,9 +985,11 @@ async function handleMaintenanceState(maintenance) {
     initMaintenanceUIListeners();
     const modal = document.getElementById('maintenanceModal');
     const bypassBanner = document.getElementById('maintenanceAdminBypassBanner');
-    const api = window.api || (window.pywebview && window.pywebview.api);
+    const api = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
 
     if (!maintenance || maintenance.enabled !== true) {
+        _isMaintenanceActive = false;
+        _maintenanceAdminBypassed = false;
         if (modal) {
             modal.classList.remove('show');
             modal.style.display = 'none';
@@ -995,6 +1000,8 @@ async function handleMaintenanceState(maintenance) {
         }
         return;
     }
+
+    _isMaintenanceActive = true;
 
     // Maintenance is ENABLED
     if (api && typeof api.set_maintenance_state === 'function') {
@@ -1009,6 +1016,8 @@ async function handleMaintenanceState(maintenance) {
             if (st && st.adminBypassGranted) isBypassed = true;
         } catch (_) {}
     }
+
+    _maintenanceAdminBypassed = isBypassed;
 
     if (isBypassed) {
         if (modal) {
@@ -2113,6 +2122,12 @@ function initUpdateModalListeners() {
             if (_currentUpdateState && _currentUpdateState.isMandatory) {
                 return; // Cannot dismiss if mandatory
             }
+            const api = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
+            if (api && typeof api.set_mandatory_update_state === 'function') {
+                try { api.set_mandatory_update_state(false); } catch (_) {}
+            } else if (api && typeof api.setMandatoryUpdateState === 'function') {
+                try { api.setMandatoryUpdateState(false); } catch (_) {}
+            }
             if (_currentUpdateState && dontRemindCheckbox && dontRemindCheckbox.checked) {
                 localStorage.setItem(`hw_skip_version_${_currentUpdateState.latestVersion}`, 'true');
             }
@@ -2128,6 +2143,8 @@ function initUpdateModalListeners() {
         updateNowBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             if (!_currentUpdateState) return;
+
+            const api = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
 
             const progressSection = document.getElementById('updateProgressSection');
             const statusText = document.getElementById('updateProgressStatusText');
@@ -2327,6 +2344,13 @@ function initUpdateModalListeners() {
 async function showUpdateModal(updateData) {
     _currentUpdateState = updateData;
     initUpdateModalListeners();
+
+    const api = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
+    if (api && typeof api.set_mandatory_update_state === 'function') {
+        try { await api.set_mandatory_update_state(Boolean(updateData && updateData.isMandatory)); } catch (_) {}
+    } else if (api && typeof api.setMandatoryUpdateState === 'function') {
+        try { await api.setMandatoryUpdateState(Boolean(updateData && updateData.isMandatory)); } catch (_) {}
+    }
 
     const modal = document.getElementById('updateModal');
     const card = document.getElementById('updateCard');
@@ -7991,6 +8015,15 @@ window.addEventListener('switch-to-account-and-open-inbox', async (event) => {
 });
 
 window.addEventListener('quick-launch-profile', async (event) => {
+    if (_currentUpdateState && _currentUpdateState.isMandatory) {
+        console.warn('[Tray] Blocked quick-launch-profile: mandatory update is active');
+        return;
+    }
+    if (_isMaintenanceActive && !_maintenanceAdminBypassed) {
+        console.warn('[Tray] Blocked quick-launch-profile: maintenance is active');
+        return;
+    }
+
     const detail = event.detail || {};
     const profileId = detail.profileId;
     if (!profileId) return;
@@ -8036,6 +8069,15 @@ window.addEventListener('quick-launch-profile', async (event) => {
 });
 
 window.addEventListener('tray-switch-account', async (event) => {
+    if (_currentUpdateState && _currentUpdateState.isMandatory) {
+        console.warn('[Tray] Blocked tray-switch-account: mandatory update is active');
+        return;
+    }
+    if (_isMaintenanceActive && !_maintenanceAdminBypassed) {
+        console.warn('[Tray] Blocked tray-switch-account: maintenance is active');
+        return;
+    }
+
     const detail = event.detail || {};
     const targetId = detail.accountId;
     if (targetId && typeof window.performAccountSwitch === 'function') {
@@ -8044,6 +8086,15 @@ window.addEventListener('tray-switch-account', async (event) => {
 });
 
 window.addEventListener('open-account-switcher', async () => {
+    if (_currentUpdateState && _currentUpdateState.isMandatory) {
+        console.warn('[Tray] Blocked open-account-switcher: mandatory update is active');
+        return;
+    }
+    if (_isMaintenanceActive && !_maintenanceAdminBypassed) {
+        console.warn('[Tray] Blocked open-account-switcher: maintenance is active');
+        return;
+    }
+
     if (typeof window.openAccountSwitcher === 'function') {
         await window.openAccountSwitcher();
     }
