@@ -2004,7 +2004,9 @@ function handleAnnouncement(announcement) {
                         if (btn.tooltip) b.title = btn.tooltip;
                         b.onclick = (e) => {
                             e.preventDefault();
-                            window.location.href = 'updater.html';
+                            if (typeof checkAppUpdates === 'function') {
+                                checkAppUpdates(true);
+                            }
                         };
                         break;
 

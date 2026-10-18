@@ -56,10 +56,11 @@ jobs:
         env:
           APP_SECRETS: ${{ secrets.APP_SECRETS_JSON }}
         run: |
+          mkdir -p app
           if [ -n "$APP_SECRETS" ]; then
-            echo "$APP_SECRETS" > secrets.json
+            echo "$APP_SECRETS" > app/secrets.json
           else
-            echo '{"FIREBASE_PROJECT_ID":"helloworld-launcher","REMOTE_CONFIG_GIST_URL":"https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json"}' > secrets.json
+            echo '{"FIREBASE_PROJECT_ID":"helloworld-launcher","REMOTE_CONFIG_GIST_URL":"https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json"}' > app/secrets.json
           fi
 
       - name: Build Launcher ZIP (dist/helloworld-launcher-win.zip)
@@ -143,10 +144,11 @@ jobs:
         env:
           APP_SECRETS: ${{ secrets.APP_SECRETS_JSON }}
         run: |
+          mkdir -p app
           if [ -n "$APP_SECRETS" ]; then
-            echo "$APP_SECRETS" > secrets.json
+            echo "$APP_SECRETS" > app/secrets.json
           else
-            echo '{"FIREBASE_PROJECT_ID":"helloworld-launcher","REMOTE_CONFIG_GIST_URL":"https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json"}' > secrets.json
+            echo '{"FIREBASE_PROJECT_ID":"helloworld-launcher","REMOTE_CONFIG_GIST_URL":"https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json"}' > app/secrets.json
           fi
 
       - name: Build Linux (.deb packages)
@@ -197,10 +199,11 @@ jobs:
         env:
           APP_SECRETS: ${{ secrets.APP_SECRETS_JSON }}
         run: |
+          mkdir -p app
           if [ -n "$APP_SECRETS" ]; then
-            echo "$APP_SECRETS" > secrets.json
+            echo "$APP_SECRETS" > app/secrets.json
           else
-            echo '{"FIREBASE_PROJECT_ID":"helloworld-launcher","REMOTE_CONFIG_GIST_URL":"https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json"}' > secrets.json
+            echo '{"FIREBASE_PROJECT_ID":"helloworld-launcher","REMOTE_CONFIG_GIST_URL":"https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json"}' > app/secrets.json
           fi
 
       - name: Build macOS (.dmg & .zip)

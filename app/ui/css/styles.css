@@ -61,13 +61,13 @@
 }
 @font-face {
     font-family: "Pixel";
-    src: url("fonts/pixel.ttf") format("truetype");
+    src: url("../fonts/pixel.ttf") format("truetype");
     font-weight: normal;
     font-style: normal;
 }
 @font-face {
     font-family: "Minecraft";
-    src: url("fonts/pixel.ttf") format("truetype");
+    src: url("../fonts/pixel.ttf") format("truetype");
     font-weight: normal;
     font-style: normal;
 }
@@ -5421,32 +5421,32 @@ label {
 
 .cube-spinner .face-front {
     transform: translateZ(40px);
-    background-image: url('img/icon/grass_block_side.png');
+    background-image: url('../img/icon/grass_block_side.png');
 }
 
 .cube-spinner .face-back {
     transform: rotateY(180deg) translateZ(40px);
-    background-image: url('img/icon/grass_block_side.png');
+    background-image: url('../img/icon/grass_block_side.png');
 }
 
 .cube-spinner .face-right {
     transform: rotateY(90deg) translateZ(40px);
-    background-image: url('img/icon/grass_block_side.png');
+    background-image: url('../img/icon/grass_block_side.png');
 }
 
 .cube-spinner .face-left {
     transform: rotateY(-90deg) translateZ(40px);
-    background-image: url('img/icon/grass_block_side.png');
+    background-image: url('../img/icon/grass_block_side.png');
 }
 
 .cube-spinner .face-top {
     transform: rotateX(90deg) translateZ(40px);
-    background-image: url('img/icon/grass_block_top.png');
+    background-image: url('../img/icon/grass_block_top.png');
 }
 
 .cube-spinner .face-bottom {
     transform: rotateX(-90deg) translateZ(40px);
-    background-image: url('img/icon/grass_block_bottom.png');
+    background-image: url('../img/icon/grass_block_bottom.png');
 }
 
 @keyframes spinner-rotate {

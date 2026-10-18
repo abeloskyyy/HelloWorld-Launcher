@@ -6,10 +6,10 @@
     "type": "git",
     "url": "https://github.com/Abeloskyyy/HelloWorld-Launcher.git"
   },
-  "main": "main.js",
+  "main": "app/main.js",
   "scripts": {
     "test": "electron .",
-    "start": "node scripts/start.js",
+    "start": "electron .",
     "build": "electron-builder",
     "build:win": "electron-builder --win -p never --config.win.target=zip",
     "build:linux": "electron-builder --linux -p never",
@@ -20,16 +20,13 @@
     "productName": "HelloWorld-Launcher",
     "directories": {
       "output": "dist",
-      "buildResources": "build"
+      "buildResources": "app/build"
     },
     "files": [
-      "main.js",
-      "preload.js",
-      "secrets.json",
-      "src/**/*",
-      "ui/**/*",
-      "!docs/**",
-      "!screenshots/**",
+      "app/**/*",
+      "!web/**",
+      "!assets/**",
+      "!legacy/**",
       "!installer/**",
       "!scripts/**",
       "!release/**",
@@ -48,7 +45,7 @@
           ]
         }
       ],
-      "icon": "build/icon.ico",
+      "icon": "app/build/icon.ico",
       "sign": null,
       "artifactName": "helloworld-launcher-win.${ext}"
     },
@@ -62,7 +59,7 @@
           ]
         }
       ],
-      "icon": "build/icons",
+      "icon": "app/build/icons",
       "category": "Game",
       "artifactName": "helloworld-launcher-linux-${arch}.${ext}"
     },
@@ -83,7 +80,7 @@
           ]
         }
       ],
-      "icon": "build/icon.png",
+      "icon": "app/build/icon.png",
       "category": "public.app-category.games",
       "artifactName": "helloworld-launcher-mac-${arch}.${ext}"
     },

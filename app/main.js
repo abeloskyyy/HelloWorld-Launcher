@@ -596,6 +596,7 @@ function loadSecrets() {
   };
   const candidates = [
     path.join(__dirname, 'secrets.json'),
+    path.join(__dirname, '..', 'secrets.json'),
     path.join(paths.getLauncherDir(), 'secrets.json')
   ];
   for (const p of candidates) {
@@ -5141,8 +5142,12 @@ ipcMain.handle('check-for-updates', () => {
   }
   // Enable dev mode updates if running in dev AND dev-config exists
   if (!app.isPackaged) {
-    const devConfig = path.join(__dirname, 'dev-app-update.yml');
-    if (fs.existsSync(devConfig)) {
+    const devConfigCandidates = [
+      path.join(__dirname, 'dev-app-update.yml'),
+      path.join(__dirname, '..', 'dev-app-update.yml')
+    ];
+    const devConfig = devConfigCandidates.find(p => fs.existsSync(p));
+    if (devConfig) {
       console.log("Running in dev mode, forcing update config...");
       autoUpdater.forceDevUpdateConfig = true;
     } else {
@@ -5179,19 +5184,25 @@ async function findLocalInstallerPath() {
         path.join(execDir, 'setup.exe'),
         path.join(execDir, 'Setup.exe'),
         path.join(execDir, 'helloworld-launcher-setup.exe'),
+        path.join(__dirname, '..', 'release', 'win', 'HelloWorld-Launcher-Setup.exe'),
+        path.join(__dirname, '..', 'dist', 'setup', 'HelloWorld-Launcher-Setup.exe'),
         path.join(__dirname, 'release', 'win', 'HelloWorld-Launcher-Setup.exe'),
         path.join(__dirname, 'dist', 'setup', 'HelloWorld-Launcher-Setup.exe')
       ];
     } else if (process.platform === 'darwin') {
       candidates = [
         path.join(execDir, 'HelloWorld-Launcher.dmg'),
-        path.join(execDir, '..', '..', '..', 'HelloWorld-Launcher.dmg')
+        path.join(execDir, '..', '..', '..', 'HelloWorld-Launcher.dmg'),
+        path.join(__dirname, '..', 'dist', 'HelloWorld-Launcher.dmg'),
+        path.join(__dirname, 'dist', 'HelloWorld-Launcher.dmg')
       ];
     } else {
       candidates = [
         path.join(execDir, 'HelloWorld-Launcher.AppImage'),
         path.join(execDir, 'helloworld-launcher.AppImage'),
-        path.join(execDir, 'helloworld-launcher.deb')
+        path.join(execDir, 'helloworld-launcher.deb'),
+        path.join(__dirname, '..', 'dist', 'helloworld-launcher.deb'),
+        path.join(__dirname, 'dist', 'helloworld-launcher.deb')
       ];
     }
 

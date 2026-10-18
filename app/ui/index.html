@@ -6,13 +6,13 @@
     <meta http-equiv="Content-Security-Policy"
         content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://mc-heads.net https://piston-meta.mojang.com https://cdn.modrinth.com https://api.modrinth.com https://*.googleapis.com https://*.firebaseapp.com https://*.firebasestorage.app https://apis.google.com https://www.gstatic.com https://www.youtube.com https://www.youtube-nocookie.com https://s.ytimg.com; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; img-src 'self' data: blob: https: file: launcher: https://launchercontent.mojang.com https://*.ytimg.com https://*.youtube.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; media-src 'self' data: blob: https:; connect-src 'self' https://piston-meta.mojang.com https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com wss://*.firebaseio.com https://www.gstatic.com https://api.mojang.com https://sessionserver.mojang.com https://api.modrinth.com https://mc-heads.net https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://launchercontent.mojang.com https://*.githubusercontent.com https://gist.githubusercontent.com https://hwlauncher.abelosky.com https://*.hwlauncher.abelosky.com https://*.workers.dev https://api.mcstatus.io https://api.minetools.eu https://api.mcsrvstat.us https://eu.mc-api.net https://www.youtube.com https://*.googlevideo.com;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="onboarding_styles.css">
-    <link rel="stylesheet" href="tutorial-spotlight.css">
-    <link rel="stylesheet" href="minecraft-skinviewer.css">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/onboarding_styles.css">
+    <link rel="stylesheet" href="css/tutorial-spotlight.css">
+    <link rel="stylesheet" href="css/minecraft-skinviewer.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Preload language flags to prevent lag spikes -->
-    <script src="i18n.js"></script>
+    <script src="js/i18n.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js';
@@ -975,11 +975,11 @@
                                     <span style="font-weight: 500;">Dansk</span>
                                 </div>
                                 <div class="lang-dropdown-item" onclick="selectLanguage('eu')">
-                                    <img src="img/es-pv.svg" alt="Basque Flag" style="width: 22px; border-radius: 3px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"> 
+                                    <img src="https://cdn.jsdelivr.net/gh/lipis/flag-icons/flags/4x3/es-pv.svg" alt="Basque Flag" style="width: 22px; border-radius: 3px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"> 
                                     <span style="font-weight: 500;">Euskara</span>
                                 </div>
                                 <div class="lang-dropdown-item" onclick="selectLanguage('gl')">
-                                    <img src="img/es-ga.svg" alt="Galician Flag" style="width: 22px; border-radius: 3px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"> 
+                                    <img src="https://cdn.jsdelivr.net/gh/lipis/flag-icons/flags/4x3/es-ga.svg" alt="Galician Flag" style="width: 22px; border-radius: 3px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"> 
                                     <span style="font-weight: 500;">Galego</span>
                                 </div>
                             </div>
@@ -2250,11 +2250,11 @@
                                             <span style="font-weight: 500;">Dansk</span>
                                         </div>
                                         <div class="lang-dropdown-item" onclick="selectWizLanguage('eu', 'Euskara', 'ES-PV')">
-                                            <img src="img/es-pv.svg" alt="Basque Flag" style="width: 22px; border-radius: 3px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"> 
+                                            <img src="https://cdn.jsdelivr.net/gh/lipis/flag-icons/flags/4x3/es-pv.svg" alt="Basque Flag" style="width: 22px; border-radius: 3px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"> 
                                             <span style="font-weight: 500;">Euskara</span>
                                         </div>
                                         <div class="lang-dropdown-item" onclick="selectWizLanguage('gl', 'Galego', 'ES-GA')">
-                                            <img src="img/es-ga.svg" alt="Galician Flag" style="width: 22px; border-radius: 3px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"> 
+                                            <img src="https://cdn.jsdelivr.net/gh/lipis/flag-icons/flags/4x3/es-ga.svg" alt="Galician Flag" style="width: 22px; border-radius: 3px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"> 
                                             <span style="font-weight: 500;">Galego</span>
                                         </div>
                                     </div>
@@ -3441,17 +3441,17 @@
         </div>
     </div>
 
-    <script src="scripts.js"></script>
-    <script src="stats.js"></script>
-    <script src="download-listeners.js"></script>
-    <script src="scripts-skinviewer3d.js"></script>
-    <script src="scripts-skinpacks.js"></script>
+    <script src="js/scripts.js"></script>
+    <script src="js/stats.js"></script>
+    <script src="js/download-listeners.js"></script>
+    <script src="js/scripts-skinviewer3d.js"></script>
+    <script src="js/scripts-skinpacks.js"></script>
     <!-- Onboarding Logic Embedded for now to ensure access to all scopes -->
-    <script src="tutorial-spotlight.js"></script>
-    <script src="tutorial-steps.js"></script>
-    <script src="scripts-onboarding.js"></script>
-    <script src="social.js"></script>
-    <script src="workshop.js"></script>
+    <script src="js/tutorial-spotlight.js"></script>
+    <script src="js/tutorial-steps.js"></script>
+    <script src="js/scripts-onboarding.js"></script>
+    <script src="js/social.js"></script>
+    <script src="js/workshop.js"></script>
 
 </body>
 

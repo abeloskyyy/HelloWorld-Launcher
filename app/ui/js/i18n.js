@@ -156,8 +156,8 @@ window.AVAILABLE_LANGS = {
     'el': { flag: 'GR', name: 'Ελληνικά' },
     'cs': { flag: 'CZ', name: 'Čeština' },
     'da': { flag: 'DK', name: 'Dansk' },
-    'eu': { flag: 'ES-PV', name: 'Euskara', customFlagUrl: 'img/es-pv.svg' },
-    'gl': { flag: 'ES-GA', name: 'Galego', customFlagUrl: 'img/es-ga.svg' }
+    'eu': { flag: 'ES-PV', name: 'Euskara', customFlagUrl: 'https://cdn.jsdelivr.net/gh/lipis/flag-icons/flags/4x3/es-pv.svg' },
+    'gl': { flag: 'ES-GA', name: 'Galego', customFlagUrl: 'https://cdn.jsdelivr.net/gh/lipis/flag-icons/flags/4x3/es-ga.svg' }
 };
 
 function updateDropdownUI() {

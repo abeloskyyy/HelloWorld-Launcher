@@ -35,22 +35,22 @@ HelloWorld Launcher is a launcher for Minecraft: Java Edition. It is open source
 
 ### Screenshots
 
-![Play Screen](screenshots/play.png)
+![Play Screen](assets/screenshots/play.png)
 *Main Play Screen*
 
-![Create Installation](screenshots/create-installation.png)
+![Create Installation](assets/screenshots/create-installation.png)
 *Creating a New Installation*
 
-![Mod Search](screenshots/search-mods.png)
+![Mod Search](assets/screenshots/search-mods.png)
 *Mod Search and Download*
 
-![Skins & Capes](screenshots/skins.png)
+![Skins & Capes](assets/screenshots/skins.png)
 *Skin & Cape Customization*
 
-![Account Management](screenshots/accounts.png)
+![Account Management](assets/screenshots/accounts.png)
 *Account Management*
 
-![Social & Community](screenshots/social.png)
+![Social & Community](assets/screenshots/social.png)
 *Social and Community Features*
 
 ---
