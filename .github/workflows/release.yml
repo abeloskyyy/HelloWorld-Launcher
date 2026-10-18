@@ -1,0 +1,154 @@
+name: Publish Official Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v2.2.0). Leave empty to use version from package.json'
+        required: false
+        type: string
+        default: ''
+      build_run_id:
+        description: 'Run ID of "Build Application". Leave empty to use latest successful build'
+        required: false
+        type: string
+        default: ''
+      is_draft:
+        description: 'Publish as Draft release?'
+        required: false
+        type: boolean
+        default: false
+      is_prerelease:
+        description: 'Publish as Pre-release?'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish-release:
+    name: Publish Official Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Resolve Release Tag & Build Run ID
+        id: resolve
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ github.event.inputs.tag_name }}
+          INPUT_RUN_ID: ${{ github.event.inputs.build_run_id }}
+        run: |
+          # 1. Resolver Tag
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          else
+            APP_VERSION=$(node -p "require('./package.json').version")
+            TAG="v$APP_VERSION"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Release Tag: $TAG"
+
+          # 2. Resolver Build Run ID
+          if [ -n "$INPUT_RUN_ID" ]; then
+            RUN_ID="$INPUT_RUN_ID"
+            echo "Using specified Build Run ID: $RUN_ID"
+          else
+            echo "Looking for latest successful 'Build Application' workflow run..."
+            RUN_ID=$(gh run list --workflow="build.yml" --status="success" --limit 1 --json databaseId --jq '.[0].databaseId')
+            if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+              echo "::error::Could not find any successful run of build.yml. Please run 'Build Application' first or provide build_run_id."
+              exit 1
+            fi
+            echo "Found latest successful Build Run ID: $RUN_ID"
+          fi
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download Build Artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_RUN_ID: ${{ steps.resolve.outputs.run_id }}
+        run: |
+          mkdir -p raw-artifacts
+          echo "Downloading artifacts from run $BUILD_RUN_ID..."
+          gh run download "$BUILD_RUN_ID" --dir raw-artifacts
+
+          mkdir -p release-assets
+          find raw-artifacts -type f \( -name "*.exe" -o -name "*.zip" -o -name "*.deb" -o -name "*.dmg" \) ! -name "*blockmap*" -exec cp {} release-assets/ \;
+
+          # Asegurar que el instalador Setup.exe esté presente (heredando de la release anterior si hiciera falta para SmartScreen)
+          if [ ! -f "release-assets/HelloWorld-Launcher-Setup.exe" ]; then
+            echo "HelloWorld-Launcher-Setup.exe not found in build artifacts. Pulling from previous release to retain SmartScreen reputation..."
+            mkdir -p prev-setup
+            if gh release download --pattern "HelloWorld-Launcher-Setup.exe" --dir prev-setup 2>/dev/null; then
+              if [ -f "prev-setup/HelloWorld-Launcher-Setup.exe" ]; then
+                cp prev-setup/HelloWorld-Launcher-Setup.exe release-assets/HelloWorld-Launcher-Setup.exe
+                echo "Successfully copied HelloWorld-Launcher-Setup.exe from previous release."
+              fi
+            fi
+          fi
+
+          echo "Staged release assets:"
+          ls -lh release-assets
+
+          COUNT=$(find release-assets -type f | wc -l)
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::No binary installer assets found in run $BUILD_RUN_ID."
+            exit 1
+          fi
+
+      - name: Create or Update GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.resolve.outputs.tag_name || steps.resolve.outputs.tag }}
+          IS_DRAFT: ${{ github.event.inputs.is_draft }}
+          IS_PRERELEASE: ${{ github.event.inputs.is_prerelease }}
+        run: |
+          TITLE="HelloWorld Launcher $TAG"
+          
+          # Verificar archivo de notas
+          NOTES_ARG=""
+          if [ -f "RELEASE_NOTES.md" ]; then
+            echo "Using RELEASE_NOTES.md for release body."
+            NOTES_ARG="--notes-file RELEASE_NOTES.md"
+          else
+            echo "RELEASE_NOTES.md not found. Using auto-generated release notes."
+            NOTES_ARG="--generate-notes"
+          fi
+
+          DRAFT_FLAG=""
+          if [ "$IS_DRAFT" = "true" ]; then
+            DRAFT_FLAG="--draft"
+          fi
+
+          PRERELEASE_FLAG=""
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
+          # Comprobar si la release ya existe
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists. Uploading/clobbering assets..."
+            gh release upload "$TAG" release-assets/* --clobber
+            if [ -f "RELEASE_NOTES.md" ]; then
+              gh release edit "$TAG" --notes-file RELEASE_NOTES.md
+            fi
+          else
+            echo "Creating new release $TAG..."
+            gh release create "$TAG" release-assets/* \
+              --title "$TITLE" \
+              $NOTES_ARG \
+              $DRAFT_FLAG \
+              $PRERELEASE_FLAG
+          fi
+
+          echo "Release operation completed successfully for $TAG."

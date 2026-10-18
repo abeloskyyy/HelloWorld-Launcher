@@ -66,7 +66,7 @@
                 </div>
 
                 <!-- Settings Gear Button (hidden on settings page itself) -->
-                <a href="../settings/" class="nav-settings-btn" id="navSettingsBtn" title="Settings" aria-label="Settings" style="display: none;">
+                <a href="../settings/" class="nav-settings-btn" id="navSettingsBtn" title="Settings" aria-label="Settings" style="display: none;" data-i18n-title="settings.main_title">
                     <i class="fas fa-cog"></i>
                 </a>
 
@@ -173,7 +173,7 @@
                                 <button class="btn btn-secondary" onclick="document.getElementById('avatarUploadInput').click()" style="flex: 1; min-width: 140px; font-size: 0.9em;">
                                     <i class="fas fa-camera"></i> <span data-i18n="settings.upload_avatar">Upload Avatar</span>
                                 </button>
-                                <button class="btn btn-secondary" id="useDefaultAvatarBtn" title="Use default Minecraft head" style="display:none; padding: 0 16px; font-size: 0.9em;">
+                                <button class="btn btn-secondary" id="useDefaultAvatarBtn" title="Use default Minecraft head" style="display:none; padding: 0 16px; font-size: 0.9em;" data-i18n-title="settings.mc_head_title">
                                     <i class="fas fa-cube"></i> <span data-i18n="settings.mc_head">MC Head</span>
                                 </button>
                                 <select id="dashboardBackground" class="form-control" style="flex: 1; min-width: 180px; padding: 10px;">
@@ -183,15 +183,15 @@
                                     <option value="gradient3" data-i18n="bg.green">Green Gradient</option>
                                     <option value="gradient4" data-i18n="bg.orange">Orange Gradient</option>
                                     <option value="gradient5" data-i18n="bg.pink">Pink Gradient</option>
-                                    <option value="minecraft1">Minecraft Overworld</option>
-                                    <option value="minecraft2">Minecraft Sky</option>
-                                    <option value="minecraft3">Minecraft Nether</option>
-                                    <option value="minecraft4">Minecraft End</option>
-                                    <option value="minecraft5">Minecraft Village</option>
-                                    <option value="minecraft6">Minecraft Forest</option>
-                                    <option value="minecraft7">Minecraft Desert</option>
-                                    <option value="minecraft8">Minecraft Ocean</option>
-                                    <option value="minecraft9">Minecraft Cherry Grove</option>
+                                    <option value="minecraft1" data-i18n="bg.mc_overworld">Minecraft Overworld</option>
+                                    <option value="minecraft2" data-i18n="bg.mc_sky">Minecraft Sky</option>
+                                    <option value="minecraft3" data-i18n="bg.mc_nether">Minecraft Nether</option>
+                                    <option value="minecraft4" data-i18n="bg.mc_end">Minecraft End</option>
+                                    <option value="minecraft5" data-i18n="bg.mc_village">Minecraft Village</option>
+                                    <option value="minecraft6" data-i18n="bg.mc_forest">Minecraft Forest</option>
+                                    <option value="minecraft7" data-i18n="bg.mc_desert">Minecraft Desert</option>
+                                    <option value="minecraft8" data-i18n="bg.mc_ocean">Minecraft Ocean</option>
+                                    <option value="minecraft9" data-i18n="bg.mc_cherry_grove">Minecraft Cherry Grove</option>
                                 </select>
                             </div>
                             <p style="font-size: 0.8em; opacity: 0.65; margin-top: 4px;" data-i18n="settings.avatar_help">Images are cropped to 1:1 and resized to 128x128 pixels.</p>

@@ -25,11 +25,15 @@
     "streak_days": "连续登录<br>天数",
     "streak_tooltip": "每天首次登录游戏时自动增加。",
     "sponsor_title": "Apex Hosting",
-    "sponsor_subtitle": "立享 25% 折扣创建你的服务器",
+    "sponsor_subtitle": "创建你的服务器",
     "sponsor_code_copied": "代码 {code} 已复制到剪贴板",
     "sponsor_copied_short": "代码已复制",
     "sponsor_copy_hint": "复制代码",
-    "sponsor_open_hint": "打开链接"
+    "sponsor_open_hint": "打开链接",
+    "buy_minecraft_title": "购买 Minecraft",
+    "buy_minecraft_subtitle": "获取官方正版 Premium 账户",
+    "buy_minecraft_badge": "PREMIUM",
+    "buy_minecraft_hint": "在 Minecraft 官方网站购买"
   },
   "user_menu": {
     "edit_profile": "编辑资料",
@@ -107,7 +111,45 @@
     "version": "版本",
     "last_played": "上次游玩",
     "starting": "正在启动...",
-    "playing": "正在游戏中"
+    "playing": "正在游戏中",
+    "servers_promo_text": "想让您的服务器出现在这里吗？点击{link}订购服务。",
+    "servers_promo_link": "这里",
+    "news_tab": "新闻",
+    "servers_tab": "服务器",
+    "join_server": "加入服务器",
+    "copy_ip_tooltip": "点击复制 IP",
+    "ip_copied": "IP {ip} 已复制到剪贴板",
+    "save_server_tooltip": "添加到我的 Minecraft 服务器列表",
+    "server_added_to_list": "服务器 {server} 已添加到您的 Minecraft 列表",
+    "web_tooltip": "访问官方网站",
+    "discord_tooltip": "加入 Discord 服务器",
+    "server_offline": "离线",
+    "server_offline_tooltip": "服务器离线",
+    "server_loading": "正在加载状态...",
+    "server_offline_motd": "服务器不可用或离线",
+    "server_error_motd": "无法获取服务器信息",
+    "players_online_tooltip": "{online}/{max} 名玩家在线",
+    "version_range_tooltip": "支持版本: {version}",
+    "version_offline": "离线",
+    "version_unknown": "在线",
+    "edition_java": "Java",
+    "edition_bedrock": "Bedrock",
+    "edition_crossplay": "Java & Bedrock",
+    "no_servers_title": "暂无推荐服务器",
+    "no_servers_desc": "推荐服务器将很快在此显示。",
+    "patchnotes_tab": "更新日志",
+    "latest_release": "正式版:",
+    "latest_snapshot": "快照:",
+    "filter_all": "全部",
+    "filter_releases": "正式版",
+    "filter_snapshots": "快照",
+    "read_changelog": "阅读完整更新日志",
+    "patchnotes_title": "Minecraft 更新日志",
+    "loading_patchnotes": "正在加载更新日志...",
+    "error_loading_patchnotes": "加载更新日志失败",
+    "release_badge": "正式版",
+    "snapshot_badge": "快照",
+    "close_modal": "关闭"
   },
   "account_switcher": {
     "title": "账户",
@@ -134,7 +176,14 @@
     "days_played": "游玩天数",
     "sessions": "会话次数",
     "days_unit": "天",
-    "hours_unit": "小时"
+    "hours_unit": "小时",
+    "profile_step_avatar": "自定义头像",
+    "profile_step_background": "个人资料背景",
+    "profile_step_country": "国家/地区",
+    "profile_step_bio": "个人简介",
+    "profile_step_links": "社交链接",
+    "profile_step_mob": "最喜欢的生物",
+    "profile_step_playstyle": "游玩风格标签"
   },
   "social": {
     "title": "社交",
@@ -303,7 +352,12 @@
     "inbox_received": "收件箱",
     "inbox_sent": "已发送",
     "no_sent_messages_yet": "您尚未发送任何消息。",
-    "join_server_title": "加入服务器"
+    "join_server_title": "加入服务器",
+    "status_menu": "在启动器菜单中",
+    "status_playing_world": "正在 \"{world}\" 中游玩",
+    "status_playing_singleplayer": "正在游玩单人游戏",
+    "status_playing_server": "正在 {server} 游玩",
+    "status_playing_multiplayer": "正在游玩多人游戏"
   },
   "installations": {
     "create_new": "创建新的安装版本",
@@ -352,8 +406,8 @@
     "no_modded_installations_found": "未找到模组安装",
     "no_versions_found": "未找到版本",
     "no_compatible_found": "未找到兼容的安装版本",
-    "no_mod_profiles": "未找到包含 Forge、Fabric、NeoForge 或 Quilt 的安装版本。",
-    "no_shader_profiles": "未找到支持光影的安装版本。（需要安装 Forge/NeoForge 或 Fabric/Quilt）。",
+    "no_mod_profiles": "未找到包含 Forge、Fabric、或 NeoForge 的安装版本。",
+    "no_shader_profiles": "未找到支持光影的安装版本。（需要安装 Forge/NeoForge 或 Fabric）。",
     "no_profiles": "未找到安装版本。",
     "version": "Version",
     "edit_title": "编辑安装",
@@ -367,7 +421,10 @@
     "install_all_warning": "安装不兼容的模组可能会导致游戏崩溃。是否继续？",
     "install_all_confirm": "部分模组可能与所选版本不兼容，并可能导致 Minecraft 崩溃。确定仍要全部安装吗？",
     "cancel_btn": "取消",
-    "install_btn": "安装"
+    "install_btn": "安装",
+    "shortcut_btn": "创建桌面和开始菜单快捷方式",
+    "shortcut_created": "已在桌面和开始菜单创建快捷方式",
+    "shortcut_failed": "创建快捷方式失败"
   },
   "loader": {
     "checking_connection": "检查连接...",
@@ -384,7 +441,6 @@
     "downloading_fabric": "正在下载 Fabric 安装程序",
     "downloading_forge": "正在下载 Forge 安装程序",
     "downloading_neoforge": "正在下载 NeoForge 安装程序",
-    "downloading_quilt": "正在下载 Quilt 安装程序",
     "extracting": "正在提取",
     "all_done": "全部完成！正在启动游戏...",
     "preparing": "准备中...",
@@ -396,7 +452,15 @@
     "feat_mods": "Mod searching and downloading",
     "feat_updates": "Automatic updates",
     "feat_versions": "Downloading new Minecraft versions",
-    "continue_anyway": "Continue anyway"
+    "continue_anyway": "Continue anyway",
+    "syncing_updates": "正在将附加组件更新至最新兼容版本。",
+    "syncing_missing_and_updates": "正在下载此安装版本的缺失文件和更新。",
+    "updating_simple": "正在更新...",
+    "updating_name": "正在更新 {name}...",
+    "update_badge": "更新",
+    "waiting": "等待中",
+    "done": "完成",
+    "error": "错误"
   },
   "toasts": {
     "login_failed": "登录失败: {err}",
@@ -512,7 +576,12 @@
     "success": "Success",
     "server_invite_invalid_ip": "Invalid server address. Use a valid hostname or IP (e.g. hypixel.net, 1.2.3.4:25565).",
     "server_invite_enter_ip": "Please enter a server address.",
-    "server_added_to_list": "Server added to your Minecraft server list!"
+    "server_added_to_list": "Server added to your Minecraft server list!",
+    "invalid_server_ip": "无效的服务器 IP 地址",
+    "minecraft_running_server_saved": "Minecraft 已在运行。我们已将该服务器添加到您的多人游戏列表中。",
+    "launch_failed": "启动游戏失败。",
+    "connecting_to_server": "正在连接至 {server}...",
+    "copied_to_clipboard": "已复制到剪贴板！"
   },
   "settings": {
     "language": "Language / 语言",
@@ -732,7 +801,7 @@
     "在“新闻”板块，您可以随时了解最新的 Minecraft 新闻和补丁。",
     "有疑问或需要解决问题吗？通过社交链接加入我们的 Discord 社区吧。",
     "工坊允许您只需一键即可安装其他用户优化过的完美配置。",
-    "创建新安装版本时，您可以在原版 (Vanilla)、Fabric、Forge、NeoForge 和 Quilt 之间进行选择。",
+    "创建新安装版本时，您可以在原版 (Vanilla)、Fabric、Forge 和 NeoForge 之间进行选择。",
     "您可以为每个安装版本自定义图标和文件夹，以便更好地进行管理整理。",
     "后台渐进式模组加载功能让您在浏览商店时不会遇到 UI 卡顿。"
   ],
@@ -922,7 +991,16 @@
     "retry": "Retry",
     "download": "Download Update",
     "release_notes": "Release Notes & Changelog",
-    "starting_download": "Starting Download..."
+    "starting_download": "Starting Download...",
+    "update_now": "立即更新",
+    "later": "稍后",
+    "dont_remind": "不再提醒此版本",
+    "mandatory_title": "需要强制更新",
+    "mandatory_badge": "强制",
+    "new_version_badge": "新版本可用",
+    "mandatory_desc": "您当前的客户端版本 ({current}) 已不再受支持。请更新至 {latest} 以继续使用。",
+    "launching_setup": "正在启动安装程序...",
+    "downloading_installer": "正在下载安装程序..."
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Minecraft新版本",
@@ -952,5 +1030,18 @@
     "premium": "高级账号",
     "moderator": "管理员",
     "creator": "创作者"
+  },
+  "maintenance": {
+    "title": "服务器维护中",
+    "subtitle": "我们目前正在进行基础设施升级和优化。HelloWorld Launcher 很快就会重新上线。",
+    "check_again": "重新检查",
+    "checking": "检查中...",
+    "status_page": "服务状态",
+    "admin_bypass": "管理员绕过",
+    "admin_bypass_badge": "🛠️ 维护模式已启用 — 管理员绕过已激活",
+    "estimated_until": "预计恢复时间: {time}",
+    "bypass_success": "管理员绕过已启用。已授予完全访问权限。",
+    "bypass_denied": "访问被拒绝: 您的账户没有管理员权限。",
+    "bypass_error": "启用管理员绕过失败: {err}"
   }
 }

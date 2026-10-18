@@ -81,12 +81,26 @@ class ModManager {
         }
     }
 
-    async getVersionFromId(versionId) {
+    async getVersionFromId(versionId, targetType = null) {
         try {
             const res = await axios.get(`https://api.modrinth.com/v2/version/${versionId}`);
-            const files = res.data.files;
-            const primary = files.find(f => f.primary) || files[0];
-            return { success: true, url: primary.url, filename: primary.filename };
+            const files = Array.isArray(res.data.files) ? res.data.files : [];
+            let file = null;
+            if (targetType === 'datapack') {
+                file = files.find(f => f.filename && f.filename.toLowerCase().endsWith('.zip'))
+                    || files.find(f => f.primary)
+                    || files[0];
+            } else if (targetType === 'mod') {
+                file = files.find(f => f.filename && f.filename.toLowerCase().endsWith('.jar'))
+                    || files.find(f => f.primary)
+                    || files[0];
+            } else {
+                file = files.find(f => f.primary) || files[0];
+            }
+            if (!file) {
+                return { success: false, error: 'No files found in version' };
+            }
+            return { success: true, url: file.url, filename: file.filename };
         } catch (e) {
             return { success: false, error: e.message };
         }
@@ -145,10 +159,54 @@ class ModManager {
      * @param {string} gameVersion - MC version string (e.g. "1.21.1")
      * @param {string} loader - Loader slug (e.g. "fabric")
      * @param {Set<string>} installedProjectIds - Set of project_ids already installed in the profile.
+    /**
+     * Resolves all dependencies for a given version, crawling transitively.
+     * Compatible with both Mods and Data Packs (a datapack can require a mod or another datapack).
+     * @param {string} versionId - Version ID of the mod or datapack.
+     * @param {string} gameVersion - MC version string (e.g. "1.21.1")
+     * @param {string} loader - Profile loader slug (e.g. "fabric", "forge", "neoforge") or null.
+     * @param {Set<string>} installedProjectIds - Set of project_ids already installed for mods.
+     * @param {Set<string>} installedFilenames - Set of filenames already installed for mods.
+     * @param {Set<string>} installedDatapackProjectIds - Set of project_ids already installed for datapacks.
+     * @param {Set<string>} installedDatapackFilenames - Set of filenames already installed for datapacks.
      * @returns {{ required: Array, optional: Array, alreadyInstalled: Array }}
      */
-    async resolveModDependencies(versionId, gameVersion, loader, installedProjectIds = new Set()) {
+    async resolveModDependencies(
+        versionId,
+        gameVersion,
+        loader,
+        installedProjectIds = new Set(),
+        installedFilenames = new Set(),
+        installedDatapackProjectIds = new Set(),
+        installedDatapackFilenames = new Set()
+    ) {
         const MAX_DEPTH = 4;
+
+        // Normalize sets for fast case-insensitive lookup
+        const normalizedInstalledIds = new Set();
+        if (installedProjectIds) {
+            installedProjectIds.forEach(id => {
+                if (id) normalizedInstalledIds.add(String(id).toLowerCase().trim());
+            });
+        }
+        const normalizedInstalledFilenames = new Set();
+        if (installedFilenames) {
+            installedFilenames.forEach(f => {
+                if (f) normalizedInstalledFilenames.add(String(f).toLowerCase().trim());
+            });
+        }
+        const normalizedInstalledDatapackIds = new Set();
+        if (installedDatapackProjectIds) {
+            installedDatapackProjectIds.forEach(id => {
+                if (id) normalizedInstalledDatapackIds.add(String(id).toLowerCase().trim());
+            });
+        }
+        const normalizedInstalledDatapackFilenames = new Set();
+        if (installedDatapackFilenames) {
+            installedDatapackFilenames.forEach(f => {
+                if (f) normalizedInstalledDatapackFilenames.add(String(f).toLowerCase().trim());
+            });
+        }
 
         // resolved maps: projectId -> dep info
         const resolvedRequired = new Map();
@@ -198,11 +256,54 @@ class ModManager {
                 // Check if already in our resolved sets (avoid duplicates)
                 if (resolvedRequired.has(depProjectId) || resolvedOptional.has(depProjectId) || alreadyInstalled.has(depProjectId)) continue;
 
-                // Classify
-                let isAlreadyInstalled = false;
-                if (installedProjectIds.has(depProjectId)) {
-                    isAlreadyInstalled = true;
-                    alreadyInstalled.set(depProjectId, { project_id: depProjectId, dependency_type: depType, project: projectDetails });
+                // Determine whether this dependency is a datapack or a mod
+                const projectLoaders = Array.isArray(projectDetails?.loaders) ? projectDetails.loaders.map(l => l.toLowerCase()) : [];
+                const hasDatapackLoader = projectLoaders.includes('datapack');
+                const hasModLoader = projectLoaders.some(l => ['fabric', 'forge', 'neoforge'].includes(l));
+
+                let depAddonType = 'mod';
+                if (projectDetails?.project_type === 'datapack' || (hasDatapackLoader && !hasModLoader)) {
+                    depAddonType = 'datapack';
+                } else if (hasDatapackLoader && hasModLoader) {
+                    // Hybrid project (like Terralith)
+                    if (loader && projectLoaders.includes(loader.toLowerCase())) {
+                        depAddonType = 'mod';
+                    } else {
+                        depAddonType = 'datapack';
+                    }
+                }
+
+                // Choose target loader for querying Modrinth versions
+                let targetDepLoader = null;
+                if (depAddonType === 'datapack') {
+                    targetDepLoader = 'datapack';
+                } else {
+                    targetDepLoader = loader || (hasModLoader ? projectLoaders.find(l => ['fabric', 'forge', 'neoforge'].includes(l)) : null);
+                }
+
+                // Check if already installed in appropriate target directory
+                const targetInstalledIds = depAddonType === 'datapack' ? normalizedInstalledDatapackIds : normalizedInstalledIds;
+                const targetInstalledFilenames = depAddonType === 'datapack' ? normalizedInstalledDatapackFilenames : normalizedInstalledFilenames;
+
+                const projIdLower = String(depProjectId).toLowerCase().trim();
+                const projDetailsIdLower = projectDetails?.id ? String(projectDetails.id).toLowerCase().trim() : null;
+                const projSlugLower = projectDetails?.slug ? String(projectDetails.slug).toLowerCase().trim() : null;
+
+                let isAlreadyInstalled = targetInstalledIds.has(projIdLower) ||
+                    (projDetailsIdLower && targetInstalledIds.has(projDetailsIdLower)) ||
+                    (projSlugLower && targetInstalledIds.has(projSlugLower));
+
+                if (!isAlreadyInstalled && projSlugLower && targetInstalledFilenames.size > 0) {
+                    for (const fn of targetInstalledFilenames) {
+                        const cleanFn = fn.replace(/\.disabled$/, '').replace(/\.jar$/, '').replace(/\.zip$/, '');
+                        if (cleanFn === projSlugLower ||
+                            cleanFn.startsWith(projSlugLower + '-') ||
+                            cleanFn.startsWith(projSlugLower + '_') ||
+                            cleanFn.startsWith(projSlugLower + '+')) {
+                            isAlreadyInstalled = true;
+                            break;
+                        }
+                    }
                 }
 
                 // Resolve the best compatible version for this dep
@@ -211,18 +312,20 @@ class ModManager {
 
                 try {
                     if (depVersionId) {
-                        // A specific version is requested
                         const vRes = await axios.get(`https://api.modrinth.com/v2/version/${depVersionId}`);
                         resolvedVersion = vRes.data;
-                        if (loader && resolvedVersion.loaders && !resolvedVersion.loaders.includes(loader.toLowerCase())) {
-                            resolvedVersion = null; // Discard if strictly incompatible with our loader
+                        if (targetDepLoader && resolvedVersion.loaders && !resolvedVersion.loaders.map(l => l.toLowerCase()).includes(targetDepLoader.toLowerCase())) {
+                            resolvedVersion = null;
                         }
                     } else {
-                        // Find best compatible version
                         const params = {};
-                        if (gameVersion) params.game_versions = JSON.stringify([gameVersion]);
-                        if (loader) params.loaders = JSON.stringify([loader]);
-                        
+                        if (gameVersion) {
+                            const info = versionUtils.parseVersionString(gameVersion);
+                            const mcVer = info ? info.mcVersion : gameVersion;
+                            params.game_versions = JSON.stringify([mcVer]);
+                        }
+                        if (targetDepLoader) params.loaders = JSON.stringify([targetDepLoader]);
+
                         const listRes = await axios.get(`https://api.modrinth.com/v2/project/${depProjectId}/version`, { params });
                         const versions = listRes.data || [];
                         resolvedVersion = versions.find(v => v.version_type === 'release' && v.featured)
@@ -231,31 +334,63 @@ class ModManager {
                             || versions.find(v => v.version_type === 'beta')
                             || versions[0]
                             || null;
-                            
+
                         if (!resolvedVersion && versions.length === 0) {
-                            // Try without game_version filter (sometimes deps don't have version tags), but KEEP loader filter
+                            // Try without game_version filter, but KEEP target loader
                             const fbParams = {};
-                            if (loader) fbParams.loaders = JSON.stringify([loader]);
+                            if (targetDepLoader) fbParams.loaders = JSON.stringify([targetDepLoader]);
                             const fallbackRes = await axios.get(`https://api.modrinth.com/v2/project/${depProjectId}/version`, { params: fbParams });
                             const fbVersions = fallbackRes.data || [];
                             resolvedVersion = fbVersions.find(v => v.version_type === 'release') || fbVersions[0] || null;
+                        }
+
+                        // If target was datapack and still nothing, try without loader filter and pick a zip version
+                        if (!resolvedVersion && depAddonType === 'datapack') {
+                            const allRes = await axios.get(`https://api.modrinth.com/v2/project/${depProjectId}/version`);
+                            const allVersions = allRes.data || [];
+                            resolvedVersion = allVersions.find(v => (v.loaders && v.loaders.includes('datapack')) || (v.files && v.files.some(f => f.filename.endsWith('.zip')))) || allVersions[0] || null;
                         }
                     }
                 } catch (e) {
                     console.warn(`[resolveModDependencies] Could not resolve version for dep ${depProjectId}:`, e.message);
                 }
 
-                // If no compatible version found for this loader, omit it completely.
-                if (!resolvedVersion) continue;
+                // Final check on resolvedVersion: refine depAddonType based on resolved files & loaders
+                if (resolvedVersion) {
+                    const vLoaders = Array.isArray(resolvedVersion.loaders) ? resolvedVersion.loaders.map(l => l.toLowerCase()) : [];
+                    if (vLoaders.includes('datapack') && !vLoaders.some(l => ['fabric', 'forge', 'neoforge'].includes(l))) {
+                        depAddonType = 'datapack';
+                    } else if (vLoaders.some(l => ['fabric', 'forge', 'neoforge'].includes(l))) {
+                        depAddonType = 'mod';
+                    }
+                }
+
+                // Also check if any file of the resolved version matches existing files on disk
+                if (!isAlreadyInstalled && resolvedVersion && Array.isArray(resolvedVersion.files) && targetInstalledFilenames.size > 0) {
+                    for (const f of resolvedVersion.files) {
+                        if (f && f.filename) {
+                            const fnLower = String(f.filename).toLowerCase();
+                            if (targetInstalledFilenames.has(fnLower) || targetInstalledFilenames.has(fnLower + '.disabled')) {
+                                isAlreadyInstalled = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!isAlreadyInstalled && !resolvedVersion) continue;
 
                 const depEntry = {
                     project_id: depProjectId,
                     dependency_type: depType,
+                    addon_type: depAddonType,
                     resolved_version: resolvedVersion,
                     project: projectDetails
                 };
 
-                if (!isAlreadyInstalled) {
+                if (isAlreadyInstalled) {
+                    alreadyInstalled.set(depProjectId, depEntry);
+                } else {
                     if (depType === 'required') {
                         resolvedRequired.set(depProjectId, depEntry);
                     } else if (depType === 'optional') {
@@ -263,8 +398,7 @@ class ModManager {
                     }
                 }
 
-                // Recurse into this dep's own dependencies
-                if (resolvedVersion && resolvedVersion.id) {
+                if (!isAlreadyInstalled && resolvedVersion && resolvedVersion.id) {
                     await fetchVersionDeps(resolvedVersion.id, depth + 1);
                 }
             }
@@ -306,7 +440,7 @@ class ModManager {
 
             // Normalize target MC version and loader
             const verInfo = versionUtils.parseVersionString(targetMcVersion);
-            const cleanMcVersion = verInfo ? verInfo.mcVersion : (targetMcVersion || '').replace(/^(Fabric|Forge|NeoForge|Vanilla|Quilt)\s+/i, '').trim();
+            const cleanMcVersion = verInfo ? verInfo.mcVersion : (targetMcVersion || '').replace(/^(Fabric|Forge|NeoForge|Vanilla)\s+/i, '').trim();
             const cleanLoader = (targetLoader || (verInfo ? verInfo.loader : 'fabric') || 'fabric').toLowerCase();
 
             console.log(`[resolveModpackCompatibility] Checking ${addons.length} addons for MC ${cleanMcVersion} (${cleanLoader})...`);
@@ -562,7 +696,7 @@ class ModManager {
                 if (!filename) return pid;
                 return filename
                     .replace(/\.(jar|zip|mrpack)$/i, '')
-                    .replace(/[-_+](fabric|forge|neoforge|quilt|mc)?v?[0-9].*$/i, '')
+                    .replace(/[-_+](fabric|forge|neoforge|mc)?v?[0-9].*$/i, '')
                     .replace(/[-_]/g, ' ')
                     .trim() || pid;
             };
@@ -606,6 +740,204 @@ class ModManager {
         } catch (e) {
             console.error('[resolveModpackCompatibility] Fatal Error:', e);
             return { success: false, error: e.message };
+        }
+    }
+
+    /**
+     * Checks for updates for addons (mods, resourcepacks, shaders) with Modrinth IDs against
+     * the target Minecraft version and loader.
+     * @param {Object} opts
+     * @param {Array} opts.addons - Array of { project_id, version_id, filename, type, state, ... }
+     * @param {string} opts.targetMcVersion - e.g. "1.21.1"
+     * @param {string} opts.targetLoader - e.g. "fabric", "forge", "neoforge", "vanilla"
+     * @param {string} [opts.profileDir] - Game directory of the profile to check existing files
+     * @returns {Promise<Array>} Array of updated addons to install { project_id, version_id, old_version_id, filename, old_filename, name, type, download_url, file_size }
+     */
+    async checkAddonUpdates({ addons, targetMcVersion, targetLoader, profileDir = null }) {
+        try {
+            if (!Array.isArray(addons) || addons.length === 0) return [];
+
+            const checkableAddons = addons.filter(addon => {
+                if (!addon || !addon.project_id) return false;
+                // Skip disabled addons
+                if (addon.state === 'disabled' || (addon.state !== 'enabled' && addon.enabled === false)) return false;
+                // Only check mods, resourcepacks, shaders
+                const type = addon.type || 'mod';
+                if (type !== 'mod' && type !== 'resourcepack' && type !== 'shader') return false;
+                return true;
+            });
+
+            if (checkableAddons.length === 0) return [];
+
+            // Normalize MC version and loader
+            const verInfo = versionUtils.parseVersionString(targetMcVersion);
+            const cleanMcVersion = verInfo ? verInfo.mcVersion : (targetMcVersion || '').replace(/^(Fabric|Forge|NeoForge|Vanilla|OptiFine)\s+/i, '').trim();
+            const cleanLoader = (targetLoader || (verInfo ? verInfo.type : 'vanilla') || 'vanilla').toLowerCase();
+
+            if (!this._versionCheckCache) this._versionCheckCache = new Map();
+
+            const checkSingleAddon = async (addon) => {
+                const pid = addon.project_id;
+                const type = addon.type || 'mod';
+
+                // Mods cannot be updated for Vanilla profiles
+                if (type === 'mod' && cleanLoader === 'vanilla') return null;
+
+                const cacheKey = `${pid}:${cleanMcVersion}:${type === 'mod' ? cleanLoader : 'any'}`;
+                let versions = null;
+
+                const cached = this._versionCheckCache.get(cacheKey);
+                if (cached && (Date.now() - cached.timestamp < 180000)) { // 3-minute TTL
+                    versions = cached.versions;
+                } else {
+                    const params = {};
+                    if (cleanMcVersion) params.game_versions = JSON.stringify([cleanMcVersion]);
+                    if (type === 'mod' && cleanLoader && cleanLoader !== 'vanilla') {
+                        params.loaders = JSON.stringify([cleanLoader]);
+                    }
+
+                    try {
+                        const res = await axios.get(`https://api.modrinth.com/v2/project/${pid}/version`, {
+                            params,
+                            timeout: 8000,
+                            headers: { 'User-Agent': 'HelloWorld-Launcher/2.2.0 (contact@abelosky.com)' }
+                        });
+                        versions = Array.isArray(res.data) ? res.data : [];
+
+                        this._versionCheckCache.set(cacheKey, { timestamp: Date.now(), versions });
+                    } catch (e) {
+                        console.warn(`[checkAddonUpdates] Failed to query Modrinth versions for project ${pid}:`, e.message);
+                        return null;
+                    }
+                }
+
+                if (!Array.isArray(versions) || versions.length === 0) return null;
+
+                const matching = versions.filter(v => v && Array.isArray(v.files) && v.files.length > 0);
+                if (matching.length === 0) return null;
+
+                // Find currently installed version object if version_id is tracked
+                let currentVer = null;
+                if (addon.version_id) {
+                    currentVer = matching.find(v => v.id === addon.version_id);
+                }
+
+                // Choose best compatible version:
+                // If currently on release (or no currentVer), prefer latest release
+                // If currently on beta/alpha or no release exists, take latest matching
+                const isCurrentRelease = !currentVer || currentVer.version_type === 'release';
+                let bestVer = null;
+                if (isCurrentRelease) {
+                    bestVer = matching.find(v => v.version_type === 'release')
+                        || matching.find(v => v.version_type === 'beta')
+                        || matching[0];
+                } else {
+                    bestVer = matching.find(v => v.version_type === 'release') || matching[0];
+                }
+
+                if (!bestVer) return null;
+
+                // If identical version ID, no update
+                if (addon.version_id && bestVer.id === addon.version_id) return null;
+
+                // Pick primary file
+                const files = bestVer.files || [];
+                let primaryFile = null;
+                if (type === 'mod') {
+                    primaryFile = files.find(f => f.primary && f.filename && f.filename.toLowerCase().endsWith('.jar'))
+                        || files.find(f => f.filename && f.filename.toLowerCase().endsWith('.jar'))
+                        || files.find(f => f.primary)
+                        || files[0];
+                } else {
+                    primaryFile = files.find(f => f.primary && f.filename && f.filename.toLowerCase().endsWith('.zip'))
+                        || files.find(f => f.filename && f.filename.toLowerCase().endsWith('.zip'))
+                        || files.find(f => f.primary)
+                        || files[0];
+                }
+
+                if (!primaryFile || !primaryFile.filename) return null;
+
+                // If filename is unchanged and it was already that file, no update
+                if (addon.filename && addon.filename.replace(/\.disabled$/, '') === primaryFile.filename) {
+                    return null;
+                }
+
+                // If currentVer is found in matching list, verify that bestVer was published after currentVer
+                if (currentVer && currentVer.date_published && bestVer.date_published) {
+                    const currentDate = new Date(currentVer.date_published).getTime();
+                    const bestDate = new Date(bestVer.date_published).getTime();
+                    if (bestDate <= currentDate) return null;
+                }
+
+                // If profile directory exists, check if updated file already exists
+                if (profileDir) {
+                    let targetDir = path.join(profileDir, 'mods');
+                    if (type === 'resourcepack') targetDir = path.join(profileDir, 'resourcepacks');
+                    if (type === 'shader') targetDir = path.join(profileDir, 'shaderpacks');
+
+                    const targetFile = path.join(targetDir, primaryFile.filename);
+                    const targetDisabled = path.join(targetDir, primaryFile.filename + '.disabled');
+                    if (fs.existsSync(targetFile) || fs.existsSync(targetDisabled)) {
+                        return null;
+                    }
+                }
+
+                const displayName = (addon.name && addon.name !== pid && addon.name !== addon.filename) ? addon.name : (addon.title || null);
+
+                return {
+                    project_id: pid,
+                    version_id: bestVer.id,
+                    old_version_id: addon.version_id || null,
+                    filename: primaryFile.filename,
+                    old_filename: addon.filename || null,
+                    name: displayName || primaryFile.filename,
+                    type: type,
+                    download_url: primaryFile.url,
+                    file_size: primaryFile.size || 0,
+                    state: addon.state || 'enabled'
+                };
+            };
+
+            // Run in concurrent batches of 8
+            const batchSize = 8;
+            const updates = [];
+            for (let i = 0; i < checkableAddons.length; i += batchSize) {
+                const batch = checkableAddons.slice(i, i + batchSize);
+                const results = await Promise.all(batch.map(checkSingleAddon));
+                for (const r of results) {
+                    if (r) updates.push(r);
+                }
+            }
+
+            // Enrich updates with titles if missing
+            if (updates.length > 0) {
+                const pidsToEnrich = updates
+                    .filter(u => !u.name || u.name === u.filename || u.name === u.project_id)
+                    .map(u => u.project_id);
+
+                if (pidsToEnrich.length > 0) {
+                    try {
+                        const detailsRes = await this.getMultipleModDetails(pidsToEnrich);
+                        if (detailsRes && detailsRes.success && Array.isArray(detailsRes.details)) {
+                            const titleMap = new Map();
+                            for (const p of detailsRes.details) {
+                                if (p.title) titleMap.set(p.id, p.title);
+                                if (p.slug && p.title) titleMap.set(p.slug, p.title);
+                            }
+                            for (const u of updates) {
+                                if (titleMap.has(u.project_id)) {
+                                    u.name = titleMap.get(u.project_id);
+                                }
+                            }
+                        }
+                    } catch (_) {}
+                }
+            }
+
+            return updates;
+        } catch (e) {
+            console.error("[checkAddonUpdates] Error:", e);
+            return [];
         }
     }
 

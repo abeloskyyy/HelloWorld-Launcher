@@ -20,7 +20,9 @@ class JavaRuntimeManager {
         const candidates = [
             path.join(dir, 'bin', javaExe),
             path.join(dir, javaExe),
-            path.join(dir, 'jre', 'bin', javaExe)
+            path.join(dir, 'jre', 'bin', javaExe),
+            path.join(dir, 'jre.bundle', 'Contents', 'Home', 'bin', javaExe),
+            path.join(dir, 'Contents', 'Home', 'bin', javaExe)
         ];
         for (const c of candidates) {
             try {
@@ -210,8 +212,8 @@ class JavaRuntimeManager {
 
                         await fs.writeFile(fullPath, Buffer.from(response.data));
 
-                        // Set executable permission on Unix
-                        if (process.platform !== 'win32' && (relPath.includes('bin/') || info.executable)) {
+                        // Set executable permission on Unix (Linux & macOS)
+                        if (process.platform !== 'win32' && (relPath.includes('bin/') || relPath.includes('jspawnhelper') || info.executable)) {
                             await fs.chmod(fullPath, 0o755);
                         }
                     } catch (dlErr) {

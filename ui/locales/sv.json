@@ -25,11 +25,15 @@
     "streak_days": "Dagar av<br>Streak",
     "streak_tooltip": "Ökar automatiskt vid din första inloggning till spelet varje dag.",
     "sponsor_title": "Apex Hosting",
-    "sponsor_subtitle": "Skapa din server med 25% rabatt",
+    "sponsor_subtitle": "Skapa din server",
     "sponsor_code_copied": "Kod {code} kopierad till urklipp",
     "sponsor_copied_short": "Kod kopierad",
     "sponsor_copy_hint": "Kopiera kod",
-    "sponsor_open_hint": "Öppna länk"
+    "sponsor_open_hint": "Öppna länk",
+    "buy_minecraft_title": "Köp Minecraft",
+    "buy_minecraft_subtitle": "Skaffa det officiella Premium-kontot",
+    "buy_minecraft_badge": "PREMIUM",
+    "buy_minecraft_hint": "Köp på Minecrafts officiella webbplats"
   },
   "user_menu": {
     "edit_profile": "Redigera profil",
@@ -107,7 +111,45 @@
     "version": "Version",
     "last_played": "Senast spelad",
     "starting": "Börjar...",
-    "playing": "Spelar"
+    "playing": "Spelar",
+    "servers_promo_text": "Vill du att din server ska synas här? Klicka {link} för att beställa tjänsten.",
+    "servers_promo_link": "här",
+    "news_tab": "Nyheter",
+    "servers_tab": "Servrar",
+    "join_server": "Gå med i server",
+    "copy_ip_tooltip": "Klicka för att kopiera IP",
+    "ip_copied": "IP {ip} kopierad till urklipp",
+    "save_server_tooltip": "Lägg till i min Minecraft-serverlista",
+    "server_added_to_list": "Server {server} tillagd i din Minecraft-lista",
+    "web_tooltip": "Besök officiell webbplats",
+    "discord_tooltip": "Gå med i Discord-servern",
+    "server_offline": "Offline",
+    "server_offline_tooltip": "Server offline",
+    "server_loading": "Laddar status...",
+    "server_offline_motd": "Server otillgänglig eller offline",
+    "server_error_motd": "Kunde inte hämta serverinformation",
+    "players_online_tooltip": "{online} av {max} spelare online",
+    "version_range_tooltip": "Version som stöds: {version}",
+    "version_offline": "Offline",
+    "version_unknown": "Online",
+    "edition_java": "Java",
+    "edition_bedrock": "Bedrock",
+    "edition_crossplay": "Java & Bedrock",
+    "no_servers_title": "Inga utvalda servrar",
+    "no_servers_desc": "Utvalda servrar kommer snart att visas här.",
+    "patchnotes_tab": "Uppdateringslogg",
+    "latest_release": "Utgåva:",
+    "latest_snapshot": "Snapshot:",
+    "filter_all": "Alla",
+    "filter_releases": "Utgåvor",
+    "filter_snapshots": "Snapshots",
+    "read_changelog": "Läs hela ändringsloggen",
+    "patchnotes_title": "Minecraft Ändringslogg",
+    "loading_patchnotes": "Laddar ändringslogg...",
+    "error_loading_patchnotes": "Kunde inte ladda ändringslogg",
+    "release_badge": "Utgåva",
+    "snapshot_badge": "Snapshot",
+    "close_modal": "Stäng"
   },
   "account_switcher": {
     "title": "konton",
@@ -134,7 +176,14 @@
     "days_played": "Spelade dagar",
     "sessions": "Sessioner",
     "days_unit": "dagar",
-    "hours_unit": "h"
+    "hours_unit": "h",
+    "profile_step_avatar": "Egen avatar",
+    "profile_step_background": "Profilbakgrund",
+    "profile_step_country": "Land",
+    "profile_step_bio": "Biografi",
+    "profile_step_links": "Sociala länkar",
+    "profile_step_mob": "Favoritmob",
+    "profile_step_playstyle": "Spelstilstaggar"
   },
   "social": {
     "title": "Socialt",
@@ -303,7 +352,12 @@
     "inbox_received": "Mottagna",
     "inbox_sent": "Skickade",
     "no_sent_messages_yet": "Du har inte skickat några meddelanden än.",
-    "join_server_title": "Anslut till server"
+    "join_server_title": "Anslut till server",
+    "status_menu": "I startprogrammets menyer",
+    "status_playing_world": "Spelar i \"{world}\"",
+    "status_playing_singleplayer": "Spelar enspelarläge",
+    "status_playing_server": "Spelar på {server}",
+    "status_playing_multiplayer": "Spelar flerspelarläge"
   },
   "installations": {
     "create_new": "Skapa ny installation",
@@ -352,8 +406,8 @@
     "no_modded_installations_found": "Inga modderade installationer hittades",
     "no_versions_found": "Inga versioner hittades",
     "no_compatible_found": "Inga kompatibla installationer hittades",
-    "no_mod_profiles": "Inga installationer med Forge, Fabric, NeoForge eller Quilt hittades.",
-    "no_shader_profiles": "Inga installationer med Shaders-stöd hittades. (Kräver Forge/NeoForge ELLER tyg/quilt installerat).",
+    "no_mod_profiles": "Inga installationer med Forge, Fabric eller NeoForge hittades.",
+    "no_shader_profiles": "Inga installationer med Shaders-stöd hittades. (Kräver Forge/NeoForge ELLER tyg installerat).",
     "no_profiles": "Inga installationer hittades.",
     "version": "Version",
     "edit_title": "Redigera installation",
@@ -367,7 +421,10 @@
     "install_all_warning": "Att installera inkompatibla moddar kan orsaka krascher. Fortsätta?",
     "install_all_confirm": "Vissa moddar kan vara inkompatibla med den valda versionen och få Minecraft att krascha. Är du säker på att du vill installera alla ändå?",
     "cancel_btn": "Avbryt",
-    "install_btn": "Installera"
+    "install_btn": "Installera",
+    "shortcut_btn": "Skapa genväg på Skrivbord och i Startmeny",
+    "shortcut_created": "Genväg skapad på Skrivbord och i Startmeny",
+    "shortcut_failed": "Kunde inte skapa genväg"
   },
   "loader": {
     "checking_connection": "Kontrollerar anslutningen...",
@@ -384,7 +441,6 @@
     "downloading_fabric": "Laddar ner Fabric installation",
     "downloading_forge": "Laddar ner Forge installationsprogrammet",
     "downloading_neoforge": "Laddar ner NeoForge installationsprogram",
-    "downloading_quilt": "Laddar ner Quilt-installation",
     "extracting": "Extrahera",
     "all_done": "Allt klart! Startar spel...",
     "preparing": "Förbereder...",
@@ -396,7 +452,15 @@
     "feat_mods": "Mod searching and downloading",
     "feat_updates": "Automatic updates",
     "feat_versions": "Downloading new Minecraft versions",
-    "continue_anyway": "Continue anyway"
+    "continue_anyway": "Continue anyway",
+    "syncing_updates": "Uppdaterar tillägg till de senaste kompatibla versionerna.",
+    "syncing_missing_and_updates": "Laddar ner saknade filer och uppdateringar för denna installation.",
+    "updating_simple": "Uppdaterar...",
+    "updating_name": "Uppdaterar {name}...",
+    "update_badge": "Uppdatering",
+    "waiting": "Väntar",
+    "done": "Klar",
+    "error": "Fel"
   },
   "toasts": {
     "login_failed": "Inloggning misslyckades: {err}",
@@ -512,7 +576,12 @@
     "success": "Success",
     "server_invite_invalid_ip": "Invalid server address. Use a valid hostname or IP (e.g. hypixel.net, 1.2.3.4:25565).",
     "server_invite_enter_ip": "Please enter a server address.",
-    "server_added_to_list": "Server added to your Minecraft server list!"
+    "server_added_to_list": "Server added to your Minecraft server list!",
+    "invalid_server_ip": "Ogiltig server-IP-adress",
+    "minecraft_running_server_saved": "Minecraft körs redan. Vi har lagt till servern i din flerspelarlista.",
+    "launch_failed": "Det gick inte att starta spelet.",
+    "connecting_to_server": "Ansluter till {server}...",
+    "copied_to_clipboard": "Kopierat till urklipp!"
   },
   "settings": {
     "language": "Language / Språk",
@@ -732,7 +801,7 @@
     "I avsnittet Nyheter kan du hålla dig uppdaterad med de senaste Minecraft-nyheterna och uppdateringarna.",
     "Har du frågor eller behöver du hjälp med ett problem? Gå med i vår Discord-gemenskap från de sociala länkarna.",
     "Workshopen låter dig installera konfigurationer optimerade av andra användare med bara ett enda klick.",
-    "När du skapar en ny installation kan du välja mellan Vanilla, Fabric, Forge, NeoForge och Quilt.",
+    "När du skapar en ny installation kan du välja mellan Vanilla, Fabric, Forge och NeoForge.",
     "Du kan anpassa ikonen och mappen för var och en av dina installationer för att hålla dig bättre organiserad.",
     "Med progressiv modladdning i bakgrunden kan du surfa i butiken utan att användargränssnittet fryser."
   ],
@@ -922,7 +991,16 @@
     "retry": "Retry",
     "download": "Download Update",
     "release_notes": "Release Notes & Changelog",
-    "starting_download": "Starting Download..."
+    "starting_download": "Starting Download...",
+    "update_now": "Uppdatera nu",
+    "later": "Senare",
+    "dont_remind": "Påminn mig inte igen för denna version",
+    "mandatory_title": "Obligatorisk uppdatering krävs",
+    "mandatory_badge": "OBLIGATORISK",
+    "new_version_badge": "NY UPPDATERING",
+    "mandatory_desc": "Din nuvarande version ({current}) stöds inte längre. Uppdatera till {latest} för att fortsätta spela.",
+    "launching_setup": "Startar installationsprogrammet...",
+    "downloading_installer": "Laddar ner installationsprogram..."
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Ny Minecraft-version",
@@ -952,5 +1030,18 @@
     "premium": "Premiumkonto",
     "moderator": "Moderator",
     "creator": "Skapare"
+  },
+  "maintenance": {
+    "title": "Servrar under underhåll",
+    "subtitle": "Vi genomför just nu uppgraderingar och optimeringar av infrastrukturen. HelloWorld Launcher är snart tillbaka.",
+    "check_again": "Kontrollera igen",
+    "checking": "Kontrollerar...",
+    "status_page": "Tjänstestatus",
+    "admin_bypass": "Admin-bypass",
+    "admin_bypass_badge": "🛠️ Underhållsläge aktivt — Admin-bypass aktiverad",
+    "estimated_until": "Beräknad återkomst: {time}",
+    "bypass_success": "Admin-bypass aktiverad. Full åtkomst beviljad.",
+    "bypass_denied": "Åtkomst nekad: ditt konto saknar administratörsbehörighet.",
+    "bypass_error": "Kunde inte aktivera Admin-bypass: {err}"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "helloworld-launcher",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "The official custom Minecraft launcher for the HelloWorld community, featuring fast updates, rich presence, and smooth performance.",
   "repository": {
     "type": "git",
@@ -9,16 +9,11 @@
   "main": "main.js",
   "scripts": {
     "test": "electron .",
-    "start": "electron .",
+    "start": "node scripts/start.js",
     "build": "electron-builder",
-    "build:win": "electron-builder --win -p never --config.win.target=zip && node scripts/generate-manifest.js --platform=win --arch=x64",
-    "build:linux": "electron-builder --linux -p never && node scripts/generate-manifest.js --platform=linux --arch=x64",
-    "generate:manifest": "node scripts/generate-manifest.js",
-    "generate:win-yml": "node scripts/generate-win-yml.js",
-    "generate:linux-yml": "node scripts/generate-linux-yml.js && node scripts/patch-latest-linux.js",
-    "build-script:win": "node scripts/build-win.js",
-    "build-script:linux": "node scripts/build-linux.js",
-    "build-script:all": "node scripts/build-all.js"
+    "build:win": "electron-builder --win -p never --config.win.target=zip",
+    "build:linux": "electron-builder --linux -p never",
+    "build:mac": "electron-builder --mac -p never"
   },
   "build": {
     "appId": "com.abelosky.helloworldlauncher",
@@ -62,6 +57,27 @@
       "icon": "build/icons",
       "category": "Game",
       "artifactName": "helloworld-launcher-linux-${arch}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.games",
+      "artifactName": "helloworld-launcher-mac-${arch}.${ext}"
     },
     "publish": [
       {

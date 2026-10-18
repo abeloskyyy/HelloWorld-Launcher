@@ -25,11 +25,15 @@
     "streak_days": "Dagen van<br>Streak",
     "streak_tooltip": "Wordt elke dag automatisch verhoogd bij uw eerste aanmelding bij het spel.",
     "sponsor_title": "Apex Hosting",
-    "sponsor_subtitle": "Maak je server met 25% korting",
+    "sponsor_subtitle": "Maak je server",
     "sponsor_code_copied": "Code {code} gekopieerd naar klembord",
     "sponsor_copied_short": "Code gekopieerd",
     "sponsor_copy_hint": "Code kopiëren",
-    "sponsor_open_hint": "Link openen"
+    "sponsor_open_hint": "Link openen",
+    "buy_minecraft_title": "Koop Minecraft",
+    "buy_minecraft_subtitle": "Krijg het officiële Premium-account",
+    "buy_minecraft_badge": "PREMIUM",
+    "buy_minecraft_hint": "Koop op de officiële Minecraft-website"
   },
   "user_menu": {
     "edit_profile": "Profiel bewerken",
@@ -107,7 +111,45 @@
     "version": "Versie",
     "last_played": "Laatst gespeeld",
     "starting": "Beginnen...",
-    "playing": "Spelen"
+    "playing": "Spelen",
+    "servers_promo_text": "Wil je dat jouw server hier verschijnt? Klik {link} om de service in te huren.",
+    "servers_promo_link": "hier",
+    "news_tab": "Nieuws",
+    "servers_tab": "Servers",
+    "join_server": "Deelnemen aan server",
+    "copy_ip_tooltip": "Klik om IP te kopiëren",
+    "ip_copied": "IP {ip} gekopieerd naar klembord",
+    "save_server_tooltip": "Toevoegen aan mijn Minecraft-serverlijst",
+    "server_added_to_list": "Server {server} toegevoegd aan je Minecraft-lijst",
+    "web_tooltip": "Bezoek officiële website",
+    "discord_tooltip": "Deelnemen aan Discord-server",
+    "server_offline": "Offline",
+    "server_offline_tooltip": "Server offline",
+    "server_loading": "Status laden...",
+    "server_offline_motd": "Server niet beschikbaar of offline",
+    "server_error_motd": "Kon serverinformatie niet ophalen",
+    "players_online_tooltip": "{online} van {max} spelers online",
+    "version_range_tooltip": "Ondersteunde versie: {version}",
+    "version_offline": "Offline",
+    "version_unknown": "Online",
+    "edition_java": "Java",
+    "edition_bedrock": "Bedrock",
+    "edition_crossplay": "Java & Bedrock",
+    "no_servers_title": "Geen aanbevolen servers",
+    "no_servers_desc": "Aanbevolen servers verschijnen hier binnenkort.",
+    "patchnotes_tab": "Patchnotities",
+    "latest_release": "Officiële versie:",
+    "latest_snapshot": "Snapshot:",
+    "filter_all": "Alles",
+    "filter_releases": "Officiële versies",
+    "filter_snapshots": "Snapshots",
+    "read_changelog": "Volledige changelog lezen",
+    "patchnotes_title": "Minecraft Changelog",
+    "loading_patchnotes": "Changelog laden...",
+    "error_loading_patchnotes": "Fout bij het laden van changelog",
+    "release_badge": "Versie",
+    "snapshot_badge": "Snapshot",
+    "close_modal": "Sluiten"
   },
   "account_switcher": {
     "title": "Rekeningen",
@@ -134,7 +176,14 @@
     "days_played": "Dagen gespeeld",
     "sessions": "Sessies",
     "days_unit": "dagen",
-    "hours_unit": "h"
+    "hours_unit": "h",
+    "profile_step_avatar": "Aangepaste avatar",
+    "profile_step_background": "Profielachtergrond",
+    "profile_step_country": "Land",
+    "profile_step_bio": "Bio",
+    "profile_step_links": "Sociale links",
+    "profile_step_mob": "Favoriete mob",
+    "profile_step_playstyle": "Speelstijltags"
   },
   "social": {
     "title": "Sociaal",
@@ -303,7 +352,12 @@
     "inbox_received": "Ontvangen",
     "inbox_sent": "Verzonden",
     "no_sent_messages_yet": "Je hebt nog geen berichten verzonden.",
-    "join_server_title": "Verbinden met server"
+    "join_server_title": "Verbinden met server",
+    "status_menu": "In de menu's van de launcher",
+    "status_playing_world": "Speelt in \"{world}\"",
+    "status_playing_singleplayer": "Speelt singleplayer",
+    "status_playing_server": "Speelt op {server}",
+    "status_playing_multiplayer": "Speelt multiplayer"
   },
   "installations": {
     "create_new": "Nieuwe installatie maken",
@@ -352,8 +406,8 @@
     "no_modded_installations_found": "Geen aangepaste installaties gevonden",
     "no_versions_found": "Geen versies gevonden",
     "no_compatible_found": "Geen compatibele installaties gevonden",
-    "no_mod_profiles": "Geen installaties met Forge, Fabric, NeoForge of Quilt gevonden.",
-    "no_shader_profiles": "Geen installaties met Shaders-ondersteuning gevonden. (Vereist Forge/NeoForge OF Fabric/Quilt geïnstalleerd).",
+    "no_mod_profiles": "Geen installaties met Forge, Fabric of NeoForge gevonden.",
+    "no_shader_profiles": "Geen installaties met Shaders-ondersteuning gevonden. (Vereist Forge/NeoForge OF Fabric geïnstalleerd).",
     "no_profiles": "Geen installaties gevonden.",
     "version": "Version",
     "edit_title": "Installatie bewerken",
@@ -367,7 +421,10 @@
     "install_all_warning": "Het installeren van incompatibele mods kan crashes veroorzaken. Doorgaan?",
     "install_all_confirm": "Sommige mods zijn mogelijk niet compatibel met de geselecteerde versie en kunnen Minecraft laten crashen. Weet je zeker dat je toch alle mods wilt installeren?",
     "cancel_btn": "Annuleren",
-    "install_btn": "Installeren"
+    "install_btn": "Installeren",
+    "shortcut_btn": "Bureaublad- en Startmenu-snelkoppeling maken",
+    "shortcut_created": "Snelkoppeling gemaakt op Bureaublad en Startmenu",
+    "shortcut_failed": "Fout bij maken van snelkoppeling"
   },
   "loader": {
     "checking_connection": "Verbinding controleren...",
@@ -384,7 +441,6 @@
     "downloading_fabric": "Fabric-installatie downloaden",
     "downloading_forge": "Forge-installatieprogramma downloaden",
     "downloading_neoforge": "NeoForge-installatieprogramma downloaden",
-    "downloading_quilt": "Quilt-installatie downloaden",
     "extracting": "Extraheren",
     "all_done": "Alles klaar! Spel starten...",
     "preparing": "Voorbereiden...",
@@ -396,7 +452,15 @@
     "feat_mods": "Mod searching and downloading",
     "feat_updates": "Automatic updates",
     "feat_versions": "Downloading new Minecraft versions",
-    "continue_anyway": "Continue anyway"
+    "continue_anyway": "Continue anyway",
+    "syncing_updates": "Addons bijwerken naar de nieuwste compatibele versies.",
+    "syncing_missing_and_updates": "Ontbrekende bestanden en updates downloaden voor deze installatie.",
+    "updating_simple": "Bijwerken...",
+    "updating_name": "{name} bijwerken...",
+    "update_badge": "Update",
+    "waiting": "Wachten",
+    "done": "Klaar",
+    "error": "Fout"
   },
   "toasts": {
     "login_failed": "Inloggen mislukt: {err}",
@@ -512,7 +576,12 @@
     "success": "Success",
     "server_invite_invalid_ip": "Invalid server address. Use a valid hostname or IP (e.g. hypixel.net, 1.2.3.4:25565).",
     "server_invite_enter_ip": "Please enter a server address.",
-    "server_added_to_list": "Server added to your Minecraft server list!"
+    "server_added_to_list": "Server added to your Minecraft server list!",
+    "invalid_server_ip": "Ongeldig server-IP-adres",
+    "minecraft_running_server_saved": "Minecraft is al geopend. We hebben de server toegevoegd aan je multiplayer-lijst.",
+    "launch_failed": "Kan de game niet starten.",
+    "connecting_to_server": "Verbinden met {server}...",
+    "copied_to_clipboard": "Gekopieerd naar klembord!"
   },
   "settings": {
     "language": "Language / Taal",
@@ -732,7 +801,7 @@
     "In de sectie Nieuws kun je op de hoogte blijven van het laatste Minecraft-nieuws en -patches.",
     "Heeft u vragen of heeft u hulp nodig bij een probleem? Word lid van onze Discord-community via de sociale links.",
     "Met de Workshop kunt u met slechts één klik configuraties installeren die door andere gebruikers zijn geoptimaliseerd.",
-    "Bij het maken van een nieuwe installatie kunt u kiezen tussen Vanilla, Fabric, Forge, NeoForge en Quilt.",
+    "Bij het maken van een nieuwe installatie kunt u kiezen tussen Vanilla, Fabric, Forge en NeoForge.",
     "U kunt het pictogram en de map voor elk van uw installaties aanpassen om beter georganiseerd te blijven.",
     "Met het laden van progressieve mods op de achtergrond kunt u door de winkel bladeren zonder dat de gebruikersinterface vastloopt."
   ],
@@ -922,7 +991,16 @@
     "retry": "Retry",
     "download": "Download Update",
     "release_notes": "Release Notes & Changelog",
-    "starting_download": "Starting Download..."
+    "starting_download": "Starting Download...",
+    "update_now": "Nu bijwerken",
+    "later": "Later",
+    "dont_remind": "Herinner me niet meer aan deze versie",
+    "mandatory_title": "Verplichte update vereist",
+    "mandatory_badge": "VERPLICHT",
+    "new_version_badge": "NIEUWE UPDATE",
+    "mandatory_desc": "Je huidige versie ({current}) wordt niet meer ondersteund. Werk bij naar {latest} om te blijven spelen.",
+    "launching_setup": "Installatieprogramma starten...",
+    "downloading_installer": "Installatieprogramma downloaden..."
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Nieuwe Minecraft-versie",
@@ -952,5 +1030,18 @@
     "premium": "Premium-account",
     "moderator": "Moderator",
     "creator": "Maker"
+  },
+  "maintenance": {
+    "title": "Servers in onderhoud",
+    "subtitle": "We voeren momenteel infrastructuurupgrades en optimalisaties uit. HelloWorld Launcher is binnenkort weer online.",
+    "check_again": "Opnieuw controleren",
+    "checking": "Controleren...",
+    "status_page": "Servicestatus",
+    "admin_bypass": "Admin Bypass",
+    "admin_bypass_badge": "🛠️ Onderhoudsmodus actief — Admin Bypass ingeschakeld",
+    "estimated_until": "Geschatte terugkeer: {time}",
+    "bypass_success": "Admin Bypass ingeschakeld. Volledige toegang verleend.",
+    "bypass_denied": "Toegang geweigerd: je account heeft geen beheerdersrechten.",
+    "bypass_error": "Kan Admin Bypass niet activeren: {err}"
   }
 }

@@ -25,9 +25,13 @@ async function parseNbt(buffer) {
  * @param {string} mcDir - La ruta a la carpeta de Minecraft (e.g. .minecraft)
  * @param {string} serverIp - La IP o dominio del servidor
  */
-async function addServerToServersDat(mcDir, serverIp) {
-    if (!serverIp) return;
+async function addServerToServersDat(mcDir, serverIp, serverName = null) {
+    if (!serverIp || !mcDir) return;
     
+    if (!fs.existsSync(mcDir)) {
+        try { fs.mkdirSync(mcDir, { recursive: true }); } catch (_) {}
+    }
+
     const serversDatPath = path.join(mcDir, 'servers.dat');
     let serversData = {
         name: '',
@@ -65,18 +69,29 @@ async function addServerToServersDat(mcDir, serverIp) {
     const serversList = serversData.value.servers.value.value;
     
     // Comprobar si el servidor ya está en la lista (ignorando mayúsculas/minúsculas)
-    const exists = serversList.some(srv => {
+    const existingIndex = serversList.findIndex(srv => {
         return srv.ip && srv.ip.value && srv.ip.value.toLowerCase() === serverIp.toLowerCase();
     });
     
-    if (exists) {
+    const cleanName = serverName && typeof serverName === 'string' && serverName.trim() ? serverName.trim() : 'Minecraft Server';
+
+    if (existingIndex !== -1) {
         console.log(`[serversDat] El servidor ${serverIp} ya existe en la lista.`);
+        // Si el nombre actual es genérico y tenemos un nombre específico, actualizarlo
+        const currentName = serversList[existingIndex]?.name?.value;
+        if (cleanName !== 'Minecraft Server' && (!currentName || currentName === 'Minecraft Server')) {
+            serversList[existingIndex].name = { type: 'string', value: cleanName };
+            try {
+                const outBuffer = nbt.writeUncompressed(serversData);
+                fs.writeFileSync(serversDatPath, outBuffer);
+            } catch (_) {}
+        }
         return;
     }
     
     // Añadir el nuevo servidor al principio de la lista
     const newServer = {
-        name: { type: 'string', value: 'Minecraft Server' },
+        name: { type: 'string', value: cleanName },
         ip: { type: 'string', value: serverIp }
     };
     
@@ -86,7 +101,7 @@ async function addServerToServersDat(mcDir, serverIp) {
     try {
         const outBuffer = nbt.writeUncompressed(serversData);
         fs.writeFileSync(serversDatPath, outBuffer);
-        console.log(`[serversDat] Añadido ${serverIp} a servers.dat correctamente.`);
+        console.log(`[serversDat] Añadido ${serverIp} (${cleanName}) a ${serversDatPath} correctamente.`);
     } catch (e) {
         console.error('[serversDat] Error al guardar servers.dat:', e);
     }

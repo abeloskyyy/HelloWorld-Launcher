@@ -1956,17 +1956,24 @@ select.form-control:focus {
 }
 
 .star-rating i {
-    transition: all 0.2s;
+    display: inline-block;
+    transition: color 0.15s ease, transform 0.15s ease, text-shadow 0.15s ease;
+    will-change: transform;
+    user-select: none;
 }
 
 .star-rating i:hover {
-    transform: scale(1.2);
+    transform: scale(1.18);
 }
 
 .star-rating i.active,
 .star-rating i.hover {
     color: #ffd700;
     text-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+}
+
+#reviewComment {
+    resize: none;
 }
 
 @media (max-width: 480px) {

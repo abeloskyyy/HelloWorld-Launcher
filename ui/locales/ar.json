@@ -25,11 +25,15 @@
     "streak_days": "أيام<br>الخط",
     "streak_tooltip": "تزداد تلقائيًا عند تسجيل دخولك الأول إلى اللعبة كل يوم.",
     "sponsor_title": "Apex Hosting",
-    "sponsor_subtitle": "أنشئ خادمك بخصم 25%",
+    "sponsor_subtitle": "أنشئ خادمك",
     "sponsor_code_copied": "تم نسخ الرمز {code} إلى الحافظة",
     "sponsor_copied_short": "تم نسخ الرمز",
     "sponsor_copy_hint": "نسخ الرمز",
-    "sponsor_open_hint": "فتح الرابط"
+    "sponsor_open_hint": "فتح الرابط",
+    "buy_minecraft_title": "شراء Minecraft",
+    "buy_minecraft_subtitle": "احصل على حساب Premium الرسمي",
+    "buy_minecraft_badge": "PREMIUM",
+    "buy_minecraft_hint": "الشراء من موقع Minecraft الرسمي"
   },
   "user_menu": {
     "edit_profile": "تحرير الملف الشخصي",
@@ -107,7 +111,45 @@
     "version": "الإصدار",
     "last_played": "لعبت آخر مرة",
     "starting": "جارٍ البدء...",
-    "playing": "اللعب"
+    "playing": "اللعب",
+    "servers_promo_text": "هل تريد أن يظهر خادمك هنا؟ انقر {link} للحصول على الخدمة.",
+    "servers_promo_link": "هنا",
+    "news_tab": "الأخبار",
+    "servers_tab": "الخوادم",
+    "join_server": "الانضمام إلى الخادم",
+    "copy_ip_tooltip": "انقر لنسخ IP",
+    "ip_copied": "تم نسخ IP {ip} إلى الحافظة",
+    "save_server_tooltip": "إضافة إلى قائمة خوادم Minecraft الخاصة بي",
+    "server_added_to_list": "تمت إضافة الخادم {server} إلى قائمة Minecraft الخاصة بك",
+    "web_tooltip": "زيارة الموقع الرسمي",
+    "discord_tooltip": "الانضمام إلى خادم Discord",
+    "server_offline": "غير متصل",
+    "server_offline_tooltip": "الخادم غير متصل",
+    "server_loading": "جارٍ تحميل الحالة...",
+    "server_offline_motd": "الخادم غير متاح أو غير متصل",
+    "server_error_motd": "تعذر جلب معلومات الخادم",
+    "players_online_tooltip": "{online} من {max} لاعبين متصلين",
+    "version_range_tooltip": "الإصدار المدعوم: {version}",
+    "version_offline": "غير متصل",
+    "version_unknown": "متصل",
+    "edition_java": "Java",
+    "edition_bedrock": "Bedrock",
+    "edition_crossplay": "Java & Bedrock",
+    "no_servers_title": "لا توجد خوادم مميزة",
+    "no_servers_desc": "ستظهر الخوادم المميزة والموصى بها هنا قريبًا.",
+    "patchnotes_tab": "سجل التحديثات",
+    "latest_release": "الإصدار الرسمي:",
+    "latest_snapshot": "اللقطة:",
+    "filter_all": "الكل",
+    "filter_releases": "الإصدارات الرسمية",
+    "filter_snapshots": "اللقطات",
+    "read_changelog": "قراءة سجل التغييرات الكامل",
+    "patchnotes_title": "سجل تغييرات Minecraft",
+    "loading_patchnotes": "جارٍ تحميل سجل التغييرات...",
+    "error_loading_patchnotes": "فشل تحميل سجل التغييرات",
+    "release_badge": "إصدار",
+    "snapshot_badge": "Snapshot",
+    "close_modal": "إغلاق"
   },
   "account_switcher": {
     "title": "الحسابات",
@@ -134,7 +176,14 @@
     "days_played": "أيام لعبت",
     "sessions": "الجلسات",
     "days_unit": "أيام",
-    "hours_unit": "ح"
+    "hours_unit": "ح",
+    "profile_step_avatar": "صورة رمزية مخصصة",
+    "profile_step_background": "خلفية الملف الشخصي",
+    "profile_step_country": "البلد",
+    "profile_step_bio": "السيرة الذاتية",
+    "profile_step_links": "الروابط الاجتماعية",
+    "profile_step_mob": "الموب المفضل",
+    "profile_step_playstyle": "علامات أسلوب اللعب"
   },
   "social": {
     "title": "اجتماعي",
@@ -303,7 +352,12 @@
     "inbox_received": "الواردة",
     "inbox_sent": "المرسلة",
     "no_sent_messages_yet": "لم تقم بإرسال أي رسائل بعد.",
-    "join_server_title": "الانضمام إلى الخادم"
+    "join_server_title": "الانضمام إلى الخادم",
+    "status_menu": "في قوائم المشغل",
+    "status_playing_world": "يلعب في \"{world}\"",
+    "status_playing_singleplayer": "يلعب لاعب فردي",
+    "status_playing_server": "يلعب في {server}",
+    "status_playing_multiplayer": "يلعب لاعبين متعددين"
   },
   "installations": {
     "create_new": "إنشاء تثبيت جديد",
@@ -352,7 +406,7 @@
     "no_modded_installations_found": "لم يتم العثور على عمليات تثبيت معدلة",
     "no_versions_found": "لم يتم العثور على أي إصدارات",
     "no_compatible_found": "لم يتم العثور على عمليات تثبيت متوافقة",
-    "no_mod_profiles": "لم يتم العثور على أي عمليات تثبيت باستخدام Forge أو Fabric أو NeoForge أو Quilt.",
+    "no_mod_profiles": "لم يتم العثور على أي عمليات تثبيت باستخدام Forge أو Fabric أو NeoForge.",
     "no_shader_profiles": "لم يتم العثور على عمليات تثبيت تدعم Shaders. (يتطلب تركيب Forge/NeoForge أو القماش/اللحاف).",
     "no_profiles": "لم يتم العثور على أي منشآت.",
     "version": "Version",
@@ -367,7 +421,10 @@
     "install_all_warning": "تثبيت تعديلات غير متوافقة قد يتسبب في توقف اللعبة. متابعة؟",
     "install_all_confirm": "قد تكون بعض التعديلات غير متوافقة مع الإصدار المحدد وقد تتسبب في تعطل Minecraft. هل أنت متأكد من رغبتك في تثبيت جميع التعديلات على أي حال؟",
     "cancel_btn": "إلغاء",
-    "install_btn": "تثبيت"
+    "install_btn": "تثبيت",
+    "shortcut_btn": "إنشاء اختصار على سطح المكتب وقائمة ابدأ",
+    "shortcut_created": "تم إنشاء الاختصار على سطح المكتب وقائمة ابدأ",
+    "shortcut_failed": "فشل إنشاء الاختصار"
   },
   "loader": {
     "checking_connection": "جارٍ التحقق من الاتصال...",
@@ -384,7 +441,6 @@
     "downloading_fabric": "تحميل تركيب القماش",
     "downloading_forge": "تنزيل برنامج Forge المثبت",
     "downloading_neoforge": "تنزيل برنامج تثبيت NeoForge",
-    "downloading_quilt": "تحميل تركيب اللحاف",
     "extracting": "استخراج",
     "all_done": "تم كل شيء! إطلاق اللعبة...",
     "preparing": "جارٍ التحضير...",
@@ -396,7 +452,15 @@
     "feat_mods": "Mod searching and downloading",
     "feat_updates": "Automatic updates",
     "feat_versions": "Downloading new Minecraft versions",
-    "continue_anyway": "Continue anyway"
+    "continue_anyway": "Continue anyway",
+    "syncing_updates": "جارٍ تحديث الإضافات إلى أحدث الإصدارات المتوافقة.",
+    "syncing_missing_and_updates": "جارٍ تنزيل الملفات المفقودة والتحديثات لهذا التثبيت.",
+    "updating_simple": "جارٍ التحديث...",
+    "updating_name": "جارٍ تحديث {name}...",
+    "update_badge": "تحديث",
+    "waiting": "في الانتظار",
+    "done": "تم",
+    "error": "خطأ"
   },
   "toasts": {
     "login_failed": "فشل تسجيل الدخول: {err}",
@@ -512,7 +576,12 @@
     "success": "Success",
     "server_invite_invalid_ip": "Invalid server address. Use a valid hostname or IP (e.g. hypixel.net, 1.2.3.4:25565).",
     "server_invite_enter_ip": "Please enter a server address.",
-    "server_added_to_list": "Server added to your Minecraft server list!"
+    "server_added_to_list": "Server added to your Minecraft server list!",
+    "invalid_server_ip": "عنوان IP غير صالح للخادم",
+    "minecraft_running_server_saved": "Minecraft قيد التشغيل بالفعل. أضفنا الخادم إلى قائمة اللاعبين المتعددين الخاصة بك.",
+    "launch_failed": "فشل بدء اللعبة.",
+    "connecting_to_server": "جارٍ الاتصال بـ {server}...",
+    "copied_to_clipboard": "تم النسخ إلى الحافظة!"
   },
   "settings": {
     "language": "Language / اللغة",
@@ -732,7 +801,7 @@
     "في قسم الأخبار، يمكنك البقاء على اطلاع بأحدث أخبار وتصحيحات لعبة Minecraft.",
     "هل لديك أسئلة أو تحتاج إلى مساعدة في مشكلة ما؟ انضم إلى مجتمع Discord الخاص بنا من الروابط الاجتماعية.",
     "تتيح لك ورشة العمل تثبيت التكوينات التي تم تحسينها بواسطة مستخدمين آخرين بنقرة واحدة فقط.",
-    "عند إنشاء تثبيت جديد، يمكنك الاختيار بين Vanilla وFabric وForge وNeoForge وQuilt.",
+    "عند إنشاء تثبيت جديد، يمكنك الاختيار بين Vanilla وFabric وForge وNeoForge.",
     "يمكنك تخصيص الرمز والمجلد لكل عملية تثبيت لديك لتبقى منظمة بشكل أفضل.",
     "يسمح لك التحميل التدريجي للخلفية بتصفح المتجر دون تجميد واجهة المستخدم."
   ],
@@ -922,7 +991,16 @@
     "retry": "Retry",
     "download": "Download Update",
     "release_notes": "Release Notes & Changelog",
-    "starting_download": "Starting Download..."
+    "starting_download": "Starting Download...",
+    "update_now": "تحديث الآن",
+    "later": "لاحقاً",
+    "dont_remind": "عدم تذكيري مرة أخرى بهذا الإصدار",
+    "mandatory_title": "مطلوب تحديث إلزامي",
+    "mandatory_badge": "إلزامي",
+    "new_version_badge": "تحديث جديد",
+    "mandatory_desc": "إصدارك الحالي ({current}) لم يعد مدعوماً. يرجى التحديث إلى {latest} للمتابعة.",
+    "launching_setup": "جاري تشغيل برنامج التثبيت...",
+    "downloading_installer": "جاري تنزيل برنامج التثبيت..."
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "نسخة ماينكرافت الجديدة",
@@ -952,5 +1030,18 @@
     "premium": "حساب بريميوم",
     "moderator": "مشرف",
     "creator": "منشئ"
+  },
+  "maintenance": {
+    "title": "الخوادم قيد الصيانة",
+    "subtitle": "نقوم حاليًا بترقيات البنية التحتية والتحسينات. سيعود HelloWorld Launcher قريبًا.",
+    "check_again": "تحقق مرة أخرى",
+    "checking": "جارٍ التحقق...",
+    "status_page": "حالة الخدمة",
+    "admin_bypass": "تجاوز المسؤول",
+    "admin_bypass_badge": "🛠️ وضع الصيانة نشط — تم تفعيل تجاوز المسؤول",
+    "estimated_until": "العودة المتوقعة: {time}",
+    "bypass_success": "تم تفعيل تجاوز المسؤول. تم منح الوصول الكامل.",
+    "bypass_denied": "تم رفض الوصول: حسابك لا يملك أذونات المسؤول.",
+    "bypass_error": "فشل تفعيل تجاوز المسؤول: {err}"
   }
 }

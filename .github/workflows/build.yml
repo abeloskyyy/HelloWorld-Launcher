@@ -1,0 +1,223 @@
+name: Build Application (Artifacts)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_windows:
+        description: 'Build Windows (ZIP)'
+        required: false
+        type: boolean
+        default: true
+      build_linux:
+        description: 'Build Linux (DEB amd64/arm64)'
+        required: false
+        type: boolean
+        default: true
+      build_macos:
+        description: 'Build macOS (DMG + ZIP x64/arm64)'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # 1. WINDOWS BUILD (Launcher ZIP - Preserving Setup Reputation)
+  # ─────────────────────────────────────────────────────────────
+  build-windows:
+    name: Build Windows
+    if: ${{ github.event.inputs.build_windows != 'false' }}
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies (Root)
+        run: npm ci || npm install
+
+      - name: Create secrets.json
+        shell: bash
+        env:
+          APP_SECRETS: ${{ secrets.APP_SECRETS_JSON }}
+        run: |
+          if [ -n "$APP_SECRETS" ]; then
+            echo "$APP_SECRETS" > secrets.json
+          else
+            echo '{"FIREBASE_PROJECT_ID":"helloworld-launcher","REMOTE_CONFIG_GIST_URL":"https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json"}' > secrets.json
+          fi
+
+      - name: Build Launcher ZIP (dist/helloworld-launcher-win.zip)
+        run: npm run build:win
+
+      - name: Fetch Existing Setup.exe (SmartScreen Reputation)
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          echo "Attempting to download existing HelloWorld-Launcher-Setup.exe from previous release..."
+          mkdir -p ./tmp-setup
+          if gh release download --pattern "HelloWorld-Launcher-Setup.exe" --dir ./tmp-setup 2>/dev/null; then
+            if [ -f "./tmp-setup/HelloWorld-Launcher-Setup.exe" ]; then
+              cp ./tmp-setup/HelloWorld-Launcher-Setup.exe dist/HelloWorld-Launcher-Setup.exe
+              echo "Preserved existing HelloWorld-Launcher-Setup.exe (SmartScreen reputation retained)."
+            fi
+          fi
+
+          # Si no existe ninguna release previa todavía en el repo, compilar el instalador inicial
+          if [ ! -f "dist/HelloWorld-Launcher-Setup.exe" ]; then
+            echo "No existing setup found on releases. Building initial bootstrapper..."
+            cd installer
+            npm ci || npm install
+            npm run build:win
+            cd ..
+            if [ -f "dist/setup/HelloWorld-Launcher-Setup.exe" ]; then
+              cp dist/setup/HelloWorld-Launcher-Setup.exe dist/HelloWorld-Launcher-Setup.exe
+            fi
+          fi
+
+      - name: Stage Windows Binaries
+        shell: bash
+        run: |
+          mkdir -p dist-windows
+          [ -f "dist/HelloWorld-Launcher-Setup.exe" ] && cp dist/HelloWorld-Launcher-Setup.exe dist-windows/
+          [ -f "dist/helloworld-launcher-win.zip" ] && cp dist/helloworld-launcher-win.zip dist-windows/
+          echo "Windows staging contents:"
+          ls -lh dist-windows
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: dist-windows/*
+          retention-days: 14
+
+  # ─────────────────────────────────────────────────────────────
+  # 2. LINUX BUILD (DEB amd64/arm64)
+  # ─────────────────────────────────────────────────────────────
+  build-linux:
+    name: Build Linux
+    if: ${{ github.event.inputs.build_linux != 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Linux Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libarchive-tools \
+            binutils \
+            fakeroot \
+            rpm \
+            dpkg
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Create secrets.json
+        env:
+          APP_SECRETS: ${{ secrets.APP_SECRETS_JSON }}
+        run: |
+          if [ -n "$APP_SECRETS" ]; then
+            echo "$APP_SECRETS" > secrets.json
+          else
+            echo '{"FIREBASE_PROJECT_ID":"helloworld-launcher","REMOTE_CONFIG_GIST_URL":"https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json"}' > secrets.json
+          fi
+
+      - name: Build Linux (.deb packages)
+        run: npm run build:linux
+        continue-on-error: true
+
+      - name: Setup Canonical Linux Names
+        run: |
+          if [ -f "dist/helloworld-launcher-linux-x64.deb" ] && [ ! -f "dist/helloworld-launcher-linux-amd64.deb" ]; then
+            cp dist/helloworld-launcher-linux-x64.deb dist/helloworld-launcher-linux-amd64.deb
+          fi
+
+      - name: Stage Linux Binaries
+        run: |
+          mkdir -p dist-linux
+          find dist -maxdepth 1 -type f -name "*.deb" -exec cp {} dist-linux/ \; 2>/dev/null || true
+          echo "Linux staging contents:"
+          ls -lh dist-linux
+
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: dist-linux/*
+          retention-days: 14
+
+  # ─────────────────────────────────────────────────────────────
+  # 3. MACOS BUILD (DMG & ZIP x64/arm64)
+  # ─────────────────────────────────────────────────────────────
+  build-macos:
+    name: Build macOS
+    if: ${{ github.event.inputs.build_macos != 'false' }}
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Create secrets.json
+        env:
+          APP_SECRETS: ${{ secrets.APP_SECRETS_JSON }}
+        run: |
+          if [ -n "$APP_SECRETS" ]; then
+            echo "$APP_SECRETS" > secrets.json
+          else
+            echo '{"FIREBASE_PROJECT_ID":"helloworld-launcher","REMOTE_CONFIG_GIST_URL":"https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json"}' > secrets.json
+          fi
+
+      - name: Build macOS (.dmg & .zip)
+        run: npm run build:mac
+        continue-on-error: true
+
+      - name: Stage macOS Binaries
+        run: |
+          mkdir -p dist-macos
+          find dist -maxdepth 1 -type f \( -name "*.dmg" -o -name "*.zip" \) ! -name "*blockmap*" -exec cp {} dist-macos/ \; 2>/dev/null || true
+          # Crear copias con alias amd64 / x64 para máxima compatibilidad con el Gist
+          if [ -f "dist-macos/helloworld-launcher-mac-x64.dmg" ] && [ ! -f "dist-macos/helloworld-launcher-mac-amd64.dmg" ]; then
+            cp dist-macos/helloworld-launcher-mac-x64.dmg dist-macos/helloworld-launcher-mac-amd64.dmg
+          fi
+          if [ -f "dist-macos/helloworld-launcher-mac-x64.zip" ] && [ ! -f "dist-macos/helloworld-launcher-mac-amd64.zip" ]; then
+            cp dist-macos/helloworld-launcher-mac-x64.zip dist-macos/helloworld-launcher-mac-amd64.zip
+          fi
+          echo "macOS staging contents:"
+          ls -lh dist-macos
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifacts
+          path: dist-macos/*
+          retention-days: 14

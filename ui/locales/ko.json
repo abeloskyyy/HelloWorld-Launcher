@@ -25,11 +25,15 @@
     "streak_days": "연속 로그인<br>일수",
     "streak_tooltip": "매일 게임에 처음 로그인할 때 자동으로 증가합니다.",
     "sponsor_title": "Apex Hosting",
-    "sponsor_subtitle": "25% 할인으로 서버 만들기",
+    "sponsor_subtitle": "서버 만들기",
     "sponsor_code_copied": "{code} 코드가 클립보드에 복사되었습니다",
     "sponsor_copied_short": "코드 복사됨",
     "sponsor_copy_hint": "코드 복사",
-    "sponsor_open_hint": "링크 열기"
+    "sponsor_open_hint": "링크 열기",
+    "buy_minecraft_title": "Minecraft 구매",
+    "buy_minecraft_subtitle": "공식 Premium 계정 받기",
+    "buy_minecraft_badge": "PREMIUM",
+    "buy_minecraft_hint": "Minecraft 공식 웹사이트에서 구매"
   },
   "user_menu": {
     "edit_profile": "프로필 편집",
@@ -107,7 +111,45 @@
     "version": "버전",
     "last_played": "최근 플레이",
     "starting": "시작하는 중...",
-    "playing": "플레이 중"
+    "playing": "플레이 중",
+    "servers_promo_text": "여기에 서버를 등록하고 싶으신가요? 서비스를 신청하려면 {link}를 클릭하세요.",
+    "servers_promo_link": "여기",
+    "news_tab": "뉴스",
+    "servers_tab": "서버",
+    "join_server": "서버 참여",
+    "copy_ip_tooltip": "IP 복사 클릭",
+    "ip_copied": "IP {ip}가 클립보드에 복사되었습니다",
+    "save_server_tooltip": "Minecraft 서버 목록에 추가",
+    "server_added_to_list": "{server} 서버가 Minecraft 목록에 추가되었습니다",
+    "web_tooltip": "공식 웹사이트 방문",
+    "discord_tooltip": "Discord 서버 참여",
+    "server_offline": "오프라인",
+    "server_offline_tooltip": "서버 오프라인",
+    "server_loading": "상태 불러오는 중...",
+    "server_offline_motd": "서버를 사용할 수 없거나 오프라인 상태입니다",
+    "server_error_motd": "서버 정보를 가져올 수 없습니다",
+    "players_online_tooltip": "{max}명 중 {online}명 접속 중",
+    "version_range_tooltip": "지원 버전: {version}",
+    "version_offline": "오프라인",
+    "version_unknown": "온라인",
+    "edition_java": "Java",
+    "edition_bedrock": "Bedrock",
+    "edition_crossplay": "Java & Bedrock",
+    "no_servers_title": "추천 서버 없음",
+    "no_servers_desc": "추천 서버가 곧 여기에 표시됩니다.",
+    "patchnotes_tab": "패치 노트",
+    "latest_release": "정식 버전:",
+    "latest_snapshot": "스냅샷:",
+    "filter_all": "전체",
+    "filter_releases": "정식 버전",
+    "filter_snapshots": "스냅샷",
+    "read_changelog": "전체 변경 로그 읽기",
+    "patchnotes_title": "Minecraft 변경 로그",
+    "loading_patchnotes": "변경 로그 불러오는 중...",
+    "error_loading_patchnotes": "변경 로그를 불러오지 못했습니다",
+    "release_badge": "정식 버전",
+    "snapshot_badge": "스냅샷",
+    "close_modal": "닫기"
   },
   "account_switcher": {
     "title": "계정",
@@ -134,7 +176,14 @@
     "days_played": "플레이 일수",
     "sessions": "세션",
     "days_unit": "일",
-    "hours_unit": "시간"
+    "hours_unit": "시간",
+    "profile_step_avatar": "사용자 지정 아바타",
+    "profile_step_background": "프로필 배경",
+    "profile_step_country": "국가",
+    "profile_step_bio": "자기소개",
+    "profile_step_links": "소셜 링크",
+    "profile_step_mob": "좋아하는 몹",
+    "profile_step_playstyle": "플레이 스타일 태그"
   },
   "social": {
     "title": "소셜",
@@ -303,7 +352,12 @@
     "inbox_received": "받은 편지함",
     "inbox_sent": "보낸 편지함",
     "no_sent_messages_yet": "아직 보낸 메시지가 없습니다.",
-    "join_server_title": "서버 참여"
+    "join_server_title": "서버 참여",
+    "status_menu": "런처 메뉴에서",
+    "status_playing_world": "\"{world}\" 플레이 중",
+    "status_playing_singleplayer": "싱글플레이어 플레이 중",
+    "status_playing_server": "{server}에서 플레이 중",
+    "status_playing_multiplayer": "멀티플레이어 플레이 중"
   },
   "installations": {
     "create_new": "새 설치 버전 만들기",
@@ -352,8 +406,8 @@
     "no_modded_installations_found": "모드 설치 버전을 찾을 수 없습니다",
     "no_versions_found": "버전을 찾을 수 없습니다",
     "no_compatible_found": "호환되는 설치 버전을 찾을 수 없습니다",
-    "no_mod_profiles": "Forge, Fabric, NeoForge 또는 Quilt가 포함된 설치 버전을 찾을 수 없습니다.",
-    "no_shader_profiles": "셰이더 지원이 포함된 설치 버전을 찾을 수 없습니다. (Forge/NeoForge 또는 Fabric/Quilt 설치 필요).",
+    "no_mod_profiles": "Forge, Fabric, NeoForge가 포함된 설치 버전을 찾을 수 없습니다.",
+    "no_shader_profiles": "셰이더 지원이 포함된 설치 버전을 찾을 수 없습니다. (Forge/NeoForge 또는 Fabric 설치 필요).",
     "no_profiles": "설치 버전을 찾을 수 없습니다.",
     "version": "Version",
     "edit_title": "설치 수정",
@@ -367,7 +421,10 @@
     "install_all_warning": "호환되지 않는 모드를 설치하면 게임이 충돌할 수 있습니다. 계속하시겠습니까?",
     "install_all_confirm": "일부 모드는 선택한 버전과 호환되지 않아 마인크래프트가 충돌할 수 있습니다. 그래도 모든 모드를 설치하시겠습니까?",
     "cancel_btn": "취소",
-    "install_btn": "설치"
+    "install_btn": "설치",
+    "shortcut_btn": "바탕화면 및 시작 메뉴 바로가기 만들기",
+    "shortcut_created": "바탕화면 및 시작 메뉴에 바로가기가 생성되었습니다",
+    "shortcut_failed": "바로가기 생성 실패"
   },
   "loader": {
     "checking_connection": "연결 확인 중...",
@@ -384,7 +441,6 @@
     "downloading_fabric": "Fabric 설치 프로그램 다운로드 중",
     "downloading_forge": "Forge 설치 프로그램 다운로드 중",
     "downloading_neoforge": "NeoForge 설치 프로그램 다운로드 중",
-    "downloading_quilt": "Quilt 설치 프로그램 다운로드 중",
     "extracting": "추출 중",
     "all_done": "모두 완료되었습니다! 게임을 실행합니다...",
     "preparing": "준비 중...",
@@ -396,7 +452,15 @@
     "feat_mods": "Mod searching and downloading",
     "feat_updates": "Automatic updates",
     "feat_versions": "Downloading new Minecraft versions",
-    "continue_anyway": "Continue anyway"
+    "continue_anyway": "Continue anyway",
+    "syncing_updates": "애드온을 최신 호환 버전으로 업데이트하는 중입니다.",
+    "syncing_missing_and_updates": "이 설치 버전에 필요한 누락된 파일과 업데이트를 다운로드하는 중입니다.",
+    "updating_simple": "업데이트 중...",
+    "updating_name": "{name} 업데이트 중...",
+    "update_badge": "업데이트",
+    "waiting": "대기 중",
+    "done": "완료",
+    "error": "오류"
   },
   "toasts": {
     "login_failed": "로그인 실패: {err}",
@@ -512,7 +576,12 @@
     "success": "Success",
     "server_invite_invalid_ip": "Invalid server address. Use a valid hostname or IP (e.g. hypixel.net, 1.2.3.4:25565).",
     "server_invite_enter_ip": "Please enter a server address.",
-    "server_added_to_list": "Server added to your Minecraft server list!"
+    "server_added_to_list": "Server added to your Minecraft server list!",
+    "invalid_server_ip": "유효하지 않은 서버 IP 주소",
+    "minecraft_running_server_saved": "Minecraft가 이미 실행 중입니다. 멀티플레이어 목록에 서버를 추가했습니다.",
+    "launch_failed": "게임을 시작하지 못했습니다.",
+    "connecting_to_server": "{server}에 연결 중...",
+    "copied_to_clipboard": "클립보드에 복사되었습니다!"
   },
   "settings": {
     "language": "Language / 언어",
@@ -732,7 +801,7 @@
     "뉴스 섹션에서 최신 Minecraft 뉴스와 패치 소식을 접할 수 있습니다.",
     "질문이 있거나 문제 해결에 도움이 필요하신가요? 소셜 링크에서 Discord 커뮤니티에 가입하세요.",
     "창작마당에서는 한 번의 클릭으로 다른 사용자가 최적화한 완벽한 구성을 설치할 수 있습니다.",
-    "새 설치 버전을 만들 때 바닐라(Vanilla), Fabric, Forge, NeoForge 및 Quilt 중에서 선택할 수 있습니다.",
+    "새 설치 버전을 만들 때 바닐라(Vanilla), Fabric, Forge 및 NeoForge 중에서 선택할 수 있습니다.",
     "각 설치 버전에 대한 아이콘과 폴더를 사용자 지정하여 더 잘 정리할 수 있습니다.",
     "백그라운드 점진적 모드 로딩을 사용하면 UI 프리징 없이 상점을 탐색할 수 있습니다."
   ],
@@ -922,7 +991,16 @@
     "retry": "Retry",
     "download": "Download Update",
     "release_notes": "Release Notes & Changelog",
-    "starting_download": "Starting Download..."
+    "starting_download": "Starting Download...",
+    "update_now": "지금 업데이트",
+    "later": "나중에",
+    "dont_remind": "이 버전에 대해 다시 알리지 않음",
+    "mandatory_title": "필수 업데이트가 필요합니다",
+    "mandatory_badge": "필수",
+    "new_version_badge": "새 업데이트",
+    "mandatory_desc": "현재 버전({current})은 더 이상 지원되지 않습니다. 계속 플레이하려면 {latest}(으)로 업데이트하세요.",
+    "launching_setup": "설치 프로그램 시작 중...",
+    "downloading_installer": "설치 프로그램 다운로드 중..."
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "새로운 Minecraft 버전",
@@ -952,5 +1030,18 @@
     "premium": "프리미엄 계정",
     "moderator": "모더레이터",
     "creator": "크리에이터"
+  },
+  "maintenance": {
+    "title": "서버 점검 중",
+    "subtitle": "현재 인프라 업그레이드 및 최적화 작업을 진행하고 있습니다. HelloWorld Launcher가 곧 다시 온라인 상태로 전환됩니다.",
+    "check_again": "다시 확인",
+    "checking": "확인 중...",
+    "status_page": "서비스 상태",
+    "admin_bypass": "관리자 우회",
+    "admin_bypass_badge": "🛠️ 점검 모드 활성 — 관리자 우회 활성화됨",
+    "estimated_until": "예상 복구 시간: {time}",
+    "bypass_success": "관리자 우회가 활성화되었습니다. 전체 액세스 권한이 부여되었습니다.",
+    "bypass_denied": "액세스 거부됨: 계정에 관리자 권한이 없습니다.",
+    "bypass_error": "관리자 우회 활성화 실패: {err}"
   }
 }

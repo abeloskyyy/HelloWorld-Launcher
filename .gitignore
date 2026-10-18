@@ -1,14 +1,11 @@
 old-beta/
 node_modules/
-CHANGELOG.md
-version-build.md
-build/
 dist/
 build-linux.sh
 firebase-backend/functions/keys.json
 firebase-backend/functions/node_modules/
-scripts/
 secrets.json
-*.secrets.json
+scripts/*.json
 serviceAccountKey.json
 release/
+version-build-old.md

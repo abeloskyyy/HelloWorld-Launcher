@@ -25,11 +25,15 @@
     "streak_days": "स्ट्रीक के दिन",
     "streak_tooltip": "प्रत्येक दिन गेम में आपके पहले लॉगिन पर स्वचालित रूप से वृद्धि होती है।",
     "sponsor_title": "Apex Hosting",
-    "sponsor_subtitle": "25% छूट के साथ अपना सर्वर बनाएं",
+    "sponsor_subtitle": "अपना सर्वर बनाएं",
     "sponsor_code_copied": "कोड {code} क्लिपबोर्ड पर कॉपी किया गया",
     "sponsor_copied_short": "कोड कॉपी किया गया",
     "sponsor_copy_hint": "कोड कॉपी करें",
-    "sponsor_open_hint": "लिंक खोलें"
+    "sponsor_open_hint": "लिंक खोलें",
+    "buy_minecraft_title": "Minecraft खरीदें",
+    "buy_minecraft_subtitle": "आधिकारिक Premium खाता प्राप्त करें",
+    "buy_minecraft_badge": "PREMIUM",
+    "buy_minecraft_hint": "Minecraft की आधिकारिक वेबसाइट पर खरीदें"
   },
   "user_menu": {
     "edit_profile": "प्रोफ़ाइल संपादित करें",
@@ -107,7 +111,45 @@
     "version": "संस्करण",
     "last_played": "आखिरी बार खेला गया",
     "starting": "प्रारंभ...",
-    "playing": "बजाना"
+    "playing": "बजाना",
+    "servers_promo_text": "क्या आप चाहते हैं कि आपका सर्वर यहाँ दिखाई दे? सेवा लेने के लिए {link} क्लिक करें।",
+    "servers_promo_link": "यहाँ",
+    "news_tab": "समाचार",
+    "servers_tab": "सर्वर",
+    "join_server": "सर्वर में शामिल हों",
+    "copy_ip_tooltip": "IP कॉपी करने के लिए क्लिक करें",
+    "ip_copied": "IP {ip} क्लिपबोर्ड पर कॉपी किया गया",
+    "save_server_tooltip": "मेरी Minecraft सर्वर सूची में जोड़ें",
+    "server_added_to_list": "सर्वर {server} आपकी Minecraft सूची में जोड़ा गया",
+    "web_tooltip": "आधिकारिक वेबसाइट पर जाएं",
+    "discord_tooltip": "Discord सर्वर से जुड़ें",
+    "server_offline": "ऑफ़लाइन",
+    "server_offline_tooltip": "सर्वर ऑफ़लाइन है",
+    "server_loading": "स्थिति लोड हो रही है...",
+    "server_offline_motd": "सर्वर अनुपलब्ध या ऑफ़लाइन है",
+    "server_error_motd": "सर्वर जानकारी प्राप्त करने में असमर्थ",
+    "players_online_tooltip": "{max} में से {online} खिलाड़ी ऑनलाइन हैं",
+    "version_range_tooltip": "समर्थित संस्करण: {version}",
+    "version_offline": "ऑफ़लाइन",
+    "version_unknown": "ऑनलाइन",
+    "edition_java": "Java",
+    "edition_bedrock": "Bedrock",
+    "edition_crossplay": "Java & Bedrock",
+    "no_servers_title": "कोई अनुशंसित सर्वर नहीं",
+    "no_servers_desc": "अनुशंसित सर्वर जल्द ही यहां प्रदर्शित होंगे।",
+    "patchnotes_tab": "अपडेट नोट्स",
+    "latest_release": "आधिकारिक रिलीज:",
+    "latest_snapshot": "स्नैपशॉट:",
+    "filter_all": "सभी",
+    "filter_releases": "आधिकारिक रिलीज",
+    "filter_snapshots": "स्नैपशॉट",
+    "read_changelog": "पूरा चेंजलॉग पढ़ें",
+    "patchnotes_title": "Minecraft चेंजलॉग",
+    "loading_patchnotes": "चेंजलॉग लोड हो रहा है...",
+    "error_loading_patchnotes": "चेंजलॉग लोड करने में विफल",
+    "release_badge": "रिलीज",
+    "snapshot_badge": "Snapshot",
+    "close_modal": "बंद करें"
   },
   "account_switcher": {
     "title": "लेखा",
@@ -134,7 +176,14 @@
     "days_played": "खेले गए दिन",
     "sessions": "सत्र",
     "days_unit": "दिन",
-    "hours_unit": "ज"
+    "hours_unit": "ज",
+    "profile_step_avatar": "कस्टम अवतार",
+    "profile_step_background": "प्रोफ़ाइल पृष्ठभूमि",
+    "profile_step_country": "देश",
+    "profile_step_bio": "बायो",
+    "profile_step_links": "सोशल लिंक",
+    "profile_step_mob": "पसंदीदा मॉब",
+    "profile_step_playstyle": "खेल शैली टैग"
   },
   "social": {
     "title": "सामाजिक",
@@ -303,7 +352,12 @@
     "inbox_received": "प्राप्त",
     "inbox_sent": "भेजे गए",
     "no_sent_messages_yet": "आपने अभी तक कोई संदेश नहीं भेजा है।",
-    "join_server_title": "सर्वर से जुड़ें"
+    "join_server_title": "सर्वर से जुड़ें",
+    "status_menu": "लॉन्चर मेनू में",
+    "status_playing_world": "\"{world}\" में खेल रहा है",
+    "status_playing_singleplayer": "सिंगलप्लेयर खेल रहा है",
+    "status_playing_server": "{server} पर खेल रहा है",
+    "status_playing_multiplayer": "मल्टीप्लेयर खेल रहा है"
   },
   "installations": {
     "create_new": "नई स्थापना बनाएँ",
@@ -367,7 +421,10 @@
     "install_all_warning": "असंगत मॉड इंस्टॉल करने से गेम क्रैश हो सकता है। क्या जारी रखें?",
     "install_all_confirm": "कुछ मॉड चयनित संस्करण के साथ असंगत हो सकते हैं और Minecraft को क्रैश कर सकते हैं। क्या आप फिर भी सभी मॉड इंस्टॉल करना चाहते हैं?",
     "cancel_btn": "रद्द करें",
-    "install_btn": "इंस्टॉल करें"
+    "install_btn": "इंस्टॉल करें",
+    "shortcut_btn": "डेस्कटॉप और स्टार्ट मेनू शॉर्टकट बनाएं",
+    "shortcut_created": "शॉर्टकट सफलतापूर्वक बनाया गया",
+    "shortcut_failed": "शॉर्टकट बनाने में विफल"
   },
   "loader": {
     "checking_connection": "कनेक्शन की जाँच की जा रही है...",
@@ -384,7 +441,6 @@
     "downloading_fabric": "फैब्रिक इंस्टालेशन डाउनलोड हो रहा है",
     "downloading_forge": "फोर्ज इंस्टॉलर डाउनलोड हो रहा है",
     "downloading_neoforge": "NeoForge इंस्टॉलर डाउनलोड हो रहा है",
-    "downloading_quilt": "रजाई स्थापना डाउनलोड हो रही है",
     "extracting": "निकालना",
     "all_done": "सब कुछ कर दिया! गेम लॉन्च हो रहा है...",
     "preparing": "तैयारी...",
@@ -396,7 +452,15 @@
     "feat_mods": "Mod searching and downloading",
     "feat_updates": "Automatic updates",
     "feat_versions": "Downloading new Minecraft versions",
-    "continue_anyway": "Continue anyway"
+    "continue_anyway": "Continue anyway",
+    "syncing_updates": "नवीनतम संगत संस्करणों में ऐडऑन अपडेट हो रहे हैं।",
+    "syncing_missing_and_updates": "इस इंस्टॉलेशन के लिए आवश्यक फाइलें और अपडेट डाउनलोड हो रहे हैं।",
+    "updating_simple": "अपडेट हो रहा है...",
+    "updating_name": "{name} अपडेट हो रहा है...",
+    "update_badge": "अपडेट",
+    "waiting": "प्रतीक्षा",
+    "done": "पूर्ण",
+    "error": "त्रुटि"
   },
   "toasts": {
     "login_failed": "लॉगिन विफल: {err}",
@@ -512,7 +576,12 @@
     "success": "Success",
     "server_invite_invalid_ip": "Invalid server address. Use a valid hostname or IP (e.g. hypixel.net, 1.2.3.4:25565).",
     "server_invite_enter_ip": "Please enter a server address.",
-    "server_added_to_list": "Server added to your Minecraft server list!"
+    "server_added_to_list": "Server added to your Minecraft server list!",
+    "invalid_server_ip": "अमान्य सर्वर आईपी पता",
+    "minecraft_running_server_saved": "Minecraft पहले से चल रहा है। हमने सर्वर को आपकी मल्टीप्लेयर सूची में जोड़ दिया है।",
+    "launch_failed": "गेम शुरू करने में विफल।",
+    "connecting_to_server": "{server} से कनेक्ट हो रहा है...",
+    "copied_to_clipboard": "क्लिपबोर्ड पर कॉपी किया गया!"
   },
   "settings": {
     "language": "Language / भाषा",
@@ -922,7 +991,16 @@
     "retry": "Retry",
     "download": "Download Update",
     "release_notes": "Release Notes & Changelog",
-    "starting_download": "Starting Download..."
+    "starting_download": "Starting Download...",
+    "update_now": "अभी अपडेट करें",
+    "later": "बाद में",
+    "dont_remind": "इस संस्करण के लिए मुझे फिर से याद न दिलाएं",
+    "mandatory_title": "अनिवार्य अपडेट आवश्यक है",
+    "mandatory_badge": "अनिवार्य",
+    "new_version_badge": "नया अपडेट",
+    "mandatory_desc": "आपका वर्तमान संस्करण ({current}) अब समर्थित नहीं है। कृपया खेलना जारी रखने के लिए {latest} पर अपडेट करें।",
+    "launching_setup": "इंस्टॉलर प्रारंभ हो रहा है...",
+    "downloading_installer": "इंस्टॉलर डाउनलोड हो रहा है..."
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "नया Minecraft संस्करण",
@@ -952,5 +1030,18 @@
     "premium": "प्रीमियम खाता",
     "moderator": "मॉडरेटर",
     "creator": "निर्माता"
+  },
+  "maintenance": {
+    "title": "सर्वर रखरखाव में हैं",
+    "subtitle": "हम वर्तमान में बुनियादी ढांचे के उन्नयन और अनुकूलन कर रहे हैं। HelloWorld Launcher जल्द ही वापस आएगा।",
+    "check_again": "फिर से जांचें",
+    "checking": "जांच हो रही है...",
+    "status_page": "सेवा की स्थिति",
+    "admin_bypass": "व्यवस्थापक बाईपास",
+    "admin_bypass_badge": "🛠️ रखरखाव मोड सक्रिय — व्यवस्थापक बाईपास सक्षम",
+    "estimated_until": "अनुमानित वापसी: {time}",
+    "bypass_success": "व्यवस्थापक बाईपास सक्षम किया गया। पूर्ण पहुंच प्रदान की गई।",
+    "bypass_denied": "पहुंच अस्वीकृत: आपके खाते में व्यवस्थापक अनुमतियां नहीं हैं।",
+    "bypass_error": "व्यवस्थापक बाईपास सक्रिय करने में विफल: {err}"
   }
 }

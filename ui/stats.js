@@ -113,13 +113,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!bar || !fill || !pct || !stepsEl) return;
 
         const STEPS = [
-            { key: 'avatar',      icon: 'fas fa-user-circle', label: 'Custom avatar' },
-            { key: 'background',  icon: 'fas fa-image',       label: 'Profile background' },
-            { key: 'country',     icon: 'fas fa-flag',        label: 'Country' },
-            { key: 'biography',   icon: 'fas fa-quote-left',  label: 'Bio' },
-            { key: 'links',       icon: 'fas fa-link',        label: 'Social links' },
-            { key: 'favoriteMob', icon: 'fas fa-paw',         label: 'Favorite mob' },
-            { key: 'playstyle',   icon: 'fas fa-tags',        label: 'Playstyle tags' },
+            { key: 'avatar',      icon: 'fas fa-user-circle', label: (window.t ? window.t('stats.profile_step_avatar') : null) || 'Custom avatar' },
+            { key: 'background',  icon: 'fas fa-image',       label: (window.t ? window.t('stats.profile_step_background') : null) || 'Profile background' },
+            { key: 'country',     icon: 'fas fa-flag',        label: (window.t ? window.t('stats.profile_step_country') : null) || 'Country' },
+            { key: 'biography',   icon: 'fas fa-quote-left',  label: (window.t ? window.t('stats.profile_step_bio') : null) || 'Bio' },
+            { key: 'links',       icon: 'fas fa-link',        label: (window.t ? window.t('stats.profile_step_links') : null) || 'Social links' },
+            { key: 'favoriteMob', icon: 'fas fa-paw',         label: (window.t ? window.t('stats.profile_step_mob') : null) || 'Favorite mob' },
+            { key: 'playstyle',   icon: 'fas fa-tags',        label: (window.t ? window.t('stats.profile_step_playstyle') : null) || 'Playstyle tags' },
         ];
 
         try {
@@ -174,13 +174,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                        '</div>';
             }).join('');
 
-            // Make the bar clickable to open Edit Profile
-            bar.style.cursor = 'pointer';
-            bar.title = 'Click to complete your profile';
-            bar.onclick = function() {
-                const btn = document.getElementById('editProfileBtn');
-                if (btn) btn.click();
-            };
+            // Ensure the bar does not intercept clicks / blocks pointer events
+            bar.style.pointerEvents = 'none';
+            bar.style.cursor = 'default';
+            bar.removeAttribute('title');
+            bar.onclick = null;
 
         } catch (e) {
             console.error('[ProfileCompletion] Error:', e);

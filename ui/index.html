@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://mc-heads.net https://piston-meta.mojang.com https://cdn.modrinth.com https://api.modrinth.com https://*.googleapis.com https://*.firebaseapp.com https://*.firebasestorage.app https://apis.google.com https://www.gstatic.com; img-src 'self' data: blob: https: file: launcher: https://launchercontent.mojang.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; connect-src 'self' https://piston-meta.mojang.com https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com wss://*.firebaseio.com https://www.gstatic.com https://api.mojang.com https://sessionserver.mojang.com https://api.modrinth.com https://mc-heads.net https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://launchercontent.mojang.com https://*.githubusercontent.com https://gist.githubusercontent.com https://hwlauncher.abelosky.com;">
+        content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://mc-heads.net https://piston-meta.mojang.com https://cdn.modrinth.com https://api.modrinth.com https://*.googleapis.com https://*.firebaseapp.com https://*.firebasestorage.app https://apis.google.com https://www.gstatic.com; img-src 'self' data: blob: https: file: launcher: https://launchercontent.mojang.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; connect-src 'self' https://piston-meta.mojang.com https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com wss://*.firebaseio.com https://www.gstatic.com https://api.mojang.com https://sessionserver.mojang.com https://api.modrinth.com https://mc-heads.net https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://launchercontent.mojang.com https://*.githubusercontent.com https://gist.githubusercontent.com https://hwlauncher.abelosky.com https://*.hwlauncher.abelosky.com https://*.workers.dev https://api.mcstatus.io https://api.minetools.eu https://api.mcsrvstat.us https://eu.mc-api.net;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="onboarding_styles.css">
@@ -57,6 +57,36 @@
     <div id="hwServicesDownBanner" style="display:none;">
         <i class="fas fa-exclamation-triangle" style="color: #ffcc00; font-size: 15px; flex-shrink: 0;"></i>
         <span data-i18n="banners.hw_services_down">HelloWorld services are temporarily down. Login, friends, chat, and workshop modpacks are unavailable.</span>
+    </div>
+
+    <!-- Maintenance Admin Bypass Banner -->
+    <div id="maintenanceAdminBypassBanner" style="display:none; background: linear-gradient(90deg, #d97706, #f59e0b); color: #000; padding: 7px 18px; font-size: 13px; font-weight: 700; align-items: center; justify-content: space-between; z-index: 99999; box-shadow: 0 2px 10px rgba(245, 158, 11, 0.3);">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <i class="fas fa-tools"></i>
+            <span data-i18n="maintenance.admin_bypass_badge">🛠️ Modo Mantenimiento Activo — Bypass de Administrador Habilitado</span>
+        </div>
+        <span style="font-size: 11px; background: rgba(0,0,0,0.25); color: #fff; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.5px;">ADMIN BYPASS</span>
+    </div>
+
+    <!-- Community Announcement Banner -->
+    <div id="announcementBanner" class="announcement-banner type-event" style="display:none;">
+        <div class="announcement-left">
+            <img id="announcementIconImg" class="announcement-icon-img" src="" alt="Icon" style="display:none;">
+            <i id="announcementIconFallback" class="fas fa-bullhorn announcement-icon-fallback"></i>
+            <span id="announcementBadge" class="announcement-badge" style="display:none;"></span>
+        </div>
+        <div class="announcement-ticker-track" id="announcementTickerTrack">
+            <div id="announcementTickerContent" class="announcement-ticker-content">
+                <span id="announcementMessageText1" class="announcement-text"></span>
+                <span id="announcementMessageText2" class="announcement-text" aria-hidden="true"></span>
+            </div>
+        </div>
+        <div class="announcement-right" id="announcementRightGroup">
+            <div class="announcement-buttons" id="announcementButtonsContainer"></div>
+            <button id="announcementCloseBtn" class="announcement-close-btn" title="Descartar aviso" style="display:none;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
     </div>
     <!-- Initial Loader -->
     <div id="initialLoader" class="loader-container">
@@ -197,7 +227,7 @@
                 </div>
 
                 <!-- Profile Completion Bar (shown below streak for logged-in users) -->
-                <div id="profileCompletionBar" style="display:none; width:100%; padding: 0 2px;">
+                <div id="profileCompletionBar" style="display:none; width:100%; padding: 0 2px; pointer-events: none;">
                     <div class="pcb-header">
                         <span class="pcb-label" data-i18n="sidebar.profile_label">Profile</span>
                         <span class="pcb-percent" id="pcbPercent">0%</span>
@@ -277,26 +307,22 @@
             <div class="sidebar-promos">
                 <!-- Sponsor Banner (Apex Hosting) -->
                 <div class="sidebar-sponsor is-hidden" id="sidebarSponsorCard" style="display: none;">
-                    <div class="sponsor-sidebar-card">
-                        <div class="sponsor-sidebar-icon">
-                            <svg viewBox="97 0 60 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="sponsor-apex-svg">
-                                <path d="M156.084 30.2821C156.084 36.1067 156.035 41.8819 156.133 47.7065C156.182 49.9277 155.348 51.2111 153.338 52.1489C145.248 55.7523 137.207 59.5531 129.068 63.0577C127.842 63.6006 125.93 63.5019 124.655 62.959C116.27 59.3063 107.984 55.4561 99.6489 51.7047C97.9328 50.9149 97.6876 49.3847 97.6876 47.7558C97.6876 44.0044 97.6876 40.253 97.6876 36.5016C97.6876 28.8013 97.6876 21.0517 97.6876 13.3514C97.6876 9.74807 98.1289 9.15574 101.414 8.0698C108.867 5.60176 116.27 3.08436 123.821 0.863131C125.783 0.270802 128.185 0.270802 130.146 0.863131C137.599 3.08436 144.954 5.70048 152.308 8.16852C155.397 9.2051 155.986 9.99487 156.035 13.4008C156.084 18.9292 156.084 24.6056 156.084 30.2821ZM104.699 17.0535C104.699 26.7282 104.699 36.0573 104.748 45.3372C104.748 45.8308 105.287 46.5218 105.778 46.7686C109.504 48.5456 113.231 50.2732 117.006 52.0009C119.212 52.9881 121.419 53.9753 123.772 55.0119C123.772 45.2878 123.772 35.8599 123.723 26.4814C123.723 26.0865 123.331 25.4448 122.988 25.2473C117.055 22.5325 111.073 19.867 104.699 17.0535ZM149.465 16.9054C143.434 19.7189 137.795 22.3844 132.157 24.9512C131.078 25.4448 130.735 26.0371 130.735 27.2218C130.784 35.4157 130.784 43.6095 130.784 51.8034C130.784 52.6426 130.784 54.4195 130.784 54.4195C130.784 54.4195 130.735 54.5676 130.833 54.617C130.931 54.6663 143.042 49.2367 148.778 46.6205C149.121 46.4725 149.465 45.7814 149.465 45.3372C149.514 36.008 149.514 26.6788 149.465 16.9054ZM111.024 12.1667C111.024 12.2161 121.713 17.1028 126.91 19.4228C127.204 19.5709 127.695 19.5215 128.038 19.3734C132.99 17.1028 137.893 14.7829 143.385 12.2655C138.874 10.7846 134.902 9.40254 130.931 8.16852C129.46 7.72427 127.793 6.83578 126.469 7.23067C121.37 8.51405 111.024 12.068 111.024 12.1667Z" fill="#C0FF1E"/>
-                            </svg>
+                    <a href="https://billing.apexminecrafthosting.com/aff.php?aff=17119" target="_blank" class="sponsor-sidebar-card" id="sidebarSponsorLink" title="Apex Hosting" data-i18n-title="sidebar.sponsor_title">
+                        <div class="sponsor-sidebar-icon" id="sponsorSidebarIcon">
+                            <img src="" alt="Sponsor" id="sponsorIconImg" class="sponsor-apex-img" style="display: none;">
+                            <i class="fas fa-server sponsor-fallback-icon" id="sponsorFallbackIcon"></i>
                         </div>
                         <div class="sponsor-sidebar-content">
-                            <span class="sponsor-sidebar-title" data-i18n="sidebar.sponsor_title">Apex Hosting</span>
-                            <span class="sponsor-sidebar-subtitle" id="sponsorSubtitle" data-i18n="sidebar.sponsor_subtitle">Crea tu servidor con un 25% de descuento</span>
+                            <span class="sponsor-sidebar-title" id="sponsorTitle" data-i18n="sidebar.sponsor_title">Apex Hosting</span>
+                            <span class="sponsor-sidebar-subtitle" id="sponsorSubtitle" data-i18n="sidebar.sponsor_subtitle">Crea tu servidor</span>
                         </div>
-                        <div class="sponsor-discount-badge" id="sponsorDiscountBadge">-25%</div>
-                        <div class="sponsor-actions">
+                        <div class="sponsor-sidebar-right">
+                            <div class="sponsor-discount-badge" id="sponsorDiscountBadge">-25%</div>
                             <button type="button" class="sponsor-action-btn" id="sponsorCopyBtn" title="Copiar código" data-i18n-title="sidebar.sponsor_copy_hint">
                                 <i class="fas fa-copy"></i>
                             </button>
-                            <button type="button" class="sponsor-action-btn" id="sponsorOpenBtn" title="Abrir enlace" data-i18n-title="sidebar.sponsor_open_hint">
-                                <i class="fas fa-external-link-alt"></i>
-                            </button>
                         </div>
-                    </div>
+                    </a>
                 </div>
 
                 <!-- Buy Minecraft Premium Banner (Only visible for non-premium accounts) -->
@@ -376,13 +402,17 @@
                     <!-- Minecraft News & Patch Notes Section -->
                     <div class="news-patch-section-wrapper">
                         <!-- Full-Width Tab Header with Sliding Indicator -->
-                        <div class="news-patch-tabs-container">
-                            <div id="newsPatchTabIndicator" class="news-patch-tab-indicator tab-0-active"></div>
-                            <button class="news-patch-tab-btn active" id="tabBtnNews" onclick="switchNewsTab('news')">
+                        <div class="news-patch-tabs-container no-servers" id="newsPatchTabsContainer">
+                            <div id="newsPatchTabIndicator" class="news-patch-tab-indicator tab-news-active"></div>
+                            <button class="news-patch-tab-btn" id="tabBtnServers" onclick="switchNewsTab('servers', true)" style="display: none;">
+                                <i class="fas fa-server" style="color: #10b981;"></i>
+                                <span data-i18n="play.servers_tab">Servidores</span>
+                            </button>
+                            <button class="news-patch-tab-btn active" id="tabBtnNews" onclick="switchNewsTab('news', true)">
                                 <i class="fas fa-newspaper" style="color: #4facfe;"></i>
                                 <span data-i18n="play.news_tab">Noticias</span>
                             </button>
-                            <button class="news-patch-tab-btn" id="tabBtnPatchNotes" onclick="switchNewsTab('patchnotes')">
+                            <button class="news-patch-tab-btn" id="tabBtnPatchNotes" onclick="switchNewsTab('patchnotes', true)">
                                 <i class="fas fa-scroll" style="color: #a855f7;"></i>
                                 <span data-i18n="play.patchnotes_tab">Changelog</span>
                             </button>
@@ -390,16 +420,26 @@
 
                         <!-- Sliding Panels Viewport -->
                         <div class="news-patch-viewport">
-                            <div id="newsPatchPanelsSlider" class="news-patch-panels-slider tab-0-active">
-                                <!-- Slide 0: News -->
-                                <div class="news-patch-panel-slide">
+                            <div id="newsPatchPanelsSlider" class="news-patch-panels-slider tabs-2">
+                                <!-- Slide 0: Servers (hidden if no active servers) -->
+                                <div class="news-patch-panel-slide" id="slideFeaturedServers" style="display: none;">
+                                    <div id="featuredServersContainer" class="featured-servers-container">
+                                        <!-- Servers will be populated here by scripts.js -->
+                                    </div>
+                                    <div id="featuredServersPromoBanner" class="featured-servers-promo-banner" style="display: none;">
+                                        <!-- Promo message will be populated dynamically -->
+                                    </div>
+                                </div>
+
+                                <!-- Slide 1: News -->
+                                <div class="news-patch-panel-slide" id="slideNews">
                                     <div id="minecraftNewsContainer" class="minecraft-news-container">
                                         <!-- News will be populated here by scripts.js -->
                                     </div>
                                 </div>
 
-                                <!-- Slide 1: Changelog -->
-                                <div class="news-patch-panel-slide">
+                                <!-- Slide 2: Changelog -->
+                                <div class="news-patch-panel-slide" id="slidePatchNotes">
                                     <div class="changelog-top-bar">
                                         <div class="patch-notes-filters">
                                             <button class="patch-filter-btn" id="filterBtnAll" onclick="filterPatchNotes('all')" data-i18n="play.filter_all">Todas</button>
@@ -1372,6 +1412,117 @@
             <button class="btn-continue-anyway" id="continueAnywayBtn" data-i18n="loader.continue_anyway">
                 Continue anyway
             </button>
+        </div>
+    </div>
+
+    <!-- New Update Screen (Optional / Mandatory) -->
+    <div id="updateModal" class="fullscreen-update" style="display: none;">
+        <div class="fullscreen-update-card" id="updateCard">
+            <div class="update-header-section">
+                <span id="updateBadge" class="update-badge" data-i18n="updater.new_version_badge">NEW UPDATE</span>
+                <div class="update-icon-wrap" id="updateIconWrap">
+                    <i class="fas fa-rocket update-icon" id="updateIcon"></i>
+                </div>
+                <h2 class="update-title" id="updateTitle" data-i18n="updater.new_version">New Version Available</h2>
+                <div class="update-version-row">
+                    <span class="update-ver-tag" id="updateCurrentVer">v2.1.0</span>
+                    <i class="fas fa-arrow-right update-ver-arrow"></i>
+                    <span class="update-ver-tag highlight" id="updateLatestVer">v2.2.0</span>
+                </div>
+                <p class="update-subtitle" id="updateSubtitle">
+                    A new version of HelloWorld Launcher is available with new features and improvements.
+                </p>
+            </div>
+
+            <!-- Changelog Container with Custom Scrollbar -->
+            <div class="update-changelog-container">
+                <div class="update-changelog-header">
+                    <i class="fas fa-list-ul"></i>
+                    <span id="updateChangelogTitle" data-i18n="updater.release_notes">Release Notes & Changelog</span>
+                </div>
+                <div class="update-changelog-body" id="updateChangelogContent">
+                    <!-- Markdown rendered here -->
+                </div>
+            </div>
+
+            <!-- Download Progress Section (Shown during setup check/download) -->
+            <div class="update-progress-section" id="updateProgressSection" style="display: none;">
+                <div class="update-progress-status-row">
+                    <span id="updateProgressStatusText" data-i18n="updater.downloading_installer">Downloading installer...</span>
+                    <span id="updateProgressPercent">0%</span>
+                </div>
+                <div class="update-progress-bar-bg">
+                    <div class="update-progress-bar-fill" id="updateProgressBarFill" style="width: 0%;"></div>
+                </div>
+                <div class="update-progress-stats">
+                    <span id="updateProgressSpeed">0 MB/s</span>
+                    <span id="updateProgressSize">0 MB / 0 MB</span>
+                </div>
+            </div>
+
+            <!-- Action Buttons and Checkbox -->
+            <div class="update-actions-footer">
+                <div class="update-footer-left">
+                    <label class="update-checkbox-label" id="updateDontRemindLabel">
+                        <input type="checkbox" id="updateDontRemindCheckbox">
+                        <span data-i18n="updater.dont_remind">Don't remind me again for this version</span>
+                    </label>
+                </div>
+                <div class="update-footer-right">
+                    <button class="btn-secondary update-btn" id="updateLaterBtn">
+                        <span data-i18n="updater.later">Later</span>
+                    </button>
+                    <button class="btn-primary update-btn" id="updateNowBtn">
+                        <i class="fas fa-arrow-down" id="updateNowIcon"></i>
+                        <span id="updateNowText" data-i18n="updater.update_now">Update Now</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Maintenance Screen (Full Screen Standalone) -->
+    <div id="maintenanceModal" class="fullscreen-maintenance" style="display: none;">
+        <div class="fullscreen-maintenance-card">
+            <div class="maintenance-icon-wrap">
+                <i class="fas fa-tools maintenance-icon"></i>
+            </div>
+            <h2 class="maintenance-title" id="maintenanceTitle" data-i18n="maintenance.title">Servidores en Mantenimiento</h2>
+            <p class="maintenance-subtitle" id="maintenanceSubtitle" data-i18n="maintenance.subtitle">
+                Estamos realizando mejoras y optimizaciones en nuestros servidores. HelloWorld Launcher volverá a estar disponible en breve.
+            </p>
+            
+            <!-- Dynamic Message box from Gist -->
+            <div class="maintenance-notice-box" id="maintenanceNoticeBox">
+                <div class="maintenance-notice-header">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Notice</span>
+                </div>
+                <div class="maintenance-notice-body" id="maintenanceMessageText">
+                    We are currently upgrading our backend infrastructure and database to improve performance. The launcher will be back online shortly. Thank you for your patience!
+                </div>
+                <div class="maintenance-estimated-time" id="maintenanceEstimatedTime" style="display: none;">
+                    <i class="far fa-clock"></i> <span id="maintenanceEstimatedTimeText"></span>
+                </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="maintenance-actions">
+                <button class="btn-primary maintenance-btn" id="maintenanceCheckBtn">
+                    <i class="fas fa-sync-alt" id="maintenanceCheckIcon" style="margin-right: 8px;"></i>
+                    <span id="maintenanceCheckText" data-i18n="maintenance.check_again">Comprobar de nuevo</span>
+                </button>
+                <a class="btn-secondary maintenance-btn maintenance-status-link" id="maintenanceStatusBtn" href="#" target="_blank" style="display: none;">
+                    <i class="fab fa-discord" style="margin-right: 8px;"></i>
+                    <span data-i18n="maintenance.status_page">Ver Estado del Servicio</span>
+                </a>
+                
+                <!-- Admin Bypass Button (Visible únicamente si el usuario es Admin verificado) -->
+                <button class="btn-admin-bypass maintenance-btn" id="maintenanceAdminBypassBtn" style="display: none;">
+                    <i class="fas fa-user-shield" style="margin-right: 8px;"></i>
+                    <span data-i18n="maintenance.admin_bypass">Admin Bypass</span>
+                </button>
+            </div>
         </div>
     </div>
 

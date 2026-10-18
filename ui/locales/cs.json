@@ -25,11 +25,15 @@
     "streak_days": "Dny<br>Streaku",
     "streak_tooltip": "Zvyšuje se automaticky při prvním přihlášení do hry každý den.",
     "sponsor_title": "Apex Hosting",
-    "sponsor_subtitle": "Vytvoř si server s 25% slevou",
+    "sponsor_subtitle": "Vytvoř si server",
     "sponsor_code_copied": "Kód {code} zkopírován do schránky",
     "sponsor_copied_short": "Kód zkopírován",
     "sponsor_copy_hint": "Kopírovat kód",
-    "sponsor_open_hint": "Otevřít odkaz"
+    "sponsor_open_hint": "Otevřít odkaz",
+    "buy_minecraft_title": "Koupit Minecraft",
+    "buy_minecraft_subtitle": "Získejte oficiální Premium účet",
+    "buy_minecraft_badge": "PREMIUM",
+    "buy_minecraft_hint": "Koupit na oficiálních stránkách Minecraftu"
   },
   "user_menu": {
     "edit_profile": "Upravit profil",
@@ -107,7 +111,45 @@
     "version": "Verze",
     "last_played": "Naposledy hrané",
     "starting": "Spouštění...",
-    "playing": "Hraní"
+    "playing": "Hraní",
+    "servers_promo_text": "Chcete, aby se váš server zobrazil zde? Klikněte {link} pro objednání služby.",
+    "servers_promo_link": "zde",
+    "news_tab": "Novinky",
+    "servers_tab": "Servery",
+    "join_server": "Připojit se k serveru",
+    "copy_ip_tooltip": "Klikněte pro zkopírování IP",
+    "ip_copied": "IP {ip} zkopírována do schránky",
+    "save_server_tooltip": "Přidat do mého seznamu Minecraft serverů",
+    "server_added_to_list": "Server {server} přidán do vašeho seznamu Minecraft",
+    "web_tooltip": "Navštívit oficiální web",
+    "discord_tooltip": "Připojit se k Discord serveru",
+    "server_offline": "Offline",
+    "server_offline_tooltip": "Server je offline",
+    "server_loading": "Načítání stavu...",
+    "server_offline_motd": "Server není dostupný nebo je offline",
+    "server_error_motd": "Nepodařilo se načíst informace o serveru",
+    "players_online_tooltip": "{online} z {max} hráčů online",
+    "version_range_tooltip": "Podporovaná verze: {version}",
+    "version_offline": "Offline",
+    "version_unknown": "Online",
+    "edition_java": "Java",
+    "edition_bedrock": "Bedrock",
+    "edition_crossplay": "Java & Bedrock",
+    "no_servers_title": "Žádné doporučené servery",
+    "no_servers_desc": "Doporučené servery se zde brzy objeví.",
+    "patchnotes_tab": "Poznámky k vydání",
+    "latest_release": "Vydání:",
+    "latest_snapshot": "Snapshot:",
+    "filter_all": "Vše",
+    "filter_releases": "Vydání",
+    "filter_snapshots": "Snapshoty",
+    "read_changelog": "Přečíst celý changelog",
+    "patchnotes_title": "Minecraft Changelog",
+    "loading_patchnotes": "Načítání changelogu...",
+    "error_loading_patchnotes": "Chyba při načítání changelogu",
+    "release_badge": "Vydání",
+    "snapshot_badge": "Snapshot",
+    "close_modal": "Zavřít"
   },
   "account_switcher": {
     "title": "Účty",
@@ -134,7 +176,14 @@
     "days_played": "Odehrané dny",
     "sessions": "Relace",
     "days_unit": "dní",
-    "hours_unit": "h"
+    "hours_unit": "h",
+    "profile_step_avatar": "Vlastní avatar",
+    "profile_step_background": "Pozadí profilu",
+    "profile_step_country": "Země",
+    "profile_step_bio": "Biografie",
+    "profile_step_links": "Odkazy na sítě",
+    "profile_step_mob": "Oblíbený mob",
+    "profile_step_playstyle": "Štítky herního stylu"
   },
   "social": {
     "title": "Sociální",
@@ -303,7 +352,12 @@
     "inbox_received": "Přijaté",
     "inbox_sent": "Odeslané",
     "no_sent_messages_yet": "Zatím jste neodeslali žádné zprávy.",
-    "join_server_title": "Připojit se k serveru"
+    "join_server_title": "Připojit se k serveru",
+    "status_menu": "V nabídkách launcheru",
+    "status_playing_world": "Hraje v \"{world}\"",
+    "status_playing_singleplayer": "Hraje jednoho hráče",
+    "status_playing_server": "Hraje na {server}",
+    "status_playing_multiplayer": "Hraje více hráčů"
   },
   "installations": {
     "create_new": "Vytvořte novou instalaci",
@@ -352,8 +406,8 @@
     "no_modded_installations_found": "Nebyly nalezeny žádné modifikované instalace",
     "no_versions_found": "Nebyly nalezeny žádné verze",
     "no_compatible_found": "Nebyly nalezeny žádné kompatibilní instalace",
-    "no_mod_profiles": "Nebyly nalezeny žádné instalace s Forge, Fabric, NeoForge nebo Quilt.",
-    "no_shader_profiles": "Nebyly nalezeny žádné instalace s podporou shaderů. (Vyžaduje instalaci Forge/NeoForge NEBO Fabric/Quilt).",
+    "no_mod_profiles": "Nebyly nalezeny žádné instalace s Forge, Fabric nebo NeoForge.",
+    "no_shader_profiles": "Nebyly nalezeny žádné instalace s podporou shaderů. (Vyžaduje instalaci Forge/NeoForge NEBO Fabric).",
     "no_profiles": "Nebyly nalezeny žádné instalace.",
     "version": "Version",
     "edit_title": "Upravit instalaci",
@@ -367,7 +421,10 @@
     "install_all_warning": "Instalace nekompatibilních modů může způsobit pád hry. Pokračovat?",
     "install_all_confirm": "Některé mody mohou být nekompatibilní se zvolenou verzí a způsobit pád Minecraftu. Opravdu chcete nainstalovat všechny mody přesto?",
     "cancel_btn": "Zrušit",
-    "install_btn": "Nainstalovat"
+    "install_btn": "Nainstalovat",
+    "shortcut_btn": "Vytvořit zástupce na Ploše a v Nabídce Start",
+    "shortcut_created": "Zástupce vytvořen na Ploše a v Nabídce Start",
+    "shortcut_failed": "Vytvoření zástupce se nezdařilo"
   },
   "loader": {
     "checking_connection": "Kontrola připojení...",
@@ -384,7 +441,6 @@
     "downloading_fabric": "Stahování instalace Fabric",
     "downloading_forge": "Stažení instalačního programu Forge",
     "downloading_neoforge": "Stažení instalačního programu NeoForge",
-    "downloading_quilt": "Stahování instalace Quilt",
     "extracting": "Extrakce",
     "all_done": "Vše hotovo! Spouštění hry...",
     "preparing": "Příprava...",
@@ -396,7 +452,15 @@
     "feat_mods": "Mod searching and downloading",
     "feat_updates": "Automatic updates",
     "feat_versions": "Downloading new Minecraft versions",
-    "continue_anyway": "Continue anyway"
+    "continue_anyway": "Continue anyway",
+    "syncing_updates": "Aktualizace doplňků na nejnovější kompatibilní verze.",
+    "syncing_missing_and_updates": "Stahování chybějících souborů a aktualizací pro tuto instalaci.",
+    "updating_simple": "Aktualizace...",
+    "updating_name": "Aktualizace {name}...",
+    "update_badge": "Aktualizace",
+    "waiting": "Čekání",
+    "done": "Hotovo",
+    "error": "Chyba"
   },
   "toasts": {
     "login_failed": "Přihlášení se nezdařilo: {err}",
@@ -512,7 +576,12 @@
     "success": "Success",
     "server_invite_invalid_ip": "Invalid server address. Use a valid hostname or IP (e.g. hypixel.net, 1.2.3.4:25565).",
     "server_invite_enter_ip": "Please enter a server address.",
-    "server_added_to_list": "Server added to your Minecraft server list!"
+    "server_added_to_list": "Server added to your Minecraft server list!",
+    "invalid_server_ip": "Neplatná IP adresa serveru",
+    "minecraft_running_server_saved": "Minecraft již běží. Přidali jsme server do vašeho seznamu pro více hráčů.",
+    "launch_failed": "Nepodařilo se spustit hru.",
+    "connecting_to_server": "Připojování k {server}...",
+    "copied_to_clipboard": "Zkopírováno do schránky!"
   },
   "settings": {
     "language": "Language / Jazyk",
@@ -732,7 +801,7 @@
     "V sekci Novinky můžete být informováni o nejnovějších zprávách a opravách Minecraftu.",
     "Máte dotazy nebo potřebujete pomoc s problémem? Připojte se k naší Discord komunitě ze sociálních odkazů.",
     "Workshop vám umožňuje nainstalovat konfigurace optimalizované jinými uživateli jediným kliknutím.",
-    "Při vytváření nové instalace si můžete vybrat mezi Vanilla, Fabric, Forge, NeoForge a Quilt.",
+    "Při vytváření nové instalace si můžete vybrat mezi Vanilla, Fabric, Forge a NeoForge.",
     "Ikonu a složku pro každou z vašich instalací si můžete přizpůsobit, abyste zůstali lépe organizovaní.",
     "Progresivní načítání modu na pozadí vám umožňuje procházet obchod bez zamrzání uživatelského rozhraní."
   ],
@@ -922,7 +991,16 @@
     "retry": "Retry",
     "download": "Download Update",
     "release_notes": "Release Notes & Changelog",
-    "starting_download": "Starting Download..."
+    "starting_download": "Starting Download...",
+    "update_now": "Aktualizovat nyní",
+    "later": "Později",
+    "dont_remind": "Pro tuto verzi již nepřipomínat",
+    "mandatory_title": "Vyžadována povinná aktualizace",
+    "mandatory_badge": "POVINNÉ",
+    "new_version_badge": "NOVÁ AKTUALIZACE",
+    "mandatory_desc": "Vaše aktuální verze ({current}) již není podporována. Aktualizujte na {latest}, abyste mohli pokračovat ve hře.",
+    "launching_setup": "Spouštění instalačního programu...",
+    "downloading_installer": "Stahování instalačního programu..."
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Nová verze Minecraftu",
@@ -952,5 +1030,18 @@
     "premium": "Prémiový účet",
     "moderator": "Moderátor",
     "creator": "Tvůrce"
+  },
+  "maintenance": {
+    "title": "Servery v údržbě",
+    "subtitle": "V současné době provádíme upgrady infrastruktury a optimalizace. HelloWorld Launcher bude brzy zpět.",
+    "check_again": "Zkontrolovat znovu",
+    "checking": "Kontrola...",
+    "status_page": "Stav služeb",
+    "admin_bypass": "Admin Bypass",
+    "admin_bypass_badge": "🛠️ Režim údržby aktivní — Admin Bypass povolen",
+    "estimated_until": "Předpokládaný návrat: {time}",
+    "bypass_success": "Admin Bypass povolen. Plný přístup udělen.",
+    "bypass_denied": "Přístup odepřen: váš účet nemá oprávnění správce.",
+    "bypass_error": "Nepodařilo se aktivovat Admin Bypass: {err}"
   }
 }

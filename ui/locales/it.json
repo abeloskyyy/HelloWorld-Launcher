@@ -25,11 +25,15 @@
     "streak_days": "Giorni di<br>serie",
     "streak_tooltip": "Aumenta automaticamente al tuo primo accesso al gioco ogni giorno.",
     "sponsor_title": "Apex Hosting",
-    "sponsor_subtitle": "Crea il tuo server con il 25% di sconto",
+    "sponsor_subtitle": "Crea il tuo server",
     "sponsor_code_copied": "Codice {code} copiato negli appunti",
     "sponsor_copied_short": "Codice copiato",
     "sponsor_copy_hint": "Copia codice",
-    "sponsor_open_hint": "Apri link"
+    "sponsor_open_hint": "Apri link",
+    "buy_minecraft_title": "Acquista Minecraft",
+    "buy_minecraft_subtitle": "Ottieni l'account Premium ufficiale",
+    "buy_minecraft_badge": "PREMIUM",
+    "buy_minecraft_hint": "Acquista sul sito ufficiale di Minecraft"
   },
   "user_menu": {
     "edit_profile": "Modifica profilo",
@@ -107,7 +111,45 @@
     "version": "Versione",
     "last_played": "Ultimo giocato",
     "starting": "Di partenza...",
-    "playing": "Giocando"
+    "playing": "Giocando",
+    "servers_promo_text": "Vuoi che il tuo server appaia qui? Clicca {link} per richiedere il servizio.",
+    "servers_promo_link": "qui",
+    "news_tab": "Notizie",
+    "servers_tab": "Server",
+    "join_server": "Entra nel server",
+    "copy_ip_tooltip": "Fai clic per copiare l'IP",
+    "ip_copied": "IP {ip} copiato negli appunti",
+    "save_server_tooltip": "Aggiungi all'elenco server di Minecraft",
+    "server_added_to_list": "Server {server} aggiunto all'elenco di Minecraft",
+    "web_tooltip": "Visita il sito ufficiale",
+    "discord_tooltip": "Unisciti al server Discord",
+    "server_offline": "Non in linea",
+    "server_offline_tooltip": "Server non in linea",
+    "server_loading": "Caricamento stato...",
+    "server_offline_motd": "Server non disponibile o non in linea",
+    "server_error_motd": "Impossibile recuperare le informazioni del server",
+    "players_online_tooltip": "{online} di {max} giocatori online",
+    "version_range_tooltip": "Versione supportata: {version}",
+    "version_offline": "Non in linea",
+    "version_unknown": "In linea",
+    "edition_java": "Java",
+    "edition_bedrock": "Bedrock",
+    "edition_crossplay": "Java & Bedrock",
+    "no_servers_title": "Nessun server in evidenza",
+    "no_servers_desc": "I server in evidenza e consigliati appariranno qui a breve.",
+    "patchnotes_tab": "Note di rilascio",
+    "latest_release": "Versione ufficiale:",
+    "latest_snapshot": "Snapshot:",
+    "filter_all": "Tutti",
+    "filter_releases": "Versioni ufficiali",
+    "filter_snapshots": "Snapshot",
+    "read_changelog": "Leggi il changelog completo",
+    "patchnotes_title": "Changelog di Minecraft",
+    "loading_patchnotes": "Caricamento changelog...",
+    "error_loading_patchnotes": "Errore durante il caricamento del changelog",
+    "release_badge": "Rilascio",
+    "snapshot_badge": "Snapshot",
+    "close_modal": "Chiudi"
   },
   "account_switcher": {
     "title": "Conti",
@@ -134,7 +176,14 @@
     "days_played": "Giorni giocati",
     "sessions": "Sessioni",
     "days_unit": "giorni",
-    "hours_unit": "H"
+    "hours_unit": "H",
+    "profile_step_avatar": "Avatar personalizzato",
+    "profile_step_background": "Sfondo del profilo",
+    "profile_step_country": "Paese",
+    "profile_step_bio": "Biografia",
+    "profile_step_links": "Link social",
+    "profile_step_mob": "Mob preferito",
+    "profile_step_playstyle": "Tag stile di gioco"
   },
   "social": {
     "title": "Sociale",
@@ -303,7 +352,12 @@
     "inbox_received": "Ricevuti",
     "inbox_sent": "Inviati",
     "no_sent_messages_yet": "Non hai ancora inviato alcun messaggio.",
-    "join_server_title": "Unisciti al server"
+    "join_server_title": "Unisciti al server",
+    "status_menu": "Nei menu del launcher",
+    "status_playing_world": "Gioca in \"{world}\"",
+    "status_playing_singleplayer": "Gioca a giocatore singolo",
+    "status_playing_server": "Gioca su {server}",
+    "status_playing_multiplayer": "Gioca in multigiocatore"
   },
   "installations": {
     "create_new": "Crea una nuova installazione",
@@ -352,8 +406,8 @@
     "no_modded_installations_found": "Nessuna installazione modificata trovata",
     "no_versions_found": "Nessuna versione trovata",
     "no_compatible_found": "Nessuna installazione compatibile trovata",
-    "no_mod_profiles": "Nessuna installazione con Forge, Fabric, NeoForge o Quilt trovata.",
-    "no_shader_profiles": "Nessuna installazione con supporto Shader trovata. (Richiede Forge/NeoForge O Fabric/Quilt installati).",
+    "no_mod_profiles": "Nessuna installazione con Forge, Fabric o NeoForge trovata.",
+    "no_shader_profiles": "Nessuna installazione con supporto Shader trovata. (Richiede Forge/NeoForge O Fabric installati).",
     "no_profiles": "Nessuna installazione trovata.",
     "version": "Version",
     "edit_title": "Modifica installazione",
@@ -367,7 +421,10 @@
     "install_all_warning": "L'installazione di mod incompatibili può causare arresti anomali. Continuare?",
     "install_all_confirm": "Alcune mod potrebbero essere incompatibili con la versione selezionata e causare il crash di Minecraft. Sei sicuro di voler installare comunque tutte le mod?",
     "cancel_btn": "Annulla",
-    "install_btn": "Installa"
+    "install_btn": "Installa",
+    "shortcut_btn": "Crea collegamento su Desktop e Menu Start",
+    "shortcut_created": "Collegamento creato su Desktop e Menu Start",
+    "shortcut_failed": "Impossibile creare il collegamento"
   },
   "loader": {
     "checking_connection": "Verifica della connessione...",
@@ -384,7 +441,6 @@
     "downloading_fabric": "Download dell'installazione di Fabric",
     "downloading_forge": "Download del programma di installazione di Forge",
     "downloading_neoforge": "Download del programma di installazione di NeoForge",
-    "downloading_quilt": "Downloading Quilt installation",
     "extracting": "Estrazione",
     "all_done": "Tutto fatto! Avvio del gioco...",
     "preparing": "Preparazione...",
@@ -396,7 +452,15 @@
     "feat_mods": "Mod searching and downloading",
     "feat_updates": "Automatic updates",
     "feat_versions": "Downloading new Minecraft versions",
-    "continue_anyway": "Continue anyway"
+    "continue_anyway": "Continue anyway",
+    "syncing_updates": "Aggiornamento degli addon alle ultime versioni compatibili.",
+    "syncing_missing_and_updates": "Download dei file mancanti e degli aggiornamenti per questa installazione.",
+    "updating_simple": "Aggiornamento...",
+    "updating_name": "Aggiornamento di {name}...",
+    "update_badge": "Aggiornamento",
+    "waiting": "In attesa",
+    "done": "Fatto",
+    "error": "Errore"
   },
   "toasts": {
     "login_failed": "Accesso non riuscito: {err}",
@@ -512,7 +576,12 @@
     "success": "Success",
     "server_invite_invalid_ip": "Invalid server address. Use a valid hostname or IP (e.g. hypixel.net, 1.2.3.4:25565).",
     "server_invite_enter_ip": "Please enter a server address.",
-    "server_added_to_list": "Server added to your Minecraft server list!"
+    "server_added_to_list": "Server added to your Minecraft server list!",
+    "invalid_server_ip": "Indirizzo IP del server non valido",
+    "minecraft_running_server_saved": "Minecraft è già avviato. Abbiamo aggiunto il server all'elenco multigiocatore.",
+    "launch_failed": "Impossibile avviare il gioco.",
+    "connecting_to_server": "Connessione a {server}...",
+    "copied_to_clipboard": "Copiato negli appunti!"
   },
   "settings": {
     "language": "Language / Lingua",
@@ -732,7 +801,7 @@
     "Nella sezione Notizie puoi rimanere aggiornato con le ultime novità e patch di Minecraft.",
     "Hai domande o hai bisogno di aiuto per un problema? Unisciti alla nostra community Discord dai collegamenti social.",
     "Il Workshop ti consente di installare configurazioni ottimizzate da altri utenti con un solo clic.",
-    "Quando crei una nuova installazione, puoi scegliere tra Vanilla, Fabric, Forge, NeoForge e Quilt.",
+    "Quando crei una nuova installazione, puoi scegliere tra Vanilla, Fabric, Forge e NeoForge.",
     "Puoi personalizzare l'icona e la cartella per ciascuna delle tue installazioni per rimanere meglio organizzati.",
     "Il caricamento progressivo delle mod in background ti consente di navigare nel negozio senza blocchi dell'interfaccia utente."
   ],
@@ -922,7 +991,16 @@
     "retry": "Retry",
     "download": "Download Update",
     "release_notes": "Release Notes & Changelog",
-    "starting_download": "Starting Download..."
+    "starting_download": "Starting Download...",
+    "update_now": "Aggiorna ora",
+    "later": "Più tardi",
+    "dont_remind": "Non ricordarmelo più per questa versione",
+    "mandatory_title": "Aggiornamento obbligatorio richiesto",
+    "mandatory_badge": "OBBLIGATORIO",
+    "new_version_badge": "NUOVO AGGIORNAMENTO",
+    "mandatory_desc": "La tua versione attuale ({current}) non è più supportata. Aggiorna a {latest} per continuare a giocare.",
+    "launching_setup": "Avvio del programma di installazione...",
+    "downloading_installer": "Download del programma di installazione..."
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Nuova versione di Minecraft",
@@ -952,5 +1030,18 @@
     "premium": "Account Premium",
     "moderator": "Moderatore",
     "creator": "Creatore"
+  },
+  "maintenance": {
+    "title": "Server in manutenzione",
+    "subtitle": "Stiamo effettuando aggiornamenti e ottimizzazioni dell'infrastruttura. HelloWorld Launcher tornerà presto online.",
+    "check_again": "Controlla di nuovo",
+    "checking": "Controllo in corso...",
+    "status_page": "Stato dei servizi",
+    "admin_bypass": "Bypass Amministratore",
+    "admin_bypass_badge": "🛠️ Modalità manutenzione attiva — Bypass Amministratore abilitato",
+    "estimated_until": "Rientro previsto: {time}",
+    "bypass_success": "Bypass Amministratore abilitato. Accesso completo accordato.",
+    "bypass_denied": "Accesso negato: il tuo account non dispone dei permessi di amministratore.",
+    "bypass_error": "Impossibile attivare il Bypass Amministratore: {err}"
   }
 }

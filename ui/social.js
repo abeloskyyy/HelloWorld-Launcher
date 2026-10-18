@@ -731,35 +731,36 @@
 
         console.log(`[Social] Joining server ${serverIp} with profile ${profileId}`);
 
-        // Update selected profile in UI
-        const profiles = window.profilesData?.profiles || {};
-        const profile = profiles[profileId];
-        if (typeof window.selectOption === 'function' && profile) {
-            window.selectOption(profileId, profile);
+        // Use global launcher join server helper
+        if (typeof window.joinMinecraftServer === 'function') {
+            await window.joinMinecraftServer(serverIp, true, profileId);
         } else {
-            const profileSelect = document.getElementById('profileSelect');
-            if (profileSelect) {
-                profileSelect.value = profileId;
-                try { profileSelect.dispatchEvent(new Event('change')); } catch (_) {}
+            // Update selected profile in UI
+            const profiles = window.profilesData?.profiles || {};
+            const profile = profiles[profileId];
+            if (typeof window.selectOption === 'function' && profile) {
+                window.selectOption(profileId, profile);
+            } else {
+                const profileSelect = document.getElementById('profileSelect');
+                if (profileSelect) {
+                    profileSelect.value = profileId;
+                    try { profileSelect.dispatchEvent(new Event('change')); } catch (_) {}
+                }
             }
-        }
 
-        // Go to play section
-        if (typeof showSection === 'function') {
-            showSection('play');
-        }
+            // Go to play section
+            if (typeof showSection === 'function') {
+                showSection('play');
+            }
 
-        // Store server IP — launchGame reads window.pendingServerParam
-        window.pendingServerParam = serverIp;
-        console.log('[Social] pendingServerParam set to:', serverIp);
-
-        // Delegate to launchGame which handles all UI states (play button, cancel, etc.)
-        const launcherFn = (typeof launchGame === 'function' && launchGame) || (typeof window.launchGame === 'function' && window.launchGame);
-        if (launcherFn) {
-            await launcherFn();
-        } else {
-            console.error('[Social] launchGame is not available');
-            if (typeof showToast === 'function') showToast('Could not launch game.', 'error');
+            window.pendingServerParam = serverIp;
+            const launcherFn = (typeof launchGame === 'function' && launchGame) || (typeof window.launchGame === 'function' && window.launchGame);
+            if (launcherFn) {
+                await launcherFn();
+            } else {
+                console.error('[Social] launchGame is not available');
+                if (typeof showToast === 'function') showToast('Could not launch game.', 'error');
+            }
         }
     };
 
@@ -2665,7 +2666,7 @@
                         if (incompatWrap && incompatList) {
                             incompatWrap.style.display = 'block';
                             incompatList.innerHTML = res.incompatible.map(item => {
-                                const cleanName = item.name || (item.filename ? item.filename.replace(/\.(jar|zip|mrpack)$/i, '').replace(/[-_+](fabric|forge|neoforge|quilt|mc)?v?[0-9].*$/i, '').replace(/[-_]/g, ' ').trim() : '') || item.project_id || 'Unknown Mod';
+                                const cleanName = item.name || (item.filename ? item.filename.replace(/\.(jar|zip|mrpack)$/i, '').replace(/[-_+](fabric|forge|neoforge|mc)?v?[0-9].*$/i, '').replace(/[-_]/g, ' ').trim() : '') || item.project_id || 'Unknown Mod';
                                 return `
                                     <div class="compat-incompat-item">
                                         <div class="item-title">${escapeHtml(cleanName)}</div>
@@ -2764,7 +2765,7 @@
                 let initialLoader = 'fabric';
                 let initialMc = '';
                 if (p.version) {
-                    const match = p.version.match(/^(Fabric|Forge|NeoForge|Vanilla|Quilt)\s+([0-9.]+)/i);
+                    const match = p.version.match(/^(Fabric|Forge|NeoForge|Vanilla)\s+([0-9.]+)/i);
                     if (match) {
                         initialLoader = match[1].toLowerCase();
                         initialMc = match[2];

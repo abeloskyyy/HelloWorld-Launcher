@@ -25,11 +25,15 @@
     "streak_days": "Segidako<br>Egunak",
     "streak_tooltip": "Automatikoki handitzen da egunero jokoan lehen aldiz saioa hastean.",
     "sponsor_title": "Apex Hosting",
-    "sponsor_subtitle": "Sortu zure zerbitzaria %25eko deskontuarekin",
+    "sponsor_subtitle": "Sortu zure zerbitzaria",
     "sponsor_code_copied": "{code} kodea arbelean kopiatu da",
     "sponsor_copied_short": "Kodea kopiatuta",
     "sponsor_copy_hint": "Kopiatu kodea",
-    "sponsor_open_hint": "Ireki esteka"
+    "sponsor_open_hint": "Ireki esteka",
+    "buy_minecraft_title": "Erosi Minecraft",
+    "buy_minecraft_subtitle": "Lortu Premium kontu ofiziala",
+    "buy_minecraft_badge": "PREMIUM",
+    "buy_minecraft_hint": "Erosi Minecraft-en webgune ofizialean"
   },
   "user_menu": {
     "edit_profile": "Editatu Profila",
@@ -107,7 +111,45 @@
     "version": "Bertsioa",
     "last_played": "Azkenekoz jolastua",
     "starting": "Abiarazten...",
-    "playing": "Jolasten"
+    "playing": "Jolasten",
+    "servers_promo_text": "Zure zerbitzaria hemen agertzea nahi duzu? Egin klik {link} zerbitzua kontratatzeko.",
+    "servers_promo_link": "hemen",
+    "news_tab": "Albisteak",
+    "servers_tab": "Zerbitzariak",
+    "join_server": "Batu zerbitzarira",
+    "copy_ip_tooltip": "Klikatu IP kopiatzeko",
+    "ip_copied": "{ip} IPa arbelean kopiatuta",
+    "save_server_tooltip": "Gehitu nire Minecraft zerbitzarien zerrendara",
+    "server_added_to_list": "{server} zerbitzaria gehitu da zure Minecraft zerrendara",
+    "web_tooltip": "Ikusi webgune ofiziala",
+    "discord_tooltip": "Batu Discord zerbitzarian",
+    "server_offline": "Lineaz kanpo",
+    "server_offline_tooltip": "Zerbitzaria lineaz kanpo",
+    "server_loading": "Egoera kargatzen...",
+    "server_offline_motd": "Zerbitzaria ez dago erabilgarri edo lineaz kanpo dago",
+    "server_error_motd": "Ezin izan da zerbitzariaren informazioa eskuratu",
+    "players_online_tooltip": "{online}/{max} jokalari konektatuta",
+    "version_range_tooltip": "Bertsio bateragarria: {version}",
+    "version_offline": "Lineaz kanpo",
+    "version_unknown": "Linean",
+    "edition_java": "Java",
+    "edition_bedrock": "Bedrock",
+    "edition_crossplay": "Java & Bedrock",
+    "no_servers_title": "Ez dago zerbitzari nabarmendurik",
+    "no_servers_desc": "Zerbitzari nabarmenduak laster agertuko dira hemen.",
+    "patchnotes_tab": "Oharrak",
+    "latest_release": "Bertsio ofiziala:",
+    "latest_snapshot": "Snapshot:",
+    "filter_all": "Guztiak",
+    "filter_releases": "Bertsio ofizialak",
+    "filter_snapshots": "Snapshot-ak",
+    "read_changelog": "Irakurri aldaketa-erregistro osoa",
+    "patchnotes_title": "Minecraft-en aldaketa-erregistroa",
+    "loading_patchnotes": "Aldaketa-erregistroa kargatzen...",
+    "error_loading_patchnotes": "Errorea oharrak kargatzean",
+    "release_badge": "Bertsioa",
+    "snapshot_badge": "Snapshot",
+    "close_modal": "Itxi"
   },
   "account_switcher": {
     "title": "Kontuak",
@@ -134,7 +176,14 @@
     "days_played": "Jolastutako Egunak",
     "sessions": "Saioak",
     "days_unit": "egun",
-    "hours_unit": "o"
+    "hours_unit": "o",
+    "profile_step_avatar": "Avatar pertsonalizatua",
+    "profile_step_background": "Profilaren atzeko planoa",
+    "profile_step_country": "Herrialdea",
+    "profile_step_bio": "Biografia",
+    "profile_step_links": "Esteka sozialak",
+    "profile_step_mob": "Mob gogokoena",
+    "profile_step_playstyle": "Jolas-estiloaren etiketak"
   },
   "social": {
     "title": "Soziala",
@@ -303,7 +352,12 @@
     "inbox_received": "Jasotakoak",
     "inbox_sent": "Bidalitakoak",
     "no_sent_messages_yet": "Oraindik ez duzu mezurik bidali.",
-    "join_server_title": "Zerbitzarira batu"
+    "join_server_title": "Zerbitzarira batu",
+    "status_menu": "Hasieratzailearen menuetan",
+    "status_playing_world": "\"{world}\" munduan jolasten",
+    "status_playing_singleplayer": "Jokalari bakarrean jolasten",
+    "status_playing_server": "{server} zerbitzarian jolasten",
+    "status_playing_multiplayer": "Jokalari anitzetan jolasten"
   },
   "installations": {
     "create_new": "Sortu instalazio berria",
@@ -352,8 +406,8 @@
     "no_modded_installations_found": "Ez da Mod instalaziorik aurkitu",
     "no_versions_found": "Ez da bertsiorik aurkitu",
     "no_compatible_found": "Ez da instalazio bateragarririk aurkitu",
-    "no_mod_profiles": "Ez da aurkitu Forge, Fabric, NeoForge edo Quilt duen instalaziorik.",
-    "no_shader_profiles": "Ez da aurkitu Shader-entzako euskarria duen instalaziorik. (Forge/NeoForge EDO Fabric/Quilt instalatuta behar du).",
+    "no_mod_profiles": "Ez da aurkitu Forge, Fabric edo NeoForge duen instalaziorik.",
+    "no_shader_profiles": "Ez da aurkitu Shader-entzako euskarria duen instalaziorik. (Forge/NeoForge EDO Fabric instalatuta behar du).",
     "no_profiles": "Ez da instalaziorik aurkitu.",
     "version": "Version",
     "edit_title": "Instalazioa editatu",
@@ -367,7 +421,10 @@
     "install_all_warning": "Mod bateraezinak instalatzeak hutsegiteak eragin ditzake. Jarraitu?",
     "install_all_confirm": "Mod batzuk aukeratutako bertsioarekin bateraezinak izan daitezke eta Minecraft-ek huts egitea eragin dezakete. Ziur zaude mod guztiak hala ere instalatu nahi dituzula?",
     "cancel_btn": "Utzi",
-    "install_btn": "Instalatu"
+    "install_btn": "Instalatu",
+    "shortcut_btn": "Sortu lasterbidea Mahaigainean eta Hasiera Menuan",
+    "shortcut_created": "Lasterbidea sortu da Mahaigainean eta Hasiera Menuan",
+    "shortcut_failed": "Ezin izan da lasterbidea sortu"
   },
   "loader": {
     "checking_connection": "Konexioa egiaztatzen...",
@@ -384,7 +441,6 @@
     "downloading_fabric": "Fabric instalazioa deskargatzen",
     "downloading_forge": "Forge instalatzailea deskargatzen",
     "downloading_neoforge": "NeoForge instalatzailea deskargatzen",
-    "downloading_quilt": "Quilt instalazioa deskargatzen",
     "extracting": "Erauzketa",
     "all_done": "Dena prest! Jokoa abiarazten...",
     "preparing": "Prestatzen...",
@@ -396,7 +452,15 @@
     "feat_mods": "Mod searching and downloading",
     "feat_updates": "Automatic updates",
     "feat_versions": "Downloading new Minecraft versions",
-    "continue_anyway": "Continue anyway"
+    "continue_anyway": "Continue anyway",
+    "syncing_updates": "Gehigarriak azken bertsio bateragarrietara eguneratzen.",
+    "syncing_missing_and_updates": "Instalazio honetarako falta diren fitxategiak eta eguneraketak deskargatzen.",
+    "updating_simple": "Eguneratzen...",
+    "updating_name": "{name} eguneratzen...",
+    "update_badge": "Eguneratzea",
+    "waiting": "Itxaroten",
+    "done": "Eginda",
+    "error": "Errorea"
   },
   "toasts": {
     "login_failed": "Saio-hasierak huts egin du: {err}",
@@ -512,7 +576,12 @@
     "success": "Success",
     "server_invite_invalid_ip": "Invalid server address. Use a valid hostname or IP (e.g. hypixel.net, 1.2.3.4:25565).",
     "server_invite_enter_ip": "Please enter a server address.",
-    "server_added_to_list": "Server added to your Minecraft server list!"
+    "server_added_to_list": "Server added to your Minecraft server list!",
+    "invalid_server_ip": "Zerbitzariaren IP helbide baliogabea",
+    "minecraft_running_server_saved": "Minecraft martxan dago dagoeneko. Zerbitzaria zure jokalari anitzeko zerrendara gehitu dugu.",
+    "launch_failed": "Errorea jokoa abiaraztean.",
+    "connecting_to_server": "{server}-(e)ra konektatzen...",
+    "copied_to_clipboard": "Arbelean kopiatuta!"
   },
   "settings": {
     "language": "Language / Hizkuntza",
@@ -732,7 +801,7 @@
     "Berriak atalean, Minecraft-en azken berrien eta adabakien eguneratuta egon zaitezke.",
     "Galderarik baduzu edo arazoren batekin laguntza behar duzu? Sartu gure Discord komunitatera esteka sozialetatik.",
     "Tailerrak beste erabiltzaileek optimizatutako konfigurazioak klik bakar batekin instalatzeko aukera ematen dizu.",
-    "Instalazio berri bat sortzerakoan, Vanilla, Fabric, Forge, NeoForge eta Quilt artean aukeratu dezakezu.",
+    "Instalazio berri bat sortzerakoan, Vanilla, Fabric, Forge eta NeoForge artean aukeratu dezakezu.",
     "Instalazio bakoitzaren ikonoa eta karpeta pertsonalizatu ditzakezu hobeto antolatuta egoteko.",
     "Atzeko planoko mod karga progresiboak denda arakatzeko aukera ematen dizu erabiltzaile-interfazea izoztu gabe."
   ],
@@ -922,7 +991,16 @@
     "retry": "Retry",
     "download": "Download Update",
     "release_notes": "Release Notes & Changelog",
-    "starting_download": "Starting Download..."
+    "starting_download": "Starting Download...",
+    "update_now": "Eguneratu orain",
+    "later": "Geroago",
+    "dont_remind": "Ez gogorarazi berriro bertsio honetarako",
+    "mandatory_title": "Derrigorrezko eguneraketa beharrezkoa",
+    "mandatory_badge": "DERRIGORREZKOA",
+    "new_version_badge": "EGUNERAKETA BERRIA",
+    "mandatory_desc": "Zure uneko bertsioa ({current}) ez da bateragarria. Mesedez, eguneratu {latest}-ra jolasten jarraitzeko.",
+    "launching_setup": "Instalatzailea abiarazten...",
+    "downloading_installer": "Instalatzailea deskargatzen..."
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Minecraft Bertsio Berria",
@@ -952,5 +1030,18 @@
     "premium": "Premium Kontua",
     "moderator": "Moderatzailea",
     "creator": "Sortzailea"
+  },
+  "maintenance": {
+    "title": "Zerbitzariak mantentze-lanetan",
+    "subtitle": "Azpiegitura hobekuntzak egiten ari gara. HelloWorld Launcher laster egongo da eskuragarri.",
+    "check_again": "Berriro egiaztatu",
+    "checking": "Egiaztatzen...",
+    "status_page": "Zerbitzuen egoera",
+    "admin_bypass": "Admin saihesbidea",
+    "admin_bypass_badge": "🛠️ Mantentze modua aktibo — Admin saihesbidea gaituta",
+    "estimated_until": "Itzulera estimatua: {time}",
+    "bypass_success": "Admin saihesbidea gaituta. Sarbide osoa emanda.",
+    "bypass_denied": "Sarbidea ukatu da: zure kontuak ez du administratzaile baimenik.",
+    "bypass_error": "Errorea Admin saihesbidea aktibatzean: {err}"
   }
 }

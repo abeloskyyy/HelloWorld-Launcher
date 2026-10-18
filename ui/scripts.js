@@ -671,15 +671,7 @@ const initLauncher = async () => {
         refreshUserSession();
         setInterval(refreshUserSession, 60000);
 
-        // Listen for background auto-updates
-        if (window.hwlAPI && window.hwlAPI.onUpdaterStatus) {
-            window.hwlAPI.onUpdaterStatus((statusData) => {
-                if (statusData && statusData.status === 'available') {
-                    showToast("New update available! Redirecting...", "success");
-                    setTimeout(() => { window.location.href = "updater.html"; }, 1500);
-                }
-            });
-        }
+        // New direct setup updater handles updates on startup and in-app seamlessly
 
         // Listen for auto-launch profile from shortcuts
         const onAutoLaunch = (profileId) => {
@@ -713,6 +705,16 @@ const initLauncher = async () => {
     console.log('[Init] Initialization complete');
     window.isLauncherReady = true;
 
+    // Check if Minecraft is already running on launcher startup
+    if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.is_minecraft_running === 'function') {
+        window.pywebview.api.is_minecraft_running().then(running => {
+            if (running) {
+                console.log('[Init] Minecraft process already running detected on startup');
+                onMinecraftReady();
+            }
+        }).catch(err => console.warn('[Init] is_minecraft_running check error:', err));
+    }
+
     // Check for pending launch from shortcut
     if (window.pendingLaunchProfileId) {
         const pid = window.pendingLaunchProfileId;
@@ -743,13 +745,32 @@ window.addEventListener('language-changed', () => {
     if (typeof renderSidebarSponsor === 'function') {
         renderSidebarSponsor(currentSponsorConfig);
     }
+    if (typeof renderFeaturedServersPromo === 'function') {
+        renderFeaturedServersPromo(window.HW_SERVERS_LINK);
+    }
+    const playButton = document.querySelector('.play-button');
+    if (playButton) {
+        if (window.isMinecraftRunning) {
+            playButton.innerHTML = window.t('play.playing') || 'Playing';
+        } else if (!window.isLaunching && !window.isSyncing) {
+            playButton.innerHTML = window.t('play.play_btn') || 'Play';
+        }
+    }
 });
 
-// --- SPONSOR / PROMO (Apex Hosting) ---
-const SPONSOR_GIST_URL = 'https://gist.githubusercontent.com/abeloskyyy/ae6861843152ced82beb7f5135ac3863/raw/hwlauncher-promo.json';
+// --- REMOTE CONFIGURATION & SERVICES (Gist Unificado) ---
+const REMOTE_CONFIG_GIST_URL = 'https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json';
+const SPONSOR_GIST_URL = REMOTE_CONFIG_GIST_URL;
+const REMOTE_CONFIG_CACHE_KEY = 'hw_remote_config_data';
+const REMOTE_CONFIG_TIME_KEY = 'hw_remote_config_time';
 const SPONSOR_CACHE_KEY = 'hw_sponsor_promo_data';
 const SPONSOR_CACHE_TIME_KEY = 'hw_sponsor_promo_time';
 const SPONSOR_CACHE_TTL = 12 * 60 * 60 * 1000; // 12 horas
+
+window.HW_REMOTE_CONFIG = null;
+window.HW_API_URL = 'https://api.hwlauncher.abelosky.com';
+window.HW_FEATURED_SERVERS = [];
+window.HW_SERVERS_LINK = null;
 
 const DEFAULT_SPONSOR_CONFIG = {
     active: false,
@@ -774,27 +795,105 @@ function renderSidebarSponsor(config) {
     card.classList.remove('is-hidden');
     card.style.display = '';
 
-    // Discount badge
+    // Color RGB dinámico configurable desde el Gist
+    function parseRgbColor(c) {
+        if (!c) return '192, 255, 30';
+        let str = String(c).trim();
+        if (str.startsWith('#')) {
+            const hex = str.replace('#', '');
+            if (hex.length === 6) {
+                const r = parseInt(hex.substring(0, 2), 16);
+                const g = parseInt(hex.substring(2, 4), 16);
+                const b = parseInt(hex.substring(4, 6), 16);
+                if (!isNaN(r) && !isNaN(g) && !isNaN(b)) return `${r}, ${g}, ${b}`;
+            }
+        }
+        const m = str.match(/(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/);
+        if (m) {
+            return `${m[1]}, ${m[2]}, ${m[3]}`;
+        }
+        return '192, 255, 30';
+    }
+    const rgbVal = parseRgbColor(currentSponsorConfig.rgb || currentSponsorConfig.color);
+    card.style.setProperty('--sponsor-rgb', rgbVal);
+
+    // Imagen / Logo dinámico desde el Gist (con fallback a icono de servidor en caso de error o ausencia)
+    const iconImg = document.getElementById('sponsorIconImg');
+    const fallbackIcon = document.getElementById('sponsorFallbackIcon');
+
+    const showFallbackIcon = () => {
+        if (iconImg) iconImg.style.display = 'none';
+        if (fallbackIcon) fallbackIcon.style.display = 'block';
+    };
+
+    const showCustomImg = () => {
+        if (fallbackIcon) fallbackIcon.style.display = 'none';
+        if (iconImg) iconImg.style.display = 'block';
+    };
+
+    const customIcon = currentSponsorConfig.iconUrl || currentSponsorConfig.imageUrl || currentSponsorConfig.logoUrl;
+    if (customIcon) {
+        if (iconImg) {
+            iconImg.onload = showCustomImg;
+            iconImg.onerror = () => {
+                iconImg.onerror = null;
+                showFallbackIcon();
+            };
+            iconImg.src = customIcon;
+        } else {
+            showFallbackIcon();
+        }
+    } else {
+        showFallbackIcon();
+    }
+
+    // Título dinámico
+    const titleEl = document.getElementById('sponsorTitle');
+    if (titleEl) {
+        if (currentSponsorConfig.title) {
+            titleEl.innerText = currentSponsorConfig.title;
+        } else if (window.t) {
+            titleEl.innerText = window.t('sidebar.sponsor_title') || 'Apex Hosting';
+        }
+    }
+
+    // Discount badge (con prefijo -)
     const badge = document.getElementById('sponsorDiscountBadge');
     if (badge) {
         let disc = String(currentSponsorConfig.discount || '25').trim();
-        if (!disc.endsWith('%')) {
-            disc = `${disc}%`;
-        }
-        badge.innerText = disc;
+        let clean = disc.replace(/[^0-9]/g, '') || '25';
+        badge.innerText = `-${clean}%`;
     }
 
-    // Subtitle translation
+    // Subtitle translation ("Crea tu servidor")
     const subtitle = document.getElementById('sponsorSubtitle');
     if (subtitle) {
-        subtitle.innerText = (window.t ? window.t('sidebar.sponsor_subtitle') : '') || 'Crea tu servidor con un 25% de descuento';
+        subtitle.innerText = (window.t ? window.t('sidebar.sponsor_subtitle') : '') || 'Crea tu servidor';
     }
 
-    // Action button: Copiar código (solo icono)
+    // Click en toda la tarjeta para abrir el enlace
+    const cardLink = document.getElementById('sidebarSponsorLink');
+    if (cardLink) {
+        const targetUrl = currentSponsorConfig.url || DEFAULT_SPONSOR_CONFIG.url;
+        cardLink.href = targetUrl;
+        cardLink.onclick = (e) => {
+            e.preventDefault();
+            if (window.hwlAPI && typeof window.hwlAPI.openExternal === 'function') {
+                window.hwlAPI.openExternal(targetUrl);
+            } else if (window.api && typeof window.api.openExternal === 'function') {
+                window.api.openExternal(targetUrl);
+            } else {
+                window.open(targetUrl, '_blank');
+            }
+        };
+    }
+
+    // Botón: Copiar código (solo icono con e.stopPropagation)
     const copyBtn = document.getElementById('sponsorCopyBtn');
     if (copyBtn) {
         copyBtn.title = (window.t ? window.t('sidebar.sponsor_copy_hint') : '') || 'Copiar código';
         copyBtn.onclick = (e) => {
+            e.preventDefault();
             e.stopPropagation();
             const code = (currentSponsorConfig.code || 'HWLAUNCHER').trim();
             navigator.clipboard.writeText(code).then(() => {
@@ -812,59 +911,1703 @@ function renderSidebarSponsor(config) {
             });
         };
     }
+}
 
-    // Action button: Abrir enlace (solo icono)
-    const openBtn = document.getElementById('sponsorOpenBtn');
-    if (openBtn) {
-        openBtn.title = (window.t ? window.t('sidebar.sponsor_open_hint') : '') || 'Abrir enlace';
-        openBtn.onclick = (e) => {
-            e.stopPropagation();
-            const targetUrl = currentSponsorConfig.url || DEFAULT_SPONSOR_CONFIG.url;
-            if (window.api && typeof window.api.openExternal === 'function') {
-                window.api.openExternal(targetUrl);
-            } else {
-                window.open(targetUrl, '_blank');
+let maintenanceListenersInitialized = false;
+
+function initMaintenanceUIListeners() {
+    if (maintenanceListenersInitialized) return;
+    maintenanceListenersInitialized = true;
+
+    const checkBtn = document.getElementById('maintenanceCheckBtn');
+    if (checkBtn) {
+        checkBtn.addEventListener('click', async () => {
+            const icon = document.getElementById('maintenanceCheckIcon');
+            const text = document.getElementById('maintenanceCheckText');
+            if (icon) icon.classList.add('fa-spin');
+            if (text) text.textContent = (window.t ? window.t('maintenance.checking') : '') || 'Comprobando...';
+            try {
+                await fetchAndApplyRemoteConfig(true);
+            } finally {
+                if (icon) icon.classList.remove('fa-spin');
+                if (text) text.textContent = (window.t ? window.t('maintenance.check_again') : '') || 'Comprobar de nuevo';
             }
-        };
+        });
+    }
+
+    const bypassBtn = document.getElementById('maintenanceAdminBypassBtn');
+    if (bypassBtn) {
+        bypassBtn.addEventListener('click', async () => {
+            try {
+                const api = window.api || (window.pywebview && window.pywebview.api);
+                if (!api || typeof api.enable_admin_bypass !== 'function') {
+                    throw new Error('API not available');
+                }
+                bypassBtn.disabled = true;
+                const res = await api.enable_admin_bypass();
+                if (res && res.success) {
+                    const modal = document.getElementById('maintenanceModal');
+                    if (modal) {
+                        modal.classList.remove('show');
+                        modal.style.display = 'none';
+                    }
+                    const banner = document.getElementById('maintenanceAdminBypassBanner');
+                    if (banner) banner.style.display = 'flex';
+                    if (typeof showToast === 'function') {
+                        showToast(window.t('maintenance.bypass_success') || 'Admin Bypass habilitado. Acceso completo concedido.', 'success');
+                    }
+                } else {
+                    if (typeof showToast === 'function') {
+                        showToast(window.t('maintenance.bypass_denied') || 'Acceso denegado: tu cuenta no tiene permisos de administrador.', 'error');
+                    }
+                }
+            } catch (err) {
+                console.error('[Maintenance] Bypass error:', err);
+                if (typeof showToast === 'function') {
+                    showToast(window.t('maintenance.bypass_error', { err: err.message }) || ('Error al activar Admin Bypass: ' + err.message), 'error');
+                }
+            } finally {
+                bypassBtn.disabled = false;
+            }
+        });
+    }
+
+    // Refresh immediately when window gains focus (user returned from editing Gist)
+    window.addEventListener('focus', () => {
+        fetchAndApplyRemoteConfig(true).catch(() => {});
+    });
+}
+
+async function handleMaintenanceState(maintenance) {
+    initMaintenanceUIListeners();
+    const modal = document.getElementById('maintenanceModal');
+    const bypassBanner = document.getElementById('maintenanceAdminBypassBanner');
+    const api = window.api || (window.pywebview && window.pywebview.api);
+
+    if (!maintenance || maintenance.enabled !== true) {
+        if (modal) {
+            modal.classList.remove('show');
+            modal.style.display = 'none';
+        }
+        if (bypassBanner) bypassBanner.style.display = 'none';
+        if (api && typeof api.set_maintenance_state === 'function') {
+            await api.set_maintenance_state(false);
+        }
+        return;
+    }
+
+    // Maintenance is ENABLED
+    if (api && typeof api.set_maintenance_state === 'function') {
+        await api.set_maintenance_state(true);
+    }
+
+    // Check if admin bypass is already granted in session
+    let isBypassed = false;
+    if (api && typeof api.get_maintenance_state === 'function') {
+        try {
+            const st = await api.get_maintenance_state();
+            if (st && st.adminBypassGranted) isBypassed = true;
+        } catch (_) {}
+    }
+
+    if (isBypassed) {
+        if (modal) {
+            modal.classList.remove('show');
+            modal.style.display = 'none';
+        }
+        if (bypassBanner) bypassBanner.style.display = 'flex';
+        return;
+    }
+
+    if (bypassBanner) bypassBanner.style.display = 'none';
+
+    // Populate maintenance modal texts
+    const msgEl = document.getElementById('maintenanceMessageText');
+    if (msgEl) {
+        msgEl.textContent = maintenance.message || 'We are currently upgrading our backend infrastructure.';
+    }
+
+    const titleEl = document.getElementById('maintenanceTitle');
+    if (titleEl && window.t) {
+        titleEl.textContent = window.t('maintenance.title') || 'Servidores en Mantenimiento';
+    }
+
+    const subtitleEl = document.getElementById('maintenanceSubtitle');
+    if (subtitleEl && window.t) {
+        subtitleEl.textContent = window.t('maintenance.subtitle') || 'Estamos realizando mejoras y optimizaciones en nuestros servidores.';
+    }
+
+    // Estimated time
+    const estBox = document.getElementById('maintenanceEstimatedTime');
+    const estText = document.getElementById('maintenanceEstimatedTimeText');
+    if (estBox && estText) {
+        if (maintenance.estimatedEnd) {
+            try {
+                const date = new Date(maintenance.estimatedEnd);
+                const formatted = date.toLocaleString();
+                estText.textContent = (window.t ? window.t('maintenance.estimated_until', { time: formatted }) : '') || `Regreso estimado: ${formatted}`;
+                estBox.style.display = 'flex';
+            } catch (_) {
+                estBox.style.display = 'none';
+            }
+        } else {
+            estBox.style.display = 'none';
+        }
+    }
+
+    // Status / Discord link
+    const statusBtn = document.getElementById('maintenanceStatusBtn');
+    if (statusBtn) {
+        if (maintenance.statusUrl) {
+            statusBtn.href = maintenance.statusUrl;
+            statusBtn.style.display = 'flex';
+        } else {
+            statusBtn.style.display = 'none';
+        }
+    }
+
+    // Admin check for displaying the "Admin Bypass" button
+    const bypassBtn = document.getElementById('maintenanceAdminBypassBtn');
+    if (bypassBtn) {
+        bypassBtn.style.display = 'none'; // default hidden
+        if (maintenance.allowBypass !== false && api && typeof api.workshop_check_admin === 'function') {
+            try {
+                const check = await api.workshop_check_admin();
+                if (check && check.isAdmin) {
+                    bypassBtn.style.display = 'flex';
+                }
+            } catch (e) {
+                console.warn('[Maintenance] Error checking admin status:', e);
+            }
+        }
+    }
+
+    // Display fullscreen screen
+    if (modal) {
+        modal.classList.add('show');
+        modal.style.display = 'flex';
     }
 }
 
-async function initSidebarSponsor() {
-    const card = document.getElementById('sidebarSponsorCard');
-    if (!card) return;
+function escapeServerHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
-    const cachedStr = localStorage.getItem(SPONSOR_CACHE_KEY);
-
-    // 1. Carga inmediata desde caché o valores por defecto (0ms de retraso)
-    if (cachedStr) {
-        try {
-            renderSidebarSponsor(JSON.parse(cachedStr));
-        } catch (e) {
-            renderSidebarSponsor(DEFAULT_SPONSOR_CONFIG);
+window.copyServerIp = function(ip, element) {
+    if (!ip) return;
+    navigator.clipboard.writeText(ip).then(() => {
+        const copyMsg = (window.t ? window.t('play.ip_copied', { ip }) : '') || `IP ${ip} copiada al portapapeles`;
+        if (typeof showToast === 'function') {
+            showToast(copyMsg, 'success');
         }
-    } else {
-        renderSidebarSponsor(DEFAULT_SPONSOR_CONFIG);
+        if (element) {
+            const icon = element.querySelector('.copy-icon');
+            if (icon) {
+                const orig = icon.className;
+                icon.className = 'fas fa-check copy-icon';
+                icon.style.color = '#34d399';
+                setTimeout(() => {
+                    icon.className = orig;
+                    icon.style.color = '';
+                }, 2000);
+            }
+        }
+    }).catch(err => {
+        console.warn('[Server] Error copying IP:', err);
+    });
+};
+
+const featuredServerStatusCache = new Map();
+
+function getI18nText(key, fallback, vars = {}) {
+    if (typeof window.t === 'function') {
+        const val = window.t(key, vars);
+        if (val && typeof val === 'string' && val !== key) {
+            return val;
+        }
+    }
+    let res = fallback || key;
+    if (vars) {
+        for (const [k, v] of Object.entries(vars)) {
+            res = res.replace(new RegExp(`\\{${k}\\}`, 'g'), v);
+        }
+    }
+    return res;
+}
+
+function formatMinecraftCodesToHtml(text) {
+    if (!text) return '';
+    const colorMap = {
+        '0': '#000000', '1': '#0000AA', '2': '#00AA00', '3': '#00AAAA',
+        '4': '#AA0000', '5': '#AA00AA', '6': '#FFAA00', '7': '#AAAAAA',
+        '8': '#555555', '9': '#5555FF', 'a': '#55FF55', 'b': '#55FFFF',
+        'c': '#FF5555', 'd': '#FF55FF', 'e': '#FFFF55', 'f': '#FFFFFF'
+    };
+    let clean = String(text).replace(/\r\n|\r/g, '\n');
+    let html = '';
+    let currentColor = null;
+    let isBold = false;
+    let isItalic = false;
+    let isUnderline = false;
+    let isStrike = false;
+
+    const tokens = clean.split(/(§[0-9a-fk-or])/gi);
+    for (const token of tokens) {
+        if (!token) continue;
+        if (/^§[0-9a-fk-or]$/i.test(token)) {
+            const code = token[1].toLowerCase();
+            if (colorMap[code]) {
+                currentColor = colorMap[code];
+                isBold = false;
+                isItalic = false;
+                isUnderline = false;
+                isStrike = false;
+            } else if (code === 'l') {
+                isBold = true;
+            } else if (code === 'o') {
+                isItalic = true;
+            } else if (code === 'n') {
+                isUnderline = true;
+            } else if (code === 'm') {
+                isStrike = true;
+            } else if (code === 'r') {
+                currentColor = null;
+                isBold = false;
+                isItalic = false;
+                isUnderline = false;
+                isStrike = false;
+            }
+        } else {
+            const styles = [];
+            if (currentColor) styles.push(`color: ${currentColor}`);
+            if (isBold) styles.push('font-weight: 700');
+            if (isItalic) styles.push('font-style: italic');
+            const dec = [];
+            if (isUnderline) dec.push('underline');
+            if (isStrike) dec.push('line-through');
+            if (dec.length) styles.push(`text-decoration: ${dec.join(' ')}`);
+
+            const escaped = escapeServerHtml(token);
+            if (styles.length) {
+                html += `<span style="${styles.join('; ')}">${escaped}</span>`;
+            } else {
+                html += escaped;
+            }
+        }
+    }
+    return html.replace(/\n/g, '<br>');
+}
+
+function normalizeServerIcon(icon) {
+    if (!icon || typeof icon !== 'string') return null;
+    let trimmed = icon.trim();
+    if (trimmed.startsWith('data:image/') || trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('file://')) {
+        return trimmed;
+    }
+    const cleanB64 = trimmed.replace(/\s+/g, '');
+    if (cleanB64.length > 50 && /^[A-Za-z0-9+/=]+$/.test(cleanB64)) {
+        return `data:image/png;base64,${cleanB64}`;
+    }
+    return trimmed;
+}
+
+function formatServerMotd(html, clean) {
+    if (!html && !clean) {
+        return `<span class="motd-loading-text">${getI18nText('play.server_offline_motd', 'Servidor no disponible o fuera de línea')}</span>`;
+    }
+    let raw = html || '';
+    if (!raw && clean) {
+        raw = formatMinecraftCodesToHtml(clean);
+    } else if (raw.includes('§')) {
+        raw = formatMinecraftCodesToHtml(raw);
     }
 
-    // 2. Actualización en segundo plano: consulta la última versión del Gist
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1500);
-        const res = await fetch(`${SPONSOR_GIST_URL}?t=${Date.now()}`, {
-            signal: controller.signal,
-            cache: 'no-cache'
-        });
-        clearTimeout(timeoutId);
+    // Normalize all <br> tags into newlines for consistent line-by-line processing
+    raw = raw.replace(/<br\s*\/?>/gi, '\n');
+    raw = raw.replace(/\r\n|\r/g, '\n');
 
-        if (res.ok) {
-            const data = await res.json();
-            localStorage.setItem(SPONSOR_CACHE_KEY, JSON.stringify(data));
-            localStorage.setItem(SPONSOR_CACHE_TIME_KEY, Date.now().toString());
-            renderSidebarSponsor(data);
+    // Split into lines, sanitize empty spans, and strip excess whitespace
+    const lines = raw.split('\n')
+        .map(line => {
+            return line.replace(/<span[^>]*>\s*<\/span>/gi, '').trim();
+        })
+        .filter(line => {
+            // Keep line only if it contains visible text (excluding HTML tags)
+            const textContent = line.replace(/<[^>]+>/g, '').trim();
+            return textContent.length > 0;
+        });
+
+    if (lines.length === 0) {
+        return `<span class="motd-loading-text">${getI18nText('play.server_offline_motd', 'Servidor no disponible o fuera de línea')}</span>`;
+    }
+
+    // Limit to at most 3 natural lines so it never wraps or creates excessive blank lines
+    const displayLines = lines.slice(0, 3);
+    return displayLines.join('<br>');
+}
+
+
+
+async function applyServerStatusData(serverId, data, serverObj = {}) {
+    if (!data) return;
+
+    // 1. Icon (resolve high-res icon and normalize base64 data)
+    const iconEl = document.getElementById(`serverIcon_${serverId}`);
+    const rawIcon = data.icon 
+        || serverObj.iconUrl 
+        || serverObj.icon 
+        || `https://api.mcsrvstat.us/icon/${encodeURIComponent(serverObj.ip || '')}`;
+    const finalIcon = normalizeServerIcon(rawIcon);
+
+    // 2. Players count
+    const playersEl = document.getElementById(`serverPlayers_${serverId}`);
+    if (playersEl) {
+        if (data.players && typeof data.players.online === 'number' && typeof data.players.max === 'number') {
+            const online = Number(data.players.online).toLocaleString();
+            const max = Number(data.players.max).toLocaleString();
+            const isOnline = !!data.online || (data.players.online > 0);
+            playersEl.className = 'featured-server-players-badge ' + (isOnline ? 'online' : 'offline');
+            playersEl.innerHTML = `
+                <span class="status-dot"></span>
+                <span class="players-text"><i class="fas fa-users" style="margin-right: 4px; font-size: 11px;"></i>${online} / ${max}</span>
+            `;
+            playersEl.title = isOnline 
+                ? getI18nText('play.players_online_tooltip', `${online} de ${max} jugadores conectados`, { online, max })
+                : getI18nText('play.server_offline_tooltip', 'Servidor fuera de línea');
+        } else if (data.online) {
+            playersEl.className = 'featured-server-players-badge online';
+            playersEl.innerHTML = `
+                <span class="status-dot"></span>
+                <span class="players-text">Online</span>
+            `;
+            playersEl.title = 'Online';
+        } else {
+            playersEl.className = 'featured-server-players-badge offline';
+            playersEl.innerHTML = `
+                <span class="status-dot"></span>
+                <span class="players-text">${getI18nText('play.server_offline', 'Offline')}</span>
+            `;
+            playersEl.title = getI18nText('play.server_offline_tooltip', 'Servidor fuera de línea');
+        }
+    }
+
+
+
+    // 4. MOTD with authentic Minecraft colors and formatting
+    const motdEl = document.getElementById(`serverMotd_${serverId}`);
+    if (motdEl) {
+        if (data.motdHtml) {
+            motdEl.innerHTML = formatServerMotd(data.motdHtml);
+        } else if (data.online) {
+            motdEl.innerHTML = '<span class="motd-loading-text">Minecraft Server</span>';
+        } else {
+            motdEl.innerHTML = `<span class="motd-offline">${getI18nText('play.server_offline_motd', 'Servidor no disponible o fuera de línea')}</span>`;
+        }
+    }
+
+    // 5. Preload icon image to prevent visual popping or flickering
+    if (iconEl) {
+        const fallbackEl = iconEl.parentElement ? iconEl.parentElement.querySelector('.featured-server-icon-fallback') : null;
+        if (finalIcon) {
+            if (iconEl.src === finalIcon && iconEl.style.display !== 'none') {
+                // Already rendered without flickering
+            } else {
+                await new Promise(resolve => {
+                    const img = new Image();
+                    img.onload = () => {
+                        iconEl.src = finalIcon;
+                        iconEl.style.display = 'block';
+                        if (fallbackEl) fallbackEl.style.display = 'none';
+                        resolve();
+                    };
+                    img.onerror = () => {
+                        const backupUrl = `https://api.mcsrvstat.us/icon/${encodeURIComponent(serverObj.ip || '')}`;
+                        if (finalIcon !== backupUrl) {
+                            iconEl.src = backupUrl;
+                            iconEl.style.display = 'block';
+                            iconEl.onerror = () => {
+                                iconEl.style.display = 'none';
+                                if (fallbackEl) fallbackEl.style.display = 'flex';
+                            };
+                        } else {
+                            iconEl.style.display = 'none';
+                            if (fallbackEl) fallbackEl.style.display = 'flex';
+                        }
+                        resolve();
+                    };
+                    img.src = finalIcon;
+                    setTimeout(resolve, 1500);
+                });
+            }
+        } else {
+            iconEl.style.display = 'none';
+            if (fallbackEl) fallbackEl.style.display = 'flex';
+        }
+    }
+
+    // 6. Smooth Fade-In all at once: add 'is-loaded' to reveal card and hide skeleton
+    const cardEl = document.getElementById(`serverCard_${serverId}`) || document.querySelector(`[data-server-id="${serverId}"]`);
+    if (cardEl && !cardEl.classList.contains('is-loaded')) {
+        cardEl.classList.add('is-loaded');
+    }
+}
+
+async function fetchFeaturedServerStatus(ip, serverId, serverObj = {}) {
+    if (!ip) return;
+    const now = Date.now();
+    const cached = featuredServerStatusCache.get(ip);
+    if (cached && (now - cached.timestamp < 60000)) {
+        await applyServerStatusData(serverId, cached.data, serverObj);
+        return;
+    }
+
+    try {
+        const api = window.api || (window.pywebview && window.pywebview.api);
+        let mergedData = null;
+
+        // 1. Preferred: IPC call to Node.js backend (cero CSP/CORS, parallel mcstatus & minetools proxy support)
+        if (api && typeof api.get_featured_server_status === 'function') {
+            try {
+                const res = await api.get_featured_server_status(ip);
+                if (res && (res.online || res.icon || res.players || res.motdHtml || res.version)) {
+                    mergedData = res;
+                }
+            } catch (ipcErr) {
+                console.warn(`[FeaturedServer] IPC status query failed for ${ip}, falling back to fetch:`, ipcErr);
+            }
+        }
+
+        // 2. Fallback: Parallel fetch directly from renderer
+        if (!mergedData) {
+            const mcPromise = fetch(`https://api.mcstatus.io/v2/status/java/${encodeURIComponent(ip)}`, {
+                signal: AbortSignal.timeout(4000)
+            }).then(r => r.ok ? r.json() : null).catch(() => null);
+
+            const bedrockPromise = fetch(`https://api.mcstatus.io/v2/status/bedrock/${encodeURIComponent(ip)}`, {
+                signal: AbortSignal.timeout(4000)
+            }).then(r => r.ok ? r.json() : null).catch(() => null);
+
+            const mtPromise = fetch(`https://api.minetools.eu/ping/${encodeURIComponent(ip)}`, {
+                signal: AbortSignal.timeout(4000)
+            }).then(r => r.ok ? r.json() : null).catch(() => null);
+
+            const [mcRes, bedrockRes, mtRes] = await Promise.all([mcPromise, bedrockPromise, mtPromise]);
+
+            const isJavaOnline = Boolean((mcRes && mcRes.online) || (mtRes && !mtRes.error && mtRes.version && mtRes.version.protocol !== -1));
+            const isBedrockOnline = Boolean(bedrockRes && bedrockRes.online);
+
+            mergedData = {
+                online: isJavaOnline || isBedrockOnline,
+                icon: null,
+                players: null,
+                motdHtml: null,
+                version: null,
+                edition: (isJavaOnline && isBedrockOnline) ? 'crossplay' : (isBedrockOnline ? 'bedrock' : (isJavaOnline ? 'java' : null))
+            };
+
+            if (mcRes) {
+                if (mcRes.icon) mergedData.icon = mcRes.icon;
+                if (mcRes.players && typeof mcRes.players.online === 'number') mergedData.players = mcRes.players;
+                if (mcRes.motd) {
+                    if (mcRes.motd.html) mergedData.motdHtml = formatServerMotd(mcRes.motd.html, mcRes.motd.clean);
+                    else if (mcRes.motd.clean) mergedData.motdHtml = formatServerMotd(null, mcRes.motd.clean);
+                }
+                if (mcRes.version && (mcRes.version.name_clean || mcRes.version.name_raw)) {
+                    mergedData.version = mcRes.version.name_clean || mcRes.version.name_raw;
+                }
+            }
+
+            if (bedrockRes && bedrockRes.online) {
+                if (!mergedData.version && bedrockRes.version && bedrockRes.version.name) {
+                    mergedData.version = bedrockRes.version.name;
+                }
+                if (!mergedData.players && bedrockRes.players && typeof bedrockRes.players.online === 'number') {
+                    mergedData.players = bedrockRes.players;
+                }
+                if (!mergedData.motdHtml && bedrockRes.motd) {
+                    mergedData.motdHtml = bedrockRes.motd.html || bedrockRes.motd.clean;
+                }
+            }
+
+            if (mtRes && !mtRes.error) {
+                if (!mergedData.icon && mtRes.favicon) {
+                    mergedData.icon = mtRes.favicon;
+                }
+                if (!mergedData.players && mtRes.players && typeof mtRes.players.online === 'number') {
+                    mergedData.players = { online: mtRes.players.online, max: mtRes.players.max };
+                }
+                if (!mergedData.motdHtml && mtRes.description) {
+                    mergedData.motdHtml = formatMinecraftCodesToHtml(mtRes.description);
+                }
+                if (!mergedData.version && mtRes.version && mtRes.version.name) {
+                    mergedData.version = mtRes.version.name;
+                }
+            }
+
+            const motdScan = String((mcRes && mcRes.motd && mcRes.motd.clean) || (mtRes && mtRes.description) || '');
+            mergedData.motdClean = motdScan;
+            const motdScanLower = motdScan.toLowerCase();
+            if (motdScanLower.includes('geyser') || motdScanLower.includes('crossplay') || (motdScanLower.includes('bedrock') && motdScanLower.includes('java'))) {
+                mergedData.edition = 'crossplay';
+            }
+        }
+
+        // If icon is still null, fallback to direct icon endpoint
+        if (!mergedData.icon) {
+            mergedData.icon = serverObj.iconUrl || serverObj.icon || `https://api.mcsrvstat.us/icon/${encodeURIComponent(ip)}`;
+        }
+
+        featuredServerStatusCache.set(ip, {
+            timestamp: now,
+            data: mergedData
+        });
+
+        await applyServerStatusData(serverId, mergedData, serverObj);
+    } catch (err) {
+        console.warn(`[FeaturedServer] Status fetch failed for ${ip}:`, err);
+        const fallbackData = {
+            online: false,
+            icon: serverObj.iconUrl || serverObj.icon || `https://api.mcsrvstat.us/icon/${encodeURIComponent(ip)}`,
+            players: null,
+            motdHtml: `<span class="motd-offline">${getI18nText('play.server_offline_motd', 'Servidor no disponible o fuera de línea')}</span>`,
+            version: serverObj.version || null
+        };
+        await applyServerStatusData(serverId, fallbackData, serverObj);
+    }
+}
+
+function renderFeaturedServers(servers) {
+    const container = document.getElementById('featuredServersContainer');
+    if (!container) return;
+
+    const list = Array.isArray(servers) ? servers : (window.HW_FEATURED_SERVERS || []);
+    const activeServers = list.filter(s => s && s.active === true);
+
+    if (activeServers.length === 0) {
+        container.classList.add('is-empty');
+        container.innerHTML = `
+            <div class="empty-servers-state">
+                <div class="empty-servers-icon-box">
+                    <i class="fas fa-server"></i>
+                </div>
+                <div class="empty-servers-title" data-i18n="play.no_servers_title">${getI18nText('play.no_servers_title', 'No hay servidores destacados')}</div>
+                <div class="empty-servers-subtitle" data-i18n="play.no_servers_desc">${getI18nText('play.no_servers_desc', 'Los servidores destacados y recomendados aparecerán aquí próximamente.')}</div>
+            </div>
+        `;
+        return;
+    }
+    container.classList.remove('is-empty');
+
+    // ANTI-FLICKER: If the active server cards already exist in container, DO NOT rebuild innerHTML
+    const existingCards = container.querySelectorAll('.featured-server-card');
+    const existingIds = Array.from(existingCards).map(c => c.getAttribute('data-server-id'));
+    const targetIds = activeServers.map(s => escapeServerHtml(s.id || (s.ip ? s.ip.replace(/[^a-zA-Z0-9_-]/g, '_') : 'server_' + (s.name || ''))));
+
+    const isSameStructure = existingIds.length === targetIds.length && existingIds.every((id, idx) => id === targetIds[idx]);
+
+    if (isSameStructure) {
+        // Re-fetch status without wiping the DOM or resetting skeletons
+        activeServers.forEach(server => {
+            const id = escapeServerHtml(server.id || (server.ip ? server.ip.replace(/[^a-zA-Z0-9_-]/g, '_') : 'server_' + (server.name || '')));
+            fetchFeaturedServerStatus(server.ip, id, server);
+        });
+        return;
+    }
+
+    let html = '';
+    const serverMap = [];
+
+    activeServers.forEach(server => {
+        const id = escapeServerHtml(server.id || (server.ip ? server.ip.replace(/[^a-zA-Z0-9_-]/g, '_') : 'server_' + Math.random().toString(36).substring(2, 7)));
+        serverMap.push({ ip: server.ip, id, server });
+
+        const name = escapeServerHtml(server.name || 'Minecraft Server');
+        const nameAttr = (server.name || '').replace(/'/g, "\\'");
+        const ip = escapeServerHtml(server.ip || '');
+        const ipAttr = (server.ip || '').replace(/'/g, "\\'");
+
+        const hasDiscord = server.discordUrl && typeof server.discordUrl === 'string';
+        const hasWeb = server.webUrl && typeof server.webUrl === 'string';
+        html += `
+            <div class="featured-server-card" id="serverCard_${id}" data-server-id="${id}">
+                <!-- Skeleton Shimmer Loader (Visible while data & icon are loading) -->
+                <div class="featured-server-skeleton" id="serverSkeleton_${id}">
+                    <div class="skeleton-top">
+                        <div class="skeleton-box skeleton-icon"></div>
+                        <div class="skeleton-header-info">
+                            <div class="skeleton-title-row">
+                                <div class="skeleton-box skeleton-name"></div>
+                            </div>
+                            <div class="skeleton-players-row">
+                                <div class="skeleton-box skeleton-players"></div>
+                            </div>
+                            <div class="skeleton-ip-row">
+                                <div class="skeleton-box skeleton-ip"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="skeleton-box skeleton-motd"></div>
+                    <div class="skeleton-bottom">
+                        <div class="skeleton-actions">
+                            ${hasDiscord ? '<div class="skeleton-box skeleton-btn"></div>' : ''}
+                            ${hasWeb ? '<div class="skeleton-box skeleton-btn"></div>' : ''}
+                            <div class="skeleton-box skeleton-btn"></div>
+                            <div class="skeleton-box skeleton-btn"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Real Card Content (Fades in smoothly all at once when data finishes loading) -->
+                <div class="featured-server-content" id="serverContent_${id}">
+                    <!-- Top Section: Icon + Name & Players & IP -->
+                    <div class="featured-server-top">
+                        <div class="featured-server-icon-wrapper">
+                            <img src="" 
+                                 alt="${name}" 
+                                 id="serverIcon_${id}"
+                                 class="featured-server-icon" 
+                                 style="display: none;"
+                                 onerror="this.onerror=null; this.src='https://api.mcsrvstat.us/icon/${encodeURIComponent(server.ip || '')}'; this.addEventListener('error', () => { this.style.display='none'; const fb = this.parentElement.querySelector('.featured-server-icon-fallback'); if(fb) fb.style.display='flex'; });">
+                            <div class="featured-server-icon-fallback" style="display: none;"><i class="fas fa-server"></i></div>
+                        </div>
+                        <div class="featured-server-header-info">
+                            <div class="featured-server-title-row">
+                                <span class="featured-server-name" title="${name}">${name}</span>
+                            </div>
+                            <div class="featured-server-players-row">
+                                <div class="featured-server-players-badge" id="serverPlayers_${id}">
+                                    <span class="status-dot"></span>
+                                    <span class="players-text">...</span>
+                                </div>
+                            </div>
+                            <div class="featured-server-ip-row">
+                                <div class="featured-server-ip-pill" onclick="window.copyServerIp('${ipAttr}', this)" title="${getI18nText('play.copy_ip_tooltip', 'Clic para copiar IP')}">
+                                    <span class="featured-server-ip-text">${ip}</span>
+                                    <i class="fas fa-copy copy-icon"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Middle Section: MOTD -->
+                    <div class="featured-server-motd" id="serverMotd_${id}">
+                        <span class="motd-loading-text">${getI18nText('play.server_loading', 'Cargando estado...')}</span>
+                    </div>
+
+                    <!-- Bottom Section: Square Action Buttons (Aligned Right, Right-to-Left: Join, Save, Web, Discord) -->
+                    <div class="featured-server-bottom">
+                        <div class="featured-server-actions">
+                            ${hasDiscord ? `
+                            <a href="${encodeURI(server.discordUrl)}" target="_blank" class="btn-server-sq btn-server-discord" title="${getI18nText('play.discord_tooltip', 'Unirse al servidor de Discord')}">
+                                <i class="fab fa-discord"></i>
+                            </a>` : ''}
+                            ${hasWeb ? `
+                            <a href="${encodeURI(server.webUrl)}" target="_blank" class="btn-server-sq btn-server-web" title="${getI18nText('play.web_tooltip', 'Visitar sitio web oficial')}">
+                                <i class="fas fa-globe"></i>
+                            </a>` : ''}
+                            <button class="btn-server-sq btn-server-save" onclick="window.addServerToMinecraft('${ipAttr}', '${nameAttr}')" title="${getI18nText('play.save_server_tooltip', 'Añadir a mi lista de servidores de Minecraft')}">
+                                <i class="fas fa-bookmark"></i>
+                            </button>
+                            <button class="btn-server-sq btn-server-join" onclick="window.joinMinecraftServer('${ipAttr}', true, null, this)" title="${getI18nText('play.join_server', 'Unirse al servidor')}">
+                                <i class="fas fa-play"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+
+    // Fetch live status (players, motd, version, high-res icon) for all active servers
+    serverMap.forEach(item => {
+        fetchFeaturedServerStatus(item.ip, item.id, item.server);
+    });
+}
+window.renderFeaturedServers = renderFeaturedServers;
+
+function renderFeaturedServersPromo(linkUrl) {
+    const banner = document.getElementById('featuredServersPromoBanner');
+    if (!banner) return;
+
+    const url = (typeof linkUrl === 'string' && linkUrl.trim().length > 0) ? linkUrl.trim() : null;
+    if (!url) {
+        banner.style.display = 'none';
+        banner.innerHTML = '';
+        return;
+    }
+
+    const safeUrl = escapeServerHtml(url);
+    const linkWord = getI18nText('play.servers_promo_link', 'aquí');
+    const linkTag = `<a href="${safeUrl}" class="featured-servers-promo-link" onclick="window.openExternalUrl('${safeUrl}'); return false;">${linkWord}</a>`;
+    const fullHtml = getI18nText('play.servers_promo_text', '¿Quieres que tu servidor aparezca aquí? Haz clic {link} para contratar el servicio.', { link: linkTag });
+
+    banner.innerHTML = `<span class="featured-servers-promo-text">${fullHtml}</span>`;
+    banner.style.display = 'flex';
+}
+window.renderFeaturedServersPromo = renderFeaturedServersPromo;
+
+window.openExternalUrl = function(url) {
+    if (!url) return;
+    try {
+        if (window.hwlAPI && typeof window.hwlAPI.openExternal === 'function') {
+            window.hwlAPI.openExternal(url);
+        } else if (window.api && typeof window.api.openExternal === 'function') {
+            window.api.openExternal(url);
+        } else {
+            window.open(url, '_blank');
+        }
+    } catch (e) {
+        console.warn('Error opening external url:', e);
+        window.open(url, '_blank');
+    }
+};
+
+// --- Community Announcement System (Top Ticker & Interactive Buttons) ---
+let _currentAnnouncementState = null;
+let _announcementResizeHandlerAdded = false;
+
+function setupAnnouncementTickerCalculation(msg) {
+    const track = document.getElementById('announcementTickerTrack');
+    const ticker = document.getElementById('announcementTickerContent');
+    if (!track || !ticker) return;
+
+    const textMessage = (msg !== undefined && msg !== null) ? String(msg).trim() : (ticker.dataset.msg || '');
+    if (!textMessage) return;
+    ticker.dataset.msg = textMessage;
+
+    const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    // 1. Measure a single text item width
+    ticker.innerHTML = `<span class="announcement-text" id="announcementMeasureSpan">${esc(textMessage)}</span>`;
+    const measureSpan = document.getElementById('announcementMeasureSpan');
+    const textWidth = Math.ceil(measureSpan ? measureSpan.getBoundingClientRect().width : 300) || 300;
+
+    // 2. Modest, natural gap between repetitions (40px)
+    const gap = 40;
+    const itemWidth = textWidth + gap;
+
+    // 3. Track width
+    const trackWidth = track.clientWidth || 500;
+
+    // 4. Calculate how many items are needed so Group A covers the entire track width
+    // This guarantees Group B enters slowly from off-screen on the right (never popping suddenly into view)
+    const countPerGroup = Math.max(1, Math.ceil(trackWidth / itemWidth));
+    const groupDistance = countPerGroup * itemWidth;
+
+    // 5. Build Group A and Group B
+    let html = '';
+    // Group A
+    for (let i = 0; i < countPerGroup; i++) {
+        html += `<span class="announcement-text" style="padding-right: ${gap}px;">${esc(textMessage)}</span>`;
+    }
+    // Group B (identical duplicate group, ensures continuous seamless flow from the lateral edge)
+    for (let i = 0; i < countPerGroup; i++) {
+        html += `<span class="announcement-text" style="padding-right: ${gap}px;" aria-hidden="true">${esc(textMessage)}</span>`;
+    }
+    ticker.innerHTML = html;
+
+    // 6. Set CSS animation properties
+    ticker.style.setProperty('--ticker-distance', `-${groupDistance}px`);
+    // Speed: 38px per second gives a steady, readable pace
+    const durationSec = Math.max(10, Math.round(groupDistance / 38));
+    ticker.style.setProperty('--ticker-duration', `${durationSec}s`);
+
+    ticker.classList.remove('animate-ticker');
+    void ticker.offsetWidth;
+    ticker.classList.add('animate-ticker');
+}
+
+window.HW_DISMISSED_ANNOUNCEMENTS = new Set();
+
+async function initDismissedAnnouncements() {
+    try {
+        const api = window.api || (window.pywebview && window.pywebview.api);
+        if (api && typeof api.get_dismissed_announcements === 'function') {
+            const list = await api.get_dismissed_announcements();
+            if (Array.isArray(list)) {
+                list.forEach(id => {
+                    if (id) window.HW_DISMISSED_ANNOUNCEMENTS.add(String(id).trim());
+                });
+            }
+        }
+    } catch (e) {
+        console.warn('[Announcement] Error loading dismissed list from backend:', e);
+    }
+}
+initDismissedAnnouncements().catch(() => {});
+
+function isAnnouncementDismissed(id) {
+    if (!id) return false;
+    const strId = String(id).trim();
+    if (window.HW_DISMISSED_ANNOUNCEMENTS && window.HW_DISMISSED_ANNOUNCEMENTS.has(strId)) {
+        return true;
+    }
+    const storageKey = 'hw_dismissed_announcement_' + strId;
+    return localStorage.getItem(storageKey) === 'true';
+}
+
+function recordAnnouncementDismissed(id) {
+    if (!id) return;
+    const strId = String(id).trim();
+    if (window.HW_DISMISSED_ANNOUNCEMENTS) {
+        window.HW_DISMISSED_ANNOUNCEMENTS.add(strId);
+    }
+    const storageKey = 'hw_dismissed_announcement_' + strId;
+    localStorage.setItem(storageKey, 'true');
+    const api = window.api || (window.pywebview && window.pywebview.api);
+    if (api && typeof api.dismiss_announcement === 'function') {
+        api.dismiss_announcement(strId).catch(() => {});
+    }
+}
+
+function handleAnnouncement(announcement) {
+    const banner = document.getElementById('announcementBanner');
+    if (!banner) return;
+
+    if (!announcement || announcement.status !== true) {
+        banner.style.display = 'none';
+        _currentAnnouncementState = null;
+        return;
+    }
+
+    // Check expiration (expiresAt in ISO format)
+    if (announcement.expiresAt) {
+        try {
+            const exp = new Date(announcement.expiresAt).getTime();
+            if (!isNaN(exp) && Date.now() > exp) {
+                banner.style.display = 'none';
+                _currentAnnouncementState = null;
+                return;
+            }
+        } catch (_) {}
+    }
+
+    // Check if dismissed permanently by its specific id
+    const announcementId = String(announcement.id || 'default').trim();
+    if (isAnnouncementDismissed(announcementId)) {
+        banner.style.display = 'none';
+        _currentAnnouncementState = null;
+        return;
+    }
+
+    // Check dismissibility (supporting dismissible, dimisable, and dismissable)
+    const isDismissible = (
+        announcement.dismissible !== false &&
+        announcement.dimisable !== false &&
+        announcement.dismissable !== false
+    );
+
+    // Prevent rebuilding DOM or restarting the ticker every 10s polling if nothing changed
+    const stateStr = JSON.stringify(announcement);
+    if (_currentAnnouncementState === stateStr && banner.style.display === 'flex') {
+        return;
+    }
+    _currentAnnouncementState = stateStr;
+
+    // Apply color theme according to type (event, info, warning, danger)
+    const allowedTypes = ['event', 'info', 'warning', 'danger'];
+    const type = (announcement.type && allowedTypes.includes(String(announcement.type).toLowerCase()))
+        ? String(announcement.type).toLowerCase()
+        : 'event';
+
+    banner.className = `announcement-banner type-${type}`;
+
+    // Set Left Icon (URL with fallback or icon font)
+    const iconImg = document.getElementById('announcementIconImg');
+    const iconFallback = document.getElementById('announcementIconFallback');
+
+    const fallbackIcons = {
+        event: 'fas fa-bullhorn',
+        info: 'fas fa-info-circle',
+        warning: 'fas fa-exclamation-triangle',
+        danger: 'fas fa-shield-alt'
+    };
+    const defaultIconClass = fallbackIcons[type] || 'fas fa-bullhorn';
+
+    if (iconImg && iconFallback) {
+        if (announcement.icon && typeof announcement.icon === 'string' && announcement.icon.trim()) {
+            const iconUrl = announcement.icon.trim();
+            iconImg.onload = () => {
+                iconImg.style.display = 'inline-block';
+                iconFallback.style.display = 'none';
+            };
+            iconImg.onerror = () => {
+                iconImg.style.display = 'none';
+                iconFallback.className = `${defaultIconClass} announcement-icon-fallback`;
+                iconFallback.style.display = 'inline-block';
+            };
+            iconImg.src = iconUrl;
+        } else {
+            iconImg.style.display = 'none';
+            iconFallback.className = `${defaultIconClass} announcement-icon-fallback`;
+            iconFallback.style.display = 'inline-block';
+        }
+    }
+
+    // Set Badge pill (e.g. "EVENTO", "NUEVO", "TORNEO")
+    const badgeEl = document.getElementById('announcementBadge');
+    if (badgeEl) {
+        if (announcement.badge && String(announcement.badge).trim()) {
+            badgeEl.textContent = String(announcement.badge).trim().toUpperCase();
+            badgeEl.style.display = 'inline-block';
+        } else {
+            badgeEl.style.display = 'none';
+        }
+    }
+
+    // Dynamic Buttons
+    const buttonsContainer = document.getElementById('announcementButtonsContainer');
+    if (buttonsContainer) {
+        buttonsContainer.innerHTML = '';
+        if (Array.isArray(announcement.buttons)) {
+            const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            announcement.buttons.forEach(btn => {
+                if (!btn || !btn.type) return;
+                const b = document.createElement('button');
+                b.type = 'button';
+                const bType = String(btn.type).toLowerCase();
+                const hasText = Boolean(btn.text && String(btn.text).trim());
+
+                switch (bType) {
+                    case 'join_server':
+                        b.className = 'announcement-btn announcement-btn-square announcement-btn-join';
+                        b.innerHTML = '<i class="fas fa-play"></i>';
+                        b.title = btn.tooltip || (btn.content ? `Entrar a ${btn.content}` : 'Unirse al servidor');
+                        b.onclick = (e) => {
+                            e.preventDefault();
+                            if (window.isLaunching) {
+                                console.log('[Announcement] Minecraft ya se está iniciando, ignorando clic.');
+                                return;
+                            }
+                            if (btn.content && typeof window.joinMinecraftServer === 'function') {
+                                window.joinMinecraftServer(btn.content, true, null, b);
+                            } else if (typeof showToast === 'function') {
+                                showToast(window.t('toasts.connecting_to_server', { server: btn.content || 'servidor' }) || `Iniciando conexión a ${btn.content || 'servidor'}`, 'info');
+                            }
+                        };
+                        break;
+
+                    case 'external_link':
+                        b.className = 'announcement-btn announcement-btn-external' + (!hasText ? ' announcement-btn-square' : '');
+                        b.innerHTML = hasText
+                            ? `<i class="fas fa-external-link-alt"></i> <span>${esc(btn.text)}</span>`
+                            : '<i class="fas fa-external-link-alt"></i>';
+                        if (btn.tooltip) b.title = btn.tooltip;
+                        b.onclick = (e) => {
+                            e.preventDefault();
+                            const url = btn.content;
+                            if (!url) return;
+                            if (window.hwlAPI && typeof window.hwlAPI.openExternal === 'function') {
+                                window.hwlAPI.openExternal(url);
+                            } else if (window.api && typeof window.api.openExternal === 'function') {
+                                window.api.openExternal(url);
+                            } else {
+                                window.open(url, '_blank');
+                            }
+                        };
+                        break;
+
+                    case 'copy_text':
+                        b.className = 'announcement-btn announcement-btn-copy' + (!hasText ? ' announcement-btn-square' : '');
+                        b.innerHTML = hasText
+                            ? `<i class="fas fa-copy"></i> <span>${esc(btn.text)}</span>`
+                            : '<i class="fas fa-copy"></i>';
+                        if (btn.tooltip) b.title = btn.tooltip;
+                        b.onclick = (e) => {
+                            e.preventDefault();
+                            if (!btn.content) return;
+                            navigator.clipboard.writeText(btn.content).then(() => {
+                                if (typeof showToast === 'function') {
+                                    showToast(window.t('toasts.copied_to_clipboard') || '¡Copiado al portapapeles!', 'success');
+                                }
+                                const origHtml = b.innerHTML;
+                                b.innerHTML = hasText
+                                    ? `<i class="fas fa-check" style="color: #34d399;"></i> <span>${esc(btn.text)}</span>`
+                                    : '<i class="fas fa-check" style="color: #34d399;"></i>';
+                                setTimeout(() => { b.innerHTML = origHtml; }, 2000);
+                            }).catch(err => console.warn('[Announcement] Error copying text:', err));
+                        };
+                        break;
+
+                    case 'open_tab':
+                        b.className = 'announcement-btn announcement-btn-tab' + (!hasText ? ' announcement-btn-square' : '');
+                        b.innerHTML = hasText
+                            ? `<i class="fas fa-compass"></i> <span>${esc(btn.text)}</span>`
+                            : '<i class="fas fa-compass"></i>';
+                        if (btn.tooltip) b.title = btn.tooltip;
+                        b.onclick = (e) => {
+                            e.preventDefault();
+                            if (typeof window.showSection === 'function') {
+                                window.showSection(btn.content || 'play');
+                            }
+                        };
+                        break;
+
+                    case 'open_modpack':
+                        b.className = 'announcement-btn announcement-btn-modpack' + (!hasText ? ' announcement-btn-square' : '');
+                        b.innerHTML = hasText
+                            ? `<i class="fas fa-cube"></i> <span>${esc(btn.text)}</span>`
+                            : '<i class="fas fa-cube"></i>';
+                        if (btn.tooltip) b.title = btn.tooltip;
+                        b.onclick = (e) => {
+                            e.preventDefault();
+                            if (typeof window.showSection === 'function') {
+                                window.showSection('workshop');
+                            }
+                            if (btn.content && typeof window.openWkItemModal === 'function') {
+                                window.openWkItemModal(btn.content);
+                            }
+                        };
+                        break;
+
+                    case 'discord':
+                        b.className = 'announcement-btn announcement-btn-discord' + (!hasText ? ' announcement-btn-square' : '');
+                        b.innerHTML = hasText
+                            ? `<i class="fab fa-discord"></i> <span>${esc(btn.text)}</span>`
+                            : '<i class="fab fa-discord"></i>';
+                        if (btn.tooltip) b.title = btn.tooltip;
+                        b.onclick = (e) => {
+                            e.preventDefault();
+                            const url = btn.content || 'https://dsc.gg/helloworld-launcher';
+                            if (window.hwlAPI && typeof window.hwlAPI.openExternal === 'function') {
+                                window.hwlAPI.openExternal(url);
+                            } else if (window.api && typeof window.api.openExternal === 'function') {
+                                window.api.openExternal(url);
+                            } else {
+                                window.open(url, '_blank');
+                            }
+                        };
+                        break;
+
+                    case 'update_app':
+                        b.className = 'announcement-btn announcement-btn-update' + (!hasText ? ' announcement-btn-square' : '');
+                        b.innerHTML = hasText
+                            ? `<i class="fas fa-rocket"></i> <span>${esc(btn.text)}</span>`
+                            : '<i class="fas fa-rocket"></i>';
+                        if (btn.tooltip) b.title = btn.tooltip;
+                        b.onclick = (e) => {
+                            e.preventDefault();
+                            window.location.href = 'updater.html';
+                        };
+                        break;
+
+                    default:
+                        // Generic button fallback
+                        b.className = 'announcement-btn announcement-btn-external' + (!hasText ? ' announcement-btn-square' : '');
+                        b.innerHTML = hasText ? `<span>${esc(btn.text)}</span>` : '<i class="fas fa-link"></i>';
+                        break;
+                }
+                buttonsContainer.appendChild(b);
+            });
+        }
+    }
+
+    // Dismiss / Close button
+    const closeBtn = document.getElementById('announcementCloseBtn');
+    if (closeBtn) {
+        if (isDismissible) {
+            closeBtn.classList.remove('is-hidden');
+            closeBtn.style.setProperty('display', 'inline-flex', 'important');
+            closeBtn.onclick = (e) => {
+                e.preventDefault();
+                banner.classList.add('hiding');
+                recordAnnouncementDismissed(announcementId);
+                _currentAnnouncementState = null;
+                setTimeout(() => {
+                    banner.style.display = 'none';
+                    banner.classList.remove('hiding');
+                }, 350);
+            };
+        } else {
+            closeBtn.classList.add('is-hidden');
+            closeBtn.style.setProperty('display', 'none', 'important');
+            closeBtn.onclick = null;
+        }
+    }
+
+    // Display banner smoothly
+    banner.classList.remove('hiding');
+    banner.style.display = 'flex';
+
+    // Calculate ticker precise loop distance after rendering
+    requestAnimationFrame(() => {
+        setupAnnouncementTickerCalculation(announcement.message);
+    });
+
+    if (!_announcementResizeHandlerAdded) {
+        _announcementResizeHandlerAdded = true;
+        window.addEventListener('resize', () => {
+            const b = document.getElementById('announcementBanner');
+            if (b && b.style.display !== 'none') {
+                setupAnnouncementTickerCalculation();
+            }
+        });
+    }
+}
+// --- NEW APP UPDATE SYSTEM (Direct Setup Launcher) ---
+function parseSemver(v) {
+    if (!v) return [0, 0, 0];
+    const clean = String(v).replace(/^v/i, '').trim();
+    const parts = clean.split('-')[0].split('.').map(n => parseInt(n, 10) || 0);
+    while (parts.length < 3) parts.push(0);
+    return parts;
+}
+
+function compareSemver(a, b) {
+    const pa = parseSemver(a);
+    const pb = parseSemver(b);
+    for (let i = 0; i < 3; i++) {
+        if (pa[i] > pb[i]) return 1;
+        if (pa[i] < pb[i]) return -1;
+    }
+    return 0;
+}
+
+function renderMarkdownToHtml(markdown) {
+    if (!markdown || typeof markdown !== 'string') return '';
+    if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
+        try {
+            return marked.parse(markdown);
+        } catch (_) {}
+    }
+    let html = markdown
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+        .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+        .replace(/`(.*?)`/gim, '<code>$1</code>')
+        .replace(/^\s*[-*+]\s+(.*$)/gim, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>(\s*<li>.*<\/li>)*)/gim, '<ul>$1</ul>');
+    return html.split('\n\n').map(p => {
+        const t = p.trim();
+        if (!t) return '';
+        if (t.startsWith('<h') || t.startsWith('<ul')) return t;
+        return `<p>${t.replace(/\n/g, '<br>')}</p>`;
+    }).join('');
+}
+
+let _currentUpdateState = null;
+let _updateListenersInitialized = false;
+
+function initUpdateModalListeners() {
+    if (_updateListenersInitialized) return;
+    _updateListenersInitialized = true;
+
+    const laterBtn = document.getElementById('updateLaterBtn');
+    const updateNowBtn = document.getElementById('updateNowBtn');
+    const dontRemindCheckbox = document.getElementById('updateDontRemindCheckbox');
+
+    if (laterBtn) {
+        laterBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (_currentUpdateState && _currentUpdateState.isMandatory) {
+                return; // Cannot dismiss if mandatory
+            }
+            if (_currentUpdateState && dontRemindCheckbox && dontRemindCheckbox.checked) {
+                localStorage.setItem(`hw_skip_version_${_currentUpdateState.latestVersion}`, 'true');
+            }
+            const modal = document.getElementById('updateModal');
+            if (modal) {
+                modal.classList.remove('show');
+                modal.style.display = 'none';
+            }
+        });
+    }
+
+    if (updateNowBtn) {
+        updateNowBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            if (!_currentUpdateState) return;
+
+            const progressSection = document.getElementById('updateProgressSection');
+            const statusText = document.getElementById('updateProgressStatusText');
+            const percentEl = document.getElementById('updateProgressPercent');
+            const barFill = document.getElementById('updateProgressBarFill');
+            const speedEl = document.getElementById('updateProgressSpeed');
+            const sizeEl = document.getElementById('updateProgressSize');
+            const nowIcon = document.getElementById('updateNowIcon');
+            const nowText = document.getElementById('updateNowText');
+
+            updateNowBtn.disabled = true;
+            if (laterBtn) laterBtn.disabled = true;
+            if (nowIcon) nowIcon.className = 'fas fa-spinner fa-spin';
+            if (nowText) nowText.textContent = (window.t ? window.t('updater.starting_download') : '') || 'Preparing...';
+
+            if (progressSection) progressSection.style.display = 'block';
+            if (barFill) barFill.style.width = '10%';
+            if (percentEl) percentEl.textContent = '10%';
+
+            const api = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
+
+            try {
+                // 1. Comprobar si existe setup.exe en la raíz
+                if (statusText) statusText.textContent = (window.t ? window.t('updater.checking') : '') || 'Checking local installer...';
+                let localCheck = null;
+                if (api && typeof api.checkLocalInstaller === 'function') {
+                    localCheck = await api.checkLocalInstaller();
+                } else if (api && typeof api.check_local_installer === 'function') {
+                    localCheck = await api.check_local_installer();
+                }
+
+                if (localCheck && localCheck.exists && localCheck.path) {
+                    // Ya existe: lanzar directamente y cerrar
+                    if (statusText) statusText.textContent = (window.t ? window.t('updater.launching_setup') : '') || 'Launching installer...';
+                    if (barFill) barFill.style.width = '100%';
+                    if (percentEl) percentEl.textContent = '100%';
+
+                    if (api && typeof api.launchInstallerAndQuit === 'function') {
+                        await api.launchInstallerAndQuit(localCheck.path);
+                    } else if (api && typeof api.launch_installer_and_quit === 'function') {
+                        await api.launch_installer_and_quit(localCheck.path);
+                    }
+                    return;
+                }
+
+                // 2. Si no existe: descargar instalador
+                if (statusText) statusText.textContent = (window.t ? window.t('updater.downloading_installer') : '') || 'Downloading installer...';
+
+                // Escuchar progreso de descarga del instalador
+                const onProgress = (data) => {
+                    const pct = Math.min(100, Math.round(data.percent || 0));
+                    if (barFill) barFill.style.width = `${pct}%`;
+                    if (percentEl) percentEl.textContent = `${pct}%`;
+                    if (speedEl && data.speed) {
+                        const mbSpeed = (data.speed / (1024 * 1024)).toFixed(2);
+                        speedEl.textContent = `${mbSpeed} MB/s`;
+                    }
+                    if (sizeEl && data.total) {
+                        const trMB = ((data.transferred || 0) / (1024 * 1024)).toFixed(1);
+                        const totMB = (data.total / (1024 * 1024)).toFixed(1);
+                        sizeEl.textContent = `${trMB} MB / ${totMB} MB`;
+                    }
+                };
+
+                if (window.hwlAPI && typeof window.hwlAPI.onInstallerDownloadProgress === 'function') {
+                    window.hwlAPI.onInstallerDownloadProgress(onProgress);
+                } else if (api && typeof api.on_installer_download_progress === 'function') {
+                    api.on_installer_download_progress(onProgress);
+                }
+
+                // Determinar URL de descarga según plataforma y arquitectura
+                const info = _currentUpdateState.releaseInfo || {};
+                const downloads = info.downloads || {};
+                const latestVer = _currentUpdateState.latestVersion;
+                const tag = info.tag || ('v' + latestVer);
+
+                let platform = 'win32';
+                let arch = 'x64';
+                try {
+                    if (window.hwlAPI && typeof window.hwlAPI.getPlatformInfo === 'function') {
+                        const pInfo = await window.hwlAPI.getPlatformInfo();
+                        if (pInfo) {
+                            platform = pInfo.platform || 'win32';
+                            arch = pInfo.arch || 'x64';
+                        }
+                    } else if (api && typeof api.get_platform_info === 'function') {
+                        const pInfo = await api.get_platform_info();
+                        if (pInfo) {
+                            platform = pInfo.platform || 'win32';
+                            arch = pInfo.arch || 'x64';
+                        }
+                    }
+                } catch (pErr) {
+                    console.warn('[UpdateNow] Could not determine platform:', pErr);
+                }
+
+                let downloadUrl = null;
+                if (platform === 'win32') {
+                    // Soporte estructura anidada: downloads.windows.setup / zip
+                    if (downloads.windows && typeof downloads.windows === 'object') {
+                        downloadUrl = downloads.windows.setup || downloads.windows.zip;
+                    }
+                    if (!downloadUrl) {
+                        downloadUrl = downloads.windows_setup || downloads.setup || downloads.windows_zip;
+                    }
+                    if (!downloadUrl) {
+                        downloadUrl = `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/HelloWorld-Launcher-Setup.exe`;
+                    }
+                } else if (platform === 'darwin') {
+                    // Soporte macOS: downloads.macos.amd64 / arm64 o downloads.mac
+                    const macObj = downloads.macos || downloads.mac;
+                    if (macObj && typeof macObj === 'object') {
+                        const archObj = (arch === 'arm64') ? (macObj.arm64 || macObj.arm) : (macObj.amd64 || macObj.x64 || macObj.intel);
+                        if (archObj && typeof archObj === 'object') {
+                            downloadUrl = archObj.dmg || archObj.zip;
+                        } else if (typeof archObj === 'string') {
+                            downloadUrl = archObj;
+                        }
+                        if (!downloadUrl) {
+                            downloadUrl = macObj.dmg || macObj.zip;
+                        }
+                    }
+                    if (!downloadUrl) {
+                        downloadUrl = downloads.mac_dmg || downloads.mac_zip;
+                    }
+                    if (!downloadUrl) {
+                        const macArch = (arch === 'arm64') ? 'arm64' : 'amd64';
+                        downloadUrl = `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/helloworld-launcher-mac-${macArch}.dmg`;
+                    }
+                } else {
+                    // Soporte Linux: downloads.linux.amd64 / arm64
+                    const linObj = downloads.linux;
+                    if (linObj && typeof linObj === 'object') {
+                        const archObj = (arch === 'arm64') ? (linObj.arm64 || linObj.arm) : (linObj.amd64 || linObj.x64);
+                        if (archObj && typeof archObj === 'object') {
+                            downloadUrl = archObj.deb || archObj.appimage || archObj.zip;
+                        } else if (typeof archObj === 'string') {
+                            downloadUrl = archObj;
+                        }
+                        if (!downloadUrl) {
+                            downloadUrl = linObj.deb || linObj.appimage;
+                        }
+                    }
+                    if (!downloadUrl) {
+                        if (arch === 'arm64') {
+                            downloadUrl = downloads.linux_arm64_deb || downloads.linux_deb || downloads.linux_arm64_appimage || downloads.linux_appimage;
+                        } else {
+                            downloadUrl = downloads.linux_amd64_deb || downloads.linux_deb || downloads.linux_amd64_appimage || downloads.linux_appimage;
+                        }
+                    }
+                    if (!downloadUrl) {
+                        const linArch = (arch === 'arm64') ? 'arm64' : 'amd64';
+                        downloadUrl = `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/helloworld-launcher-linux-${linArch}.deb`;
+                    }
+                }
+
+                let dlResult = null;
+                if (api && typeof api.downloadInstallerFile === 'function') {
+                    dlResult = await api.downloadInstallerFile(downloadUrl);
+                } else if (api && typeof api.download_installer_file === 'function') {
+                    dlResult = await api.download_installer_file(downloadUrl);
+                }
+
+                if (dlResult && dlResult.success && dlResult.filePath) {
+                    if (statusText) statusText.textContent = (window.t ? window.t('updater.launching_setup') : '') || 'Launching installer...';
+                    if (barFill) barFill.style.width = '100%';
+                    if (percentEl) percentEl.textContent = '100%';
+
+                    if (api && typeof api.launchInstallerAndQuit === 'function') {
+                        await api.launchInstallerAndQuit(dlResult.filePath);
+                    } else if (api && typeof api.launch_installer_and_quit === 'function') {
+                        await api.launch_installer_and_quit(dlResult.filePath);
+                    }
+                } else {
+                    throw new Error((dlResult && dlResult.error) || 'Failed to download installer');
+                }
+
+            } catch (err) {
+                console.error('[UpdateNow] Error during update process:', err);
+                if (statusText) {
+                    statusText.textContent = (window.t ? window.t('updater.could_not_dl') : '') || ('Error: ' + err.message);
+                    statusText.style.color = '#ef4444';
+                }
+                updateNowBtn.disabled = false;
+                if (laterBtn && !_currentUpdateState.isMandatory) laterBtn.disabled = false;
+                if (nowIcon) nowIcon.className = 'fas fa-arrow-down';
+                if (nowText) nowText.textContent = (window.t ? window.t('updater.retry') : '') || 'Retry';
+            }
+        });
+    }
+}
+
+async function showUpdateModal(updateData) {
+    _currentUpdateState = updateData;
+    initUpdateModalListeners();
+
+    const modal = document.getElementById('updateModal');
+    const card = document.getElementById('updateCard');
+    if (!modal || !card) return;
+
+    const { currentVersion, latestVersion, isMandatory, forceMessage, releaseInfo } = updateData;
+
+    // Toggle card mode
+    if (isMandatory) {
+        card.classList.add('mandatory-mode');
+    } else {
+        card.classList.remove('mandatory-mode');
+    }
+
+    // Badge
+    const badgeEl = document.getElementById('updateBadge');
+    if (badgeEl) {
+        badgeEl.textContent = isMandatory
+            ? ((window.t ? window.t('updater.mandatory_badge') : '') || 'MANDATORY')
+            : ((window.t ? window.t('updater.new_version_badge') : '') || 'NEW UPDATE');
+    }
+
+    // Icon
+    const iconEl = document.getElementById('updateIcon');
+    if (iconEl) {
+        iconEl.className = isMandatory ? 'fas fa-shield-alt update-icon' : 'fas fa-rocket update-icon';
+    }
+
+    // Title
+    const titleEl = document.getElementById('updateTitle');
+    if (titleEl) {
+        titleEl.textContent = isMandatory
+            ? ((window.t ? window.t('updater.mandatory_title') : '') || 'Mandatory Update Required')
+            : ((window.t ? window.t('updater.new_version') : '') || 'New Version Available');
+    }
+
+    // Versions
+    const curVerEl = document.getElementById('updateCurrentVer');
+    const latVerEl = document.getElementById('updateLatestVer');
+    if (curVerEl) curVerEl.textContent = `v${currentVersion}`;
+    if (latVerEl) latVerEl.textContent = `v${latestVersion}`;
+
+    // Subtitle
+    const subEl = document.getElementById('updateSubtitle');
+    if (subEl) {
+        if (isMandatory) {
+            subEl.textContent = forceMessage || ((window.t ? window.t('updater.mandatory_desc', { current: currentVersion, latest: latestVersion }) : '') || `Your current version (v${currentVersion}) is no longer supported. Please update to v${latestVersion} to continue playing.`);
+        } else {
+            subEl.textContent = (window.t ? window.t('updater.new_version') : '') || 'A new version of HelloWorld Launcher is available with new features and improvements.';
+        }
+    }
+
+    // Changelog Markdown Content
+    const changelogBody = document.getElementById('updateChangelogContent');
+    if (changelogBody) {
+        const mdText = (releaseInfo && releaseInfo.markdown) ? releaseInfo.markdown : '';
+        if (mdText && mdText.trim()) {
+            changelogBody.innerHTML = renderMarkdownToHtml(mdText);
+        } else {
+            changelogBody.innerHTML = `<p style="color: #94a3b8;">${(window.t ? window.t('updater.no_changelog') : '') || 'No release notes provided.'}</p>`;
+        }
+    }
+
+    // Progress Section (reset)
+    const progSection = document.getElementById('updateProgressSection');
+    if (progSection) progSection.style.display = 'none';
+
+    // Footer buttons & checkbox
+    const dontRemindLabel = document.getElementById('updateDontRemindLabel');
+    const laterBtn = document.getElementById('updateLaterBtn');
+    const updateNowBtn = document.getElementById('updateNowBtn');
+    const nowText = document.getElementById('updateNowText');
+    const nowIcon = document.getElementById('updateNowIcon');
+
+    if (nowText) nowText.textContent = (window.t ? window.t('updater.update_now') : '') || 'Update Now';
+    if (nowIcon) nowIcon.className = 'fas fa-arrow-down';
+    if (updateNowBtn) updateNowBtn.disabled = false;
+
+    if (isMandatory) {
+        if (dontRemindLabel) dontRemindLabel.style.display = 'none';
+        if (laterBtn) laterBtn.style.display = 'none';
+    } else {
+        if (dontRemindLabel) dontRemindLabel.style.display = 'flex';
+        if (laterBtn) {
+            laterBtn.style.display = 'inline-flex';
+            laterBtn.disabled = false;
+        }
+    }
+
+    // Display modal
+    modal.classList.add('show');
+    modal.style.display = 'flex';
+}
+
+async function checkAppUpdates(changelog) {
+    if (!changelog || !changelog.latestVersion) return;
+
+    let currentVersion = '2.2.0';
+    try {
+        const api = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
+        if (api && typeof api.get_launcher_version === 'function') {
+            currentVersion = await api.get_launcher_version();
+        } else if (api && typeof api.getUserJson === 'function') {
+            const vEl = document.getElementById('launcherVersion');
+            if (vEl && vEl.textContent && vEl.textContent.trim()) {
+                currentVersion = vEl.textContent.trim();
+            }
+        }
+    } catch (_) {}
+
+    const latestVersion = changelog.latestVersion;
+    const minVersion = changelog.minVersion || '0.0.0';
+
+    // Si ya estamos en la última o superior, nada que hacer
+    if (compareSemver(currentVersion, latestVersion) >= 0) {
+        return;
+    }
+
+    // Comprobar si es actualización obligatoria (MANDATORY)
+    let isMandatory = (compareSemver(currentVersion, minVersion) < 0) || Boolean(changelog.forceUpdate);
+    if (!isMandatory && Array.isArray(changelog.versions)) {
+        for (const v of changelog.versions) {
+            if (compareSemver(currentVersion, v.version) < 0 && v.forceUpdate === true) {
+                isMandatory = true;
+                break;
+            }
+        }
+    }
+
+    // Si es opcional, comprobar si el usuario marcó "no volver a recordar"
+    if (!isMandatory) {
+        const isSkipped = localStorage.getItem(`hw_skip_version_${latestVersion}`);
+        if (isSkipped === 'true') {
+            return;
+        }
+    }
+
+    // Obtener releaseInfo correspondiente
+    let releaseInfo = null;
+    if (Array.isArray(changelog.versions)) {
+        releaseInfo = changelog.versions.find(v => v.version === latestVersion) || changelog.versions[0];
+    }
+
+    await showUpdateModal({
+        currentVersion,
+        latestVersion,
+        minVersion,
+        isMandatory,
+        forceMessage: changelog.forceUpdateMessage,
+        releaseInfo
+    });
+}
+window.checkAppUpdates = checkAppUpdates;
+
+async function applyRemoteConfig(data) {
+    if (!data) return;
+    if (typeof data === 'string') {
+        try {
+            data = JSON.parse(data);
+        } catch (e1) {
+            try {
+                const fixed = data.replace(/([0-9]|true|false|null|"|\]|\})\s*\r?\n(\s*")/g, '$1,\n$2');
+                data = JSON.parse(fixed);
+            } catch (_) {}
+        }
+    }
+    if (!data || typeof data !== 'object') return;
+    window.HW_REMOTE_CONFIG = data;
+
+    if (data.api && data.api.baseUrl) {
+        window.HW_API_URL = data.api.baseUrl;
+    }
+
+    window.HW_SERVERS_LINK = (typeof data.servers_link === 'string' && data.servers_link.trim().length > 0) ? data.servers_link.trim() : null;
+
+    if (data.servers && Array.isArray(data.servers)) {
+        window.HW_FEATURED_SERVERS = data.servers;
+        renderFeaturedServers(data.servers);
+    } else {
+        window.HW_FEATURED_SERVERS = [];
+        renderFeaturedServers([]);
+    }
+
+    renderFeaturedServersPromo(window.HW_SERVERS_LINK);
+
+    if (typeof updateTabsLayout === 'function') {
+        updateTabsLayout();
+    }
+    if (data.sponsor) {
+        localStorage.setItem(SPONSOR_CACHE_KEY, JSON.stringify(data.sponsor));
+        renderSidebarSponsor(data.sponsor);
+    }
+    if (data.maintenance) {
+        await handleMaintenanceState(data.maintenance);
+    }
+    if (data.announcement) {
+        handleAnnouncement(data.announcement);
+    } else {
+        handleAnnouncement(null);
+    }
+    if (data.changelog) {
+        window.HW_CHANGELOG = data.changelog;
+        checkAppUpdates(data.changelog).catch(err => console.warn('[UpdateCheck] Error:', err));
+    }
+}
+
+async function fetchAndApplyRemoteConfig(forceRefresh = false) {
+    const cachedStr = localStorage.getItem(REMOTE_CONFIG_CACHE_KEY);
+    if (!forceRefresh && cachedStr) {
+        try {
+            const cached = JSON.parse(cachedStr);
+            applyRemoteConfig(cached);
+        } catch (_) {}
+    }
+
+    try {
+        const api = window.api || (window.pywebview && window.pywebview.api);
+        let data = null;
+
+        // 1. Fetch via backend Node.js (cero CORS, más rápido y confiable)
+        if (api && typeof api.fetch_remote_config === 'function') {
+            const res = await api.fetch_remote_config();
+            if (res && res.success && res.data) {
+                data = res.data;
+            }
+        }
+
+        // 2. Fallback fetch directo estándar en caso de fallo
+        if (!data) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3500);
+            const res = await fetch(`${REMOTE_CONFIG_GIST_URL}?t=${Date.now()}`, {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            if (res.ok) {
+                const text = await res.text();
+                try {
+                    data = JSON.parse(text);
+                } catch (e1) {
+                    try {
+                        const fixed = text.replace(/([0-9]|true|false|null|"|\]|\})\s*\r?\n(\s*")/g, '$1,\n$2');
+                        data = JSON.parse(fixed);
+                    } catch (_) {}
+                }
+            }
+        }
+
+        if (data) {
+            localStorage.setItem(REMOTE_CONFIG_CACHE_KEY, JSON.stringify(data));
+            localStorage.setItem(REMOTE_CONFIG_TIME_KEY, Date.now().toString());
+            await applyRemoteConfig(data);
+            return data;
         }
     } catch (err) {
-        console.warn('[Sponsor] No se pudo obtener promo remota, usando local:', err.message);
+        console.warn('[RemoteConfig] Error fetching config:', err);
     }
+    return null;
+}
+
+let remoteConfigPollTimer = null;
+function startRemoteConfigPolling() {
+    if (remoteConfigPollTimer) clearInterval(remoteConfigPollTimer);
+    remoteConfigPollTimer = setInterval(() => {
+        fetchAndApplyRemoteConfig(true).catch(() => {});
+    }, 10000); // Polling cada 10s
+}
+
+async function initRemoteConfig() {
+    await initDismissedAnnouncements();
+    if (typeof updateTabsLayout === 'function') {
+        updateTabsLayout();
+    }
+    await fetchAndApplyRemoteConfig(false);
+    startRemoteConfigPolling();
+
+    // Comprobación instantánea si el usuario vuelve a enfocar la ventana del launcher tras editar el Gist
+    window.addEventListener('focus', () => {
+        fetchAndApplyRemoteConfig(true).catch(() => {});
+    });
+}
+
+// Backward-compatible alias
+async function initSidebarSponsor() {
+    await initRemoteConfig();
 }
 
 // --- BUY MINECRAFT PREMIUM PROMO ---
@@ -1862,42 +3605,31 @@ if (selectMicrosoftBtn) {
 window.cancelLaunch = function() {
     if (window.logIdleTimer) { clearTimeout(window.logIdleTimer); window.logIdleTimer = null; }
     window.isLaunching = false;
+    resetServerJoinButtons();
 
     // Instantly revert state in UI
-
     const playButton = document.querySelector('.play-button');
-
     if (playButton) {
-
         playButton.disabled = false;
-
         playButton.style.cursor = 'pointer';
-
         playButton.style.opacity = '1';
-
-        playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
-
+        if (window.isMinecraftRunning) {
+            playButton.innerHTML = window.t('play.playing') || 'Playing';
+        } else {
+            playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
+        }
     }
 
     const cancelBtn = document.getElementById('cancelLaunchBtn');
-
     if (cancelBtn) {
-
         cancelBtn.classList.remove('visible');
-
         cancelBtn.innerHTML = '<i class="fas fa-times"></i>';
-
         cancelBtn.disabled = false;
-
     }
-
-
 
     // Call API to cancel launch immediately
     window.pywebview.api.cancel_launch().catch(err => console.error("Cancel launch error:", err));
 };
-
-
 
 async function launchGame() {
     window.launchGame = launchGame;
@@ -1913,16 +3645,22 @@ async function launchGame() {
     if (window.isLaunching) return;
     window.isLaunching = true;
 
+    // Block all server action buttons while launching
+    document.querySelectorAll('.btn-server-sq').forEach(b => {
+        b.classList.add('is-disabled');
+        if (b.tagName === 'BUTTON') b.disabled = true;
+    });
+
     // Show loading state immediately so UI feels fast and responsive
     const playButton = document.querySelector('.play-button');
     if (playButton) {
         if (!playButton.dataset.originalHtml) {
             playButton.dataset.originalHtml = playButton.innerHTML;
         }
-        playButton.disabled = true;
-        playButton.style.cursor = 'not-allowed';
-        playButton.style.opacity = '0.7';
-        playButton.innerHTML = '<span class="spinner"></span> ' + (window.t('play.starting') || 'Starting...');
+        playButton.disabled = false;
+        playButton.style.cursor = 'default';
+        playButton.style.opacity = '0.75';
+        playButton.innerHTML = window.t('play.starting') || 'Starting...';
     }
 
     const cancelBtn = document.getElementById('cancelLaunchBtn');
@@ -1932,11 +3670,16 @@ async function launchGame() {
 
     const revertPlayState = () => {
         window.isLaunching = false;
+        resetServerJoinButtons();
         if (playButton) {
             playButton.disabled = false;
             playButton.style.cursor = 'pointer';
             playButton.style.opacity = '1';
-            playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
+            if (window.isMinecraftRunning) {
+                playButton.innerHTML = window.t('play.playing') || 'Playing';
+            } else {
+                playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
+            }
         }
         if (cancelBtn) cancelBtn.classList.remove('visible');
     };
@@ -2017,8 +3760,9 @@ async function launchGame() {
 
     // Try to launch the game
     const serverParam = window.pendingServerParam || null;
+    const saveServerParam = typeof window.pendingSaveServerParam === 'boolean' ? window.pendingSaveServerParam : false;
     await new Promise(r => setTimeout(r, 10));
-    const result = await pywebview.api.start_game(selectedProfile, nickname, false, serverParam);
+    const result = await pywebview.api.start_game(selectedProfile, nickname, false, serverParam, saveServerParam);
     
     if (!window.isLaunching || (result && result.status === 'cancelled')) {
         console.log('[Launch] Launch was cancelled by user, ignoring start_game result.');
@@ -2033,6 +3777,7 @@ async function launchGame() {
 
     if (result.status !== "missing_files" && result.status !== "already_running") {
         window.pendingServerParam = null;
+        window.pendingSaveServerParam = false;
         if (result.status !== "error") {
             resetLogIdleTimer();
         }
@@ -2043,15 +3788,21 @@ async function launchGame() {
         const confirm = await window.pywebview.api.confirm(window.t("toasts.already_open_warning") || "Minecraft is already open. Do you want to open another instance?");
         if (confirm) {
             // Force launch
-            const forceResult = await pywebview.api.start_game(selectedProfile, nickname, true, serverParam);
+            const forceResult = await pywebview.api.start_game(selectedProfile, nickname, true, serverParam, saveServerParam);
             window.pendingServerParam = null;
+            window.pendingSaveServerParam = false;
             if (forceResult.status === "error") {
                 window.isLaunching = false;
+                resetServerJoinButtons();
                 if (playButton) {
                     playButton.disabled = false;
                     playButton.style.cursor = 'pointer';
                     playButton.style.opacity = '1';
-                    playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
+                    if (window.isMinecraftRunning) {
+                        playButton.innerHTML = window.t('play.playing') || 'Playing';
+                    } else {
+                        playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
+                    }
                 }
                 if (cancelBtn) cancelBtn.classList.remove('visible');
                 return;
@@ -2061,11 +3812,19 @@ async function launchGame() {
         } else {
             // Revert state
             window.isLaunching = false;
+            resetServerJoinButtons();
+            if (serverParam && typeof showToast === 'function') {
+                showToast(window.t('toasts.minecraft_running_server_saved') || 'Minecraft ya está abierto. Añadimos el servidor a tu lista multijugador.', 'info');
+            }
             if (playButton) {
                 playButton.disabled = false;
                 playButton.style.cursor = 'pointer';
                 playButton.style.opacity = '1';
-                playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
+                if (window.isMinecraftRunning) {
+                    playButton.innerHTML = window.t('play.playing') || 'Playing';
+                } else {
+                    playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
+                }
             }
             if (cancelBtn) cancelBtn.classList.remove('visible');
             return;
@@ -2078,24 +3837,180 @@ async function launchGame() {
     } else if (result.status === "error") {
         // Revert state
         window.isLaunching = false;
+        resetServerJoinButtons();
         if (playButton) {
             playButton.disabled = false;
             playButton.style.cursor = 'pointer';
             playButton.style.opacity = '1';
-            playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
+            if (window.isMinecraftRunning) {
+                playButton.innerHTML = window.t('play.playing') || 'Playing';
+            } else {
+                playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
+            }
         }
         if (cancelBtn) cancelBtn.classList.remove('visible');
         return;
     }
 }
 
+/**
+ * Global function to join a Minecraft server with optional profile selection and saving to servers.dat.
+ * Accessible from anywhere in the launcher.
+ * @param {string} ip - Server address / domain (e.g. "mc.hypixel.net")
+ * @param {boolean} [save=false] - Whether to save the server to Minecraft's servers.dat list
+ * @param {string} [profileId=null] - Optional specific profile ID to launch with
+ */
+window.joinMinecraftServer = async function(ip, save = false, profileId = null, btnEl = null) {
+    const serverIp = (ip && typeof ip === 'string') ? ip.trim() : '';
+    if (!serverIp) {
+        console.warn('[JoinServer] Cannot join: invalid or empty IP');
+        if (typeof showToast === 'function') {
+            showToast((window.t ? window.t('toasts.invalid_server_ip') : '') || 'IP de servidor no válida', 'error');
+        }
+        return;
+    }
+
+    // 0. Debounce / Prevent duplicate launches if user clicks again while starting
+    if (window.isLaunching) {
+        console.warn('[JoinServer] Launch is already in progress, ignoring extra click.');
+        return;
+    }
+
+    // Block all action buttons across all server cards while starting
+    document.querySelectorAll('.btn-server-sq').forEach(b => {
+        b.classList.add('is-disabled');
+        b.setAttribute('aria-disabled', 'true');
+        if (b.tagName === 'BUTTON') b.disabled = true;
+    });
+
+    // Visual loading state on the clicked button (except announcement play button)
+    const clickedBtn = btnEl || (typeof event !== 'undefined' && event?.currentTarget ? event.currentTarget : null);
+    if (clickedBtn && !clickedBtn.classList.contains('announcement-btn')) {
+        if (!clickedBtn.dataset.originalHtml) {
+            clickedBtn.dataset.originalHtml = clickedBtn.innerHTML;
+        }
+        clickedBtn.classList.remove('is-disabled');
+        clickedBtn.classList.add('is-launching');
+        clickedBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    }
+
+    const restoreServerJoinBtn = () => {
+        resetServerJoinButtons();
+    };
+
+    try {
+        // 1. Select profile or verify one exists
+        const profileSelect = document.getElementById('profileSelect');
+        let effectiveProfileId = profileId || (profileSelect ? profileSelect.value : null);
+
+        if (profileId) {
+            const profiles = window.profilesData?.profiles || {};
+            const profile = profiles[profileId];
+            if (typeof window.selectOption === 'function' && profile) {
+                await window.selectOption(profileId, profile);
+            } else if (profileSelect) {
+                profileSelect.value = profileId;
+                try { profileSelect.dispatchEvent(new Event('change')); } catch (_) {}
+            }
+        } else if (!effectiveProfileId) {
+            const api = (typeof pywebview !== 'undefined' && pywebview.api) || window.api;
+            let profilesData = window.profilesData;
+            if (!profilesData && api && typeof api.get_profiles === 'function') {
+                try { profilesData = await api.get_profiles(); } catch (_) {}
+            }
+            const pIds = profilesData && profilesData.profiles ? Object.keys(profilesData.profiles) : [];
+            if (pIds.length === 0) {
+                restoreServerJoinBtn();
+                if (typeof showToast === 'function') {
+                    showToast((window.t ? window.t('play.create_installation') : '') || 'Crea una instalación para jugar', 'warning');
+                }
+                return;
+            } else if (profileSelect) {
+                const firstId = pIds[0];
+                effectiveProfileId = firstId;
+                if (typeof window.selectOption === 'function') {
+                    await window.selectOption(firstId, profilesData.profiles[firstId]);
+                } else {
+                    profileSelect.value = firstId;
+                    try { profileSelect.dispatchEvent(new Event('change')); } catch (_) {}
+                }
+            }
+        }
+
+        // 2. Add to servers.dat in active profile directory and root .minecraft
+        try {
+            const api = (typeof pywebview !== 'undefined' && pywebview.api) || window.api;
+            if (api && typeof api.add_server_to_servers_dat === 'function') {
+                await api.add_server_to_servers_dat(serverIp, effectiveProfileId || (profileSelect ? profileSelect.value : null));
+            }
+        } catch (e) {
+            console.warn('[JoinServer] Could not add server to servers.dat:', e);
+        }
+
+        // 3. Switch to play section
+        if (typeof showSection === 'function') {
+            showSection('play');
+        }
+
+        // 4. Set pending params for launchGame
+        window.pendingServerParam = serverIp;
+        window.pendingSaveServerParam = !!save;
+        console.log(`[JoinServer] Prepared join for ${serverIp} (profile: ${effectiveProfileId}, save: ${!!save})`);
+
+        // 5. Trigger launchGame
+        const launcherFn = (typeof launchGame === 'function' && launchGame) || (typeof window.launchGame === 'function' && window.launchGame);
+        if (launcherFn) {
+            await launcherFn();
+        } else {
+            console.error('[JoinServer] launchGame function is not available');
+            restoreServerJoinBtn();
+            if (typeof showToast === 'function') {
+                showToast(window.t('toasts.launch_failed') || 'Error al iniciar el juego.', 'error');
+            }
+        }
+    } catch (launchErr) {
+        console.error('[JoinServer] Error joining server:', launchErr);
+        restoreServerJoinBtn();
+    }
+};
+window.joinServer = window.joinMinecraftServer;
+
+window.addServerToMinecraft = async function(serverIp, serverName = null) {
+    if (!serverIp || typeof serverIp !== 'string') return false;
+    try {
+        const profileSelect = document.getElementById('profileSelect');
+        const profileId = profileSelect ? profileSelect.value : null;
+        const api = (typeof pywebview !== 'undefined' && pywebview.api) || window.api;
+        if (api && typeof api.add_server_to_servers_dat === 'function') {
+            const res = await api.add_server_to_servers_dat(serverIp.trim(), profileId, serverName);
+            if (res && res.success) {
+                const displayName = serverName || serverIp;
+                const msg = (window.t ? window.t('play.server_added_to_list', { server: displayName }) : '') || `Servidor ${displayName} guardado en tu lista de Minecraft`;
+                if (typeof showToast === 'function') {
+                    showToast(msg, 'success');
+                }
+                return true;
+            }
+        }
+    } catch (err) {
+        console.error('[serversDat] Error saving server:', err);
+    }
+    return false;
+};
+
 // Global listener for info messages from main.js (launcher events)
 window.addEventListener('info-message', (e) => {
     const msg = String(e.detail);
+    const isGameReadyLog = /Connecting to\s+|joined the game|joined singleplayer|Player joined|Stopping worker threads|stage COMPLETE|Mod loading complete|MinecraftForge v.* Initialized|Narrator library for|LWJGL Version:/i.test(msg);
+
     if (msg === "Game Closed" || msg.includes("Game Crashed") || msg.includes("has exited") || msg.includes("Game process closed")) {
         // Always re-enable button when game closes, regardless of sync state
         onMinecraftClosed();
     } else if (msg === "Game Ready") {
+        console.log('[Launch] Minecraft start/ready detected, transitioning to ready:', msg);
+        onMinecraftReady();
+    } else if (window.isLaunching && isGameReadyLog) {
+        console.log('[Launch] Minecraft start log detected, transitioning to ready:', msg);
         onMinecraftReady();
     } else {
         // Reset 45s idle timer on any game log while launching
@@ -2105,33 +4020,61 @@ window.addEventListener('info-message', (e) => {
     }
 });
 
+// Listener for direct game-status events
+if (window.electronAPI && typeof window.electronAPI.on === 'function') {
+    window.electronAPI.on('game-status', (status) => {
+        if (status && status.running) {
+            onMinecraftReady();
+        } else if (status && !status.running) {
+            onMinecraftClosed();
+        }
+    });
+}
+
+function resetServerJoinButtons() {
+    document.querySelectorAll('.btn-server-sq').forEach(btn => {
+        if (btn.dataset.originalHtml) {
+            btn.innerHTML = btn.dataset.originalHtml;
+            delete btn.dataset.originalHtml;
+        }
+        btn.classList.remove('is-launching');
+        btn.classList.remove('is-disabled');
+        btn.removeAttribute('aria-disabled');
+        if (btn.tagName === 'BUTTON') btn.disabled = false;
+        btn.style.pointerEvents = '';
+    });
+    document.querySelectorAll('.announcement-btn-join').forEach(btn => {
+        btn.classList.remove('is-launching', 'is-locked', 'is-disabled');
+        btn.removeAttribute('aria-disabled');
+        if (btn.tagName === 'BUTTON') btn.disabled = false;
+        btn.style.pointerEvents = '';
+        btn.innerHTML = '<i class="fas fa-play"></i>';
+    });
+}
+
 // Reset play button when launch fails (JVM errors, missing files, etc.)
 window.addEventListener('error', (e) => {
     const msg = String(e.detail);
     if (msg.includes('Launch Failed') || msg.includes('Process Error')) {
         if (window.logIdleTimer) { clearTimeout(window.logIdleTimer); window.logIdleTimer = null; }
         window.isLaunching = false;
+        resetServerJoinButtons();
 
         const playButton = document.querySelector('.play-button');
-
         if (playButton) {
-
             playButton.disabled = false;
-
             playButton.style.cursor = 'pointer';
-
             playButton.style.opacity = '1';
-
-            playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
-
+            if (window.isMinecraftRunning) {
+                playButton.innerHTML = window.t('play.playing') || 'Playing';
+            } else {
+                playButton.innerHTML = playButton.dataset.originalHtml || window.t('play.play_btn') || 'Play';
+            }
         }
 
         const cancelBtn = document.getElementById('cancelLaunchBtn');
-
         if (cancelBtn) cancelBtn.classList.remove('visible');
-
     }
-
 });
 
 
@@ -2233,15 +4176,58 @@ async function startSynchronizationQueue(syncData, profileId) {
 
     }
 
+    if (syncData.updated_addons) {
+
+        syncData.updated_addons.forEach(a => {
+
+            queue.push({
+
+                type: 'update',
+
+                name: a.name || a.filename.replace(/\.disabled$/, ''),
+
+                displayName: a.name || a.filename.replace(/\.disabled$/, ''),
+
+                data: a
+
+            });
+
+        });
+
+    }
+
+    const subtitleEl = modal.querySelector('.sync-modal-subtitle');
+    const hasUpdates = queue.some(q => q.type === 'update');
+    const hasMissing = queue.some(q => q.type === 'version' || q.type === 'addon');
+    if (subtitleEl) {
+        if (hasUpdates && hasMissing) {
+            subtitleEl.textContent = window.t('loader.syncing_missing_and_updates') || 'Downloading missing files and updates for this installation.';
+        } else if (hasUpdates) {
+            subtitleEl.textContent = window.t('loader.syncing_updates') || 'Updating addons to the latest compatible versions.';
+        } else {
+            subtitleEl.textContent = window.t('loader.downloading_missing') || 'Downloading missing files for this installation.';
+        }
+    }
+
     
 
     // Render list immediately with placeholders
 
     const renderItem = (q, i) => {
 
-        const iconClass = q.type === 'version' ? 'fas fa-cube sync-icon-version' : 'fas fa-puzzle-piece sync-icon-addon';
+        let iconClass = 'fas fa-puzzle-piece sync-icon-addon';
+        let badgeHtml = '';
 
-        return `<div id="sync-task-${i}" class="sync-task-item">
+        if (q.type === 'version') {
+            iconClass = 'fas fa-cube sync-icon-version';
+        } else if (q.type === 'update') {
+            iconClass = 'fas fa-arrow-alt-circle-up sync-icon-update';
+            badgeHtml = `<span class="sync-badge-update">${window.t('loader.update_badge') || 'UPDATE'}</span>`;
+        } else {
+            iconClass = 'fas fa-puzzle-piece sync-icon-addon';
+        }
+
+        return `<div id="sync-task-${i}" class="sync-task-item ${q.type === 'update' ? 'sync-task-update' : ''}">
 
             <div class="sync-task-left">
 
@@ -2249,9 +4235,11 @@ async function startSynchronizationQueue(syncData, profileId) {
 
                 <span id="sync-task-label-${i}" class="sync-task-label">${q.displayName}</span>
 
+                ${badgeHtml}
+
             </div>
 
-            <div id="sync-task-status-${i}" class="sync-task-status pending"><i class="fas fa-clock"></i> Waiting</div>
+            <div id="sync-task-status-${i}" class="sync-task-status pending"><i class="fas fa-clock"></i> ${window.t('loader.waiting') || 'Waiting'}</div>
 
         </div>`;
 
@@ -2265,7 +4253,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
     queue.forEach((q, i) => {
 
-        if (q.type === 'addon' && q.data && q.data.project_id) {
+        if ((q.type === 'addon' || q.type === 'update') && q.data && q.data.project_id) {
 
             const cached = window.modrinthDetailsCache && window.modrinthDetailsCache[q.data.project_id];
 
@@ -2372,8 +4360,13 @@ async function startSynchronizationQueue(syncData, profileId) {
         
 
         const taskName = task.displayName || task.name;
-        updateTaskStatus(i, '<i class="fas fa-spinner fa-spin"></i>', window.t('loader.downloading_simple') || 'Downloading...', 'downloading');
-        progressText.textContent = window.t('loader.downloading_name', { name: taskName }) || `Downloading ${taskName}...`;
+        if (task.type === 'update') {
+            updateTaskStatus(i, '<i class="fas fa-spinner fa-spin"></i>', window.t('loader.updating_simple') || 'Updating...', 'downloading');
+            progressText.textContent = window.t('loader.updating_name', { name: taskName }) || `Updating ${taskName}...`;
+        } else {
+            updateTaskStatus(i, '<i class="fas fa-spinner fa-spin"></i>', window.t('loader.downloading_simple') || 'Downloading...', 'downloading');
+            progressText.textContent = window.t('loader.downloading_name', { name: taskName }) || `Downloading ${taskName}...`;
+        }
         progressBar.style.width = '0%';
 
         
@@ -2428,7 +4421,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
                 
 
-            } else if (task.type === 'addon') {
+            } else if (task.type === 'addon' || task.type === 'update') {
 
                 const a = task.data;
 
@@ -2442,7 +4435,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
                         progressBar.style.width = `${percentage || 0}%`;
 
-                        const label = task.displayName || a.filename;
+                        const label = task.displayName || a.name || a.filename;
 
                         progressText.textContent = `${label} (${percentage || 0}%)`;
 
@@ -2454,7 +4447,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
                 const res = await window.pywebview.api.install_project(
 
-                    a.project_id, a.version_id, profileId, a.type, null
+                    a.project_id, a.version_id, profileId, a.type, null, task.type === 'update'
 
                 );
 
@@ -2470,13 +4463,13 @@ async function startSynchronizationQueue(syncData, profileId) {
 
             
 
-            updateTaskStatus(i, '<i class="fas fa-check"></i>', 'Done', 'done');
+            updateTaskStatus(i, '<i class="fas fa-check"></i>', window.t('loader.done') || 'Done', 'done');
 
         } catch (err) {
 
             console.error(err);
 
-            updateTaskStatus(i, '<i class="fas fa-times"></i>', 'Error', 'error');
+            updateTaskStatus(i, '<i class="fas fa-times"></i>', window.t('loader.error') || 'Error', 'error');
 
             if (window.currentSyncCancelled) break;
 
@@ -2493,17 +4486,15 @@ async function startSynchronizationQueue(syncData, profileId) {
             // Revert Play Button
 
             const playBtn = document.querySelector('.play-button');
-
             if (playBtn) {
-
                 playBtn.disabled = false;
-
                 playBtn.style.cursor = 'pointer';
-
                 playBtn.style.opacity = '1';
-
-                playBtn.innerHTML = playBtn.dataset.originalHtml || window.t('play.play_btn') || 'Play';
-
+                if (window.isMinecraftRunning) {
+                    playBtn.innerHTML = window.t('play.playing') || 'Playing';
+                } else {
+                    playBtn.innerHTML = playBtn.dataset.originalHtml || window.t('play.play_btn') || 'Play';
+                }
             }
 
             const cancelBtn = document.getElementById('cancelLaunchBtn');
@@ -2522,7 +4513,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
         // Delete partial/completed addon file if a download was in progress when cancelled
 
-        if (window.currentSyncTask && window.currentSyncTask.type === 'addon') {
+        if (window.currentSyncTask && (window.currentSyncTask.type === 'addon' || window.currentSyncTask.type === 'update')) {
 
             const a = window.currentSyncTask.data;
 
@@ -2564,60 +4555,42 @@ async function startSynchronizationQueue(syncData, profileId) {
 function onMinecraftReady() {
     if (window.logIdleTimer) { clearTimeout(window.logIdleTimer); window.logIdleTimer = null; }
     window.isLaunching = false;
+    window.isMinecraftRunning = true;
+    resetServerJoinButtons();
 
     const playButton = document.querySelector('.play-button');
-
     if (playButton) {
-
         playButton.innerHTML = window.t('play.playing') || 'Playing';
-
         playButton.disabled = false;
-
         playButton.style.cursor = 'pointer';
-
         playButton.style.opacity = '1';
-
     }
 
     const cancelBtn = document.getElementById('cancelLaunchBtn');
-
     if (cancelBtn) cancelBtn.classList.remove('visible');
-
 }
-
-
 
 // Callback when Minecraft closes
 function onMinecraftClosed() {
     if (window.logIdleTimer) { clearTimeout(window.logIdleTimer); window.logIdleTimer = null; }
     window.isLaunching = false;
+    window.isMinecraftRunning = false;
+    resetServerJoinButtons();
 
     const playButton = document.querySelector('.play-button');
-
     if (playButton) {
-
         playButton.innerHTML = window.t('play.play_btn') || 'Play';
-
         playButton.disabled = false;
-
         playButton.style.cursor = 'pointer';
-
         playButton.style.opacity = '1';
-
     }
 
     const cancelBtn = document.getElementById('cancelLaunchBtn');
-
     if (cancelBtn) cancelBtn.classList.remove('visible');
 
-
-
     // Reload profiles and options
-
     loadProfiles();
-
     loadOptions();
-
 }
 
 
@@ -3502,21 +5475,23 @@ async function loadProfiles() {
 
 
 
-        item.onclick = () => {
+        item.onclick = async (e) => {
+            if (e.target.closest('button') || e.target.closest('.profile-actions')) return;
 
             console.log("Installation selected:", id);
-
+            if (typeof selectOption === 'function') {
+                await selectOption(id, profile);
+            }
+            if (typeof showSection === 'function') {
+                showSection('play');
+            }
         };
-
-
 
         list.appendChild(item);
 
     }
 
 }
-
-
 
 function showSection(sectionId) {
     if (sectionId === 'skins') {
@@ -3529,33 +5504,28 @@ function showSection(sectionId) {
     }
 
     document.querySelectorAll('.section').forEach(section => {
-
         section.classList.remove('active');
-
     });
-
-
 
     document.querySelectorAll('.sidebar-button').forEach(button => {
-
         button.classList.remove('active');
-
     });
 
-
-
     const section = document.getElementById(sectionId);
-
     if (section) section.classList.add('active');
 
-
-
-    if (event && event.target) {
-
+    const sectionNavMap = {
+        'play': 'playNavBtn',
+        'profiles': 'profilesNavBtn',
+        'workshop': 'workshopNavBtn',
+        'skins': 'skinsSidebarBtn'
+    };
+    const targetNavBtn = sectionNavMap[sectionId] ? document.getElementById(sectionNavMap[sectionId]) : null;
+    if (targetNavBtn) {
+        targetNavBtn.classList.add('active');
+    } else if (typeof event !== 'undefined' && event && event.target && event.target.classList && event.target.classList.contains('sidebar-button')) {
         event.target.classList.add('active');
-
     }
-
 }
 
 
@@ -5872,6 +7842,13 @@ window.performAccountSwitch = async function (accountId, openInboxAfter = false,
             }
             if (typeof window.initSocial === 'function') {
                 await window.initSocial(true).catch(() => {});
+            }
+
+            // Reset admin bypass banner and reevaluate maintenance for the new account
+            const bypassBanner = document.getElementById('maintenanceAdminBypassBanner');
+            if (bypassBanner) bypassBanner.style.display = 'none';
+            if (window.HW_REMOTE_CONFIG && window.HW_REMOTE_CONFIG.maintenance) {
+                await handleMaintenanceState(window.HW_REMOTE_CONFIG.maintenance);
             }
 
             const prefix = window.t ? window.t('auth.switched_to') : 'Switched to';
@@ -8681,7 +10658,8 @@ async function searchMods(page = 1) {
 
 function createModCard(mod, forcedType) {
     if (forcedType) mod.project_type = forcedType;
-    const effectiveType = mod.project_type || currentContentType;
+    // CRITICAL: If currentContentType is 'datapack', preserve 'datapack' because Modrinth returns project_type: 'mod' for datapacks in search results!
+    const effectiveType = (currentContentType === 'datapack') ? 'datapack' : (forcedType || mod.project_type || currentContentType);
 
     const card = document.createElement('div');
 
@@ -8709,18 +10687,26 @@ function createModCard(mod, forcedType) {
 
 
 
-    const modCategoriesArray = Array.isArray(mod.categories) ? mod.categories : [];
+    let modCategoriesArray = Array.isArray(mod.categories) ? mod.categories : [];
+    if (effectiveType === 'datapack') {
+        const loaderNames = new Set(['fabric', 'forge', 'neoforge', 'bukkit', 'spigot', 'paper', 'purpur', 'folia', 'bungeecord', 'velocity']);
+        const nonLoaderCats = modCategoriesArray.filter(cat => !loaderNames.has(cat.toLowerCase()));
+        if (nonLoaderCats.length > 0) modCategoriesArray = nonLoaderCats;
+    }
     const categories = modCategoriesArray.slice(0, 3).map(cat =>
-
         `<span class="mod-category-badge">${cat}</span>`
-
     ).join('');
 
 
 
     card.onclick = () => {
-        if (effectiveType) currentContentType = effectiveType;
-        else if (mod.project_id && document.getElementById('wkModrinthGrid')?.contains(card)) currentContentType = 'modpack';
+        if (currentContentType === 'datapack') {
+            // Keep currentContentType as 'datapack'
+        } else if (document.getElementById('wkModrinthGrid')?.contains(card)) {
+            currentContentType = 'modpack';
+        } else if (effectiveType && currentContentType !== 'resourcepack' && currentContentType !== 'shader') {
+            currentContentType = effectiveType;
+        }
         openModDetails(mod.project_id);
     };
 
@@ -8855,7 +10841,12 @@ window.openModDetails = async function (projectId) {
 
 
         const details = result.details;
-        if (details.project_type) currentContentType = details.project_type;
+        // Do not overwrite currentContentType if in datapack, resourcepack, or shader sections
+        if (currentContentType !== 'datapack' && currentContentType !== 'resourcepack' && currentContentType !== 'shader') {
+            if (details.project_type && details.project_type !== 'mod') {
+                currentContentType = details.project_type;
+            }
+        }
 
 
 
@@ -8977,7 +10968,7 @@ window.openModDetails = async function (projectId) {
 
         installBtn.onclick = () => {
 
-            downloadModFromCard(targetProjectId, details.slug, details.project_type || currentContentType, details.title, details.icon_url, true);
+            downloadModFromCard(targetProjectId, details.slug, currentContentType, details.title, details.icon_url, true);
 
         };
 
@@ -9280,8 +11271,10 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
         // Loader logic
 
         let searchLoader = loader;
-        if (currentContentType === 'resourcepack' || currentContentType === 'datapack' || currentContentType === 'modpack') {
+        if (currentContentType === 'resourcepack' || currentContentType === 'modpack') {
             searchLoader = null;
+        } else if (currentContentType === 'datapack') {
+            searchLoader = 'datapack';
         } else if (currentContentType === 'shader') {
 
             // For shaders, Modrinth usually expects 'iris' or 'optifine'
@@ -9302,6 +11295,11 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
 
         const selectBestVersion = (list) => {
             if (!list || list.length === 0) return null;
+            // For datapacks, prioritize versions that include datapack loader or have .zip files
+            if (currentContentType === 'datapack') {
+                const dpList = list.filter(v => (v.loaders && v.loaders.includes('datapack')) || (v.files && v.files.some(f => f.filename && f.filename.endsWith('.zip'))));
+                if (dpList.length > 0) list = dpList;
+            }
             return list.find(v => v.version_type === 'release' && v.featured)
                 || list.find(v => v.version_type === 'release')
                 || list.find(v => v.featured)
@@ -9327,17 +11325,25 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
                     return;
                 }
 
-                // If confirmed, fetch all versions (not filtered by game version)
-                const allVersionsResult = await window.pywebview.api.get_mod_versions(projectId, null, null);
+                // If confirmed, fetch all versions
+                const allVersionsResult = await window.pywebview.api.get_mod_versions(projectId, null, currentContentType === 'datapack' ? 'datapack' : null);
 
-                if (!allVersionsResult.success || allVersionsResult.versions.length === 0) {
+                let candidateVersions = (allVersionsResult.success && allVersionsResult.versions) ? allVersionsResult.versions : [];
+                if (candidateVersions.length === 0 && currentContentType === 'datapack') {
+                    const fbResult = await window.pywebview.api.get_mod_versions(projectId, null, null);
+                    if (fbResult.success && fbResult.versions) {
+                        candidateVersions = fbResult.versions;
+                    }
+                }
+
+                if (candidateVersions.length === 0) {
                     window.pywebview.api.error(window.t('toasts.no_versions_project') || 'No versions available for this project');
                     restoreButtonState(projectId);
                     return;
                 }
 
                 // Use the recommended stable/featured version
-                version = selectBestVersion(allVersionsResult.versions);
+                version = selectBestVersion(candidateVersions);
 
             } else if (currentContentType === 'shader') {
 
@@ -9395,15 +11401,20 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
             }
 
         }
-        // For mods: check and handle dependencies BEFORE downloading the main mod
-        if (currentContentType === 'mod') {
+        // For mods AND datapacks: check and handle dependencies BEFORE downloading the main addon
+        if (currentContentType === 'mod' || currentContentType === 'datapack') {
             btnsToLoad.forEach(b => { if (b) b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ...'; });
             try {
+                await refreshInstalledAddonsCache();
+                const installedIdsArr = Array.from(window.installedAddonsCache || []);
                 const depsResult = await window.pywebview.api.resolve_mod_dependencies(
                     version.id,
                     gameVersion,
                     loader,
-                    currentModsProfile
+                    currentModsProfile,
+                    installedIdsArr,
+                    worldName,
+                    currentContentType
                 );
 
                 const hasDepsToInstall = depsResult && depsResult.success &&
@@ -9425,7 +11436,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
 
                     // depChoice: 'all' | 'required' | 'cancel'
                     if (!depChoice || depChoice === 'cancel') {
-                        // User skipped deps — just install the main mod
+                        // User skipped deps — just install the main addon
                     } else {
                         // Install selected deps first (silently, no button state changes needed)
                         const depsToInstall = depChoice === 'all'
@@ -9434,19 +11445,32 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
 
                         for (const dep of depsToInstall) {
                             if (!dep.resolved_version) continue;
-                            const depFile = (dep.resolved_version.files || []).find(f => f.primary) || dep.resolved_version.files[0];
+                            const depType = dep.addon_type || 'mod';
+                            const depFiles = Array.isArray(dep.resolved_version.files) ? dep.resolved_version.files : [];
+                            let depFile = null;
+                            if (depType === 'datapack') {
+                                depFile = depFiles.find(f => f.filename && f.filename.toLowerCase().endsWith('.zip'))
+                                    || depFiles.find(f => f.primary)
+                                    || depFiles[0];
+                            } else {
+                                depFile = depFiles.find(f => f.filename && f.filename.toLowerCase().endsWith('.jar'))
+                                    || depFiles.find(f => f.primary)
+                                    || depFiles[0];
+                            }
                             if (!depFile) continue;
                             
                             const depCard = document.getElementById(`dep-card-${dep.project_id}`);
                             if (depCard) depCard.classList.add('is-downloading');
                             
+                            const depWorld = depType === 'datapack' ? worldName : null;
+
                             try {
                                 await window.pywebview.api.install_project(
                                     dep.project_id,
                                     dep.resolved_version.id,
                                     currentModsProfile,
-                                    'mod',
-                                    null,
+                                    depType,
+                                    depWorld,
                                     false
                                 );
                             } catch (depErr) {
@@ -10567,37 +12591,148 @@ function filterPatchNotes(filterType) {
     renderPatchNotesList();
 }
 
-function switchNewsTab(tabName) {
+let currentNewsTab = 'news';
+
+function hasActiveFeaturedServers() {
+    const list = window.HW_FEATURED_SERVERS;
+    return Array.isArray(list) && list.some(s => s && s.active === true);
+}
+
+function shouldShowServersTab() {
+    return hasActiveFeaturedServers() || Boolean(window.HW_SERVERS_LINK);
+}
+
+function updateTabsLayout() {
+    const hasServers = shouldShowServersTab();
+    const btnServers = document.getElementById('tabBtnServers');
+    const slideServers = document.getElementById('slideFeaturedServers');
+    const slider = document.getElementById('newsPatchPanelsSlider');
+    const tabsContainer = document.getElementById('newsPatchTabsContainer') || document.querySelector('.news-patch-tabs-container');
+
+    if (!hasServers) {
+        // HIDE SERVERS TAB & SLIDE COMPLETELY (user request: si no hay servers, que no aparezca el apartado)
+        if (btnServers) btnServers.style.display = 'none';
+        if (slideServers) slideServers.style.display = 'none';
+        if (tabsContainer) {
+            tabsContainer.classList.remove('has-servers');
+            tabsContainer.classList.add('no-servers');
+        }
+        if (slider) {
+            slider.classList.remove('tabs-3');
+            slider.classList.add('tabs-2');
+        }
+
+        // If currently on servers tab, fallback to news
+        if (currentNewsTab === 'servers') {
+            switchNewsTab('news');
+        } else {
+            switchNewsTab(currentNewsTab);
+        }
+    } else {
+        // SHOW SERVERS TAB & SLIDE
+        if (btnServers) btnServers.style.display = '';
+        if (slideServers) slideServers.style.display = '';
+        if (tabsContainer) {
+            tabsContainer.classList.remove('no-servers');
+            tabsContainer.classList.add('has-servers');
+        }
+        if (slider) {
+            slider.classList.remove('tabs-2');
+            slider.classList.add('tabs-3');
+        }
+
+        // If not manually switched by user, servers tab is shown first
+        if (!window._userManuallySwitchedTab) {
+            switchNewsTab('servers');
+        } else {
+            switchNewsTab(currentNewsTab);
+        }
+    }
+}
+window.updateTabsLayout = updateTabsLayout;
+
+function switchNewsTab(tabName, userTriggered = false) {
+    if (userTriggered) {
+        window._userManuallySwitchedTab = true;
+    }
+    const hasServers = shouldShowServersTab();
+    if (!hasServers && tabName === 'servers') {
+        tabName = 'news';
+    }
+    currentNewsTab = tabName;
+
     const slider = document.getElementById('newsPatchPanelsSlider');
     const indicator = document.getElementById('newsPatchTabIndicator');
+    const btnServers = document.getElementById('tabBtnServers');
     const btnNews = document.getElementById('tabBtnNews');
     const btnPatch = document.getElementById('tabBtnPatchNotes');
 
-    if (tabName === 'news') {
-        if (slider) {
-            slider.classList.remove('tab-1-active');
-            slider.classList.add('tab-0-active');
-        }
-        if (indicator) {
-            indicator.classList.remove('tab-1-active');
-            indicator.classList.add('tab-0-active');
-        }
-        if (btnNews) btnNews.classList.add('active');
-        if (btnPatch) btnPatch.classList.remove('active');
-    } else {
-        if (slider) {
-            slider.classList.remove('tab-0-active');
-            slider.classList.add('tab-1-active');
-        }
-        if (indicator) {
-            indicator.classList.remove('tab-0-active');
-            indicator.classList.add('tab-1-active');
-        }
-        if (btnNews) btnNews.classList.remove('active');
-        if (btnPatch) btnPatch.classList.add('active');
+    if (btnServers) btnServers.classList.remove('active');
+    if (btnNews) btnNews.classList.remove('active');
+    if (btnPatch) btnPatch.classList.remove('active');
 
-        if (allPatchNotesEntries.length === 0) {
-            loadMinecraftPatchNotes();
+    if (indicator) {
+        indicator.classList.remove('tab-servers-active', 'tab-news-active', 'tab-patch-active');
+    }
+
+    if (!hasServers) {
+        // 2 TABS MODE: News (0), Changelog (1)
+        if (tabName === 'news') {
+            if (slider) slider.style.transform = 'translateX(0%)';
+            if (indicator) {
+                indicator.style.transform = 'translateX(0%)';
+                indicator.classList.add('tab-news-active');
+            }
+            if (btnNews) btnNews.classList.add('active');
+
+            const newsContainer = document.getElementById('minecraftNewsContainer');
+            if (newsContainer && (!newsContainer.children || newsContainer.children.length === 0)) {
+                loadMinecraftNews();
+            }
+        } else if (tabName === 'patchnotes') {
+            if (slider) slider.style.transform = 'translateX(-50%)';
+            if (indicator) {
+                indicator.style.transform = 'translateX(100%)';
+                indicator.classList.add('tab-patch-active');
+            }
+            if (btnPatch) btnPatch.classList.add('active');
+
+            if (allPatchNotesEntries.length === 0) {
+                loadMinecraftPatchNotes();
+            }
+        }
+    } else {
+        // 3 TABS MODE: Servers (0), News (1), Changelog (2)
+        if (tabName === 'servers') {
+            if (slider) slider.style.transform = 'translateX(0%)';
+            if (indicator) {
+                indicator.style.transform = 'translateX(0%)';
+                indicator.classList.add('tab-servers-active');
+            }
+            if (btnServers) btnServers.classList.add('active');
+        } else if (tabName === 'news') {
+            if (slider) slider.style.transform = 'translateX(-33.333333%)';
+            if (indicator) {
+                indicator.style.transform = 'translateX(100%)';
+                indicator.classList.add('tab-news-active');
+            }
+            if (btnNews) btnNews.classList.add('active');
+
+            const newsContainer = document.getElementById('minecraftNewsContainer');
+            if (newsContainer && (!newsContainer.children || newsContainer.children.length === 0)) {
+                loadMinecraftNews();
+            }
+        } else if (tabName === 'patchnotes') {
+            if (slider) slider.style.transform = 'translateX(-66.666666%)';
+            if (indicator) {
+                indicator.style.transform = 'translateX(200%)';
+                indicator.classList.add('tab-patch-active');
+            }
+            if (btnPatch) btnPatch.classList.add('active');
+
+            if (allPatchNotesEntries.length === 0) {
+                loadMinecraftPatchNotes();
+            }
         }
     }
 }
@@ -10856,6 +12991,9 @@ if (window.hwlAPI && window.hwlAPI.onServicesDown429) {
             : `<div class="mod-dep-icon-placeholder"><i class="fas fa-puzzle-piece"></i></div>`;
 
         const authorStr = author ? (t('workshop.deps.author', { author }) || `by ${author}`) : '';
+        const typeBadgeText = dep.addon_type === 'datapack' ? (t('sidebar.data_packs') || 'Data Pack') : (t('sidebar.mods') || 'Mod');
+        const typeBadgeClass = dep.addon_type === 'datapack' ? 'mod-dep-type-datapack' : 'mod-dep-type-mod';
+        const typeBadgeHtml = dep.addon_type ? `<span class="mod-dep-type-badge ${typeBadgeClass}">${typeBadgeText}</span>` : '';
 
         return `<div id="dep-card-${dep.project_id}" class="mod-dep-card${isInstalled ? ' is-installed' : ''}">
             ${iconHtml}
@@ -10864,6 +13002,7 @@ if (window.hwlAPI && window.hwlAPI.onServicesDown429) {
                 ${authorStr ? `<div class="mod-dep-author">${esc(authorStr)}</div>` : ''}
                 ${desc ? `<div class="mod-dep-desc">${desc}</div>` : ''}
             </div>
+            ${typeBadgeHtml}
             <span class="mod-dep-badge ${badgeClass}">${badgeText}</span>
             <div class="mod-dep-progress-bg">
                 <div id="dep-progress-${dep.project_id}" class="mod-dep-progress-fill"></div>
@@ -10901,11 +13040,14 @@ if (window.hwlAPI && window.hwlAPI.onServicesDown429) {
 
         const required = depsResult.required || [];
         const optional = depsResult.optional || [];
-        const alreadyInstalled = depsResult.alreadyInstalled || [];
+
+        // If there are no required or optional dependencies to install, don't show the modal
+        if (required.length === 0 && optional.length === 0) {
+            return Promise.resolve('cancel');
+        }
 
         const reqText = t('workshop.deps.required_section') || 'Required';
         const optText = t('workshop.deps.optional_section') || 'Optional';
-        const instText = t('workshop.deps.installed_section') || 'Installed';
 
         renderSection(
             document.getElementById('modDepsRequiredList'),
@@ -10919,14 +13061,11 @@ if (window.hwlAPI && window.hwlAPI.onServicesDown429) {
             document.getElementById('modDepsOptionalSection'),
             optional, 'mod-dep-badge-optional', optText, false
         );
-        renderSection(
-            document.getElementById('modDepsInstalledList'),
-            document.getElementById('modDepsInstalledCount'),
-            document.getElementById('modDepsInstalledSection'),
-            alreadyInstalled, 'mod-dep-badge-installed', instText, true
-        );
+        // Do not display already installed dependencies in the install dependencies modal
+        const installedSection = document.getElementById('modDepsInstalledSection');
+        if (installedSection) installedSection.style.display = 'none';
 
-        const hasAny = required.length > 0 || optional.length > 0 || alreadyInstalled.length > 0;
+        const hasAny = required.length > 0 || optional.length > 0;
         if (!hasAny && emptyEl) {
             emptyEl.style.display = 'flex';
         }

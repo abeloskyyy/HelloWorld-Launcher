@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('hwlAPI', {
     createProfileShortcut: (data) => ipcRenderer.invoke('create-profile-shortcut', data),
     getPendingLaunchProfile: () => ipcRenderer.invoke('get-pending-launch-profile'),
     onAutoLaunchProfile: (callback) => ipcRenderer.on('auto-launch-profile', (event, profileId) => callback(profileId)),
+    isMinecraftRunning: () => ipcRenderer.invoke('is-minecraft-running'),
+    getMinecraftInstances: () => ipcRenderer.invoke('get-minecraft-instances'),
 
     // Mods & Skins
     searchModrinth: (query, options) => ipcRenderer.invoke('search-modrinth', { query, options }),
@@ -68,6 +70,11 @@ contextBridge.exposeInMainWorld('hwlAPI', {
     startDownloadUpdate: () => ipcRenderer.invoke('start-download-update'),
     quitAndInstall: () => ipcRenderer.invoke('quit-and-install'),
     onUpdaterStatus: (callback) => ipcRenderer.on('updater-status', (event, data) => callback(data)),
+    checkLocalInstaller: () => ipcRenderer.invoke('check-local-installer'),
+    launchInstallerAndQuit: (installerPath) => ipcRenderer.invoke('launch-installer-and-quit', installerPath),
+    downloadInstallerFile: (downloadUrl) => ipcRenderer.invoke('download-installer-file', downloadUrl),
+    onInstallerDownloadProgress: (callback) => ipcRenderer.on('installer-download-progress', (event, data) => callback(data)),
+    getPlatformInfo: () => ipcRenderer.invoke('get-platform-info'),
 
     // Onboarding
     getOnboardingStatus: () => ipcRenderer.invoke('get-onboarding-status'),
@@ -82,6 +89,12 @@ contextBridge.exposeInMainWorld('hwlAPI', {
     workshop_toggle_like: (id) => ipcRenderer.invoke('workshop-toggle-like', id),
     workshop_record_download: (id) => ipcRenderer.invoke('workshop-record-download', id),
     workshop_check_admin: () => ipcRenderer.invoke('workshop-check-admin'),
+    fetch_remote_config: () => ipcRenderer.invoke('fetch-remote-config'),
+    dismiss_announcement: (id) => ipcRenderer.invoke('dismiss-announcement', id),
+    get_dismissed_announcements: () => ipcRenderer.invoke('get-dismissed-announcements'),
+    set_maintenance_state: (active) => ipcRenderer.invoke('set-maintenance-state', active),
+    enable_admin_bypass: () => ipcRenderer.invoke('enable-admin-bypass'),
+    get_maintenance_state: () => ipcRenderer.invoke('get-maintenance-state'),
     workshop_admin_get_items: (status) => ipcRenderer.invoke('workshop-admin-get-items', status),
     workshop_moderate_item: (id, status, note, isOfficial) => ipcRenderer.invoke('workshop-moderate-item', id, status, note, isOfficial),
     workshop_delete_item: (id) => ipcRenderer.invoke('workshop-delete-item', id),
@@ -160,8 +173,12 @@ const pywebviewAPI = {
     get_loader_versions: (type, mc_version) => ipcRenderer.invoke('get-loader-versions', { type, mc_version }),
     install_version: (version_id) => ipcRenderer.invoke('install-version', version_id),
     get_launcher_version: () => ipcRenderer.invoke('get-version'),
-    start_game: (profileId, nickname, force, serverIp) => ipcRenderer.invoke('launch-profile', { profileId, nickname, force, serverIp }),
+    is_minecraft_running: () => ipcRenderer.invoke('is-minecraft-running'),
+    get_minecraft_instances: () => ipcRenderer.invoke('get-minecraft-instances'),
+    start_game: (profileId, nickname, force, serverIp, saveServer) => ipcRenderer.invoke('launch-profile', { profileId, nickname, force, serverIp, saveServer }),
     cancel_launch: () => ipcRenderer.invoke('cancel-launch'),
+    add_server_to_servers_dat: (serverIp, profileId, serverName) => ipcRenderer.invoke('add-server-to-servers-dat', serverIp, profileId, serverName),
+    get_featured_server_status: (ip) => ipcRenderer.invoke('get-featured-server-status', ip),
 
     // Settings
     save_version_settings: (showSnapshots, showOld) => ipcRenderer.invoke('save-version-settings', showSnapshots, showOld),
@@ -208,9 +225,10 @@ const pywebviewAPI = {
         ipcRenderer.invoke('install-addon', {
             project_id, version_id, profile_id, type, world_name, force_reinstall
         }),
-    resolve_mod_dependencies: (version_id, game_version, loader, profile_id) =>
-        ipcRenderer.invoke('resolve-mod-dependencies', { version_id, game_version, loader, profile_id }),
+    resolve_mod_dependencies: (version_id, game_version, loader, profile_id, installed_project_ids, world_name, content_type) =>
+        ipcRenderer.invoke('resolve-mod-dependencies', { version_id, game_version, loader, profile_id, installed_project_ids, world_name, content_type }),
     resolve_modpack_compatibility: (opts) => ipcRenderer.invoke('resolve-modpack-compatibility', opts),
+    check_addon_updates: (opts) => ipcRenderer.invoke('check-addon-updates', opts),
     on_mod_download_progress: (callback) => ipcRenderer.on('mod-download-progress', (_event, data) => callback(data)),
     toggle_mod: (arg1, arg2, arg3, arg4, arg5) => {
         // Handle multiple signatures:
@@ -242,7 +260,7 @@ const pywebviewAPI = {
     },
     delete_mod: (profile_id, filename) => ipcRenderer.invoke('delete-addon', { filename, profile_id, type: 'mod' }),
     delete_addon: (filename, profile_id, type, world_name) => ipcRenderer.invoke('delete-addon', { filename, profile_id, type, world_name }),
-    delete_addon_file: (profile_id, type, filename) => ipcRenderer.invoke('delete-addon-file', { profile_id, type, filename }),
+    delete_addon_file: (profile_id, type, filename, world_name) => ipcRenderer.invoke('delete-addon-file', { profile_id, type, filename, world_name }),
 
     // Misc
     check_review_reminder: () => ipcRenderer.invoke('check-review-reminder'),
@@ -251,6 +269,11 @@ const pywebviewAPI = {
     openUrl: (url) => ipcRenderer.invoke('open-url', url),
     openExternal: (url) => ipcRenderer.invoke('open-url', url),
     ms_write_verified: (emailKey, email, username, uuid, firebaseUid, firebaseRefreshToken) => ipcRenderer.invoke('ms-write-verified', emailKey, email, username, uuid, firebaseUid, firebaseRefreshToken),
+    check_local_installer: () => ipcRenderer.invoke('check-local-installer'),
+    launch_installer_and_quit: (installerPath) => ipcRenderer.invoke('launch-installer-and-quit', installerPath),
+    download_installer_file: (downloadUrl) => ipcRenderer.invoke('download-installer-file', downloadUrl),
+    on_installer_download_progress: (callback) => ipcRenderer.on('installer-download-progress', (event, data) => callback(data)),
+    get_platform_info: () => ipcRenderer.invoke('get-platform-info'),
 
     // UI Dialogs
     info: (msg) => ipcRenderer.invoke('info', msg),
@@ -313,8 +336,14 @@ const pywebviewAPI = {
     workshop_toggle_like: (id) => ipcRenderer.invoke('workshop-toggle-like', id),
     workshop_record_download: (id) => ipcRenderer.invoke('workshop-record-download', id),
 
-    // Workshop Admin
+    // Workshop Admin & Maintenance
     workshop_check_admin: () => ipcRenderer.invoke('workshop-check-admin'),
+    fetch_remote_config: () => ipcRenderer.invoke('fetch-remote-config'),
+    dismiss_announcement: (id) => ipcRenderer.invoke('dismiss-announcement', id),
+    get_dismissed_announcements: () => ipcRenderer.invoke('get-dismissed-announcements'),
+    set_maintenance_state: (active) => ipcRenderer.invoke('set-maintenance-state', active),
+    enable_admin_bypass: () => ipcRenderer.invoke('enable-admin-bypass'),
+    get_maintenance_state: () => ipcRenderer.invoke('get-maintenance-state'),
     workshop_admin_get_items: (status) => ipcRenderer.invoke('workshop-admin-get-items', status),
     workshop_moderate_item: (id, status, note, isOfficial) => ipcRenderer.invoke('workshop-moderate-item', id, status, note, isOfficial),
     workshop_delete_item: (id) => ipcRenderer.invoke('workshop-delete-item', id),
@@ -397,7 +426,7 @@ ipcRenderer.on('open-account-switcher', () => {
 // Expose electronAPI for direct event listening
 contextBridge.exposeInMainWorld('electronAPI', {
     on: (channel, callback) => {
-        const validChannels = ['download-progress', 'download-complete', 'download-cancelled', 'info-message', 'login-update', 'reload-profiles', 'show-in-app-notification', 'stats-updated'];
+        const validChannels = ['download-progress', 'download-complete', 'download-cancelled', 'info-message', 'login-update', 'reload-profiles', 'show-in-app-notification', 'stats-updated', 'game-status'];
         if (validChannels.includes(channel)) {
             ipcRenderer.on(channel, (event, data) => callback(data));
         }

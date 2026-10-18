@@ -55,6 +55,47 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('[Global Error] Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
+// Clean exit handlers to avoid npm / PowerShell reporting "electron.exe exited with signal SIGINT" on Ctrl+C
+let isTerminating = false;
+const handleGracefulTermination = () => {
+  if (isTerminating) return;
+  isTerminating = true;
+  try { isQuitting = true; } catch (_) {}
+  try {
+    if (typeof tray !== 'undefined' && tray && !tray.isDestroyed()) {
+      tray.destroy();
+    }
+  } catch (_) {}
+  try {
+    if (typeof activeDownloads !== 'undefined' && activeDownloads) {
+      for (const [version_id, info] of activeDownloads) {
+        try {
+          if (info.gameProcess && info.gameProcess.pid) {
+            process.kill(info.gameProcess.pid, 'SIGKILL');
+          }
+        } catch (_) {}
+      }
+      activeDownloads.clear();
+    }
+  } catch (_) {}
+  try {
+    if (app && !app.isDestroyed?.()) {
+      app.exit(0);
+    }
+  } catch (_) {}
+  process.exit(0);
+};
+
+process.on('SIGINT', handleGracefulTermination);
+process.on('SIGTERM', handleGracefulTermination);
+process.on('SIGBREAK', handleGracefulTermination);
+
+if (!app.isPackaged && process.platform === 'win32' && process.stdin && process.stdin.isTTY) {
+  try {
+    process.stdin.resume();
+  } catch (_) {}
+}
+
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.abelosky.helloworldlauncher');
 }
@@ -256,7 +297,11 @@ launcher.on('progress', (e) => {
     mainWindow && mainWindow.webContents.send('download-progress', e);
   }
 })
-launcher.on('close', handleLauncherClose);
+launcher.on('close', (code) => {
+  // Global close event from MCLC client emitter.
+  // Note: Individual processes manage their own lifecycle via child.on('close')
+  // and process monitor, so we do not close the entire launcher game state here.
+});
 
 let mainWindow = null
 
@@ -546,8 +591,7 @@ function loadSecrets() {
     FIREBASE_API_KEY: "", // Loaded from secrets.json
     FIREBASE_PROJECT_ID: "helloworld-launcher",
     WORKSHOP_DISCORD_WEBHOOK: "",
-    WORKSHOP_ADMIN_UID: "",
-    WORKSHOP_MODERATOR_UIDS: []
+    REMOTE_CONFIG_GIST_URL: "https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json"
   };
   const candidates = [
     path.join(__dirname, 'secrets.json'),
@@ -629,6 +673,10 @@ function buildFSFields(obj) {
   }
   return fields;
 }
+
+// --- Maintenance State & Admin Bypass ---
+let _isMaintenanceActive = false;
+let _adminBypassGranted = false;
 
 // --- Social Helper: Firestore REST calls ---
 async function fsGet(docPath, idToken) {
@@ -1445,6 +1493,275 @@ async function fetchPresenceForUser(uid, auth, fsDocId = null) {
   }
 }
 
+// --- Minecraft Process, Window & Daily Streak Detection ---
+let activeGameProcesses = new Set(); // Internal ChildProcess instances
+const internalGameProcessesMeta = new Map(); // child -> { pid, startTime, streakTimer, windowPollTimer }
+let externalMinecraftPids = new Set(); // External detected PIDs (e.g. opened before launcher or externally)
+const externalProcessesMeta = new Map(); // pid -> { startTime, firstDetectedAt }
+let processMonitorInterval = null;
+let lastStreakRecordedDateStr = null;
+let lastKnownRunningState = false;
+
+function parseCsvLine(line) {
+  const result = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(cur.trim());
+      cur = '';
+    } else {
+      cur += char;
+    }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+function isMinecraftGameWindowTitle(rawTitle) {
+  if (!rawTitle || typeof rawTitle !== 'string') return false;
+  const t = rawTitle.toLowerCase().trim();
+  if (!t.includes('minecraft')) return false;
+  // Exclude standalone launcher UI windows or headless servers if running in java
+  if (t.includes('minecraft server') && !t.includes('1.')) return false;
+  if (t.endsWith('launcher') || t.includes('launcher -')) return false;
+  return true;
+}
+
+function detectSystemMinecraftProcesses() {
+  return new Promise((resolve) => {
+    if (process.platform === 'win32') {
+      const commands = [
+        'tasklist /v /fo csv /fi "IMAGENAME eq javaw.exe"',
+        'tasklist /v /fo csv /fi "IMAGENAME eq java.exe"'
+      ];
+      const results = new Map();
+      let pending = commands.length;
+      commands.forEach(cmd => {
+        const { exec } = require('child_process');
+        exec(cmd, { windowsHide: true, timeout: 3500 }, (err, stdout) => {
+          if (!err && stdout) {
+            const lines = stdout.split(/\r?\n/).filter(l => l.trim().length > 0);
+            for (let i = 1; i < lines.length; i++) {
+              const cols = parseCsvLine(lines[i]);
+              if (cols.length >= 9) {
+                const pid = parseInt(cols[1], 10);
+                const rawTitle = cols[8].replace(/^"|"$/g, '').trim();
+                if (pid && isMinecraftGameWindowTitle(rawTitle)) {
+                  results.set(pid, {
+                    imageName: cols[0].replace(/^"|"$/g, '').trim(),
+                    title: rawTitle
+                  });
+                }
+              }
+            }
+          }
+          pending--;
+          if (pending === 0) resolve(results);
+        });
+      });
+    } else if (process.platform === 'darwin' || process.platform === 'linux') {
+      const { exec } = require('child_process');
+      const results = new Map();
+      const parsePsOutput = (stdout) => {
+        const lines = stdout.split(/\r?\n/).filter(l => l.trim().length > 0);
+        for (const line of lines) {
+          const lower = line.toLowerCase();
+          if ((lower.includes('minecraft') || lower.includes('net.minecraft')) && (lower.includes('java') || lower.includes('/java'))) {
+            const match = line.trim().match(/^(\d+)\s+(.+)$/);
+            if (match) {
+              const pid = parseInt(match[1], 10);
+              if (pid && pid !== process.pid) {
+                results.set(pid, { imageName: 'java', title: match[2] });
+              }
+            }
+          }
+        }
+      };
+
+      if (process.platform === 'linux') {
+        exec('wmctrl -lp', { timeout: 2000 }, (err, stdout) => {
+          if (!err && stdout) {
+            const lines = stdout.split(/\r?\n/).filter(l => l.trim().length > 0);
+            for (const line of lines) {
+              if (line.toLowerCase().includes('minecraft')) {
+                const parts = line.trim().split(/\s+/);
+                if (parts.length >= 3) {
+                  const pid = parseInt(parts[2], 10);
+                  if (pid) results.set(pid, { imageName: 'java', title: line });
+                }
+              }
+            }
+          }
+          if (results.size > 0) return resolve(results);
+          // Fallback to ps command if wmctrl is not installed or returned no window
+          exec('ps -ax -o pid,command', { timeout: 2500 }, (pErr, pStdout) => {
+            if (!pErr && pStdout) parsePsOutput(pStdout);
+            resolve(results);
+          });
+        });
+      } else {
+        // macOS: Native process list inspection
+        exec('ps -ax -o pid,command', { timeout: 2500 }, (pErr, pStdout) => {
+          if (!pErr && pStdout) parsePsOutput(pStdout);
+          resolve(results);
+        });
+      }
+    } else {
+      resolve(new Map());
+    }
+  });
+}
+
+function getRunningMinecraftCount() {
+  const allRunningPids = new Set();
+  for (const child of activeGameProcesses) {
+    if (child && child.pid && !child.killed) {
+      allRunningPids.add(child.pid);
+    }
+  }
+  for (const pid of externalMinecraftPids) {
+    allRunningPids.add(pid);
+  }
+  return allRunningPids.size;
+}
+
+function isMinecraftRunning() {
+  return getRunningMinecraftCount() > 0;
+}
+
+async function addPlaytimeToUserStats(playTimeHours) {
+  if (playTimeHours <= 0 || isLaunchCancelled) return;
+  try {
+    const auth = await getSocialAuth().catch(() => null);
+    if (!auth) return;
+    let stats;
+    try {
+      stats = await fsGet(`users/${auth.uid}/stats/main`, auth.idToken);
+    } catch (e) {
+      stats = { totalHours: 0 };
+    }
+    const newHours = (stats.totalHours || 0) + playTimeHours;
+    await fsSet(`users/${auth.uid}/stats/main`, { ...stats, totalHours: newHours }, auth.idToken);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('stats-updated');
+    }
+    console.log(`[Stats] Added ${playTimeHours.toFixed(3)}h playtime. New total: ${newHours.toFixed(2)}h`);
+  } catch (err) {
+    console.error('[Stats] Error updating playtime:', err.message);
+  }
+}
+
+async function checkDailyStreakForRunningGame() {
+  if (!isMinecraftRunning()) return;
+
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+
+  // If already confirmed recorded for today in this session, skip
+  if (lastStreakRecordedDateStr === todayStr) return;
+
+  const auth = await getSocialAuth().catch(() => null);
+  if (!auth) return;
+
+  try {
+    let stats;
+    try {
+      stats = await fsGet(`users/${auth.uid}/stats/main`, auth.idToken);
+    } catch (e) {
+      stats = null;
+    }
+    const lastDate = stats && stats.lastPlayed ? new Date(stats.lastPlayed).toISOString().split('T')[0] : null;
+
+    if (lastDate === todayStr) {
+      lastStreakRecordedDateStr = todayStr;
+      return;
+    }
+
+    console.log(`[Streak] Minecraft is running on a new day (${todayStr}, lastPlayed was ${lastDate}). Updating streak!`);
+    await updateStreakAndSessions();
+    lastStreakRecordedDateStr = todayStr;
+  } catch (err) {
+    console.warn('[Streak] Error checking daily streak:', err.message);
+  }
+}
+
+async function pollMinecraftProcesses() {
+  try {
+    const systemProcs = await detectSystemMinecraftProcesses();
+    const systemPids = new Set(systemProcs.keys());
+
+    const internalPids = new Set();
+    for (const child of activeGameProcesses) {
+      if (child && child.pid && !child.killed) {
+        internalPids.add(child.pid);
+      }
+    }
+
+    const newExternalPids = new Set();
+    for (const pid of systemPids) {
+      if (!internalPids.has(pid)) {
+        newExternalPids.add(pid);
+        if (!externalProcessesMeta.has(pid)) {
+          externalProcessesMeta.set(pid, {
+            startTime: Date.now(),
+            firstDetectedAt: Date.now()
+          });
+        }
+      }
+    }
+
+    // Process closed external processes
+    for (const [pid, meta] of externalProcessesMeta) {
+      if (!newExternalPids.has(pid)) {
+        const elapsedMs = Date.now() - meta.startTime;
+        if (elapsedMs >= 30000 && !isLaunchCancelled) {
+          addPlaytimeToUserStats(elapsedMs / (1000 * 60 * 60)).catch(() => {});
+        }
+        externalProcessesMeta.delete(pid);
+      }
+    }
+
+    externalMinecraftPids = newExternalPids;
+    const currentlyRunning = isMinecraftRunning();
+
+    // Check daily streak for any running game instance
+    if (currentlyRunning) {
+      await checkDailyStreakForRunningGame();
+    }
+
+    // State transitions
+    if (!lastKnownRunningState && currentlyRunning) {
+      lastKnownRunningState = true;
+      console.log(`[ProcessMonitor] Minecraft process detected running (count: ${getRunningMinecraftCount()})`);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('info-message', 'Game Ready');
+        mainWindow.webContents.send('game-status', { running: true, count: getRunningMinecraftCount() });
+      }
+    } else if (lastKnownRunningState && !currentlyRunning) {
+      lastKnownRunningState = false;
+      console.log('[ProcessMonitor] All Minecraft processes closed');
+      handleLauncherClose('all_processes_closed');
+    }
+  } catch (err) {
+    console.warn('[ProcessMonitor] Polling error:', err.message);
+  }
+}
+
+function startMinecraftProcessMonitor() {
+  if (processMonitorInterval) return;
+  pollMinecraftProcesses();
+  processMonitorInterval = setInterval(pollMinecraftProcesses, 3500);
+}
+
 let gameStartTime = null;
 let streakSessionTimer = null;
 let streakCountedThisRun = false;
@@ -1457,6 +1774,8 @@ function triggerStreakUpdate() {
     streakSessionTimer = null;
   }
   console.log('[Stats] Gameplay threshold met (in-game world/server or verified active playtime), recording streak and session');
+  const now = new Date();
+  lastStreakRecordedDateStr = now.toISOString().split('T')[0];
   updateStreakAndSessions();
 }
 
@@ -1513,8 +1832,16 @@ async function updateStreakAndSessions() {
 }
 
 async function handleLauncherClose(e) {
+  if (isMinecraftRunning()) {
+    console.log(`[handleLauncherClose] Ignored: ${getRunningMinecraftCount()} instance(s) still active.`);
+    return;
+  }
   console.log('[Launcher Close]', e);
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('info-message', 'Game Closed');
+  lastKnownRunningState = false;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('info-message', 'Game Closed');
+    mainWindow.webContents.send('game-status', { running: false, count: 0 });
+  }
   presenceManager.safeRun(presenceManager.onGameClosed());
 
   if (streakSessionTimer) {
@@ -1526,31 +1853,11 @@ async function handleLauncherClose(e) {
     const elapsedMs = Date.now() - gameStartTime;
     gameStartTime = null;
 
-    // Only count playtime and streak if the game was actually played for at least 30s and was not cancelled
     if (elapsedMs >= 30000 && !isLaunchCancelled) {
       if (!streakCountedThisRun) {
         triggerStreakUpdate();
       }
-      const playTimeHours = elapsedMs / (1000 * 60 * 60);
-      try {
-        const auth = await getSocialAuth().catch(() => null);
-        if (auth) {
-          let stats;
-          try {
-            stats = await fsGet(`users/${auth.uid}/stats/main`, auth.idToken);
-          } catch (e) {
-            stats = { totalHours: 0 };
-          }
-          const newHours = (stats.totalHours || 0) + playTimeHours;
-          await fsSet(`users/${auth.uid}/stats/main`, { ...stats, totalHours: newHours }, auth.idToken);
-          
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('stats-updated');
-          }
-        }
-      } catch (err) {
-        console.error('[Stats] Error updating playtime:', err.message);
-      }
+      addPlaytimeToUserStats(elapsedMs / (1000 * 60 * 60)).catch(() => {});
     } else {
       console.log(`[Stats] Game session under 30s (${(elapsedMs / 1000).toFixed(1)}s) or cancelled, skipping streak and playtime.`);
     }
@@ -2482,7 +2789,17 @@ function startLocalServer() {
         res.end(data);
       });
     });
-    srv.listen(0, '127.0.0.1', () => {
+    const PREFERRED_PORT = 51290;
+    srv.once('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        srv.listen(0, '127.0.0.1', () => {
+          localPort = srv.address().port;
+          console.log('[LocalServer] Running on fallback port', localPort);
+          resolve(localPort);
+        });
+      }
+    });
+    srv.listen(PREFERRED_PORT, '127.0.0.1', () => {
       localPort = srv.address().port;
       console.log('[LocalServer] Running on port', localPort);
       resolve(localPort);
@@ -2763,8 +3080,47 @@ const createWindow = async () => {
     minHeight: 650
   })
 
-  win.maximize();
-  Menu.setApplicationMenu(null);
+  if (process.platform === 'darwin') {
+    const macMenuTemplate = [
+      {
+        label: app.name,
+        submenu: [
+          { role: 'about' },
+          { type: 'separator' },
+          { role: 'services' },
+          { type: 'separator' },
+          { role: 'hide' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          { role: 'quit' }
+        ]
+      },
+      {
+        label: 'Edit',
+        submenu: [
+          { role: 'undo' },
+          { role: 'redo' },
+          { type: 'separator' },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
+          { role: 'selectAll' }
+        ]
+      },
+      {
+        label: 'Window',
+        submenu: [
+          { role: 'minimize' },
+          { role: 'zoom' },
+          { role: 'close' }
+        ]
+      }
+    ];
+    Menu.setApplicationMenu(Menu.buildFromTemplate(macMenuTemplate));
+  } else {
+    Menu.setApplicationMenu(null);
+  }
 
   // Force repaint when window gains focus or is restored from background
   win.on('focus', () => {
@@ -2813,6 +3169,12 @@ const createWindow = async () => {
 
   win.webContents.on('did-finish-load', () => {
     win.webContents.send('sys-ready');
+    pollMinecraftProcesses().then(() => {
+      if (isMinecraftRunning() && win && !win.isDestroyed()) {
+        win.webContents.send('info-message', 'Game Ready');
+        win.webContents.send('game-status', { running: true, count: getRunningMinecraftCount() });
+      }
+    }).catch(() => {});
     if (pendingAutoLaunchProfileId) {
       const pid = pendingAutoLaunchProfileId;
       pendingAutoLaunchProfileId = null;
@@ -2861,6 +3223,9 @@ const createWindow = async () => {
   });
 
   mainWindow = win;
+
+  // Start Minecraft process & window detection monitor
+  startMinecraftProcessMonitor();
 
   if (presenceManager.canUsePresence()) {
     presenceManager.safeRun(presenceManager.setLauncherOnline());
@@ -3223,6 +3588,7 @@ ipcMain.handle('login-helloworld', async (e, identifier, password) => {
 })
 
 ipcMain.handle('logout', async () => {
+  _adminBypassGranted = false;
   stopMessagePolling();
   stopPresencePolling();
   presenceManager.safeRun(presenceManager.setOffline());
@@ -3338,6 +3704,7 @@ ipcMain.handle('remove-all-accounts', async () => {
 })
 
 ipcMain.handle('switch-account', async (e, accountId, targetType = null) => {
+  _adminBypassGranted = false;
   try {
     const accounts = loadSavedAccounts();
     let acc = null;
@@ -3607,7 +3974,7 @@ ipcMain.handle('get-profiles-for-addon', async (e, type) => {
       continue;
     }
 
-    if (version.includes('forge') || version.includes('fabric') || version.includes('quilt') || version.includes('neoforge') || version.includes('optifine')) {
+    if (version.includes('forge') || version.includes('fabric') || version.includes('neoforge') || version.includes('optifine')) {
       filtered[id] = profile;
     }
   }
@@ -3782,7 +4149,7 @@ ipcMain.handle('create-profile-shortcut', async (e, arg1, arg2, arg3) => {
       target: process.execPath,
       args,
       cwd: path.dirname(process.execPath),
-      appUserModelId: 'com.abelosky.helloworldlauncher',
+      appUserModelId: `com.abelosky.helloworldlauncher.profile.${profileId}`,
       description: `${profileName} - HelloWorld Launcher`,
       icon: icoPath,
       iconIndex: 0
@@ -3828,8 +4195,83 @@ ipcMain.handle('get-mod-categories', async (e) => modManager.getModCategories())
 ipcMain.handle('get-mod-versions', async (e, { project_id, game_version, loader }) => modManager.getModVersions(project_id, game_version, loader))
 ipcMain.handle('get-mod-details', async (e, id) => modManager.getModDetails(id))
 ipcMain.handle('get-multiple-mod-details', async (e, ids) => modManager.getMultipleModDetails(ids))
-ipcMain.handle('resolve-mod-dependencies', async (e, { version_id, game_version, loader }) => modManager.resolveModDependencies(version_id, game_version, loader))
+ipcMain.handle('resolve-mod-dependencies', async (e, { version_id, game_version, loader, profile_id, installed_project_ids, world_name, content_type }) => {
+  const installedProjectIds = new Set(Array.isArray(installed_project_ids) && content_type !== 'datapack' ? installed_project_ids : []);
+  const installedFilenames = new Set();
+  const installedDatapackProjectIds = new Set(Array.isArray(installed_project_ids) && content_type === 'datapack' ? installed_project_ids : []);
+  const installedDatapackFilenames = new Set();
+
+  if (profile_id) {
+    try {
+      const profilesData = profileManager.loadProfiles();
+      const profile = profilesData?.profiles?.[profile_id];
+      if (profile) {
+        if (Array.isArray(profile.addons)) {
+          for (const addon of profile.addons) {
+            if (addon.type === 'datapack') {
+              if (!world_name || !addon.world_name || addon.world_name === world_name) {
+                if (addon.project_id) installedDatapackProjectIds.add(String(addon.project_id).toLowerCase());
+                if (addon.filename) {
+                  installedDatapackFilenames.add(addon.filename.toLowerCase());
+                  if (addon.filename.endsWith('.disabled')) {
+                    installedDatapackFilenames.add(addon.filename.slice(0, -9).toLowerCase());
+                  }
+                }
+              }
+            } else {
+              // Mods (and resourcepacks/shaders)
+              if (addon.project_id) installedProjectIds.add(String(addon.project_id).toLowerCase());
+              if (addon.filename) {
+                installedFilenames.add(addon.filename.toLowerCase());
+                if (addon.filename.endsWith('.disabled')) {
+                  installedFilenames.add(addon.filename.slice(0, -9).toLowerCase());
+                }
+              }
+            }
+          }
+        }
+        const mcDir = paths.getMcDir();
+        const profileDir = profile.directory || mcDir;
+        const modsDir = path.join(profileDir, 'mods');
+        if (fs.existsSync(modsDir)) {
+          const files = await fs.readdir(modsDir);
+          for (const f of files) {
+            installedFilenames.add(f.toLowerCase());
+            if (f.endsWith('.disabled')) {
+              installedFilenames.add(f.slice(0, -9).toLowerCase());
+            }
+          }
+        }
+        if (world_name) {
+          const dpDir = path.join(profileDir, 'saves', world_name, 'datapacks');
+          if (fs.existsSync(dpDir)) {
+            const files = await fs.readdir(dpDir);
+            for (const f of files) {
+              installedDatapackFilenames.add(f.toLowerCase());
+              if (f.endsWith('.disabled')) {
+                installedDatapackFilenames.add(f.slice(0, -9).toLowerCase());
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[resolve-mod-dependencies] Error resolving installed addons for profile:', err.message);
+    }
+  }
+
+  return modManager.resolveModDependencies(
+    version_id,
+    game_version,
+    loader,
+    installedProjectIds,
+    installedFilenames,
+    installedDatapackProjectIds,
+    installedDatapackFilenames
+  );
+})
 ipcMain.handle('resolve-modpack-compatibility', async (e, args) => modManager.resolveModpackCompatibility(args))
+ipcMain.handle('check-addon-updates', async (e, args) => modManager.checkAddonUpdates(args))
 
 ipcMain.handle('install-addon', async (e, args) => {
   try {
@@ -3847,7 +4289,7 @@ ipcMain.handle('install-addon', async (e, args) => {
       // Resolve URL from Version ID if provided
       if (!url && version_id) {
         console.log('[install-addon] Resolving version ID:', version_id);
-        const vInfo = await modManager.getVersionFromId(version_id);
+        const vInfo = await modManager.getVersionFromId(version_id, type);
         if (!vInfo.success) {
           console.error('[install-addon] Version resolution failed:', vInfo.error);
           return { success: false, error: "Could not resolve version info: " + vInfo.error };
@@ -3888,7 +4330,6 @@ ipcMain.handle('install-addon', async (e, args) => {
             if (deps['fabric-loader']) loaderStr = `Fabric ${mcVer} (${deps['fabric-loader']})`;
             else if (deps['forge']) loaderStr = `Forge ${mcVer} (${deps['forge']})`;
             else if (deps['neoforge']) loaderStr = `NeoForge ${mcVer} (${deps['neoforge']})`;
-            else if (deps['quilt-loader']) loaderStr = `Quilt ${mcVer} (${deps['quilt-loader']})`;
             if (!profile.version || profile.version === 'Vanilla' || profile.version.startsWith('Vanilla')) {
               profile.version = loaderStr;
             }
@@ -3925,15 +4366,73 @@ ipcMain.handle('install-addon', async (e, args) => {
         }
       }
 
+      // Collect old files for this project to remove upon reinstall/version update
+      const oldFilesToRemove = new Set();
+      if (profile.addons && project_id) {
+        for (const a of profile.addons) {
+          if (a.project_id === project_id && a.filename) {
+            if (type === 'datapack' && a.world_name && args.world_name && a.world_name !== args.world_name) continue;
+            oldFilesToRemove.add(a.filename);
+          }
+        }
+      }
+      if (type === 'mod' && project_id) {
+        try {
+          const modDetails = await modManager.getModDetails(project_id);
+          if (modDetails && modDetails.slug && fs.existsSync(targetDir)) {
+            const slug = String(modDetails.slug).toLowerCase();
+            const existingFiles = await fs.readdir(targetDir);
+            const otherProjectFilenames = new Set(
+              (profile.addons || [])
+                .filter(a => a.project_id !== project_id && a.filename)
+                .map(a => a.filename.toLowerCase())
+            );
+            for (const ef of existingFiles) {
+              const efLower = ef.toLowerCase();
+              if (otherProjectFilenames.has(efLower)) continue;
+              const cleanEf = efLower.replace(/\.disabled$/, '').replace(/\.jar$/, '');
+              if (cleanEf === slug || cleanEf.startsWith(slug + '-') || cleanEf.startsWith(slug + '_') || cleanEf.startsWith(slug + '+')) {
+                oldFilesToRemove.add(ef);
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
       const targetFile = path.join(targetDir, filename);
       if (fs.existsSync(targetFile) && !args.force_reinstall) {
         console.log('[install-addon] File already exists, skipping download:', filename);
 
+        // Delete any older files for this project if filename changed
+        for (const oldFile of oldFilesToRemove) {
+          if (oldFile && oldFile !== filename) {
+            try {
+              const oldPath = path.join(targetDir, oldFile);
+              if (fs.existsSync(oldPath)) await fs.remove(oldPath);
+              const oldDisabledPath = path.join(targetDir, oldFile + '.disabled');
+              if (fs.existsSync(oldDisabledPath)) await fs.remove(oldDisabledPath);
+              console.log('[install-addon] Deleted old mod file on reinstall/update:', oldFile);
+            } catch (_) {}
+          }
+        }
+
         // Update profile JSON addons metadata anyway to ensure it's tracked
         if (project_id && version_id) {
           profile.addons = profile.addons || [];
-          profile.addons = profile.addons.filter(a => a.project_id !== project_id && a.filename !== filename);
-          profile.addons.push({ project_id, version_id, filename, type, state: 'enabled' });
+          profile.addons = profile.addons.filter(a => {
+            if (type === 'datapack') {
+              return !(a.project_id === project_id && a.type === 'datapack' && a.world_name === args.world_name);
+            }
+            return a.project_id !== project_id && a.filename !== filename && !oldFilesToRemove.has(a.filename);
+          });
+          profile.addons.push({
+            project_id,
+            version_id,
+            filename,
+            type,
+            world_name: type === 'datapack' ? args.world_name : undefined,
+            state: 'enabled'
+          });
           profileManager.saveProfiles(profilesData);
         }
 
@@ -3949,19 +4448,53 @@ ipcMain.handle('install-addon', async (e, args) => {
         }
       });
 
-      // Update profile JSON with addon metadata after successful download
-      if (result.success && project_id && version_id) {
-        profile.addons = profile.addons || [];
-        // Remove older version of same mod
-        profile.addons = profile.addons.filter(a => a.project_id !== project_id);
-        profile.addons.push({
-          project_id,
-          version_id,
-          filename,
-          type,
-          state: 'enabled'
-        });
-        profileManager.saveProfiles(profilesData);
+      // Delete older file(s) for this project on reinstall/version update since filename can change
+      if (result.success) {
+        for (const oldFile of oldFilesToRemove) {
+          if (oldFile && oldFile !== filename) {
+            try {
+              const oldPath = path.join(targetDir, oldFile);
+              if (fs.existsSync(oldPath)) {
+                await fs.remove(oldPath);
+                console.log('[install-addon] Deleted old mod file on reinstall/update:', oldPath);
+              }
+              const oldDisabledPath = path.join(targetDir, oldFile + '.disabled');
+              if (fs.existsSync(oldDisabledPath)) {
+                await fs.remove(oldDisabledPath);
+                console.log('[install-addon] Deleted old disabled mod file on reinstall/update:', oldDisabledPath);
+              }
+            } catch (delErr) {
+              console.warn('[install-addon] Failed to delete old mod file:', oldFile, delErr.message);
+            }
+          }
+        }
+
+        // Also if the new file had a leftover .disabled file, clean it up
+        try {
+          const newDisabled = path.join(targetDir, filename + '.disabled');
+          if (fs.existsSync(newDisabled)) await fs.remove(newDisabled);
+        } catch (_) {}
+
+        // Update profile JSON with addon metadata after successful download
+        if (project_id && version_id) {
+          profile.addons = profile.addons || [];
+          // Remove older version of same addon
+          profile.addons = profile.addons.filter(a => {
+            if (type === 'datapack') {
+              return !(a.project_id === project_id && a.type === 'datapack' && a.world_name === args.world_name);
+            }
+            return a.project_id !== project_id && !oldFilesToRemove.has(a.filename);
+          });
+          profile.addons.push({
+            project_id,
+            version_id,
+            filename,
+            type,
+            world_name: type === 'datapack' ? args.world_name : undefined,
+            state: 'enabled'
+          });
+          profileManager.saveProfiles(profilesData);
+        }
       }
 
       return result;
@@ -4031,8 +4564,23 @@ ipcMain.handle('get-installed-addons', async (e, { profile_id, type, world_name 
   const finalMods = result.success ? result.mods : [];
 
   if (profile.addons) {
+    let profileModified = false;
     profile.addons.forEach(addon => {
       if (addon.type !== type) return;
+
+      if (type === 'datapack') {
+        if (addon.world_name) {
+          if (addon.world_name !== world_name) return;
+        } else {
+          // If legacy addon entry without world_name, check if file exists in this world
+          if (existingFilesMap.has(addon.filename)) {
+            addon.world_name = world_name;
+            profileModified = true;
+          } else {
+            return;
+          }
+        }
+      }
 
       const existingMod = existingFilesMap.get(addon.filename);
       const isEnabled = addon.state ? (addon.state !== 'disabled') : (addon.enabled !== false);
@@ -4056,6 +4604,9 @@ ipcMain.handle('get-installed-addons', async (e, { profile_id, type, world_name 
         });
       }
     });
+    if (profileModified) {
+      try { profileManager.saveProfiles(profilesData); } catch (_) {}
+    }
   }
 
   return { success: true, mods: finalMods };
@@ -4076,7 +4627,11 @@ ipcMain.handle('toggle-addon', async (e, { filename, profile_id, type, world_nam
   if (type === 'datapack') targetDir = path.join(profileDir, 'saves', world_name, 'datapacks');
 
   // Find the addon in profile metadata
-  const addonIndex = profile.addons ? profile.addons.findIndex(a => a.filename === filename && a.type === type) : -1;
+  const addonIndex = profile.addons ? profile.addons.findIndex(a => {
+    if (a.filename !== filename || a.type !== type) return false;
+    if (type === 'datapack' && a.world_name && a.world_name !== world_name) return false;
+    return true;
+  }) : -1;
 
   if (addonIndex === -1) {
     // If not in metadata, just rename the file on disk
@@ -4133,7 +4688,7 @@ ipcMain.handle('toggle-addon', async (e, { filename, profile_id, type, world_nam
   return { success: true, new_name: newFilename };
 })
 
-ipcMain.handle('delete-addon-file', async (e, { profile_id, type, filename }) => {
+ipcMain.handle('delete-addon-file', async (e, { profile_id, type, filename, world_name }) => {
   try {
     const profilesData = profileManager.loadProfiles();
     const profile = profilesData.profiles[profile_id];
@@ -4143,6 +4698,7 @@ ipcMain.handle('delete-addon-file', async (e, { profile_id, type, filename }) =>
     let targetDir = path.join(profileDir, 'mods');
     if (type === 'resourcepack') targetDir = path.join(profileDir, 'resourcepacks');
     if (type === 'shader') targetDir = path.join(profileDir, 'shaderpacks');
+    if (type === 'datapack') targetDir = path.join(profileDir, 'saves', world_name, 'datapacks');
     const filePath = path.join(targetDir, filename);
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     return { success: true };
@@ -4166,14 +4722,24 @@ ipcMain.handle('delete-addon', async (e, { filename, profile_id, type, world_nam
   if (type === 'datapack') targetDir = path.join(profileDir, 'saves', world_name, 'datapacks');
 
   // Find the addon in metadata to get the actual filename (with or without .disabled)
-  const addon = profile.addons ? profile.addons.find(a => a.filename === filename && a.type === type) : null;
+  const addon = profile.addons ? profile.addons.find(a => {
+    if (a.filename !== filename || a.type !== type) return false;
+    if (type === 'datapack' && a.world_name && a.world_name !== world_name) return false;
+    return true;
+  }) : null;
   const actualFilename = addon ? addon.filename : filename;
 
   const result = await modManager.deleteAddon(actualFilename, targetDir);
 
   // Remove from profile metadata
   if (result.success && profile.addons) {
-    profile.addons = profile.addons.filter(a => !(a.filename === actualFilename && a.type === type));
+    profile.addons = profile.addons.filter(a => {
+      if (a.filename === actualFilename && a.type === type) {
+        if (type === 'datapack' && a.world_name && a.world_name !== world_name) return true;
+        return false;
+      }
+      return true;
+    });
     profileManager.saveProfiles(profilesData);
   }
 
@@ -4525,6 +5091,225 @@ ipcMain.handle('quit-and-install', () => {
   if (autoUpdater) autoUpdater.quitAndInstall(true, true);
 })
 
+// --- Direct Setup Updater Handlers ---
+async function findLocalInstallerPath() {
+  try {
+    const execDir = path.dirname(process.execPath);
+    let candidates = [];
+    if (process.platform === 'win32') {
+      candidates = [
+        path.join(execDir, 'HelloWorld-Launcher-Setup.exe'),
+        path.join(execDir, 'setup.exe'),
+        path.join(execDir, 'Setup.exe'),
+        path.join(execDir, 'helloworld-launcher-setup.exe'),
+        path.join(__dirname, 'release', 'win', 'HelloWorld-Launcher-Setup.exe'),
+        path.join(__dirname, 'dist', 'setup', 'HelloWorld-Launcher-Setup.exe')
+      ];
+    } else if (process.platform === 'darwin') {
+      candidates = [
+        path.join(execDir, 'HelloWorld-Launcher.dmg'),
+        path.join(execDir, '..', '..', '..', 'HelloWorld-Launcher.dmg')
+      ];
+    } else {
+      candidates = [
+        path.join(execDir, 'HelloWorld-Launcher.AppImage'),
+        path.join(execDir, 'helloworld-launcher.AppImage'),
+        path.join(execDir, 'helloworld-launcher.deb')
+      ];
+    }
+
+    for (const c of candidates) {
+      if (fs.existsSync(c)) {
+        const stat = fs.statSync(c);
+        if (stat.size > 1024 * 1024) {
+          return c;
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[findLocalInstallerPath] Error:', e);
+  }
+  return null;
+}
+
+ipcMain.handle('check-local-installer', async () => {
+  const p = await findLocalInstallerPath();
+  return { exists: Boolean(p), path: p };
+});
+
+ipcMain.handle('get-platform-info', () => {
+  return { platform: process.platform, arch: process.arch };
+});
+
+ipcMain.handle('launch-installer-and-quit', async (event, installerPath) => {
+  try {
+    let targetExe = installerPath;
+    if (!targetExe || !fs.existsSync(targetExe)) {
+      targetExe = await findLocalInstallerPath();
+    }
+    if (!targetExe || !fs.existsSync(targetExe)) {
+      throw new Error('Installer executable not found');
+    }
+
+    const targetLower = targetExe.toLowerCase();
+
+    // Linux: paquete Debian (.deb)
+    if (targetLower.endsWith('.deb')) {
+      console.log('[launch-installer-and-quit] Opening Linux deb with system package installer:', targetExe);
+      await shell.openPath(targetExe);
+      setTimeout(() => {
+        isQuitting = true;
+        app.quit();
+      }, 1500);
+      return { success: true };
+    }
+
+    // macOS: imagen de disco (.dmg)
+    if (targetLower.endsWith('.dmg')) {
+      console.log('[launch-installer-and-quit] Opening macOS DMG image:', targetExe);
+      await shell.openPath(targetExe);
+      setTimeout(() => {
+        isQuitting = true;
+        app.quit();
+      }, 1500);
+      return { success: true };
+    }
+
+    // Linux: AppImage
+    if (targetLower.endsWith('.appimage')) {
+      console.log('[launch-installer-and-quit] Launching Linux AppImage:', targetExe);
+      try { fs.chmodSync(targetExe, 0o755); } catch (_) {}
+      const { spawn } = require('child_process');
+      const child = spawn(targetExe, ['--update'], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+      setTimeout(() => {
+        isQuitting = true;
+        app.quit();
+      }, 500);
+      return { success: true };
+    }
+
+    // Windows (.exe)
+    const execDir = path.dirname(process.execPath);
+    const { spawn } = require('child_process');
+    console.log('[launch-installer-and-quit] Executing Windows Setup:', targetExe, 'with installPath:', execDir);
+
+    const child = spawn(targetExe, ['--update', `--install-path=${execDir}`], {
+      detached: true,
+      stdio: 'ignore'
+    });
+    child.unref();
+
+    setTimeout(() => {
+      isQuitting = true;
+      app.quit();
+    }, 500);
+
+    return { success: true };
+  } catch (err) {
+    console.error('[launch-installer-and-quit] Error:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
+  try {
+    if (!downloadUrl) throw new Error('No download URL provided');
+    const execDir = path.dirname(process.execPath);
+
+    let targetDir = execDir;
+    try {
+      fs.accessSync(execDir, fs.constants.W_OK);
+    } catch (_) {
+      targetDir = app.getPath('temp');
+    }
+
+    // Extraer extensión y nombre real del archivo desde la URL
+    let filename = process.platform === 'win32' ? 'HelloWorld-Launcher-Setup.exe' : 'helloworld-launcher-update';
+    try {
+      const urlObj = new URL(downloadUrl);
+      const parsedBase = path.basename(urlObj.pathname);
+      if (parsedBase && (parsedBase.includes('.exe') || parsedBase.includes('.deb') || parsedBase.includes('.dmg') || parsedBase.includes('.AppImage') || parsedBase.includes('.zip'))) {
+        filename = parsedBase;
+      } else {
+        if (process.platform === 'win32') filename = 'HelloWorld-Launcher-Setup.exe';
+        else if (process.platform === 'darwin') filename = 'HelloWorld-Launcher.dmg';
+        else filename = 'helloworld-launcher-linux.deb';
+      }
+    } catch (_) {}
+
+    const destPath = path.join(targetDir, filename);
+    const tempPath = destPath + '.tmp_' + Date.now();
+    const writer = fs.createWriteStream(tempPath);
+
+    console.log('[download-installer-file] Downloading from:', downloadUrl, 'to:', destPath);
+
+    const res = await axios({
+      method: 'get',
+      url: downloadUrl,
+      responseType: 'stream',
+      timeout: 60000,
+      headers: {
+        'User-Agent': 'HelloWorld-Launcher-Direct-Updater'
+      }
+    });
+
+    const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
+    let downloadedBytes = 0;
+    let lastTime = Date.now();
+    let lastBytes = 0;
+
+    res.data.on('data', (chunk) => {
+      downloadedBytes += chunk.length;
+      const now = Date.now();
+      if (now - lastTime >= 350) {
+        const speed = (downloadedBytes - lastBytes) / ((now - lastTime) / 1000);
+        lastTime = now;
+        lastBytes = downloadedBytes;
+        const percent = totalBytes > 0 ? (downloadedBytes / totalBytes) * 100 : 0;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('installer-download-progress', {
+            transferred: downloadedBytes,
+            total: totalBytes,
+            percent: Math.min(100, Math.round(percent)),
+            speed: Math.round(speed)
+          });
+        }
+      }
+    });
+
+    await new Promise((resolve, reject) => {
+      res.data.pipe(writer);
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+    });
+
+    if (fs.existsSync(destPath)) {
+      try { fs.unlinkSync(destPath); } catch (_) {}
+    }
+    fs.renameSync(tempPath, destPath);
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('installer-download-progress', {
+        transferred: totalBytes || downloadedBytes,
+        total: totalBytes || downloadedBytes,
+        percent: 100,
+        speed: 0
+      });
+    }
+
+    console.log('[download-installer-file] Download complete:', destPath);
+    return { success: true, filePath: destPath };
+  } catch (err) {
+    console.error('[download-installer-file] Error:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+
 // AutoUpdater Events
 if (autoUpdater) {
   autoUpdater.on('checking-for-update', () => {
@@ -4665,18 +5450,6 @@ async function getNeoForgeAllVersions() {
   }
 }
 
-ipcMain.handle('get-quilt-mc-versions', async () => {
-  try {
-    const response = await axios.get('https://meta.quiltmc.org/v3/versions/game', { timeout: 5000 });
-    const data = response.data;
-    const versions = data.filter(v => v.stable).map(v => v.version);
-    return versions;
-  } catch (err) {
-    console.error('Error fetching quilt versions:', err);
-    return [];
-  }
-});
-
 ipcMain.handle('get-neoforge-mc-versions', async () => {
   try {
     const allVersions = await getNeoForgeAllVersions();
@@ -4753,10 +5526,6 @@ ipcMain.handle('get-loader-versions', async (e, { type, mc_version }) => {
       });
 
       return versions;
-    } else if (type === 'quilt') {
-      const response = await axios.get(`https://meta.quiltmc.org/v3/versions/loader/${mc_version}`, { timeout: 5000 });
-      const data = response.data;
-      return data.map(v => v.loader.version);
     } else if (type === 'neoforge') {
       const allVersions = await getNeoForgeAllVersions();
       const versions = allVersions.filter(v => getMcVersionFromNeoForge(v) === mc_version);
@@ -5014,35 +5783,6 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       }
     }
 
-    if (versionType === 'quilt' && loaderVersion) {
-      // Quilt: Download the profile JSON to the versions folder
-      const quiltVersionName = `quilt-loader-${loaderVersion}-${mcVersion}`;
-      const quiltDir = path.join(mcDir, 'versions', quiltVersionName);
-      const quiltJsonPath = path.join(quiltDir, `${quiltVersionName}.json`);
-
-      if (!fs.existsSync(quiltJsonPath)) {
-        if (onProgress) onProgress({
-          type: 'version-install', task: 'Downloading Quilt installation...', version: version_id, current: 5, total: 100
-        });
-
-        try {
-          const res = await fetch(`https://meta.quiltmc.org/v3/versions/loader/${mcVersion}/${loaderVersion}/profile/json`).catch(() => {
-            throw new Error('Network error or no internet connection');
-          });
-          if (!res.ok) throw new Error(`Quilt API returned ${res.status}`);
-          const profileJson = await res.json();
-          fs.ensureDirSync(quiltDir);
-          fs.writeJsonSync(quiltJsonPath, profileJson, { spaces: 2 });
-          console.log(`[installVersionLogic] Saved Quilt profile JSON: ${quiltJsonPath}`);
-          customVersionId = quiltVersionName;
-        } catch (err) {
-          throw new Error(`Failed to download Quilt profile: ${err.message}`);
-        }
-      } else {
-        customVersionId = quiltVersionName;
-      }
-    }
-
     let forgeInstallerPath = null;
     if (versionType === 'forge' && loaderVersion) {
       // Forge: Download the installer JAR to the .HWLauncher/temp location
@@ -5159,7 +5899,7 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
     }
 
     // Set the version type correctly. MCLC needs 'release' for the base vanilla assets part!
-    const resolvedVersionType = (versionType === 'forge' || versionType === 'fabric' || versionType === 'neoforge' || versionType === 'quilt' || versionType === 'optifine') ? 'release' : versionType;
+    const resolvedVersionType = (versionType === 'forge' || versionType === 'fabric' || versionType === 'neoforge' || versionType === 'optifine') ? 'release' : versionType;
 
     const launchOptions = {
       authorization: { access_token: 'null', client_token: 'null', uuid: 'null', name: 'Installer', user_properties: {} },
@@ -5171,7 +5911,7 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       customArgs: []
     };
 
-    if (versionType === 'fabric' || versionType === 'quilt') {
+    if (versionType === 'fabric') {
       launchOptions.version.custom = customVersionId;
       if (typeof fabricJsonPathVar !== 'undefined' && fabricJsonPathVar) launchOptions.overrides = { ...launchOptions.overrides, versionJson: fabricJsonPathVar };
     }
@@ -5335,18 +6075,16 @@ async function installVersionLogic(version_id, onProgress, onMessage, onDownload
       });
     }
 
-    // ─── Fabric & Quilt: Verify & repair libraries after MCLC download ───────────────
-    if ((versionType === 'fabric' || versionType === 'quilt') && loaderVersion && !downloadInfo.cancelled) {
-      const loaderVersionName = versionType === 'fabric'
-        ? `fabric-loader-${loaderVersion}-${mcVersion}`
-        : `quilt-loader-${loaderVersion}-${mcVersion}`;
+    // ─── Fabric: Verify & repair libraries after MCLC download ───────────────
+    if (versionType === 'fabric' && loaderVersion && !downloadInfo.cancelled) {
+      const loaderVersionName = `fabric-loader-${loaderVersion}-${mcVersion}`;
       if (onProgress) onProgress({
-        type: 'version-install', task: `Verifying ${versionType === 'fabric' ? 'Fabric' : 'Quilt'} libraries...`,
+        type: 'version-install', task: 'Verifying Fabric libraries...',
         version: version_id, current: 95, total: 100, percentage: 95
       });
       const libsOk = await downloadMissingFabricLibraries(mcDir, loaderVersionName, onProgress);
       if (!libsOk && onMessage) {
-        onMessage(`Warning: Some ${versionType === 'fabric' ? 'Fabric' : 'Quilt'} libraries could not be downloaded. The game may fail to start.`);
+        onMessage('Warning: Some Fabric libraries could not be downloaded. The game may fail to start.');
       }
     }
 
@@ -5980,18 +6718,25 @@ async function refreshMicrosoftSession(userData, force = false) {
 }
 
 let currentGameProcess = null;
-let activeGameProcesses = new Set();
 let isLaunchCancelled = false;
 let isStartingGame = false;
+
+ipcMain.handle('is-minecraft-running', () => {
+  return isMinecraftRunning();
+});
+
+ipcMain.handle('get-minecraft-instances', () => {
+  return getRunningMinecraftCount();
+});
 
 // Lock to prevent race conditions when updating profile metadata
 const profileUpdateLocks = new Map();
 
-ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverIp }) => {
+ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverIp, saveServer }) => {
   // Yield to allow the Windows message pump and renderer to paint the spinner and cancel button
   await new Promise(resolve => setTimeout(resolve, 20));
-  console.log(`[Launch] launch-profile called with profileId: ${profileId}, force: ${force}, serverIp: ${serverIp || 'none'}`);
-  if (activeGameProcesses.size > 0 && !force) {
+  console.log(`[Launch] launch-profile called with profileId: ${profileId}, force: ${force}, serverIp: ${serverIp || 'none'}, saveServer: ${saveServer}`);
+  if (isMinecraftRunning() && !force) {
     console.log("[Launch] Minecraft is already running and force is false.");
     return { status: 'already_running' };
   }
@@ -6004,12 +6749,14 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
     isLaunchCancelled = false;
     if (launcher) launcher._cancelled = false;
     if (launcher && launcher.handler) launcher.handler._cancelled = false;
-    if (streakSessionTimer) {
-      clearTimeout(streakSessionTimer);
-      streakSessionTimer = null;
+    if (activeGameProcesses.size === 0) {
+      if (streakSessionTimer) {
+        clearTimeout(streakSessionTimer);
+        streakSessionTimer = null;
+      }
+      streakCountedThisRun = false;
+      gameStartTime = null;
     }
-    streakCountedThisRun = false;
-    gameStartTime = null;
 
     const profiles = profileManager.loadProfiles().profiles;
     const profile = profiles[profileId];
@@ -6022,9 +6769,8 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
     const isForge = verInfo.type === 'forge';
     const isFabric = verInfo.type === 'fabric';
     const isNeoForge = verInfo.type === 'neoforge';
-    const isQuilt = verInfo.type === 'quilt';
     const isOptiFine = verInfo.type === 'optifine';
-    const isModded = isForge || isFabric || isNeoForge || isQuilt || isOptiFine;
+    const isModded = isForge || isFabric || isNeoForge || isOptiFine;
 
     let mcVersion = verInfo.mcVersion;
     const actualMcDir = paths.getMcDir();
@@ -6084,14 +6830,41 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       }
     }
 
-    if (isMissingVersion || missingAddons.length > 0) {
-      console.log(`[Launch] Missing files detected. isMissingVersion: ${isMissingVersion}, missingAddons: ${missingAddons.length}`);
+    // Check for compatible updates for Modrinth addons (mods, resourcepacks, shaders)
+    let updatedAddons = [];
+    if (!isLaunchCancelled && profile.addons && profile.addons.length > 0) {
+      try {
+        const profileDir = profile.directory || actualMcDir;
+        // Don't check addons that are already determined to be missing
+        const addonsToCheck = profile.addons.filter(a =>
+          !missingAddons.some(m => m.project_id && m.project_id === a.project_id)
+        );
+        updatedAddons = await modManager.checkAddonUpdates({
+          addons: addonsToCheck,
+          targetMcVersion: mcVersion,
+          targetLoader: verInfo ? verInfo.type : 'vanilla',
+          profileDir
+        });
+      } catch (updateErr) {
+        console.warn('[Launch] Warning: failed to check addon updates:', updateErr.message);
+      }
+    }
+
+    if (isLaunchCancelled) {
+      console.log("[Launch] Launch cancelled during sync check.");
+      isStartingGame = false;
+      return { status: 'cancelled' };
+    }
+
+    if (isMissingVersion || missingAddons.length > 0 || (updatedAddons && updatedAddons.length > 0)) {
+      console.log(`[Launch] Missing files or updates detected. isMissingVersion: ${isMissingVersion}, missingAddons: ${missingAddons.length}, updatedAddons: ${updatedAddons ? updatedAddons.length : 0}`);
       isStartingGame = false;
       return {
         status: 'missing_files',
         missing_version: isMissingVersion,
         version_id: profile.version,
-        missing_addons: missingAddons
+        missing_addons: missingAddons,
+        updated_addons: updatedAddons || []
       };
     }
 
@@ -6173,7 +6946,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       options.version.custom = expectedVersionDirName;
     }
 
-    // 2.0.5. Custom Loader JVM Arguments (NeoForge, Forge, Fabric, Quilt, OptiFine)
+    // 2.0.5. Custom Loader JVM Arguments (NeoForge, Forge, Fabric, OptiFine)
     // MCLC ignores arguments.jvm from custom version JSONs, which causes modern loaders like NeoForge
     // to crash on startup with "The installation is corrupted!" due to missing -DlibraryDirectory=${library_directory} etc.
     const customVersionName = options.version.custom || (isModded ? expectedVersionDirName : null);
@@ -6189,7 +6962,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
               '${library_directory}': path.resolve(path.join(actualMcDir, 'libraries')),
               '${classpath_separator}': process.platform === 'win32' ? ';' : ':',
               '${version_name}': customVersionName,
-              '${game_directory}': actualMcDir,
+              '${game_directory}': profile.directory || actualMcDir,
               '${assets_root}': path.resolve(path.join(actualMcDir, 'assets')),
               '${assets_index_name}': customJson.assets || mcVersion,
               '${auth_uuid}': auth.uuid,
@@ -6248,12 +7021,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       }
       // Fix Mixin ServiceLoader crash on Java 25 by explicitly specifying the Mixin service class
       if (!options.customArgs) options.customArgs = [];
-      if (customVersionName.toLowerCase().includes('quilt')) {
-        if (!options.customArgs.includes('-Dmixin.service=org.quiltmc.loader.impl.launch.knot.MixinServiceKnot')) {
-          options.customArgs.push('-Dmixin.service=org.quiltmc.loader.impl.launch.knot.MixinServiceKnot');
-          console.log('[Launch] Added explicit Quilt Mixin service property for Java 25 support');
-        }
-      } else if (customVersionName.toLowerCase().includes('fabric')) {
+      if (customVersionName.toLowerCase().includes('fabric')) {
         if (!options.customArgs.includes('-Dmixin.service=net.fabricmc.loader.impl.launch.knot.MixinServiceKnot')) {
           options.customArgs.push('-Dmixin.service=net.fabricmc.loader.impl.launch.knot.MixinServiceKnot');
           console.log('[Launch] Added explicit Fabric Mixin service property for Java 25 support');
@@ -6261,18 +7029,17 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       }
     }
 
-    // 2.1. Fabric & Quilt: Verify & repair libraries before launch
-    if ((isFabric || isQuilt) && profile.version) {
+    // 2.1. Fabric: Verify & repair libraries before launch
+    if (isFabric && profile.version) {
       try {
-        const loaderLabel = isFabric ? 'Fabric' : 'Quilt';
-        if (mainWindow) mainWindow.webContents.send('info-message', `Verifying ${loaderLabel} libraries...`);
+        if (mainWindow) mainWindow.webContents.send('info-message', 'Verifying Fabric libraries...');
         const libsOk = await downloadMissingFabricLibraries(actualMcDir, expectedVersionDirName, null);
         if (!libsOk) {
-          console.warn(`[Launch] Some ${loaderLabel} libraries are still missing after repair attempt.`);
-          if (mainWindow) mainWindow.webContents.send('info-message', `Warning: Some ${loaderLabel} libraries may be missing.`);
+          console.warn('[Launch] Some Fabric libraries are still missing after repair attempt.');
+          if (mainWindow) mainWindow.webContents.send('info-message', 'Warning: Some Fabric libraries may be missing.');
         }
       } catch (verifyErr) {
-        console.warn(`[Launch] ${isFabric ? 'Fabric' : 'Quilt'} library verification failed:`, verifyErr.message);
+        console.warn('[Launch] Fabric library verification failed:', verifyErr.message);
       }
     }
 
@@ -6322,15 +7089,30 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
 
     // Add server connection arguments if serverIp is provided
     if (serverIp) {
-      // Use quickPlay type "legacy" to pass --server <ip> --port <port> to the game arguments
+      const isModern = (() => {
+        const match = mcVersion.match(/(\d+)\.(\d+)(?:\.(\d+))?/);
+        if (!match) return false;
+        const major = parseInt(match[1]);
+        const minor = parseInt(match[2]);
+        return major > 1 || (major === 1 && minor >= 20);
+      })();
+
+      // Modern MC (1.20+) requires --quickPlayMultiplayer, older versions use legacy --server / --port
       options.quickPlay = {
-        type: "legacy",
+        type: isModern ? "multiplayer" : "legacy",
         identifier: serverIp
       };
-      console.log(`[Launch] Auto-connecting to server: ${serverIp}`);
+      console.log(`[Launch] Auto-connecting to server: ${serverIp} (isModern: ${isModern}, saveServer: ${saveServer})`);
+
       try {
-        await addServerToServersDat(mcDir, serverIp);
-      } catch (_) {}
+        const targetGameDir = profile.directory || actualMcDir;
+        await addServerToServersDat(targetGameDir, serverIp);
+        if (targetGameDir !== actualMcDir) {
+          await addServerToServersDat(actualMcDir, serverIp);
+        }
+      } catch (srvErr) {
+        console.warn('[Launch] Could not auto-save server to servers.dat:', srvErr);
+      }
     }
 
     // 3. Java Runtime
@@ -6361,22 +7143,74 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
     console.log(`[Launch] Starting Minecraft ${mcVersion} for ${auth.name}...`);
     await new Promise(resolve => setTimeout(resolve, 25));
 
+    function checkMinecraftWindow(pid) {
+      return new Promise((resolve) => {
+        if (!pid) return resolve(false);
+        if (process.platform === 'win32') {
+          const { exec } = require('child_process');
+          exec(`tasklist /v /fo csv /fi "PID eq ${pid}"`, { windowsHide: true, timeout: 2500 }, (err, stdout) => {
+            if (!err && stdout) {
+              const lines = stdout.split(/\r?\n/).filter(l => l.trim().length > 0);
+              for (let i = 1; i < lines.length; i++) {
+                const cols = parseCsvLine(lines[i]);
+                if (cols.length >= 9) {
+                  const title = cols[8].replace(/^"|"$/g, '').trim();
+                  if (isMinecraftGameWindowTitle(title)) {
+                    return resolve(true);
+                  }
+                }
+              }
+            }
+            resolve(false);
+          });
+        } else {
+          // macOS & Linux: check if child process is active and running
+          try {
+            process.kill(pid, 0);
+            resolve(true);
+          } catch (_) {
+            resolve(false);
+          }
+        }
+      });
+    }
+
     launcher.launch(options).then(child => {
       isStartingGame = false;
       if (!child) {
         console.error("[Launch] MCLC returned null child process (Java runtime or launch initialization failed).");
-        presenceManager.safeRun(presenceManager.onGameClosed());
+        if (getRunningMinecraftCount() === 0) {
+          presenceManager.safeRun(presenceManager.onGameClosed());
+        }
         if (mainWindow) mainWindow.webContents.send('error', "Could not start the game. Please verify your Java installation and RAM allocation.");
         return;
       }
+
+      let isGameMarkedReady = false;
+      let windowPollTimer = null;
+
+      const triggerGameReady = (reason) => {
+        if (isGameMarkedReady) return;
+        isGameMarkedReady = true;
+        if (windowPollTimer) {
+          clearInterval(windowPollTimer);
+          windowPollTimer = null;
+        }
+        console.log(`[Launch] Game marked READY (${reason})`);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('info-message', 'Game Ready');
+          mainWindow.webContents.send('game-status', { running: true, count: getRunningMinecraftCount() });
+        }
+      };
+
       if (isLaunchCancelled) {
         console.log("[Launch] Launch cancelled while starting, killing immediately.");
-        if (streakSessionTimer) {
-          clearTimeout(streakSessionTimer);
-          streakSessionTimer = null;
+        if (windowPollTimer) {
+          clearInterval(windowPollTimer);
+          windowPollTimer = null;
         }
-        streakCountedThisRun = false;
-        gameStartTime = null;
+        activeGameProcesses.delete(child);
+        internalGameProcessesMeta.delete(child);
         try {
           if (process.platform === 'win32' && child.pid) {
             const { exec } = require('child_process');
@@ -6385,28 +7219,34 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
             process.kill(child.pid, 'SIGKILL');
           }
         } catch (e) { }
-        presenceManager.safeRun(presenceManager.onGameClosed());
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('info-message', "Game Closed");
+        if (getRunningMinecraftCount() === 0) {
+          currentGameProcess = null;
+          lastKnownRunningState = false;
+          presenceManager.safeRun(presenceManager.onGameClosed());
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('info-message', "Game Closed");
+            mainWindow.webContents.send('game-status', { running: false, count: 0 });
+          }
         }
         return;
       }
 
-      gameStartTime = Date.now();
-      streakCountedThisRun = false;
-      if (streakSessionTimer) {
-        clearTimeout(streakSessionTimer);
-        streakSessionTimer = null;
-      }
-      // Require at least 30s of uninterrupted runtime before counting streak & session
-      streakSessionTimer = setTimeout(() => {
-        if (!isLaunchCancelled && activeGameProcesses.has(child)) {
-          triggerStreakUpdate();
-        }
-      }, 30000);
+      const childStartTime = Date.now();
+      const childMeta = {
+        pid: child.pid,
+        startTime: childStartTime,
+        streakTimer: setTimeout(() => {
+          if (!isLaunchCancelled && activeGameProcesses.has(child)) {
+            triggerStreakUpdate();
+          }
+        }, 30000),
+        windowPollTimer: null
+      };
 
-      currentGameProcess = child;
+      internalGameProcessesMeta.set(child, childMeta);
       activeGameProcesses.add(child);
+      currentGameProcess = child;
+      lastKnownRunningState = true;
 
       // Update Presence / RPC state with PID
       presenceManager.safeRun(presenceManager.onGameLaunch({
@@ -6416,7 +7256,34 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
         pid: child.pid
       }));
 
+      // Window Detection: Poll every 4-5s for the actual Minecraft window
+      if (child.pid) {
+        windowPollTimer = setInterval(async () => {
+          if (isGameMarkedReady || isLaunchCancelled || !activeGameProcesses.has(child)) {
+            if (windowPollTimer) {
+              clearInterval(windowPollTimer);
+              windowPollTimer = null;
+            }
+            return;
+          }
+          try {
+            const hasWindow = await checkMinecraftWindow(child.pid);
+            if (hasWindow && !isGameMarkedReady) {
+              triggerGameReady('Minecraft window detected');
+            }
+          } catch (e) { }
+        }, 4000);
+        childMeta.windowPollTimer = windowPollTimer;
+      }
+
       let lastStdoutIpcTime = 0;
+      const isMinecraftReadyLog = (msg) => {
+        if (!msg) return false;
+        // High-confidence completion signatures across Vanilla, Fabric, Forge, NeoForge:
+        // Excludes early logs like texture atlas creation or LWJGL library loading.
+        return /Connecting to\s+|joined the game|joined singleplayer|Player joined|Stopping worker threads|stage COMPLETE|Mod loading complete|MinecraftForge v.* Initialized|Narrator library for|LWJGL Version:/i.test(msg);
+      };
+
       child.stdout?.on('data', (data) => {
         if (isLaunchCancelled) return;
         const message = data.toString().trim();
@@ -6425,9 +7292,13 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
         presenceManager.handleGameLog(message);
         const now = Date.now();
         if (mainWindow && !mainWindow.isDestroyed()) {
-          if (message.includes('Setting user:') || message.includes('Sound engine started') || now - lastStdoutIpcTime > 400) {
+          const isReady = isMinecraftReadyLog(message);
+          if (isReady || message.includes('Setting user:') || message.includes('Sound engine started') || now - lastStdoutIpcTime > 400) {
             lastStdoutIpcTime = now;
             mainWindow.webContents.send('info-message', `[Game stdout] ${message}`);
+            if (isReady) {
+              triggerGameReady(`Log detected: ${message.slice(0, 80)}`);
+            }
           }
         }
       });
@@ -6440,36 +7311,69 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
         presenceManager.handleGameLog(message);
         const now = Date.now();
         if (mainWindow && !mainWindow.isDestroyed()) {
-          if (now - lastStdoutIpcTime > 400) {
+          const isReady = isMinecraftReadyLog(message);
+          if (isReady || now - lastStdoutIpcTime > 400) {
             lastStdoutIpcTime = now;
             mainWindow.webContents.send('info-message', `[Game stderr] ${message}`);
+            if (isReady) {
+              triggerGameReady(`Stderr log detected: ${message.slice(0, 80)}`);
+            }
           }
         }
       });
 
       child.on('close', (exitCode) => {
         console.log("[Launch] Game process closed", exitCode);
-        if (streakSessionTimer) {
-          clearTimeout(streakSessionTimer);
-          streakSessionTimer = null;
+        const meta = internalGameProcessesMeta.get(child);
+        if (meta) {
+          if (meta.windowPollTimer) {
+            clearInterval(meta.windowPollTimer);
+            meta.windowPollTimer = null;
+          }
+          if (meta.streakTimer) {
+            clearTimeout(meta.streakTimer);
+            meta.streakTimer = null;
+          }
+          const elapsedMs = Date.now() - meta.startTime;
+          if (elapsedMs >= 30000 && !isLaunchCancelled) {
+            addPlaytimeToUserStats(elapsedMs / (1000 * 60 * 60)).catch(() => {});
+          }
+          internalGameProcessesMeta.delete(child);
         }
         activeGameProcesses.delete(child);
-        if (activeGameProcesses.size === 0) {
+        const remainingCount = getRunningMinecraftCount();
+        if (remainingCount === 0) {
           currentGameProcess = null;
+          lastKnownRunningState = false;
           handleLauncherClose(exitCode);
+        } else {
+          console.log(`[Launch] An instance closed, but ${remainingCount} instance(s) still running. Keeping game status.`);
+          currentGameProcess = activeGameProcesses.values().next().value || null;
         }
       });
 
       child.on('error', (err) => {
         console.error("[Launch] Process Error:", err);
-        if (streakSessionTimer) {
-          clearTimeout(streakSessionTimer);
-          streakSessionTimer = null;
+        const meta = internalGameProcessesMeta.get(child);
+        if (meta) {
+          if (meta.windowPollTimer) {
+            clearInterval(meta.windowPollTimer);
+            meta.windowPollTimer = null;
+          }
+          if (meta.streakTimer) {
+            clearTimeout(meta.streakTimer);
+            meta.streakTimer = null;
+          }
+          internalGameProcessesMeta.delete(child);
         }
         activeGameProcesses.delete(child);
-        if (activeGameProcesses.size === 0) {
+        const remainingCount = getRunningMinecraftCount();
+        if (remainingCount === 0) {
           currentGameProcess = null;
+          lastKnownRunningState = false;
           handleLauncherClose(err);
+        } else {
+          currentGameProcess = activeGameProcesses.values().next().value || null;
         }
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('error', "Process Error: " + err.message);
@@ -6477,14 +7381,14 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       });
     }).catch(err => {
       isStartingGame = false;
-      if (streakSessionTimer) {
-        clearTimeout(streakSessionTimer);
-        streakSessionTimer = null;
+      if (getRunningMinecraftCount() === 0) {
+        streakCountedThisRun = false;
+        gameStartTime = null;
       }
-      streakCountedThisRun = false;
-      gameStartTime = null;
       console.error("[Launch] Launcher Error:", err);
-      presenceManager.safeRun(presenceManager.onGameClosed());
+      if (getRunningMinecraftCount() === 0) {
+        presenceManager.safeRun(presenceManager.onGameClosed());
+      }
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('error', "Launch Failed: " + err.message);
     });
 
@@ -6504,6 +7408,154 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
     return { success: false, error: e.message };
   }
 })
+
+ipcMain.handle('add-server-to-servers-dat', async (e, serverIp, profileId, serverName) => {
+  try {
+    if (!serverIp || typeof serverIp !== 'string') return { success: false, error: 'Invalid IP' };
+    const cleanIp = serverIp.trim();
+    const actualMcDir = paths.getMcDir();
+
+    // 1. Always save in actualMcDir
+    await addServerToServersDat(actualMcDir, cleanIp, serverName);
+
+    // 2. Also save in profile custom directory if provided
+    if (profileId) {
+      try {
+        const profiles = profileManager.loadProfiles().profiles;
+        const profile = profiles[profileId];
+        if (profile && profile.directory && profile.directory !== actualMcDir) {
+          await addServerToServersDat(profile.directory, cleanIp, serverName);
+          console.log(`[serversDat] Saved ${cleanIp} to profile directory: ${profile.directory}`);
+        }
+      } catch (profErr) {
+        console.warn('[serversDat] Error saving to profile directory:', profErr);
+      }
+    }
+    return { success: true };
+  } catch (err) {
+    console.warn('[serversDat] Error adding server to servers.dat:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('get-featured-server-status', async (e, ip) => {
+  if (!ip || typeof ip !== 'string') return null;
+  const cleanIp = ip.trim();
+  const mergedData = {
+    online: false,
+    icon: null,
+    players: null,
+    motdHtml: null,
+    version: null,
+    edition: null
+  };
+
+  try {
+    const mcJavaPromise = fetch(`https://api.mcstatus.io/v2/status/java/${encodeURIComponent(cleanIp)}`, {
+      signal: AbortSignal.timeout(4000)
+    }).then(r => r.ok ? r.json() : null).catch(() => null);
+
+    const mcBedrockPromise = fetch(`https://api.mcstatus.io/v2/status/bedrock/${encodeURIComponent(cleanIp)}`, {
+      signal: AbortSignal.timeout(4000)
+    }).then(r => r.ok ? r.json() : null).catch(() => null);
+
+    const mcsPromise = fetch(`https://api.mcsrvstat.us/3/${encodeURIComponent(cleanIp)}`, {
+      headers: { 'User-Agent': 'HelloWorldLauncher/2.1' },
+      signal: AbortSignal.timeout(4000)
+    }).then(r => r.ok ? r.json() : null).catch(() => null);
+
+    const mtPromise = fetch(`https://api.minetools.eu/ping/${encodeURIComponent(cleanIp)}`, {
+      signal: AbortSignal.timeout(4000)
+    }).then(r => r.ok ? r.json() : null).catch(() => null);
+
+    const [mc, bedrock, mcs, mt] = await Promise.all([mcJavaPromise, mcBedrockPromise, mcsPromise, mtPromise]);
+
+    const isJavaOnline = Boolean((mc && mc.online) || (mcs && mcs.online) || (mt && !mt.error && mt.version && mt.version.protocol !== -1));
+    const isBedrockOnline = Boolean(bedrock && bedrock.online);
+
+    mergedData.online = isJavaOnline || isBedrockOnline;
+
+    if (isJavaOnline && isBedrockOnline) {
+      mergedData.edition = 'crossplay';
+    } else if (isBedrockOnline) {
+      mergedData.edition = 'bedrock';
+    } else if (isJavaOnline) {
+      mergedData.edition = 'java';
+    }
+
+    const cleanMotd = (mcs && mcs.motd && Array.isArray(mcs.motd.clean) ? mcs.motd.clean.join('\n') : '')
+      || (mc && mc.motd && mc.motd.clean)
+      || (mt && mt.description)
+      || '';
+    mergedData.motdClean = cleanMotd;
+
+    if (mc) {
+      if (mc.icon) mergedData.icon = mc.icon;
+      if (mc.players && typeof mc.players.online === 'number') mergedData.players = mc.players;
+      if (mc.motd) {
+        if (mc.motd.html) mergedData.motdHtml = mc.motd.html;
+        else if (mc.motd.clean) mergedData.motdHtml = mc.motd.clean;
+      }
+      if (mc.version && (mc.version.name_clean || mc.version.name_raw)) {
+        mergedData.version = mc.version.name_clean || mc.version.name_raw;
+      }
+    }
+
+    if (mcs && mcs.online) {
+      if (!mergedData.icon && mcs.icon) mergedData.icon = mcs.icon;
+      if (!mergedData.players && mcs.players) mergedData.players = mcs.players;
+      if (mcs.version && (!mergedData.version || mergedData.version.length < 3)) {
+        mergedData.version = mcs.version;
+      }
+    }
+
+    if (bedrock && bedrock.online) {
+      if (!mergedData.version && bedrock.version && bedrock.version.name) {
+        mergedData.version = bedrock.version.name;
+      }
+      if (!mergedData.players && bedrock.players && typeof bedrock.players.online === 'number') {
+        mergedData.players = bedrock.players;
+      }
+      if (!mergedData.motdHtml && bedrock.motd) {
+        mergedData.motdHtml = bedrock.motd.html || bedrock.motd.clean;
+      }
+    }
+
+    if (mt && !mt.error) {
+      if (!mergedData.icon && mt.favicon) mergedData.icon = mt.favicon;
+      if (!mergedData.players && mt.players && typeof mt.players.online === 'number') {
+        mergedData.players = { online: mt.players.online, max: mt.players.max };
+      }
+      if (!mergedData.motdHtml && mt.description) {
+        mergedData.motdHtml = mt.description;
+      }
+      if (!mergedData.version && mt.version && mt.version.name) {
+        mergedData.version = mt.version.name;
+      }
+    }
+
+    // Secondary scan on MOTD description for Geyser/Crossplay indicators
+    const fullText = (cleanMotd + ' ' + (mergedData.motdHtml || '')).toLowerCase();
+    if (fullText.includes('geyser') || fullText.includes('crossplay') || (fullText.includes('bedrock') && fullText.includes('java')) || fullText.includes('bedrock port')) {
+      mergedData.edition = 'crossplay';
+    }
+
+    // Normalize base64 icon if needed
+    if (mergedData.icon && typeof mergedData.icon === 'string') {
+      const trimmed = mergedData.icon.trim();
+      if (!trimmed.startsWith('data:image/') && !trimmed.startsWith('http')) {
+        const cleanB64 = trimmed.replace(/\s+/g, '');
+        if (cleanB64.length > 50 && /^[A-Za-z0-9+/=]+$/.test(cleanB64)) {
+          mergedData.icon = `data:image/png;base64,${cleanB64}`;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[FeaturedServers] get-featured-server-status error for ${cleanIp}:`, err.message);
+  }
+
+  return mergedData;
+});
 
 ipcMain.handle('cancel-launch', async () => {
   try {
@@ -6536,10 +7588,16 @@ ipcMain.handle('cancel-launch', async () => {
         console.warn('[cancel-launch] Process kill error:', killErr.message);
       }
       activeGameProcesses.delete(currentGameProcess);
-      if (activeGameProcesses.size === 0) {
+      internalGameProcessesMeta.delete(currentGameProcess);
+      const remainingCount = getRunningMinecraftCount();
+      if (remainingCount === 0) {
         currentGameProcess = null;
+        lastKnownRunningState = false;
+        handleLauncherClose('cancelled');
+      } else {
+        currentGameProcess = activeGameProcesses.values().next().value || null;
+        console.log(`[cancel-launch] Instance cancelled, but ${remainingCount} other instance(s) still running.`);
       }
-      handleLauncherClose('cancelled');
       return { success: true };
     }
     return { success: true, message: 'Launch marked as cancelled' };
@@ -7876,36 +8934,7 @@ async function _wkGetUserRoles(idToken) {
     let isAdmin = false;
     let isMod = false;
 
-    // 1. Secrets fallback check
-    try {
-      const currentSecrets = loadSecrets();
-      const rawAdmin = currentSecrets.WORKSHOP_ADMIN_UID || APP_SECRETS.WORKSHOP_ADMIN_UID || '';
-      const adminUid = _wkDec(rawAdmin) || rawAdmin;
-      if (adminUid && (uid === rawAdmin || uid === adminUid)) {
-        isAdmin = true;
-        isMod = true;
-      }
-      let mods = currentSecrets.WORKSHOP_MODERATOR_UIDS || APP_SECRETS.WORKSHOP_MODERATOR_UIDS || [];
-      if (typeof mods === 'string') {
-        mods = mods.split(',').map(s => s.trim()).filter(Boolean);
-      }
-      if (Array.isArray(mods)) {
-        for (const m of mods) {
-          const decM = _wkDec(m) || m;
-          if (uid === m || uid === decM) {
-            isMod = true;
-          }
-        }
-      }
-    } catch (_) {}
-
-    if (isAdmin && isMod) {
-      const roles = { isAdmin: true, isMod: true };
-      _roleCache.set(uid, { roles, expiresAt: Date.now() + 5 * 60 * 1000 });
-      return roles;
-    }
-
-    // 2. Candidate UIDs (primary UID + linked account UIDs for current user only)
+    // 1. Candidate UIDs (primary UID + linked account UIDs for current user only)
     const candidateUids = new Set([uid]);
     try {
       const ud = loadUserData();
@@ -8352,7 +9381,116 @@ ipcMain.handle('workshop-record-download', async (e, id) => {
   }
 });
 
-// --- Workshop Admin IPC Handlers ---
+// --- Remote Configuration & Maintenance Handlers ---
+const REMOTE_CONFIG_GIST_URL = APP_SECRETS.REMOTE_CONFIG_GIST_URL || 'https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json';
+let _cachedRemoteConfig = null;
+
+async function fetchRemoteConfigBackend() {
+  try {
+    const res = await axios.get(REMOTE_CONFIG_GIST_URL, {
+      params: { _cb: Date.now() },
+      timeout: 5000,
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      },
+      transformResponse: [(data) => {
+        if (!data || typeof data !== 'string') return data;
+        try {
+          return JSON.parse(data);
+        } catch (e1) {
+          try {
+            const fixed = data.replace(/([0-9]|true|false|null|"|\]|\})\s*\r?\n(\s*")/g, '$1,\n$2');
+            return JSON.parse(fixed);
+          } catch (_) {
+            return data;
+          }
+        }
+      }]
+    });
+    let data = res.data;
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(data);
+      } catch (e1) {
+        try {
+          const fixed = data.replace(/([0-9]|true|false|null|"|\]|\})\s*\r?\n(\s*")/g, '$1,\n$2');
+          data = JSON.parse(fixed);
+        } catch (_) {}
+      }
+    }
+    if (data && typeof data === 'object') {
+      _cachedRemoteConfig = data;
+      const maintenanceActive = Boolean(data.maintenance && data.maintenance.enabled);
+      if (_isMaintenanceActive !== maintenanceActive) {
+        _isMaintenanceActive = maintenanceActive;
+        console.log('[Maintenance] State updated:', _isMaintenanceActive ? 'ACTIVE' : 'INACTIVE');
+      }
+      return { success: true, data: data };
+    }
+  } catch (err) {
+    console.warn('[RemoteConfig] Fetch error:', err.message);
+  }
+  return { success: Boolean(_cachedRemoteConfig), data: _cachedRemoteConfig };
+}
+
+ipcMain.handle('fetch-remote-config', async () => {
+  return await fetchRemoteConfigBackend();
+});
+
+ipcMain.handle('set-maintenance-state', (event, active) => {
+  const next = Boolean(active);
+  if (_isMaintenanceActive !== next) {
+    _isMaintenanceActive = next;
+    console.log('[Maintenance] State updated:', _isMaintenanceActive ? 'ACTIVE' : 'INACTIVE');
+  }
+  return { success: true, isMaintenanceActive: _isMaintenanceActive };
+});
+
+ipcMain.handle('enable-admin-bypass', async () => {
+  try {
+    const auth = await getSocialAuth();
+    if (!auth || !auth.idToken) {
+      return { success: false, error: 'not_authenticated' };
+    }
+    const isAdmin = await _wkAdminCheck(auth.idToken);
+    if (!isAdmin) {
+      return { success: false, error: 'not_admin' };
+    }
+    _adminBypassGranted = true;
+    console.log('[Maintenance] Admin bypass GRANTED for UID:', auth.uid);
+    return { success: true, adminBypassGranted: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('get-maintenance-state', () => {
+  return {
+    isMaintenanceActive: _isMaintenanceActive,
+    adminBypassGranted: _adminBypassGranted
+  };
+});
+
+ipcMain.handle('dismiss-announcement', async (event, id) => {
+  if (!id) return { success: false };
+  const current = loadUserData();
+  const list = Array.isArray(current.dismissed_announcements) ? [...current.dismissed_announcements] : [];
+  const strId = String(id).trim();
+  if (!list.includes(strId)) {
+    list.push(strId);
+    saveUserData({ ...current, dismissed_announcements: list });
+    console.log('[Announcement] Dismissed permanently by ID:', strId);
+  }
+  return { success: true, dismissed: list };
+});
+
+ipcMain.handle('get-dismissed-announcements', async () => {
+  const current = loadUserData();
+  return Array.isArray(current.dismissed_announcements) ? current.dismissed_announcements : [];
+});
+
 ipcMain.handle('workshop-check-admin', async () => {
   try {
     const auth = await getSocialAuth();
@@ -8477,17 +9615,33 @@ function ensureWindowsShortcut() {
       console.log('[WindowsShortcut] Ensured Start Menu shortcut with AppUserModelId:', shortcutPath);
     }
 
-    // Also update Desktop shortcut with AppUserModelId if present
-    try {
-      const desktopPath = path.join(app.getPath('desktop'), 'HelloWorld Launcher.lnk');
-      if (fs.existsSync(desktopPath)) {
-        const currentDesktop = shell.readShortcutLink(desktopPath);
-        if (currentDesktop.appUserModelId !== 'com.abelosky.helloworldlauncher' || currentDesktop.target !== process.execPath) {
-          shell.writeShortcutLink(desktopPath, 'replace', shortcutOptions);
-          console.log('[WindowsShortcut] Updated Desktop shortcut with AppUserModelId:', desktopPath);
+    // Also scan Start Menu and Desktop for profile shortcuts that might still have the main launcher's appUserModelId
+    const fixProfileShortcutsInDir = (dir) => {
+      if (!fs.existsSync(dir)) return;
+      try {
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+          if (!file.toLowerCase().endsWith('.lnk')) continue;
+          if (file.toLowerCase() === 'helloworld launcher.lnk') continue;
+          const fullPath = path.join(dir, file);
+          try {
+            const sc = shell.readShortcutLink(fullPath);
+            const isProfileShortcut = (sc.args && sc.args.includes('--launch-profile')) || file.includes('(HelloWorld Launcher)');
+            if (isProfileShortcut && sc.appUserModelId === 'com.abelosky.helloworldlauncher') {
+              const updatedOptions = {
+                ...sc,
+                appUserModelId: 'com.abelosky.helloworldlauncher.profile'
+              };
+              shell.writeShortcutLink(fullPath, 'replace', updatedOptions);
+              console.log('[WindowsShortcut] Disassociated profile shortcut from main launcher AUMID:', fullPath);
+            }
+          } catch (_) {}
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    };
+
+    fixProfileShortcutsInDir(startMenuDir);
+    fixProfileShortcutsInDir(app.getPath('desktop'));
   } catch (e) {
     console.error('[WindowsShortcut] Error updating shortcuts:', e.message);
   }

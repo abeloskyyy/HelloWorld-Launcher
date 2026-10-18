@@ -25,11 +25,15 @@
     "streak_days": "<br>連続記録の日々",
     "streak_tooltip": "毎日ゲームへの最初のログイン時に自動的に増加します。",
     "sponsor_title": "Apex Hosting",
-    "sponsor_subtitle": "25%割引でサーバーを作成",
+    "sponsor_subtitle": "サーバーを作成",
     "sponsor_code_copied": "コード {code} をクリップボードにコピーしました",
     "sponsor_copied_short": "コードをコピーしました",
     "sponsor_copy_hint": "コードをコピー",
-    "sponsor_open_hint": "リンクを開く"
+    "sponsor_open_hint": "リンクを開く",
+    "buy_minecraft_title": "Minecraft を購入",
+    "buy_minecraft_subtitle": "公式 Premium アカウントを取得",
+    "buy_minecraft_badge": "PREMIUM",
+    "buy_minecraft_hint": "Minecraft 公式サイトで購入"
   },
   "user_menu": {
     "edit_profile": "プロフィールの編集",
@@ -107,7 +111,45 @@
     "version": "バージョン",
     "last_played": "最後にプレイした",
     "starting": "起動...",
-    "playing": "遊ぶ"
+    "playing": "遊ぶ",
+    "servers_promo_text": "ここにあなたのサーバーを掲載したいですか？サービスを申し込むには{link}をクリックしてください。",
+    "servers_promo_link": "こちら",
+    "news_tab": "ニュース",
+    "servers_tab": "サーバー",
+    "join_server": "サーバーに参加",
+    "copy_ip_tooltip": "クリックして IP をコピー",
+    "ip_copied": "IP {ip} をクリップボードにコピーしました",
+    "save_server_tooltip": "Minecraft サーバーリストに追加",
+    "server_added_to_list": "サーバー {server} をリストに追加しました",
+    "web_tooltip": "公式サイトを見る",
+    "discord_tooltip": "Discord サーバーに参加",
+    "server_offline": "オフライン",
+    "server_offline_tooltip": "サーバーはオフラインです",
+    "server_loading": "状態を読み込み中...",
+    "server_offline_motd": "サーバーが利用できないかオフラインです",
+    "server_error_motd": "サーバー情報を取得できませんでした",
+    "players_online_tooltip": "{online}/{max} 人のプレイヤーがオンライン",
+    "version_range_tooltip": "対応バージョン: {version}",
+    "version_offline": "オフライン",
+    "version_unknown": "オンライン",
+    "edition_java": "Java",
+    "edition_bedrock": "Bedrock",
+    "edition_crossplay": "Java & Bedrock",
+    "no_servers_title": "おすすめサーバーはありません",
+    "no_servers_desc": "おすすめサーバーはまもなくここに表示されます。",
+    "patchnotes_tab": "更新履歴",
+    "latest_release": "正式版:",
+    "latest_snapshot": "スナップショット:",
+    "filter_all": "すべて",
+    "filter_releases": "正式版",
+    "filter_snapshots": "スナップショット",
+    "read_changelog": "変更履歴をすべて読む",
+    "patchnotes_title": "Minecraft 変更履歴",
+    "loading_patchnotes": "変更履歴を読み込み中...",
+    "error_loading_patchnotes": "変更履歴の読み込みに失敗しました",
+    "release_badge": "正式版",
+    "snapshot_badge": "Snapshot",
+    "close_modal": "閉じる"
   },
   "account_switcher": {
     "title": "アカウント",
@@ -134,7 +176,14 @@
     "days_played": "プレイ日数",
     "sessions": "セッション",
     "days_unit": "日",
-    "hours_unit": "h"
+    "hours_unit": "h",
+    "profile_step_avatar": "カスタムアバター",
+    "profile_step_background": "プロフィールの背景",
+    "profile_step_country": "国",
+    "profile_step_bio": "自己紹介",
+    "profile_step_links": "SNSリンク",
+    "profile_step_mob": "お気に入りのモブ",
+    "profile_step_playstyle": "プレイスタイルタグ"
   },
   "social": {
     "title": "社交",
@@ -303,7 +352,12 @@
     "inbox_received": "受信",
     "inbox_sent": "送信済み",
     "no_sent_messages_yet": "まだメッセージを送信していません。",
-    "join_server_title": "サーバーに参加"
+    "join_server_title": "サーバーに参加",
+    "status_menu": "ランチャーのメニュー内",
+    "status_playing_world": "\"{world}\" でプレイ中",
+    "status_playing_singleplayer": "シングルプレイヤーをプレイ中",
+    "status_playing_server": "{server} でプレイ中",
+    "status_playing_multiplayer": "マルチプレイヤーをプレイ中"
   },
   "installations": {
     "create_new": "新しいインストールを作成する",
@@ -352,8 +406,8 @@
     "no_modded_installations_found": "Mod を追加したインストールは見つかりませんでした",
     "no_versions_found": "バージョンが見つかりません",
     "no_compatible_found": "互換性のあるインストールが見つかりません",
-    "no_mod_profiles": "Forge、Fabric、NeoForge、または Quilt を使用したインストールが見つかりません。",
-    "no_shader_profiles": "シェーダーをサポートするインストールが見つかりません。 (Forge/NeoForge または Fabric/Quilt がインストールされている必要があります)。",
+    "no_mod_profiles": "Forge、Fabric、または NeoForge を使用したインストールが見つかりません。",
+    "no_shader_profiles": "シェーダーをサポートするインストールが見つかりません。 (Forge/NeoForge または Fabric がインストールされている必要があります)。",
     "no_profiles": "インストールが見つかりません。",
     "version": "Version",
     "edit_title": "インストールの編集",
@@ -367,7 +421,10 @@
     "install_all_warning": "互換性のないMODをインストールするとクラッシュする可能性があります。続行しますか？",
     "install_all_confirm": "一部のMODが選択したバージョンと互換性がなく、Minecraftがクラッシュする可能性があります。それでもすべてのMODをインストールしますか？",
     "cancel_btn": "キャンセル",
-    "install_btn": "インストール"
+    "install_btn": "インストール",
+    "shortcut_btn": "デスクトップとスタートメニューにショートカットを作成",
+    "shortcut_created": "デスクトップとスタートメニューにショートカットを作成しました",
+    "shortcut_failed": "ショートカットの作成に失敗しました"
   },
   "loader": {
     "checking_connection": "接続を確認しています...",
@@ -384,7 +441,6 @@
     "downloading_fabric": "ファブリックのインストールをダウンロードしています",
     "downloading_forge": "Forge インストーラーをダウンロードしています",
     "downloading_neoforge": "NeoForge インストーラーをダウンロードしています",
-    "downloading_quilt": "Quilt インストールをダウンロードしています",
     "extracting": "抽出中",
     "all_done": "すべて完了しました！ゲームを起動中...",
     "preparing": "準備中...",
@@ -396,7 +452,15 @@
     "feat_mods": "Mod searching and downloading",
     "feat_updates": "Automatic updates",
     "feat_versions": "Downloading new Minecraft versions",
-    "continue_anyway": "Continue anyway"
+    "continue_anyway": "Continue anyway",
+    "syncing_updates": "アドオンを最新の互換バージョンに更新中。",
+    "syncing_missing_and_updates": "このインストールの不足ファイルと更新をダウンロード中。",
+    "updating_simple": "更新中...",
+    "updating_name": "{name} を更新中...",
+    "update_badge": "更新",
+    "waiting": "待機中",
+    "done": "完了",
+    "error": "エラー"
   },
   "toasts": {
     "login_failed": "ログインに失敗しました: {err}",
@@ -512,7 +576,12 @@
     "success": "Success",
     "server_invite_invalid_ip": "Invalid server address. Use a valid hostname or IP (e.g. hypixel.net, 1.2.3.4:25565).",
     "server_invite_enter_ip": "Please enter a server address.",
-    "server_added_to_list": "Server added to your Minecraft server list!"
+    "server_added_to_list": "Server added to your Minecraft server list!",
+    "invalid_server_ip": "無効なサーバーIPアドレス",
+    "minecraft_running_server_saved": "Minecraft は既に起動しています。マルチプレイヤーリストにサーバーを追加しました。",
+    "launch_failed": "ゲームの起動に失敗しました。",
+    "connecting_to_server": "{server} に接続中...",
+    "copied_to_clipboard": "クリップボードにコピーしました！"
   },
   "settings": {
     "language": "Language / 言語",
@@ -732,7 +801,7 @@
     "ニュース セクションでは、Minecraft の最新ニュースとパッチを常に最新の状態に保つことができます。",
     "質問がある場合、または問題に関してサポートが必要な場合は、ソーシャルリンクからDiscordコミュニティに参加してください。",
     "ワークショップを使用すると、他のユーザーが最適化した構成をワンクリックでインストールできます。",
-    "新しいインストールを作成するときは、Vanilla、Fabric、Forge、NeoForge、Quilt から選択できます。",
+    "新しいインストールを作成するときは、Vanilla、Fabric、Forge、NeoForge から選択できます。",
     "各インストールのアイコンとフォルダーをカスタマイズして、より適切に整理できます。",
     "バックグラウンドでのプログレッシブ MOD の読み込みにより、UI がフリーズすることなくストアを閲覧できます。"
   ],
@@ -922,7 +991,16 @@
     "retry": "Retry",
     "download": "Download Update",
     "release_notes": "Release Notes & Changelog",
-    "starting_download": "Starting Download..."
+    "starting_download": "Starting Download...",
+    "update_now": "今すぐ更新",
+    "later": "後で",
+    "dont_remind": "このバージョンについて再通知しない",
+    "mandatory_title": "必須アップデートが必要です",
+    "mandatory_badge": "必須",
+    "new_version_badge": "新しいアップデート",
+    "mandatory_desc": "現在のバージョン ({current}) はサポートされていません。プレイを続けるには {latest} に更新してください。",
+    "launching_setup": "インストーラーを起動しています...",
+    "downloading_installer": "インストーラーをダウンロード中..."
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Minecraftの新しいバージョン",
@@ -952,5 +1030,18 @@
     "premium": "プレミアムアカウント",
     "moderator": "モデレーター",
     "creator": "クリエイター"
+  },
+  "maintenance": {
+    "title": "メンテナンス中のサーバー",
+    "subtitle": "現在、インフラのアップグレードと最適化を実施しています。HelloWorld Launcher はまもなく再開します。",
+    "check_again": "再確認",
+    "checking": "確認中...",
+    "status_page": "サービス状況",
+    "admin_bypass": "管理者バイパス",
+    "admin_bypass_badge": "🛠️ メンテナンスモード中 — 管理者バイパス有効",
+    "estimated_until": "再開予定: {time}",
+    "bypass_success": "管理者バイパスが有効になりました。フルアクセスが付与されました。",
+    "bypass_denied": "アクセスが拒否されました: アカウントに管理者権限がありません。",
+    "bypass_error": "管理者バイパスの有効化に失敗しました: {err}"
   }
 }
