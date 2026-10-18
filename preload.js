@@ -73,7 +73,10 @@ contextBridge.exposeInMainWorld('hwlAPI', {
     checkLocalInstaller: () => ipcRenderer.invoke('check-local-installer'),
     launchInstallerAndQuit: (installerPath) => ipcRenderer.invoke('launch-installer-and-quit', installerPath),
     downloadInstallerFile: (downloadUrl) => ipcRenderer.invoke('download-installer-file', downloadUrl),
-    onInstallerDownloadProgress: (callback) => ipcRenderer.on('installer-download-progress', (event, data) => callback(data)),
+    onInstallerDownloadProgress: (callback) => {
+      ipcRenderer.removeAllListeners('installer-download-progress');
+      ipcRenderer.on('installer-download-progress', (event, data) => callback(data));
+    },
     getPlatformInfo: () => ipcRenderer.invoke('get-platform-info'),
 
     // Onboarding
@@ -272,7 +275,10 @@ const pywebviewAPI = {
     check_local_installer: () => ipcRenderer.invoke('check-local-installer'),
     launch_installer_and_quit: (installerPath) => ipcRenderer.invoke('launch-installer-and-quit', installerPath),
     download_installer_file: (downloadUrl) => ipcRenderer.invoke('download-installer-file', downloadUrl),
-    on_installer_download_progress: (callback) => ipcRenderer.on('installer-download-progress', (event, data) => callback(data)),
+    on_installer_download_progress: (callback) => {
+      ipcRenderer.removeAllListeners('installer-download-progress');
+      ipcRenderer.on('installer-download-progress', (event, data) => callback(data));
+    },
     get_platform_info: () => ipcRenderer.invoke('get-platform-info'),
 
     // UI Dialogs

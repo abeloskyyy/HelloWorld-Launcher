@@ -2144,8 +2144,10 @@ function initUpdateModalListeners() {
             if (nowText) nowText.textContent = (window.t ? window.t('updater.starting_download') : '') || 'Preparing...';
 
             if (progressSection) progressSection.style.display = 'block';
-            if (barFill) barFill.style.width = '10%';
-            if (percentEl) percentEl.textContent = '10%';
+            if (barFill) barFill.style.width = '0%';
+            if (percentEl) percentEl.textContent = '0%';
+            if (sizeEl) sizeEl.textContent = '0 MB';
+            if (speedEl) speedEl.textContent = '';
 
             const api = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
 
@@ -2177,18 +2179,24 @@ function initUpdateModalListeners() {
                 if (statusText) statusText.textContent = (window.t ? window.t('updater.downloading_installer') : '') || 'Downloading installer...';
 
                 // Escuchar progreso de descarga del instalador
+                let maxProgressPct = 0;
                 const onProgress = (data) => {
-                    const pct = Math.min(100, Math.round(data.percent || 0));
-                    if (barFill) barFill.style.width = `${pct}%`;
-                    if (percentEl) percentEl.textContent = `${pct}%`;
+                    const rawPct = Math.min(100, Math.round(data.percent || 0));
+                    if (rawPct > maxProgressPct) maxProgressPct = rawPct;
+                    if (barFill) barFill.style.width = `${maxProgressPct}%`;
+                    if (percentEl) percentEl.textContent = `${maxProgressPct}%`;
                     if (speedEl && data.speed) {
                         const mbSpeed = (data.speed / (1024 * 1024)).toFixed(2);
                         speedEl.textContent = `${mbSpeed} MB/s`;
                     }
-                    if (sizeEl && data.total) {
+                    if (sizeEl) {
                         const trMB = ((data.transferred || 0) / (1024 * 1024)).toFixed(1);
-                        const totMB = (data.total / (1024 * 1024)).toFixed(1);
-                        sizeEl.textContent = `${trMB} MB / ${totMB} MB`;
+                        if (data.total && data.total > 0) {
+                            const totMB = (data.total / (1024 * 1024)).toFixed(1);
+                            sizeEl.textContent = `${trMB} MB / ${totMB} MB`;
+                        } else {
+                            sizeEl.textContent = `${trMB} MB`;
+                        }
                     }
                 };
 

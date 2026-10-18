@@ -71,9 +71,17 @@ async function copySetupToInstallDir(installPath) {
     const setupSrc = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath
     const setupDest = path.join(installPath, 'setup.exe')
 
-    if (setupSrc !== setupDest) {
-      await fs.copy(setupSrc, setupDest, { overwrite: true })
+    const srcResolved = path.resolve(setupSrc).toLowerCase()
+    const destResolved = path.resolve(setupDest).toLowerCase()
+    const srcDir = path.dirname(srcResolved)
+    const targetDir = path.resolve(installPath).toLowerCase()
+
+    // Si el setup ya se encuentra dentro de la misma carpeta de instalación, NO volver a copiarse
+    if (srcResolved === destResolved || srcDir === targetDir) {
+      return setupDest
     }
+
+    await fs.copy(setupSrc, setupDest, { overwrite: true })
     return setupDest
   } catch (err) {
     console.error('Failed to copy setup to install dir:', err)

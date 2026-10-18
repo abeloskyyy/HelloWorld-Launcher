@@ -5230,22 +5230,36 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
       targetDir = app.getPath('temp');
     }
 
-    // Extraer extensión y nombre real del archivo desde la URL
-    let filename = process.platform === 'win32' ? 'HelloWorld-Launcher-Setup.exe' : 'helloworld-launcher-update';
+    // Para Windows, guardar siempre el instalador como setup.exe directamente
+    let filename = process.platform === 'win32' ? 'setup.exe' : 'helloworld-launcher-update';
     try {
       const urlObj = new URL(downloadUrl);
       const parsedBase = path.basename(urlObj.pathname);
-      if (parsedBase && (parsedBase.includes('.exe') || parsedBase.includes('.deb') || parsedBase.includes('.dmg') || parsedBase.includes('.AppImage') || parsedBase.includes('.zip'))) {
-        filename = parsedBase;
-      } else {
-        if (process.platform === 'win32') filename = 'HelloWorld-Launcher-Setup.exe';
-        else if (process.platform === 'darwin') filename = 'HelloWorld-Launcher.dmg';
-        else filename = 'helloworld-launcher-linux.deb';
+      if (parsedBase && (parsedBase.includes('.deb') || parsedBase.includes('.dmg') || parsedBase.includes('.AppImage') || parsedBase.includes('.zip'))) {
+        if (process.platform !== 'win32') {
+          filename = parsedBase;
+        }
+      } else if (process.platform === 'darwin') {
+        filename = 'HelloWorld-Launcher.dmg';
+      } else if (process.platform === 'linux') {
+        filename = 'helloworld-launcher-linux.deb';
+      }
+    } catch (_) {}
+
+    // Limpiar temporales antiguos huérfanos si existieran
+    try {
+      const filesInDir = fs.readdirSync(targetDir);
+      for (const f of filesInDir) {
+        if (f.startsWith('setup.exe.tmp_') || f.startsWith('HelloWorld-Launcher-Setup.exe.tmp_')) {
+          try { fs.unlinkSync(path.join(targetDir, f)); } catch (_) {}
+        }
       }
     } catch (_) {}
 
     const destPath = path.join(targetDir, filename);
     const tempPath = destPath + '.tmp_' + Date.now();
+    let writer = null;
+
     // Support Google Drive links automatically
     let targetUrl = downloadUrl;
     try {
@@ -5264,13 +5278,13 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
       }
     } catch (_) {}
 
-    const writer = fs.createWriteStream(tempPath);
+    writer = fs.createWriteStream(tempPath);
 
     const res = await axios({
       method: 'get',
       url: targetUrl,
       responseType: 'stream',
-      timeout: 60000,
+      timeout: 0, // Sin timeout para evitar cortes en descargas de archivos grandes
       maxRedirects: 15,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -5292,16 +5306,23 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
     res.data.on('data', (chunk) => {
       downloadedBytes += chunk.length;
       const now = Date.now();
-      if (now - lastTime >= 350) {
+      if (now - lastTime >= 300) {
         const speed = (downloadedBytes - lastBytes) / ((now - lastTime) / 1000);
         lastTime = now;
         lastBytes = downloadedBytes;
-        const percent = totalBytes > 0 ? (downloadedBytes / totalBytes) * 100 : 0;
+        let percent = 0;
+        if (totalBytes > 0) {
+          percent = Math.min(99, Math.round((downloadedBytes / totalBytes) * 100));
+        } else {
+          // Si Google Drive no envía Content-Length, estimar sobre ~95MB con límite del 95%
+          const estimatedTotal = 95 * 1024 * 1024;
+          percent = Math.min(95, Math.round((downloadedBytes / estimatedTotal) * 100));
+        }
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('installer-download-progress', {
             transferred: downloadedBytes,
             total: totalBytes,
-            percent: Math.min(100, Math.round(percent)),
+            percent: percent,
             speed: Math.round(speed)
           });
         }
@@ -5311,7 +5332,15 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
     await new Promise((resolve, reject) => {
       res.data.pipe(writer);
       writer.on('finish', resolve);
-      writer.on('error', reject);
+      writer.on('error', (err) => {
+        try { fs.unlinkSync(tempPath); } catch (_) {}
+        reject(err);
+      });
+      res.data.on('error', (err) => {
+        try { writer.close(); } catch (_) {}
+        try { fs.unlinkSync(tempPath); } catch (_) {}
+        reject(err);
+      });
     });
 
     if (fs.existsSync(destPath)) {
@@ -5332,6 +5361,9 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
     return { success: true, filePath: destPath };
   } catch (err) {
     console.error('[download-installer-file] Error:', err);
+    try {
+      if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    } catch (_) {}
     return { success: false, error: err.message };
   }
 });
