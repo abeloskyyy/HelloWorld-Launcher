@@ -2891,13 +2891,13 @@ function isAccountActive(acc, current) {
 function updateTrayMenu() {
   if (!tray || tray.isDestroyed()) return;
 
-  const isWindowVisible = Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible());
   const isLocked = Boolean(_isMandatoryUpdateActive || (_isMaintenanceActive && !_adminBypassGranted));
 
-  // Fallo de seguridad corregido:
-  // Si la ventana del launcher está cerrada/oculta o si hay una actualización obligatoria o mantenimiento activo,
-  // NO permitir cambiar de cuenta ni abrir los últimos perfiles jugados desde el menú del tray.
-  if (!isWindowVisible || isLocked) {
+  // Bloqueo de seguridad:
+  // Si hay una actualización obligatoria o mantenimiento activo, restringir el menú del tray
+  // para evitar saltarse el bloqueo.
+  // En funcionamiento normal (incluso con la app oculta en segundo plano), el menú completo permanece activo.
+  if (isLocked) {
     const restrictedItems = [
       {
         label: getTranslation('tray.open', 'Abrir HelloWorld Launcher'),
