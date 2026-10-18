@@ -15,32 +15,17 @@ const REPO_NAME = 'HelloWorld-Launcher'
 const API_BASE = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`
 const REMOTE_CONFIG_GIST_URL = 'https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json'
 
-// ── Platform / arch helpers ───────────────────────────────────────────────────
+// ── Platform / arch helpers (Windows only) ───────────────────────────────────
 
 function getPlatformArch() {
-  const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
-  const platform = process.platform === 'win32' ? 'win' : 'linux'
-  return { platform, arch }
+  return { platform: 'win', arch: 'x64' }
 }
 
-/** Expected asset names:
- *  Windows: helloworld-launcher-win.zip
- *  Linux:   helloworld-launcher-linux-x64.deb / helloworld-launcher-linux-arm64.deb
- *  Setup:   HelloWorld-Launcher-Setup.exe
- *  Manifest: manifest.json
- */
+/** Expected asset names for Windows Setup */
 function getExpectedAssetNames() {
-  const { platform, arch } = getPlatformArch()
-  if (platform === 'win') {
-    return {
-      launcher: 'helloworld-launcher-win.zip',
-      setup: 'HelloWorld-Launcher-Setup.exe',
-      manifest: 'manifest.json',
-    }
-  }
   return {
-    launcher: `helloworld-launcher-linux-${arch}.deb`,
-    setup: null,
+    launcher: 'helloworld-launcher-win.zip',
+    setup: 'HelloWorld-Launcher-Setup.exe',
     manifest: 'manifest.json',
   }
 }
@@ -132,38 +117,20 @@ async function fetchGistReleaseInfo(version = null) {
     }
     if (!targetVersionObj || !targetVersionObj.downloads) return null
 
-    const { platform, arch } = getPlatformArch()
     const downloads = targetVersionObj.downloads || {}
     let launcherUrl = null
     let setupUrl = null
 
-    if (platform === 'win') {
-      if (downloads.windows && typeof downloads.windows === 'object') {
-        launcherUrl = downloads.windows.zip || downloads.windows.setup
-        setupUrl = downloads.windows.setup || downloads.windows.zip
-      }
-      if (!launcherUrl) {
-        launcherUrl = downloads.windows_zip || downloads.windows_setup || downloads.setup
-      }
-      if (!setupUrl) {
-        setupUrl = downloads.windows_setup || downloads.setup || downloads.windows_zip
-      }
-    } else {
-      const linObj = downloads.linux
-      if (linObj && typeof linObj === 'object') {
-        const archObj = (arch === 'arm64') ? (linObj.arm64 || linObj.arm) : (linObj.amd64 || linObj.x64)
-        if (archObj && typeof archObj === 'object') {
-          launcherUrl = archObj.deb || archObj.appimage || archObj.zip
-        } else if (typeof archObj === 'string') {
-          launcherUrl = archObj
-        }
-        if (!launcherUrl) launcherUrl = linObj.deb || linObj.appimage || linObj.zip
-      }
-      if (!launcherUrl) {
-        launcherUrl = (arch === 'arm64')
-          ? (downloads.linux_arm64_deb || downloads.linux_deb || downloads.linux_appimage)
-          : (downloads.linux_amd64_deb || downloads.linux_deb || downloads.linux_appimage)
-      }
+    // Windows setup targets
+    if (downloads.windows && typeof downloads.windows === 'object') {
+      launcherUrl = downloads.windows.zip || downloads.windows.setup
+      setupUrl = downloads.windows.setup || downloads.windows.zip
+    }
+    if (!launcherUrl) {
+      launcherUrl = downloads.windows_zip || downloads.windows_setup || downloads.setup
+    }
+    if (!setupUrl) {
+      setupUrl = downloads.windows_setup || downloads.setup || downloads.windows_zip
     }
 
     if (!launcherUrl) return null
@@ -242,9 +209,7 @@ async function getLatestReleaseInfo(version = null) {
 
   // ── 2. FALLBACK: FETCH FROM GITHUB RELEASES ──
   try {
-    const release = await fetchRelease(version)
-
-    const find = (name) => release.assets.find(a => a.name === name || (name && name.includes('-x64.deb') && a.name === name.replace('-x64.deb', '-amd64.deb')))
+    const find = (name) => release.assets.find(a => a.name === name)
 
     const launcherAsset = find(names.launcher)
     const setupAsset = find(names.setup)

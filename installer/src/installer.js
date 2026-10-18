@@ -54,44 +54,25 @@ function getTempDir() {
 
 /** Find the main launcher executable in an install directory */
 function findLauncherExecutable(installPath) {
-  if (process.platform === 'win32') {
-    const files = fs.readdirSync(installPath).filter(f =>
-      f.endsWith('.exe') && !f.toLowerCase().startsWith('unins') && !f.toLowerCase().includes('setup')
-    )
-    if (files.length > 0) return path.join(installPath, files[0])
-  } else {
-    // Linux: find the AppImage
-    const files = fs.readdirSync(installPath).filter(f => f.endsWith('.AppImage'))
-    if (files.length > 0) return path.join(installPath, files[0])
-    // Or a non-extension executable
-    const execs = fs.readdirSync(installPath).filter(f => {
-      const stat = fs.statSync(path.join(installPath, f))
-      return stat.isFile() && !f.includes('.') && (stat.mode & 0o111)
-    })
-    if (execs.length > 0) return path.join(installPath, execs[0])
-  }
+  const files = fs.readdirSync(installPath).filter(f =>
+    f.endsWith('.exe') && !f.toLowerCase().startsWith('unins') && !f.toLowerCase().includes('setup')
+  )
+  if (files.length > 0) return path.join(installPath, files[0])
   return null
 }
 
 /** Copy the running setup executable to the install directory */
 async function copySetupToInstallDir(installPath) {
   try {
-    // If running from source (via npm start / electron .), do not copy the Electron binary
     if (process.defaultApp || process.execPath.toLowerCase().endsWith('electron.exe')) {
       return null
     }
 
     const setupSrc = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath
-    const setupDest = path.join(
-      installPath,
-      process.platform === 'win32' ? 'setup.exe' : 'setup.AppImage'
-    )
+    const setupDest = path.join(installPath, 'setup.exe')
 
     if (setupSrc !== setupDest) {
       await fs.copy(setupSrc, setupDest, { overwrite: true })
-      if (process.platform !== 'win32') {
-        await execPromise(`chmod +x "${setupDest}"`).catch(() => {})
-      }
     }
     return setupDest
   } catch (err) {
@@ -103,12 +84,7 @@ async function copySetupToInstallDir(installPath) {
 /** Kill the launcher if it's running */
 async function killLauncher() {
   try {
-    if (process.platform === 'win32') {
-      await execPromise('taskkill /f /im "HelloWorld-Launcher.exe" 2>nul').catch(() => {})
-    } else {
-      await execPromise('pkill -f "HelloWorld-Launcher" 2>/dev/null').catch(() => {})
-    }
-    // Give it a moment to shut down
+    await execPromise('taskkill /f /im "HelloWorld-Launcher.exe" 2>nul').catch(() => {})
     await new Promise(r => setTimeout(r, 1500))
   } catch { }
 }
@@ -184,19 +160,10 @@ async function install({ installPath, createDesktop, createStartMenu, launchAfte
     })
 
     emit('Preparing installation directory...', 72)
-
-    if (process.platform === 'win32') {
-      emit('Extracting files...', 75)
-      await extractZip(assetPath, installPath, (pct) => {
-        emit('Extracting files...', 75 + Math.round(pct * 0.12)) // 75-87%
-      })
-    } else {
-      // Linux: AppImage is a single executable
-      await fs.ensureDir(installPath)
-      const appImageDest = path.join(installPath, release.launcher.name)
-      await fs.copy(assetPath, appImageDest, { overwrite: true })
-      await execPromise(`chmod +x "${appImageDest}"`).catch(() => {})
-    }
+    emit('Extracting files...', 75)
+    await extractZip(assetPath, installPath, (pct) => {
+      emit('Extracting files...', 75 + Math.round(pct * 0.12)) // 75-87%
+    })
 
     emit('Copying setup to installation folder...', 88)
     const installerPath = await copySetupToInstallDir(installPath)
@@ -262,21 +229,10 @@ async function update({ installPath, launchAfter }, onProgress) {
     emit('Stopping launcher...', 72)
     await killLauncher()
 
-    if (process.platform === 'win32') {
-      emit('Applying update...', 75)
-      await extractZip(assetPath, installPath, (pct) => {
-        emit('Applying update...', 75 + Math.round(pct * 0.12))
-      })
-    } else {
-      emit('Replacing launcher...', 75)
-      const appImages = fs.readdirSync(installPath).filter(f => f.endsWith('.AppImage'))
-      for (const img of appImages) {
-        await fs.remove(path.join(installPath, img)).catch(() => {})
-      }
-      const appImageDest = path.join(installPath, release.launcher.name)
-      await fs.copy(assetPath, appImageDest, { overwrite: true })
-      await execPromise(`chmod +x "${appImageDest}"`).catch(() => {})
-    }
+    emit('Applying update...', 75)
+    await extractZip(assetPath, installPath, (pct) => {
+      emit('Applying update...', 75 + Math.round(pct * 0.12))
+    })
 
     emit('Updating registration...', 90)
     const installerPath = await copySetupToInstallDir(installPath)
