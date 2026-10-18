@@ -2,24 +2,75 @@ name: Discord Release Notify
 
 on:
   release:
-    types: [published]
+    types: [published, released]
+  workflow_dispatch:
 
 jobs:
   notify:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Send Discord message
+      - name: Send Discord Release Message
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK }}
-          VERSION: ${{ github.event.release.tag_name }}
-          TITLE: ${{ github.event.release.name }}
-          URL: ${{ github.event.release.html_url }}
-          BODY: ${{ github.event.release.body }}
+          TAG_NAME: ${{ github.event.release.tag_name || 'v2.2.0' }}
+          RELEASE_TITLE: ${{ github.event.release.name || '' }}
+          RELEASE_URL: ${{ github.event.release.html_url || 'https://github.com/abeloskyyy/HelloWorld-Launcher/releases' }}
+          RELEASE_BODY: ${{ github.event.release.body || 'No release notes provided.' }}
         run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "::error::DISCORD_WEBHOOK secret is empty or not configured in GitHub Secrets!"
+            exit 1
+          fi
+
+          # Fallback title if blank
+          TITLE="$RELEASE_TITLE"
+          if [ -z "$TITLE" ]; then
+            TITLE="$TAG_NAME"
+          fi
+
+          # Truncate changelog body if longer than 1800 chars to avoid Discord 400 Bad Request error
+          BODY="$RELEASE_BODY"
+          if [ ${#BODY} -gt 1800 ]; then
+            BODY="$(echo "$BODY" | cut -c 1-1800)"
+            BODY="$BODY\n\n... [Read full release notes on GitHub]($RELEASE_URL)"
+          fi
+
+          DESC="**Version:** $TAG_NAME\n\n$BODY"
+
+          # Create robust JSON payload with jq
           PAYLOAD=$(jq -n \
             --arg title "🚀 New Release: $TITLE" \
-            --arg desc "**Version:** $VERSION\n\n$BODY" \
-            --arg url "$URL" \
-            '{embeds: [{title: $title, description: $desc, url: $url, color: 5814783}]}')
-          curl -H "Content-Type: application/json" -X POST -d "$PAYLOAD" $WEBHOOK_URL
+            --arg desc "$DESC" \
+            --arg url "$RELEASE_URL" \
+            '{
+              embeds: [
+                {
+                  title: $title,
+                  description: $desc,
+                  url: $url,
+                  color: 1096065,
+                  footer: {
+                    text: "HelloWorld Launcher • Official Release"
+                  },
+                  timestamp: (now | todate)
+                }
+              ]
+            }')
+
+          echo "Sending notification to Discord..."
+          RESPONSE=$(curl -s -S -w "\n%{http_code}" -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "$WEBHOOK_URL")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          CONTENT=$(echo "$RESPONSE" | sed '$d')
+
+          echo "Discord Response Code: $HTTP_CODE"
+          if [ -n "$CONTENT" ]; then
+            echo "Discord Response Body: $CONTENT"
+          fi
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ Message successfully sent to Discord!"
+          else
+            echo "::error::Failed to send Discord webhook. HTTP Status: $HTTP_CODE"
+            exit 1
+          fi
