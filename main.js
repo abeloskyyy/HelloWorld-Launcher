@@ -5257,8 +5257,6 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
     } catch (_) {}
 
     const destPath = path.join(targetDir, filename);
-    const tempPath = destPath + '.tmp_' + Date.now();
-    let writer = null;
 
     // Support Google Drive links automatically
     let targetUrl = downloadUrl;
@@ -5278,92 +5276,114 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
       }
     } catch (_) {}
 
-    writer = fs.createWriteStream(tempPath);
+    let lastError = null;
+    const maxAttempts = 3;
 
-    const res = await axios({
-      method: 'get',
-      url: targetUrl,
-      responseType: 'stream',
-      timeout: 0, // Sin timeout para evitar cortes en descargas de archivos grandes
-      maxRedirects: 15,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      let tempPath = null;
+      let writer = null;
+      try {
+        tempPath = destPath + '.tmp_' + Date.now();
+        writer = fs.createWriteStream(tempPath);
 
-    const contentType = (res.headers['content-type'] || '').toLowerCase();
-    if (contentType.includes('text/html')) {
-      try { writer.close(); } catch (_) {}
-      try { fs.unlinkSync(tempPath); } catch (_) {}
-      throw new Error('El enlace de descarga devolvió una página web HTML en lugar del archivo ejecutable. Asegúrate de que el enlace de Google Drive tenga permisos públicos ("Cualquier persona con el enlace").');
-    }
+        console.log(`[download-installer-file] Attempt ${attempt}/${maxAttempts} downloading from:`, targetUrl, 'to:', destPath);
 
-    const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
-    let downloadedBytes = 0;
-    let lastTime = Date.now();
-    let lastBytes = 0;
+        const res = await axios({
+          method: 'get',
+          url: targetUrl,
+          responseType: 'stream',
+          timeout: 0, // Sin timeout para evitar cortes en descargas de archivos grandes
+          maxRedirects: 15,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*'
+          }
+        });
 
-    res.data.on('data', (chunk) => {
-      downloadedBytes += chunk.length;
-      const now = Date.now();
-      if (now - lastTime >= 300) {
-        const speed = (downloadedBytes - lastBytes) / ((now - lastTime) / 1000);
-        lastTime = now;
-        lastBytes = downloadedBytes;
-        let percent = 0;
-        if (totalBytes > 0) {
-          percent = Math.min(99, Math.round((downloadedBytes / totalBytes) * 100));
-        } else {
-          // Si Google Drive no envía Content-Length, estimar sobre ~95MB con límite del 95%
-          const estimatedTotal = 95 * 1024 * 1024;
-          percent = Math.min(95, Math.round((downloadedBytes / estimatedTotal) * 100));
+        const contentType = (res.headers['content-type'] || '').toLowerCase();
+        if (contentType.includes('text/html')) {
+          try { writer.close(); } catch (_) {}
+          try { fs.unlinkSync(tempPath); } catch (_) {}
+          throw new Error('El enlace de descarga devolvió una página web HTML en lugar del archivo ejecutable. Asegúrate de que el enlace de Google Drive tenga permisos públicos ("Cualquier persona con el enlace").');
         }
+
+        const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
+        let downloadedBytes = 0;
+        let lastTime = Date.now();
+        let lastBytes = 0;
+
+        res.data.on('data', (chunk) => {
+          downloadedBytes += chunk.length;
+          const now = Date.now();
+          if (now - lastTime >= 300) {
+            const speed = (downloadedBytes - lastBytes) / ((now - lastTime) / 1000);
+            lastTime = now;
+            lastBytes = downloadedBytes;
+            let percent = 0;
+            if (totalBytes > 0) {
+              percent = Math.min(99, Math.round((downloadedBytes / totalBytes) * 100));
+            } else {
+              // Si Google Drive no envía Content-Length, estimar sobre ~95MB con límite del 95%
+              const estimatedTotal = 95 * 1024 * 1024;
+              percent = Math.min(95, Math.round((downloadedBytes / estimatedTotal) * 100));
+            }
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('installer-download-progress', {
+                transferred: downloadedBytes,
+                total: totalBytes,
+                percent: percent,
+                speed: Math.round(speed)
+              });
+            }
+          }
+        });
+
+        await new Promise((resolve, reject) => {
+          res.data.pipe(writer);
+          writer.on('finish', resolve);
+          writer.on('error', (err) => {
+            try { fs.unlinkSync(tempPath); } catch (_) {}
+            reject(err);
+          });
+          res.data.on('error', (err) => {
+            try { writer.close(); } catch (_) {}
+            try { fs.unlinkSync(tempPath); } catch (_) {}
+            reject(err);
+          });
+        });
+
+        if (fs.existsSync(destPath)) {
+          try { fs.unlinkSync(destPath); } catch (_) {}
+        }
+        fs.renameSync(tempPath, destPath);
+
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('installer-download-progress', {
-            transferred: downloadedBytes,
-            total: totalBytes,
-            percent: percent,
-            speed: Math.round(speed)
+            transferred: totalBytes || downloadedBytes,
+            total: totalBytes || downloadedBytes,
+            percent: 100,
+            speed: 0
           });
         }
+
+        console.log('[download-installer-file] Download complete:', destPath);
+        return { success: true, filePath: destPath };
+
+      } catch (attemptErr) {
+        lastError = attemptErr;
+        console.warn(`[download-installer-file] Attempt ${attempt}/${maxAttempts} failed:`, attemptErr.message);
+        try { if (writer) writer.close(); } catch (_) {}
+        try { if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) {}
+
+        if (attempt < maxAttempts) {
+          await new Promise(r => setTimeout(r, 1500));
+        }
       }
-    });
-
-    await new Promise((resolve, reject) => {
-      res.data.pipe(writer);
-      writer.on('finish', resolve);
-      writer.on('error', (err) => {
-        try { fs.unlinkSync(tempPath); } catch (_) {}
-        reject(err);
-      });
-      res.data.on('error', (err) => {
-        try { writer.close(); } catch (_) {}
-        try { fs.unlinkSync(tempPath); } catch (_) {}
-        reject(err);
-      });
-    });
-
-    if (fs.existsSync(destPath)) {
-      try { fs.unlinkSync(destPath); } catch (_) {}
-    }
-    fs.renameSync(tempPath, destPath);
-
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('installer-download-progress', {
-        transferred: totalBytes || downloadedBytes,
-        total: totalBytes || downloadedBytes,
-        percent: 100,
-        speed: 0
-      });
     }
 
-    console.log('[download-installer-file] Download complete:', destPath);
-    return { success: true, filePath: destPath };
+    throw lastError || new Error('Failed to download installer after multiple attempts');
   } catch (err) {
-    console.error('[download-installer-file] Error:', err);
-    try {
-      if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-    } catch (_) {}
+    console.error('[download-installer-file] Final error:', err);
     return { success: false, error: err.message };
   }
 });

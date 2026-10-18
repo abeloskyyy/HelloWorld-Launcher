@@ -2149,33 +2149,7 @@ function initUpdateModalListeners() {
             if (sizeEl) sizeEl.textContent = '0 MB';
             if (speedEl) speedEl.textContent = '';
 
-            const api = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
-
             try {
-                // 1. Comprobar si existe setup.exe en la raíz
-                if (statusText) statusText.textContent = (window.t ? window.t('updater.checking') : '') || 'Checking local installer...';
-                let localCheck = null;
-                if (api && typeof api.checkLocalInstaller === 'function') {
-                    localCheck = await api.checkLocalInstaller();
-                } else if (api && typeof api.check_local_installer === 'function') {
-                    localCheck = await api.check_local_installer();
-                }
-
-                if (localCheck && localCheck.exists && localCheck.path) {
-                    // Ya existe: lanzar directamente y cerrar
-                    if (statusText) statusText.textContent = (window.t ? window.t('updater.launching_setup') : '') || 'Launching installer...';
-                    if (barFill) barFill.style.width = '100%';
-                    if (percentEl) percentEl.textContent = '100%';
-
-                    if (api && typeof api.launchInstallerAndQuit === 'function') {
-                        await api.launchInstallerAndQuit(localCheck.path);
-                    } else if (api && typeof api.launch_installer_and_quit === 'function') {
-                        await api.launch_installer_and_quit(localCheck.path);
-                    }
-                    return;
-                }
-
-                // 2. Si no existe: descargar instalador
                 if (statusText) statusText.textContent = (window.t ? window.t('updater.downloading_installer') : '') || 'Downloading installer...';
 
                 // Escuchar progreso de descarga del instalador
@@ -2314,6 +2288,28 @@ function initUpdateModalListeners() {
                 }
 
             } catch (err) {
+                console.warn('[UpdateNow] Download error, attempting local installer fallback:', err.message);
+                try {
+                    const fallbackApi = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
+                    let localCheck = null;
+                    if (fallbackApi && typeof fallbackApi.checkLocalInstaller === 'function') {
+                        localCheck = await fallbackApi.checkLocalInstaller();
+                    } else if (fallbackApi && typeof fallbackApi.check_local_installer === 'function') {
+                        localCheck = await fallbackApi.check_local_installer();
+                    }
+                    if (localCheck && localCheck.exists && localCheck.path) {
+                        if (statusText) statusText.textContent = (window.t ? window.t('updater.launching_setup') : '') || 'Launching installer...';
+                        if (barFill) barFill.style.width = '100%';
+                        if (percentEl) percentEl.textContent = '100%';
+                        if (fallbackApi && typeof fallbackApi.launchInstallerAndQuit === 'function') {
+                            await fallbackApi.launchInstallerAndQuit(localCheck.path);
+                        } else if (fallbackApi && typeof fallbackApi.launch_installer_and_quit === 'function') {
+                            await fallbackApi.launch_installer_and_quit(localCheck.path);
+                        }
+                        return;
+                    }
+                } catch (_) {}
+
                 console.error('[UpdateNow] Error during update process:', err);
                 if (statusText) {
                     statusText.textContent = (window.t ? window.t('updater.could_not_dl') : '') || ('Error: ' + err.message);
