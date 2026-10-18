@@ -26,7 +26,7 @@ on:
 
 permissions:
   contents: write
-  actions: read
+  actions: write
 
 jobs:
   publish-release:
@@ -132,15 +132,13 @@ jobs:
             makeYml("HelloWorld-Launcher-Setup.exe", "latest.yml");
             makeYml("helloworld-launcher-linux-amd64.deb", "latest-linux.yml");
             makeYml("helloworld-launcher-linux-arm64.deb", "latest-linux-arm64.yml");
-            makeYml("helloworld-launcher-mac-amd64.dmg", "latest-mac.yml");
-            makeYml("helloworld-launcher-mac-arm64.dmg", "latest-mac-arm64.yml");
           '
           echo "Release assets including generated metadata:"
           ls -lh release-assets
 
       - name: Create or Update GitHub Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.resolve.outputs.tag_name || steps.resolve.outputs.tag }}
           IS_DRAFT: ${{ github.event.inputs.is_draft }}
           IS_PRERELEASE: ${{ github.event.inputs.is_prerelease }}
@@ -184,3 +182,12 @@ jobs:
           fi
 
           echo "Release operation completed successfully for $TAG."
+
+      - name: Trigger Discord Release Notification
+        if: ${{ github.event.inputs.is_draft != 'true' && secrets.RELEASE_PAT == '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.resolve.outputs.tag_name || steps.resolve.outputs.tag }}
+        run: |
+          echo "Dispatching Discord release notification for $TAG..."
+          gh workflow run discord-release.yml -f tag_name="$TAG" || echo "Notice: Could not dispatch discord-release.yml automatically via gh CLI."

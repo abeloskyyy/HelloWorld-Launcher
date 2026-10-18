@@ -4,6 +4,12 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag to notify (e.g. v2.2.0). Leave empty to auto-detect latest release.'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   notify:
@@ -13,9 +19,10 @@ jobs:
       - name: Send Discord Release Message
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK }}
-          TAG_NAME: ${{ github.event.release.tag_name || 'v2.2.0' }}
+          INPUT_TAG: ${{ github.event.inputs.tag_name }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
           RELEASE_TITLE: ${{ github.event.release.name || '' }}
-          RELEASE_URL: ${{ github.event.release.html_url || 'https://github.com/abeloskyyy/HelloWorld-Launcher/releases' }}
+          EVENT_RELEASE_URL: ${{ github.event.release.html_url || '' }}
           EVENT_BODY: ${{ github.event.release.body }}
         run: |
           if [ -z "$WEBHOOK_URL" ]; then
@@ -23,10 +30,29 @@ jobs:
             exit 1
           fi
 
+          # Tag resolution
+          TAG_NAME="$INPUT_TAG"
+          if [ -z "$TAG_NAME" ]; then
+            TAG_NAME="$EVENT_TAG"
+          fi
+          if [ -z "$TAG_NAME" ]; then
+            echo "Attempting to fetch latest release tag from GitHub API..."
+            TAG_NAME=$(curl -s "https://api.github.com/repos/abeloskyyy/HelloWorld-Launcher/releases/latest" | jq -r '.tag_name // empty')
+          fi
+          if [ -z "$TAG_NAME" ]; then
+            TAG_NAME="v2.2.0"
+          fi
+
+          # Release URL resolution
+          RELEASE_URL="$EVENT_RELEASE_URL"
+          if [ -z "$RELEASE_URL" ]; then
+            RELEASE_URL="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/tag/$TAG_NAME"
+          fi
+
           # Title fallback
           TITLE="$RELEASE_TITLE"
           if [ -z "$TITLE" ]; then
-            TITLE="$TAG_NAME"
+            TITLE="HelloWorld Launcher $TAG_NAME"
           fi
 
           # Body fallback: If triggered manually or release body is empty, fetch from Gist changelog
@@ -46,13 +72,14 @@ jobs:
             TRUNCATED="true"
           fi
 
-          # Create robust JSON payload with jq and real JSON newlines
+          # Create robust JSON payload with jq including Link Button components
           PAYLOAD=$(jq -n \
             --arg title "🚀 New Release: $TITLE" \
             --arg version "$TAG_NAME" \
             --arg body "$BODY" \
             --arg url "$RELEASE_URL" \
             --arg truncated "$TRUNCATED" \
+            --arg download_url "https://hwlauncher.abelosky.com" \
             '{
               embeds: [
                 {
@@ -67,6 +94,31 @@ jobs:
                     text: "HelloWorld Launcher • Official Release"
                   },
                   timestamp: (now | todate)
+                }
+              ],
+              components: [
+                {
+                  type: 1,
+                  components: [
+                    {
+                      type: 2,
+                      style: 5,
+                      label: "Descargar Ahora",
+                      url: $download_url,
+                      emoji: {
+                        name: "🚀"
+                      }
+                    },
+                    {
+                      type: 2,
+                      style: 5,
+                      label: "Ver en GitHub",
+                      url: $url,
+                      emoji: {
+                        name: "📦"
+                      }
+                    }
+                  ]
                 }
               ]
             }')
