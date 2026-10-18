@@ -10,44 +10,59 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Send Discord Release Message
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK }}
           TAG_NAME: ${{ github.event.release.tag_name || 'v2.2.0' }}
           RELEASE_TITLE: ${{ github.event.release.name || '' }}
           RELEASE_URL: ${{ github.event.release.html_url || 'https://github.com/abeloskyyy/HelloWorld-Launcher/releases' }}
-          RELEASE_BODY: ${{ github.event.release.body || 'No release notes provided.' }}
+          EVENT_BODY: ${{ github.event.release.body }}
         run: |
           if [ -z "$WEBHOOK_URL" ]; then
             echo "::error::DISCORD_WEBHOOK secret is empty or not configured in GitHub Secrets!"
             exit 1
           fi
 
-          # Fallback title if blank
+          # Title fallback
           TITLE="$RELEASE_TITLE"
           if [ -z "$TITLE" ]; then
             TITLE="$TAG_NAME"
           fi
 
-          # Truncate changelog body if longer than 1800 chars to avoid Discord 400 Bad Request error
-          BODY="$RELEASE_BODY"
-          if [ ${#BODY} -gt 1800 ]; then
-            BODY="$(echo "$BODY" | cut -c 1-1800)"
-            BODY="$BODY\n\n... [Read full release notes on GitHub]($RELEASE_URL)"
+          # Body fallback: If triggered manually (workflow_dispatch) without release event, read CHANGELOG.md
+          BODY="$EVENT_BODY"
+          if [ -z "$BODY" ] && [ -f "CHANGELOG.md" ]; then
+            BODY=$(cat CHANGELOG.md)
+          fi
+          if [ -z "$BODY" ]; then
+            BODY="No release notes provided."
           fi
 
-          DESC="**Version:** $TAG_NAME\n\n$BODY"
+          # Truncate changelog body if longer than 1800 chars to avoid Discord 400 Bad Request error
+          TRUNCATED="false"
+          if [ ${#BODY} -gt 1800 ]; then
+            BODY="$(echo "$BODY" | cut -c 1-1800)"
+            TRUNCATED="true"
+          fi
 
-          # Create robust JSON payload with jq
+          # Create robust JSON payload with jq and real JSON newlines
           PAYLOAD=$(jq -n \
             --arg title "🚀 New Release: $TITLE" \
-            --arg desc "$DESC" \
+            --arg version "$TAG_NAME" \
+            --arg body "$BODY" \
             --arg url "$RELEASE_URL" \
+            --arg truncated "$TRUNCATED" \
             '{
               embeds: [
                 {
                   title: $title,
-                  description: $desc,
+                  description: (
+                    "**Version:** " + $version + "\n\n" + $body +
+                    (if $truncated == "true" then "\n\n... [Read full release notes on GitHub](" + $url + ")" else "" end)
+                  ),
                   url: $url,
                   color: 1096065,
                   footer: {
