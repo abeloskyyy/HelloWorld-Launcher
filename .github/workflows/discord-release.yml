@@ -10,9 +10,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Send Discord Release Message
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK }}
@@ -32,12 +29,13 @@ jobs:
             TITLE="$TAG_NAME"
           fi
 
-          # Body fallback: If triggered manually (workflow_dispatch) without release event, read CHANGELOG.md
+          # Body fallback: If triggered manually or release body is empty, fetch from Gist changelog
           BODY="$EVENT_BODY"
-          if [ -z "$BODY" ] && [ -f "CHANGELOG.md" ]; then
-            BODY=$(cat CHANGELOG.md)
+          if [ -z "$BODY" ] || [ "$BODY" = "null" ]; then
+            echo "Fetching release notes from Gist..."
+            BODY=$(curl -s "https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json" | jq -r '.changelog.versions[0].markdown // empty')
           fi
-          if [ -z "$BODY" ]; then
+          if [ -z "$BODY" ] || [ "$BODY" = "null" ]; then
             BODY="No release notes provided."
           fi
 
