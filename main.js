@@ -5,6 +5,7 @@ const { URL } = require('url')
 const crypto = require('crypto')
 const { exec } = require('child_process')
 const dns = require('dns').promises
+const { pipeline } = require('stream/promises')
 
 // Use graceful-fs to handle EMFILE (too many open files) errors automatically
 // Must patch BEFORE loading fs-extra so it uses the patched fs
@@ -3204,18 +3205,6 @@ const createWindow = async () => {
   // Intercept window close (X button or Alt+F4) and hide to system tray instead of exiting
   win.on('close', (event) => {
     if (!isQuitting) {
-      if (_isMandatoryUpdateActive) {
-        // Si hay una actualización obligatoria pendiente, cerrar la ventana debe salir del launcher limpiamente
-        isQuitting = true;
-        if (tray && !tray.isDestroyed()) {
-          try { tray.destroy(); } catch (_) {}
-        }
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.destroy();
-        }
-        app.quit();
-        return;
-      }
       event.preventDefault();
       win.hide();
       if (!hasShownTrayBalloon && process.platform === 'win32' && tray && !tray.isDestroyed()) {
@@ -5303,17 +5292,35 @@ ipcMain.handle('launch-installer-and-quit', async (event, installerPath) => {
   }
 });
 
+// Función auxiliar para limpiar archivos temporales huérfanos de descargas anteriores
+function cleanOrphanedTmpFiles(dir) {
+  try {
+    if (!dir || !fs.existsSync(dir)) return;
+    const files = fs.readdirSync(dir);
+    for (const f of files) {
+      if (f.includes('.tmp_') || f.startsWith('setup.exe.tmp') || f.startsWith('HelloWorld-Launcher-Setup.exe.tmp')) {
+        try { fs.unlinkSync(path.join(dir, f)); } catch (_) {}
+      }
+    }
+  } catch (_) {}
+}
+
 ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
   try {
     if (!downloadUrl) throw new Error('No download URL provided');
     const execDir = path.dirname(process.execPath);
+    const tempDir = app.getPath('temp');
 
     let targetDir = execDir;
     try {
       fs.accessSync(execDir, fs.constants.W_OK);
     } catch (_) {
-      targetDir = app.getPath('temp');
+      targetDir = tempDir;
     }
+
+    // Limpiar temporales antiguos en ambos directorios para no dejar basura previa
+    cleanOrphanedTmpFiles(execDir);
+    cleanOrphanedTmpFiles(tempDir);
 
     // Para Windows, guardar siempre el instalador como setup.exe directamente
     let filename = process.platform === 'win32' ? 'setup.exe' : 'helloworld-launcher-update';
@@ -5331,23 +5338,13 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
       }
     } catch (_) {}
 
-    // Limpiar temporales antiguos huérfanos si existieran
-    try {
-      const filesInDir = fs.readdirSync(targetDir);
-      for (const f of filesInDir) {
-        if (f.startsWith('setup.exe.tmp_') || f.startsWith('HelloWorld-Launcher-Setup.exe.tmp_')) {
-          try { fs.unlinkSync(path.join(targetDir, f)); } catch (_) {}
-        }
-      }
-    } catch (_) {}
-
     const destPath = path.join(targetDir, filename);
 
-    // Support Google Drive links automatically
+    // Soporte para enlaces de Google Drive automáticos
     let targetUrl = downloadUrl;
     try {
       const urlObj = new URL(downloadUrl);
-      if (urlObj.hostname.includes('drive.google.com')) {
+      if (urlObj.hostname.includes('drive.google.com') || urlObj.hostname.includes('drive.usercontent.google.com')) {
         let fileId = null;
         const matchPath = urlObj.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
         if (matchPath) {
@@ -5362,34 +5359,47 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
     } catch (_) {}
 
     let lastError = null;
-    const maxAttempts = 3;
+    const maxAttempts = 5;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       let tempPath = null;
       let writer = null;
+      let inactivityTimer = null;
+
       try {
         tempPath = destPath + '.tmp_' + Date.now();
         writer = fs.createWriteStream(tempPath);
 
         console.log(`[download-installer-file] Attempt ${attempt}/${maxAttempts} downloading from:`, targetUrl, 'to:', destPath);
 
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('installer-download-progress', {
+            transferred: 0,
+            total: 0,
+            percent: 0,
+            speed: 0,
+            attempt: attempt,
+            maxAttempts: maxAttempts
+          });
+        }
+
         const res = await axios({
           method: 'get',
           url: targetUrl,
           responseType: 'stream',
-          timeout: 0, // Sin timeout para evitar cortes en descargas de archivos grandes
+          timeout: 25000, // Timeout de conexión inicial
           maxRedirects: 15,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': '*/*'
+            'Accept': '*/*',
+            'Accept-Encoding': 'identity',
+            'Connection': 'keep-alive'
           }
         });
 
         const contentType = (res.headers['content-type'] || '').toLowerCase();
         if (contentType.includes('text/html')) {
-          try { writer.close(); } catch (_) {}
-          try { fs.unlinkSync(tempPath); } catch (_) {}
-          throw new Error('El enlace de descarga devolvió una página web HTML en lugar del archivo ejecutable. Asegúrate de que el enlace de Google Drive tenga permisos públicos ("Cualquier persona con el enlace").');
+          throw new Error('El enlace devolvió HTML en vez del ejecutable. Verifica permisos de Google Drive.');
         }
 
         const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
@@ -5397,10 +5407,23 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
         let lastTime = Date.now();
         let lastBytes = 0;
 
+        // Monitor de inactividad de datos: si pasan 15s sin recibir ningún chunk, abortar intento para reintentar
+        const resetInactivityTimer = () => {
+          if (inactivityTimer) clearTimeout(inactivityTimer);
+          inactivityTimer = setTimeout(() => {
+            console.warn(`[download-installer-file] Stream stalled (no data for 15s) on attempt ${attempt}`);
+            if (res.data) {
+              res.data.destroy(new Error('Descarga estancada: el servidor no envió datos durante 15 segundos'));
+            }
+          }, 15000);
+        };
+        resetInactivityTimer();
+
         res.data.on('data', (chunk) => {
+          resetInactivityTimer();
           downloadedBytes += chunk.length;
           const now = Date.now();
-          if (now - lastTime >= 300) {
+          if (now - lastTime >= 250) {
             const speed = (downloadedBytes - lastBytes) / ((now - lastTime) / 1000);
             lastTime = now;
             lastBytes = downloadedBytes;
@@ -5408,7 +5431,6 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
             if (totalBytes > 0) {
               percent = Math.min(99, Math.round((downloadedBytes / totalBytes) * 100));
             } else {
-              // Si Google Drive no envía Content-Length, estimar sobre ~95MB con límite del 95%
               const estimatedTotal = 95 * 1024 * 1024;
               percent = Math.min(95, Math.round((downloadedBytes / estimatedTotal) * 100));
             }
@@ -5417,26 +5439,27 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
                 transferred: downloadedBytes,
                 total: totalBytes,
                 percent: percent,
-                speed: Math.round(speed)
+                speed: Math.round(speed),
+                attempt: attempt,
+                maxAttempts: maxAttempts
               });
             }
           }
         });
 
-        await new Promise((resolve, reject) => {
-          res.data.pipe(writer);
-          writer.on('finish', resolve);
-          writer.on('error', (err) => {
-            try { fs.unlinkSync(tempPath); } catch (_) {}
-            reject(err);
-          });
-          res.data.on('error', (err) => {
-            try { writer.close(); } catch (_) {}
-            try { fs.unlinkSync(tempPath); } catch (_) {}
-            reject(err);
-          });
-        });
+        // Pipeline garantiza propagación de errores de red y cierre automático de streams
+        await pipeline(res.data, writer);
+        if (inactivityTimer) clearTimeout(inactivityTimer);
 
+        // Validación estricta de integridad de la descarga para evitar ejecutar ejecutables truncados
+        if (totalBytes > 0 && downloadedBytes < totalBytes) {
+          throw new Error(`Descarga incompleta: se recibieron ${downloadedBytes} de ${totalBytes} bytes`);
+        }
+        if (process.platform === 'win32' && downloadedBytes < 30 * 1024 * 1024) {
+          throw new Error(`El archivo descargado es demasiado pequeño (${(downloadedBytes / (1024 * 1024)).toFixed(1)} MB), descarga incompleta`);
+        }
+
+        // Reemplazar destino de forma segura
         if (fs.existsSync(destPath)) {
           try { fs.unlinkSync(destPath); } catch (_) {}
         }
@@ -5447,24 +5470,49 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
             transferred: totalBytes || downloadedBytes,
             total: totalBytes || downloadedBytes,
             percent: 100,
-            speed: 0
+            speed: 0,
+            attempt: attempt,
+            maxAttempts: maxAttempts
           });
         }
 
-        console.log('[download-installer-file] Download complete:', destPath);
+        console.log('[download-installer-file] Download complete and verified:', destPath, `(${downloadedBytes} bytes)`);
         return { success: true, filePath: destPath };
 
       } catch (attemptErr) {
         lastError = attemptErr;
         console.warn(`[download-installer-file] Attempt ${attempt}/${maxAttempts} failed:`, attemptErr.message);
-        try { if (writer) writer.close(); } catch (_) {}
-        try { if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) {}
+
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+
+        // Cerrar y destruir writer antes de intentar borrar el temporal para evitar bloqueo EBUSY en Windows
+        if (writer && !writer.destroyed) {
+          try {
+            await new Promise((resolve) => {
+              writer.on('close', resolve);
+              writer.destroy();
+              setTimeout(resolve, 300);
+            });
+          } catch (_) {}
+        }
+
+        try {
+          if (tempPath && fs.existsSync(tempPath)) {
+            fs.unlinkSync(tempPath);
+          }
+        } catch (cleanErr) {
+          console.warn('[download-installer-file] Could not remove temp file:', cleanErr.message);
+        }
 
         if (attempt < maxAttempts) {
-          await new Promise(r => setTimeout(r, 1500));
+          await new Promise(r => setTimeout(r, 1200));
         }
       }
     }
+
+    // Limpieza final de temporales huérfanos
+    cleanOrphanedTmpFiles(execDir);
+    cleanOrphanedTmpFiles(tempDir);
 
     throw lastError || new Error('Failed to download installer after multiple attempts');
   } catch (err) {

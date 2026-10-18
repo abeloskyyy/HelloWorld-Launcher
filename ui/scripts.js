@@ -2170,12 +2170,21 @@ function initUpdateModalListeners() {
                 if (statusText) statusText.textContent = (window.t ? window.t('updater.downloading_installer') : '') || 'Downloading installer...';
 
                 // Escuchar progreso de descarga del instalador
-                let maxProgressPct = 0;
+                let currentAttempt = 1;
                 const onProgress = (data) => {
-                    const rawPct = Math.min(100, Math.round(data.percent || 0));
-                    if (rawPct > maxProgressPct) maxProgressPct = rawPct;
-                    if (barFill) barFill.style.width = `${maxProgressPct}%`;
-                    if (percentEl) percentEl.textContent = `${maxProgressPct}%`;
+                    const rawPct = Math.min(100, Math.max(0, Math.round(data.percent || 0)));
+                    if (data.attempt && data.attempt !== currentAttempt) {
+                        currentAttempt = data.attempt;
+                    }
+                    if (barFill) barFill.style.width = `${rawPct}%`;
+                    if (percentEl) percentEl.textContent = `${rawPct}%`;
+                    if (statusText) {
+                        if (data.attempt && data.maxAttempts && data.attempt > 1) {
+                            statusText.textContent = `Descargando instalador (intento ${data.attempt}/${data.maxAttempts})...`;
+                        } else {
+                            statusText.textContent = (window.t ? window.t('updater.downloading_installer') : '') || 'Downloading installer...';
+                        }
+                    }
                     if (speedEl && data.speed) {
                         const mbSpeed = (data.speed / (1024 * 1024)).toFixed(2);
                         speedEl.textContent = `${mbSpeed} MB/s`;
@@ -2305,28 +2314,6 @@ function initUpdateModalListeners() {
                 }
 
             } catch (err) {
-                console.warn('[UpdateNow] Download error, attempting local installer fallback:', err.message);
-                try {
-                    const fallbackApi = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
-                    let localCheck = null;
-                    if (fallbackApi && typeof fallbackApi.checkLocalInstaller === 'function') {
-                        localCheck = await fallbackApi.checkLocalInstaller();
-                    } else if (fallbackApi && typeof fallbackApi.check_local_installer === 'function') {
-                        localCheck = await fallbackApi.check_local_installer();
-                    }
-                    if (localCheck && localCheck.exists && localCheck.path) {
-                        if (statusText) statusText.textContent = (window.t ? window.t('updater.launching_setup') : '') || 'Launching installer...';
-                        if (barFill) barFill.style.width = '100%';
-                        if (percentEl) percentEl.textContent = '100%';
-                        if (fallbackApi && typeof fallbackApi.launchInstallerAndQuit === 'function') {
-                            await fallbackApi.launchInstallerAndQuit(localCheck.path);
-                        } else if (fallbackApi && typeof fallbackApi.launch_installer_and_quit === 'function') {
-                            await fallbackApi.launch_installer_and_quit(localCheck.path);
-                        }
-                        return;
-                    }
-                } catch (_) {}
-
                 console.error('[UpdateNow] Error during update process:', err);
                 if (statusText) {
                     statusText.textContent = (window.t ? window.t('updater.could_not_dl') : '') || ('Error: ' + err.message);
