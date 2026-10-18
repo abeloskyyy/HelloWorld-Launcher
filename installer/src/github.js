@@ -8,10 +8,12 @@ const http = require('http')
 const fs = require('fs-extra')
 const path = require('path')
 const os = require('os')
+const axios = require('axios')
 
 const REPO_OWNER = 'Abeloskyyy'
 const REPO_NAME = 'HelloWorld-Launcher'
 const API_BASE = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`
+const REMOTE_CONFIG_GIST_URL = 'https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json'
 
 // ── Platform / arch helpers ───────────────────────────────────────────────────
 
@@ -43,6 +45,41 @@ function getExpectedAssetNames() {
   }
 }
 
+// ── Google Drive & URL helpers ────────────────────────────────────────────────
+
+function resolveDownloadUrl(url) {
+  if (!url || typeof url !== 'string' || !url.startsWith('http')) return url
+  try {
+    const urlObj = new URL(url)
+    if (urlObj.hostname.includes('drive.google.com')) {
+      let fileId = null
+      const matchPath = urlObj.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
+      if (matchPath) {
+        fileId = matchPath[1]
+      } else if (urlObj.searchParams.has('id')) {
+        fileId = urlObj.searchParams.get('id')
+      }
+      if (fileId) {
+        return `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`
+      }
+    }
+  } catch (_) {}
+  return url
+}
+
+function safeParseJson(raw) {
+  try {
+    return JSON.parse(raw)
+  } catch (e1) {
+    try {
+      const fixed = raw.replace(/([0-9]|true|false|null|"|\]|\})\s*\r?\n(\s*")/g, '$1,\n$2')
+      return JSON.parse(fixed)
+    } catch (_) {
+      throw e1
+    }
+  }
+}
+
 // ── HTTP utility ─────────────────────────────────────────────────────────────
 
 function httpGet(url, opts = {}) {
@@ -50,13 +87,14 @@ function httpGet(url, opts = {}) {
     const proto = url.startsWith('https') ? https : http
     const req = proto.get(url, {
       headers: {
-        'User-Agent': 'HelloWorld-Launcher-Setup/1.0',
-        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'application/vnd.github.v3+json, application/json, text/plain, */*',
       },
     }, (res) => {
       // Follow redirects
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return resolve(httpGet(res.headers.location, opts))
+        const nextUrl = new URL(res.headers.location, url).toString()
+        return resolve(httpGet(nextUrl, opts))
       }
       if (res.statusCode !== 200) {
         res.resume()
@@ -74,6 +112,87 @@ function httpGet(url, opts = {}) {
 }
 
 // ── Release info ─────────────────────────────────────────────────────────────
+
+async function fetchGistReleaseInfo(version = null) {
+  try {
+    const raw = await httpGet(`${REMOTE_CONFIG_GIST_URL}?t=${Date.now()}`)
+    const data = safeParseJson(raw)
+    if (!data || !data.changelog) return null
+
+    const changelog = data.changelog
+    const latestVersion = changelog.latestVersion || '2.2.0'
+    const versions = Array.isArray(changelog.versions) ? changelog.versions : []
+
+    let targetVersionObj = null
+    if (version) {
+      targetVersionObj = versions.find(v => v.version === version)
+    }
+    if (!targetVersionObj) {
+      targetVersionObj = versions.find(v => v.version === latestVersion) || versions[0]
+    }
+    if (!targetVersionObj || !targetVersionObj.downloads) return null
+
+    const { platform, arch } = getPlatformArch()
+    const downloads = targetVersionObj.downloads || {}
+    let launcherUrl = null
+    let setupUrl = null
+
+    if (platform === 'win') {
+      if (downloads.windows && typeof downloads.windows === 'object') {
+        launcherUrl = downloads.windows.zip || downloads.windows.setup
+        setupUrl = downloads.windows.setup || downloads.windows.zip
+      }
+      if (!launcherUrl) {
+        launcherUrl = downloads.windows_zip || downloads.windows_setup || downloads.setup
+      }
+      if (!setupUrl) {
+        setupUrl = downloads.windows_setup || downloads.setup || downloads.windows_zip
+      }
+    } else {
+      const linObj = downloads.linux
+      if (linObj && typeof linObj === 'object') {
+        const archObj = (arch === 'arm64') ? (linObj.arm64 || linObj.arm) : (linObj.amd64 || linObj.x64)
+        if (archObj && typeof archObj === 'object') {
+          launcherUrl = archObj.deb || archObj.appimage || archObj.zip
+        } else if (typeof archObj === 'string') {
+          launcherUrl = archObj
+        }
+        if (!launcherUrl) launcherUrl = linObj.deb || linObj.appimage || linObj.zip
+      }
+      if (!launcherUrl) {
+        launcherUrl = (arch === 'arm64')
+          ? (downloads.linux_arm64_deb || downloads.linux_deb || downloads.linux_appimage)
+          : (downloads.linux_amd64_deb || downloads.linux_deb || downloads.linux_appimage)
+      }
+    }
+
+    if (!launcherUrl) return null
+
+    const effectiveVersion = targetVersionObj.version || latestVersion
+    const names = getExpectedAssetNames()
+
+    return {
+      version: effectiveVersion,
+      tagName: 'v' + effectiveVersion,
+      releaseNotes: targetVersionObj.markdown || targetVersionObj.title || '',
+      publishedAt: targetVersionObj.releaseDate || new Date().toISOString(),
+      launcher: {
+        name: names.launcher,
+        url: launcherUrl,
+        size: 0,
+      },
+      setup: setupUrl ? {
+        name: names.setup,
+        url: setupUrl,
+        size: 0,
+      } : null,
+      manifest: null,
+    }
+  } catch (err) {
+    console.warn('[fetchGistReleaseInfo] Could not fetch/parse changelog from Gist:', err.message)
+    return null
+  }
+}
 
 async function fetchRelease(version) {
   if (version) {
@@ -111,7 +230,17 @@ async function getLatestReleaseInfo(version = null) {
     }
   }
 
-  // ── PRODUCTION: FETCH FROM GITHUB RELEASES ──
+  // ── 1. PRIMARY: FETCH FROM GIST CHANGELOG (Supports Google Drive & Custom Downloads) ──
+  try {
+    const gistRelease = await fetchGistReleaseInfo(version)
+    if (gistRelease && gistRelease.launcher && gistRelease.launcher.url) {
+      return gistRelease
+    }
+  } catch (gistErr) {
+    console.warn('[getLatestReleaseInfo] Gist lookup failed, falling back to GitHub Releases:', gistErr.message)
+  }
+
+  // ── 2. FALLBACK: FETCH FROM GITHUB RELEASES ──
   try {
     const release = await fetchRelease(version)
 
@@ -166,7 +295,7 @@ async function getLatestReleaseInfo(version = null) {
  * Download a URL to a local file, calling onProgress(percent, transferredBytes, totalBytes, speedBps)
  */
 function downloadFile(url, destPath, onProgress) {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     if (!url.startsWith('http')) {
       try {
         const stat = fs.statSync(url)
@@ -198,54 +327,65 @@ function downloadFile(url, destPath, onProgress) {
       }
     }
 
-    const proto = url.startsWith('https') ? https : http
+    const resolvedUrl = resolveDownloadUrl(url)
+    const writeStream = fs.createWriteStream(destPath)
 
-    const makeRequest = (targetUrl) => {
-      const req = proto.get(targetUrl, {
-        headers: { 'User-Agent': 'HelloWorld-Launcher-Setup/1.0' },
-      }, (res) => {
-        // Follow redirect
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          res.resume()
-          return makeRequest(res.headers.location)
-        }
-        if (res.statusCode !== 200) {
-          res.resume()
-          return reject(new Error(`Download failed: HTTP ${res.statusCode}`))
-        }
-
-        const total = parseInt(res.headers['content-length'] || '0', 10)
-        let transferred = 0
-        let lastTime = Date.now()
-        let lastBytes = 0
-
-        const fileStream = fs.createWriteStream(destPath)
-        res.pipe(fileStream)
-
-        res.on('data', (chunk) => {
-          transferred += chunk.length
-          const now = Date.now()
-          const elapsed = (now - lastTime) / 1000
-          let speed = 0
-          if (elapsed >= 0.5) {
-            speed = (transferred - lastBytes) / elapsed
-            lastTime = now
-            lastBytes = transferred
-          }
-          const percent = total > 0 ? Math.round((transferred / total) * 100) : 0
-          if (onProgress) onProgress(percent, transferred, total, speed)
-        })
-
-        fileStream.on('finish', resolve)
-        fileStream.on('error', reject)
-        res.on('error', reject)
+    try {
+      const res = await axios({
+        method: 'get',
+        url: resolvedUrl,
+        responseType: 'stream',
+        timeout: 60000,
+        maxRedirects: 15,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': '*/*',
+        },
       })
 
-      req.on('error', reject)
-      req.setTimeout(30000, () => { req.destroy(); reject(new Error('Download timeout')) })
-    }
+      const contentType = (res.headers['content-type'] || '').toLowerCase()
+      if (contentType.includes('text/html')) {
+        try { writeStream.close() } catch (_) {}
+        try { fs.unlinkSync(destPath) } catch (_) {}
+        return reject(new Error('El enlace de descarga devolvió una página HTML en lugar del archivo. Asegúrate de que el enlace de Google Drive tenga permisos públicos ("Cualquier persona con el enlace").'))
+      }
 
-    makeRequest(url)
+      const total = parseInt(res.headers['content-length'] || '0', 10)
+      let transferred = 0
+      let lastTime = Date.now()
+      let lastBytes = 0
+
+      res.data.on('data', (chunk) => {
+        transferred += chunk.length
+        const now = Date.now()
+        const elapsed = (now - lastTime) / 1000
+        let speed = 0
+        if (elapsed >= 0.5) {
+          speed = (transferred - lastBytes) / elapsed
+          lastTime = now
+          lastBytes = transferred
+        }
+        const percent = total > 0 ? Math.round((transferred / total) * 100) : 0
+        if (onProgress) onProgress(percent, transferred, total, speed)
+      })
+
+      res.data.pipe(writeStream)
+
+      writeStream.on('finish', () => resolve())
+      writeStream.on('error', (err) => {
+        try { fs.unlinkSync(destPath) } catch (_) {}
+        reject(err)
+      })
+      res.data.on('error', (err) => {
+        try { writeStream.close() } catch (_) {}
+        try { fs.unlinkSync(destPath) } catch (_) {}
+        reject(err)
+      })
+    } catch (err) {
+      try { writeStream.close() } catch (_) {}
+      try { fs.unlinkSync(destPath) } catch (_) {}
+      reject(err)
+    }
   })
 }
 
