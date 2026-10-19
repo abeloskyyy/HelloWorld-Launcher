@@ -6491,12 +6491,36 @@ function getSelectedIcon() {
 
 if (loginButton) {
 
-    loginButton.addEventListener('click', () => {
+    loginButton.addEventListener('click', async () => {
 
         if (loginModal) loginModal.classList.add('show');
 
+        const savedBtn = document.getElementById('selectSavedAccountsBtn');
+        if (savedBtn && window.pywebview && window.pywebview.api && window.pywebview.api.get_saved_accounts) {
+            try {
+                const accs = await window.pywebview.api.get_saved_accounts();
+                if (accs && accs.length > 0) {
+                    savedBtn.style.display = 'inline-flex';
+                } else {
+                    savedBtn.style.display = 'none';
+                }
+            } catch (_) {
+                savedBtn.style.display = 'none';
+            }
+        }
+
     });
 
+}
+
+const selectSavedAccountsBtn = document.getElementById('selectSavedAccountsBtn');
+if (selectSavedAccountsBtn) {
+    selectSavedAccountsBtn.addEventListener('click', async () => {
+        if (loginModal) loginModal.classList.remove('show');
+        if (typeof window.openAccountSwitcher === 'function') {
+            await window.openAccountSwitcher();
+        }
+    });
 }
 
 

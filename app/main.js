@@ -372,6 +372,33 @@ const loadUserData = () => {
     } catch (_) {}
   }
 
+  // Auto-restore active account from saved accounts if username is empty AND app is ready
+  if ((!userDataCache.username || userDataCache.username.trim() === '') && app.isReady()) {
+    try {
+      const savedAccs = loadSavedAccounts();
+      if (savedAccs && savedAccs.length > 0) {
+        const sorted = [...savedAccs].sort((a, b) => (b.lastUsed || '').localeCompare(a.lastUsed || ''));
+        const latest = sorted[0];
+        if (latest && latest.username) {
+          userDataCache.username = latest.username;
+          userDataCache.account_type = latest.type || 'offline';
+          userDataCache.uuid = latest.uuid || '';
+          if (latest.avatarUrl) userDataCache.last_skin_url = latest.avatarUrl;
+          if (latest.mc_token) userDataCache.mc_token = latest.mc_token;
+          if (latest.msmc_auth) userDataCache.msmc_auth = latest.msmc_auth;
+          if (latest.firebase_uid) userDataCache.firebase_uid = latest.firebase_uid;
+          if (latest.firebase_refresh_token) userDataCache.firebase_refresh_token = latest.firebase_refresh_token;
+          if (latest.firebase_ms_uid) userDataCache.firebase_ms_uid = latest.firebase_ms_uid;
+          if (latest.firebase_ms_refresh_token) userDataCache.firebase_ms_refresh_token = latest.firebase_ms_refresh_token;
+          saveUserData(userDataCache);
+          console.log(`[loadUserData] Auto-restored active account from saved_accounts.json: ${latest.username} (${latest.type})`);
+        }
+      }
+    } catch (e) {
+      console.warn('[loadUserData] Failed to auto-restore saved account:', e);
+    }
+  }
+
   // Ensure mcdir is valid
   if (!userDataCache.mcdir || userDataCache.mcdir.trim() === "") {
     userDataCache.mcdir = paths.getMcDir();

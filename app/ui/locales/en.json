@@ -917,7 +917,8 @@
     "email": "Email",
     "email_address_placeholder": "Email Address",
     "account_required_desc": "You need a HelloWorld or Microsoft account to use this feature.",
-    "create_hw_account": "Create a HelloWorld Account"
+    "create_hw_account": "Create a HelloWorld Account",
+    "select_saved_account": "Or switch to a saved account"
   },
   "error": {
     "launch_error": "Launch Error",

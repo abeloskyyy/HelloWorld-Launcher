@@ -917,7 +917,8 @@
     "email": "Correo electrónico",
     "email_address_placeholder": "Dirección de correo electrónico",
     "account_required_desc": "Necesitas una cuenta de HelloWorld o Microsoft para usar esta función.",
-    "create_hw_account": "Crear una cuenta HelloWorld"
+    "create_hw_account": "Crear una cuenta HelloWorld",
+    "select_saved_account": "O selecciona una cuenta guardada"
   },
   "error": {
     "launch_error": "Error de Ejecución",

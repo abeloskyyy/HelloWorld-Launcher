@@ -396,7 +396,7 @@
                     position: 'right',
                     advanceOn: 'manual',
                     beforeShow: () => {
-                        // Create logic handled by scripts-skinpacks.js
+                        // Create logic handled by skinpacks.js
                         // We wait for modal to close
                         const skinPackModal = document.getElementById('skinPackModal');
                         const checkClosed = setInterval(() => {
