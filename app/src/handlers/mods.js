@@ -888,7 +888,7 @@ class ModManager {
                         const res = await axios.get(`https://api.modrinth.com/v2/project/${pid}/version`, {
                             params,
                             timeout: 8000,
-                            headers: { 'User-Agent': 'HelloWorld-Launcher/2.2.0 (contact@abelosky.com)' }
+                            headers: { 'User-Agent': 'HelloWorld-Launcher/2.2.1 (contact@abelosky.com)' }
                         });
                         versions = Array.isArray(res.data) ? res.data : [];
 

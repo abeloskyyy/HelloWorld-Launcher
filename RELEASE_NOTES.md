@@ -5,10 +5,6 @@
 - Auto-maximize and reopen launcher when game closes (configurable in settings)
 - Windows Jump List context menu for Start Menu and Taskbar
 
-## Changed
-
-- 
-
 ## Fixed
 
 - Fixed Microsoft account verification blocked by Content Security Policy (ERR_BLOCKED_BY_CSP in Firebase Auth iframe)
