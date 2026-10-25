@@ -15,7 +15,7 @@ const getLauncherVersion = () => {
     return packageJson.version || '2.2.1';
 };
 
-const MODRINTH_USER_AGENT = `HelloWorld-Launcher/${getLauncherVersion()} (contact@abelosky.com)`;
+const MODRINTH_USER_AGENT = `HelloWorld-Launcher/${getLauncherVersion()} (abelosky.dev@gmail.com)`;
 
 class ModManager {
 
