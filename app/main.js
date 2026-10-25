@@ -103,6 +103,15 @@ if (process.platform === 'win32') {
 
 const activeNotifications = new Set();
 
+function hasCommandLineArg(args, flag) {
+  if (!Array.isArray(args)) return false;
+  return args.some(arg => {
+    if (typeof arg !== 'string') return false;
+    const clean = arg.trim();
+    return clean === flag || clean.startsWith(`${flag}=`);
+  });
+}
+
 function parseLaunchProfileArg(args) {
   if (!Array.isArray(args)) return null;
   for (const arg of args) {
@@ -118,6 +127,22 @@ function parseLaunchProfileArg(args) {
   return null;
 }
 
+function getAppLaunchArgs(extraArgs = '') {
+  if (app.isPackaged) {
+    return extraArgs ? extraArgs.trim() : '';
+  }
+  const appPath = app.getAppPath();
+  return extraArgs ? `"${appPath}" ${extraArgs.trim()}` : `"${appPath}"`;
+}
+
+if (hasCommandLineArg(process.argv, '--quit-launcher')) {
+  app.quit();
+  process.exit(0);
+}
+if (hasCommandLineArg(process.argv, '--open-discord')) {
+  try { shell.openExternal('https://dsc.gg/helloworld-launcher'); } catch (_) {}
+}
+let pendingOpenSocial = hasCommandLineArg(process.argv, '--open-social');
 let pendingAutoLaunchProfileId = parseLaunchProfileArg(process.argv);
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -128,7 +153,39 @@ if (!gotSingleInstanceLock) {
 } else {
   app.on('second-instance', (event, commandLine) => {
     console.log('[SingleInstance] Second instance launched with commandLine:', commandLine);
+
+    if (hasCommandLineArg(commandLine, '--quit-launcher')) {
+      isQuitting = true;
+      if (typeof tray !== 'undefined' && tray && !tray.isDestroyed()) {
+        try { tray.destroy(); } catch (_) {}
+      }
+      if (typeof mainWindow !== 'undefined' && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.destroy();
+      }
+      app.quit();
+      setTimeout(() => {
+        try {
+          if (app && !app.isDestroyed?.()) app.exit(0);
+        } catch (_) {}
+        process.exit(0);
+      }, 400);
+      return;
+    }
+
+    if (hasCommandLineArg(commandLine, '--open-discord')) {
+      try { shell.openExternal('https://dsc.gg/helloworld-launcher'); } catch (_) {}
+      return;
+    }
+
     showAndFocusWindow();
+
+    if (hasCommandLineArg(commandLine, '--open-social')) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('navigate-to-chat', { targetTab: 'received' });
+      }
+      return;
+    }
+
     const targetProfileId = parseLaunchProfileArg(commandLine);
     if (targetProfileId && mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('auto-launch-profile', targetProfileId);
@@ -3033,6 +3090,9 @@ function updateTrayMenu() {
     try {
       tray.setContextMenu(Menu.buildFromTemplate(restrictedItems));
     } catch (_) {}
+    try {
+      requestUpdateJumpList();
+    } catch (_) {}
     return;
   }
 
@@ -3173,6 +3233,159 @@ function updateTrayMenu() {
   try {
     tray.setContextMenu(contextMenu);
   } catch (_) {}
+  try {
+    requestUpdateJumpList();
+  } catch (_) {}
+}
+
+let updateJumpListTimeout = null;
+function requestUpdateJumpList() {
+  if (process.platform !== 'win32') return;
+  if (updateJumpListTimeout) clearTimeout(updateJumpListTimeout);
+  updateJumpListTimeout = setTimeout(() => {
+    updateJumpList().catch(err => {
+      console.warn('[JumpList] Error updating JumpList:', err);
+    });
+  }, 200);
+}
+
+async function updateJumpList() {
+  if (process.platform !== 'win32') return;
+
+  try {
+    const isLocked = Boolean(_isMandatoryUpdateActive || (_isMaintenanceActive && !_adminBypassGranted));
+    const recentProfiles = isLocked ? [] : getLastPlayedProfiles(5);
+    const fallbackIcon = getTrayIcon();
+
+    const recentProfileTasks = [];
+    for (const p of recentProfiles) {
+      let iconPath = fallbackIcon;
+      try {
+        const ico = await getProfileIcoPath(p.id, p.icon);
+        if (ico && fs.existsSync(ico)) {
+          iconPath = ico;
+        }
+      } catch (_) {}
+
+      const label = formatProfileTrayLabel(p);
+      recentProfileTasks.push({
+        type: 'task',
+        title: label,
+        description: `Lanzar ${p.name || label}`,
+        program: process.execPath,
+        args: getAppLaunchArgs(`--launch-profile="${p.id}"`),
+        arguments: getAppLaunchArgs(`--launch-profile="${p.id}"`),
+        iconPath,
+        iconIndex: 0
+      });
+    }
+
+    const standardTasks = [];
+
+    if (isLocked) {
+      standardTasks.push({
+        type: 'task',
+        title: getTranslation('tray.open', 'Abrir HelloWorld Launcher'),
+        description: getTranslation('tray.open', 'Abrir HelloWorld Launcher'),
+        program: process.execPath,
+        args: getAppLaunchArgs('--open-launcher'),
+        arguments: getAppLaunchArgs('--open-launcher'),
+        iconPath: fallbackIcon,
+        iconIndex: 0
+      });
+      standardTasks.push({
+        type: 'task',
+        title: getTranslation('tray.discord', 'Discord de la comunidad'),
+        description: getTranslation('tray.discord', 'Discord de la comunidad'),
+        program: process.execPath,
+        args: getAppLaunchArgs('--open-discord'),
+        arguments: getAppLaunchArgs('--open-discord'),
+        iconPath: fallbackIcon,
+        iconIndex: 0
+      });
+      standardTasks.push({
+        type: 'task',
+        title: getTranslation('tray.quit', 'Salir de HelloWorld Launcher'),
+        description: getTranslation('tray.quit', 'Salir de HelloWorld Launcher'),
+        program: process.execPath,
+        args: getAppLaunchArgs('--quit-launcher'),
+        arguments: getAppLaunchArgs('--quit-launcher'),
+        iconPath: fallbackIcon,
+        iconIndex: 0
+      });
+    } else {
+      standardTasks.push({
+        type: 'task',
+        title: getTranslation('tray.open', 'Abrir HelloWorld Launcher'),
+        description: getTranslation('tray.open', 'Abrir HelloWorld Launcher'),
+        program: process.execPath,
+        args: getAppLaunchArgs('--open-launcher'),
+        arguments: getAppLaunchArgs('--open-launcher'),
+        iconPath: fallbackIcon,
+        iconIndex: 0
+      });
+      standardTasks.push({
+        type: 'task',
+        title: getTranslation('tray.social', 'Amigos y Social'),
+        description: getTranslation('tray.social', 'Amigos y Social'),
+        program: process.execPath,
+        args: getAppLaunchArgs('--open-social'),
+        arguments: getAppLaunchArgs('--open-social'),
+        iconPath: fallbackIcon,
+        iconIndex: 0
+      });
+      standardTasks.push({
+        type: 'task',
+        title: getTranslation('tray.discord', 'Discord de la comunidad'),
+        description: getTranslation('tray.discord', 'Discord de la comunidad'),
+        program: process.execPath,
+        args: getAppLaunchArgs('--open-discord'),
+        arguments: getAppLaunchArgs('--open-discord'),
+        iconPath: fallbackIcon,
+        iconIndex: 0
+      });
+      standardTasks.push({
+        type: 'task',
+        title: getTranslation('tray.quit', 'Salir de HelloWorld Launcher'),
+        description: getTranslation('tray.quit', 'Salir de HelloWorld Launcher'),
+        program: process.execPath,
+        args: getAppLaunchArgs('--quit-launcher'),
+        arguments: getAppLaunchArgs('--quit-launcher'),
+        iconPath: fallbackIcon,
+        iconIndex: 0
+      });
+    }
+
+    const categories = [];
+    if (recentProfileTasks.length > 0) {
+      categories.push({
+        type: 'custom',
+        name: getTranslation('tray.recent_profiles', 'Instalaciones recientes'),
+        items: recentProfileTasks
+      });
+    }
+    categories.push({
+      type: 'tasks',
+      items: standardTasks
+    });
+
+    let jumpRes = 'error';
+    try {
+      jumpRes = app.setJumpList(categories);
+    } catch (_) {
+      jumpRes = 'error';
+    }
+
+    if (jumpRes !== 'ok') {
+      try {
+        app.setUserTasks([...recentProfileTasks, ...standardTasks]);
+      } catch (err) {
+        console.warn('[JumpList] Failed fallback to setUserTasks:', err.message);
+      }
+    }
+  } catch (err) {
+    console.warn('[JumpList] Error updating Windows JumpList:', err.message);
+  }
 }
 
 function createTray() {
@@ -3360,6 +3573,17 @@ const createWindow = async () => {
         }
       }, 1000);
     }
+    if (pendingOpenSocial) {
+      pendingOpenSocial = false;
+      setTimeout(() => {
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('navigate-to-chat', { targetTab: 'received' });
+        }
+      }, 1000);
+    }
+    try {
+      requestUpdateJumpList();
+    } catch (_) {}
     // Start background checks
     checkLatestVersionsAndInstall();
     // Start background update check after 3 seconds without blocking UI
@@ -3388,11 +3612,19 @@ const createWindow = async () => {
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     // Allow Firebase Auth popup (signInWithPopup needs window.open)
-    if (url.includes('firebaseapp.com/__/auth/') ||
+    if (url.includes('firebaseapp.com') ||
+      url.includes('firebase.com') ||
       url.includes('login.microsoftonline.com') ||
       url.includes('login.live.com') ||
+      url.includes('account.live.com') ||
+      url.includes('account.microsoft.com') ||
       url.includes('accounts.google.com')) {
-      return { action: 'allow' };
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          autoHideMenuBar: true
+        }
+      };
     }
     shell.openExternal(url);
     return { action: 'deny' };
@@ -4202,10 +4434,16 @@ ipcMain.handle('edit-profile', async (e, profile_id, name, version, loader, icon
       data.addons = addons;
     }
   }
-  return await profileManager.editProfile(id, data);
+  const result = await profileManager.editProfile(id, data);
+  try { updateTrayMenu(); } catch (_) {}
+  return result;
 })
 
-ipcMain.handle('delete-profile', async (e, id) => profileManager.deleteProfile(id))
+ipcMain.handle('delete-profile', async (e, id) => {
+  const result = await profileManager.deleteProfile(id);
+  try { updateTrayMenu(); } catch (_) {}
+  return result;
+})
 ipcMain.handle('get-profile-icon', async (e, f) => profileManager.getProfileIconAsBase64(f))
 
 // --- Profile Windows Shortcuts & ICO generation ---
@@ -10077,6 +10315,22 @@ app.whenReady().then(() => {
 
   createWindow();
   createTray();
+  try {
+    if (process.platform === 'win32') {
+      const startMenuLnk = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'HelloWorld Launcher.lnk');
+      if (fs.existsSync(startMenuLnk)) {
+        const current = shell.readShortcutLink(startMenuLnk);
+        if (!current.appUserModelId || current.appUserModelId !== 'com.abelosky.helloworldlauncher') {
+          shell.writeShortcutLink(startMenuLnk, 'update', {
+            appUserModelId: 'com.abelosky.helloworldlauncher'
+          });
+        }
+      }
+    }
+  } catch (_) {}
+  try {
+    requestUpdateJumpList();
+  } catch (_) {}
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
