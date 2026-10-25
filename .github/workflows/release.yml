@@ -184,10 +184,15 @@ jobs:
           echo "Release operation completed successfully for $TAG."
 
       - name: Trigger Discord Release Notification
-        if: ${{ github.event.inputs.is_draft != 'true' && secrets.RELEASE_PAT == '' }}
+        if: ${{ github.event.inputs.is_draft != 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
           TAG: ${{ steps.resolve.outputs.tag_name || steps.resolve.outputs.tag }}
         run: |
-          echo "Dispatching Discord release notification for $TAG..."
-          gh workflow run discord-release.yml -f tag_name="$TAG" || echo "Notice: Could not dispatch discord-release.yml automatically via gh CLI."
+          if [ -n "$RELEASE_PAT" ]; then
+            echo "RELEASE_PAT was used; discord-release.yml will trigger automatically via GitHub release publication."
+          else
+            echo "Dispatching Discord release notification for $TAG..."
+            gh workflow run discord-release.yml -f tag_name="$TAG" || echo "Notice: Could not dispatch discord-release.yml automatically via gh CLI."
+          fi
