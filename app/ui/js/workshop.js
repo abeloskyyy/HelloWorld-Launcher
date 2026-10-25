@@ -8,7 +8,7 @@
     let workshopInitialized = false;
     let wkModpacksLoaded = false; // Cache flag — avoid full reload on tab switch
 
-    function api() { return window.pywebview && window.pywebview.api; }
+    function api() { return window.hwlAPI; }
 
     function escHtml(s) {
         return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -70,7 +70,12 @@
     }
 
     async function resolveIcon(iconName, iconBase64) {
-        if (iconBase64) return iconBase64;
+        if (iconBase64 && (iconBase64.startsWith('data:') || iconBase64.startsWith('http://') || iconBase64.startsWith('https://'))) {
+            return iconBase64;
+        }
+        if (iconName && (iconName.startsWith('data:') || iconName.startsWith('http://') || iconName.startsWith('https://'))) {
+            return iconName;
+        }
         if (!iconName) return 'img/icon.png';
         try {
             const raw = await api().get_profile_icon(iconName);
@@ -78,32 +83,109 @@
         } catch (e) { return 'img/icon.png'; }
     }
 
-    function showWkLoadingScreen() {
-        const screen = document.getElementById('wkLoadingScreen');
-        if (!screen) return;
-        // Position the overlay to cover the main-content area (excluding sidebar)
-        const mainContent = document.querySelector('.main-content');
-        if (mainContent) {
-            const rect = mainContent.getBoundingClientRect();
-            screen.style.left = rect.left + 'px';
-            screen.style.top = rect.top + 'px';
-            screen.style.width = rect.width + 'px';
-            screen.style.height = rect.height + 'px';
-            screen.style.right = 'auto';
-            screen.style.bottom = 'auto';
-        }
-        screen.style.display = 'flex';
-        screen.classList.remove('fade-out');
+    const LAUNCHER_DEFAULT_ICONS = new Set([
+        'ancient_debris.png', 'bricks.png', 'coal_ore.png', 'crafting_table.png',
+        'default.png', 'diamond_ore.png', 'dirt.png', 'emerald_ore.png',
+        'end_stone.png', 'furnace.png', 'glowstone.png', 'gold_ore.png',
+        'grass.png', 'iron_ore.png', 'lapis_ore.png', 'netherrack.png',
+        'oak_log.png', 'redstone_ore.png', 'slime_block.png', 'stone.png',
+        'stone_bricks.png', 'tnt.png', 'white_wool.png', 'icon.png'
+    ]);
+
+    function isLauncherDefaultIcon(name) {
+        if (!name || typeof name !== 'string') return false;
+        if (name.startsWith('data:') || name.startsWith('http://') || name.startsWith('https://')) return false;
+        const base = name.split('/').pop().split('\\').pop().toLowerCase();
+        return LAUNCHER_DEFAULT_ICONS.has(base);
     }
 
-    function hideWkLoadingScreen() {
-        const screen = document.getElementById('wkLoadingScreen');
-        if (screen) {
-            screen.classList.add('fade-out');
-            setTimeout(() => {
-                if (screen && screen.classList.contains('fade-out')) screen.style.display = 'none';
-            }, 400);
+    function showWkLoadingScreen() {}
+    function hideWkLoadingScreen() {}
+
+    function getWkCardSkeletonHTML(count = 4, context = 'public') {
+        let html = '';
+        const n = Math.max(1, count);
+        for (let i = 0; i < n; i++) {
+            if (context === 'modrinth') {
+                html += '<div class="mod-card mod-card-skeleton">' +
+                    '<div class="mod-card-header">' +
+                        '<div class="mod-card-icon wk-skeleton-shimmer" style="border-radius: 8px;"></div>' +
+                        '<div class="mod-card-info" style="display: flex; flex-direction: column; gap: 6px; justify-content: center;">' +
+                            '<div class="wk-skeleton-shimmer" style="height: 16px; width: 75%; border-radius: 6px;"></div>' +
+                            '<div class="wk-skeleton-shimmer" style="height: 12px; width: 45%; border-radius: 4px;"></div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="mod-card-description" style="display: flex; flex-direction: column; gap: 6px; justify-content: center; min-height: 40px;">' +
+                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 100%; border-radius: 4px;"></div>' +
+                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 75%; border-radius: 4px;"></div>' +
+                    '</div>' +
+                    '<div class="mod-card-stats">' +
+                        '<div class="wk-skeleton-shimmer" style="height: 14px; width: 55px; border-radius: 4px;"></div>' +
+                    '</div>' +
+                    '<div class="mod-card-categories" style="display: flex; gap: 6px;">' +
+                        '<div class="wk-skeleton-shimmer" style="height: 20px; width: 50px; border-radius: 12px;"></div>' +
+                        '<div class="wk-skeleton-shimmer" style="height: 20px; width: 60px; border-radius: 12px;"></div>' +
+                    '</div>' +
+                    '<div class="mod-card-actions">' +
+                        '<div class="wk-skeleton-shimmer" style="height: 38px; width: 100%; border-radius: 8px;"></div>' +
+                    '</div>' +
+                '</div>';
+            } else if (context === 'mine') {
+                html += '<div class="wk-card wk-card-skeleton">' +
+                    '<div class="wk-card-header">' +
+                        '<div class="wk-card-icon wk-skeleton-shimmer"></div>' +
+                        '<div class="wk-card-title-wrap">' +
+                            '<div class="wk-skeleton-shimmer" style="height: 16px; width: 68%; border-radius: 6px; margin-bottom: 6px;"></div>' +
+                            '<div class="wk-skeleton-shimmer" style="height: 12px; width: 42%; border-radius: 4px;"></div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="wk-card-desc" style="display: flex; flex-direction: column; gap: 8px; justify-content: center; min-height: 58px; max-height: 58px;">' +
+                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 100%; border-radius: 4px;"></div>' +
+                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 85%; border-radius: 4px;"></div>' +
+                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 45%; border-radius: 4px;"></div>' +
+                    '</div>' +
+                    '<div class="wk-card-stats-block" style="border: none; background: rgba(0,0,0,0.15);">' +
+                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 50%; border-radius: 4px;"></div>' +
+                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 40%; border-radius: 4px;"></div>' +
+                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 45%; border-radius: 4px;"></div>' +
+                    '</div>' +
+                    '<div class="wk-card-actions">' +
+                        '<div class="wk-card-actions-row">' +
+                            '<div class="wk-skeleton-shimmer" style="height: 34px; width: 100%; border-radius: 8px;"></div>' +
+                        '</div>' +
+                        '<div class="wk-card-actions-admin-row">' +
+                            '<div class="wk-skeleton-shimmer" style="height: 34px; flex: 1; border-radius: 8px;"></div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            } else {
+                html += '<div class="wk-card wk-card-skeleton">' +
+                    '<div class="wk-card-header">' +
+                        '<div class="wk-card-icon wk-skeleton-shimmer"></div>' +
+                        '<div class="wk-card-title-wrap">' +
+                            '<div class="wk-skeleton-shimmer" style="height: 16px; width: 68%; border-radius: 6px; margin-bottom: 6px;"></div>' +
+                            '<div class="wk-skeleton-shimmer" style="height: 12px; width: 42%; border-radius: 4px;"></div>' +
+                        '</div>' +
+                        '<div class="wk-skeleton-shimmer" style="height: 20px; width: 38px; border-radius: 12px; margin-left: auto;"></div>' +
+                    '</div>' +
+                    '<div class="wk-card-desc" style="display: flex; flex-direction: column; gap: 8px; justify-content: center; min-height: 58px; max-height: 58px;">' +
+                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 100%; border-radius: 4px;"></div>' +
+                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 85%; border-radius: 4px;"></div>' +
+                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 45%; border-radius: 4px;"></div>' +
+                    '</div>' +
+                    '<div class="wk-card-actions">' +
+                        '<div class="wk-card-actions-row">' +
+                            '<div class="wk-skeleton-shimmer" style="height: 34px; width: 100%; border-radius: 8px;"></div>' +
+                        '</div>' +
+                        '<div class="wk-card-actions-row">' +
+                            '<div class="wk-skeleton-shimmer" style="height: 34px; flex: 1; border-radius: 8px;"></div>' +
+                            '<div class="wk-skeleton-shimmer" style="height: 34px; width: 38px; border-radius: 8px; flex-shrink: 0;"></div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            }
         }
+        return html;
     }
 
     window.switchWorkshopTab = function (tab) {
@@ -152,21 +234,10 @@
         }, 180);
     };
 
-    async function restoreWkAccordionStates() {
-        let states = {};
-        try {
-            if (api() && api().get_user_json) {
-                const user = await api().get_user_json();
-                // Only read wkAccordionStates if it's a plain object (not undefined or corrupt)
-                const raw = user && user.wkAccordionStates;
-                if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-                    states = raw;
-                }
-            }
-        } catch(e) {}
+    function restoreWkAccordionStatesSync() {
         ['wkMyBody', 'wkOfficialBody', 'wkCommunityBody', 'wkModrinthBody'].forEach(id => {
             try {
-                const saved = states[id] || localStorage.getItem('wk_acc_' + id);
+                const saved = localStorage.getItem('wk_acc_' + id);
                 if (saved) {
                     const body = document.getElementById(id);
                     const btn = document.querySelector('[data-accordion="' + id + '"]');
@@ -185,6 +256,24 @@
                 }
             } catch(e) {}
         });
+    }
+
+    async function restoreWkAccordionStates() {
+        restoreWkAccordionStatesSync();
+        try {
+            if (api() && api().get_user_json) {
+                const user = await api().get_user_json();
+                const raw = user && user.wkAccordionStates;
+                if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+                    ['wkMyBody', 'wkOfficialBody', 'wkCommunityBody', 'wkModrinthBody'].forEach(id => {
+                        if (raw[id] && raw[id] !== localStorage.getItem('wk_acc_' + id)) {
+                            localStorage.setItem('wk_acc_' + id, raw[id]);
+                        }
+                    });
+                    restoreWkAccordionStatesSync();
+                }
+            }
+        } catch(e) {}
     }
 
     window.toggleWkAccordion = async function (id) {
@@ -282,9 +371,10 @@
         if (!grid) { wkModrinthIsLoading = false; return; }
 
         if (!append) {
-            if (loading) loading.style.display = 'flex';
+            if (loading) loading.style.display = 'none';
             if (moreLoading) moreLoading.style.display = 'none';
-            grid.innerHTML = '';
+            const cachedModrinth = parseInt(localStorage.getItem('wk_count_modrinth') || '6', 10);
+            grid.innerHTML = getWkCardSkeletonHTML(cachedModrinth > 0 ? cachedModrinth : 6, 'modrinth');
         } else {
             if (moreLoading) moreLoading.style.display = 'flex';
         }
@@ -316,6 +406,11 @@
                 wkModrinthNoMore = true;
                 wkModrinthIsLoading = false;
                 return;
+            }
+
+            if (!append) {
+                grid.innerHTML = '';
+                localStorage.setItem('wk_count_modrinth', result.results.length);
             }
 
             if (result.results.length < limit) {
@@ -352,7 +447,7 @@
 
     window.initWorkshop = async function () {
         initWkModrinthListeners();
-        await restoreWkAccordionStates();
+        restoreWkAccordionStatesSync();
 
         if (workshopInitialized && wkModpacksLoaded) {
             // Already loaded — just refresh admin access silently, no full reload
@@ -369,6 +464,7 @@
         ]);
         wkModpacksLoaded = true;
         hideWkLoadingScreen();
+        restoreWkAccordionStates();
     };
 
     async function loadWorkshopModPacks() {
@@ -377,8 +473,15 @@
         const communityLock = document.getElementById('wkCommunityLock');
         if (!officialGrid) return;
 
-        officialGrid.innerHTML = '<div class="wk-loading"><div class="wk-spinner"></div><span>Loading...</span></div>';
-        if (communityGrid) communityGrid.innerHTML = '<div class="wk-loading"><div class="wk-spinner"></div><span>Loading...</span></div>';
+        const cachedOfficial = parseInt(localStorage.getItem('wk_count_official') || '2', 10);
+        const cachedCommunity = parseInt(localStorage.getItem('wk_count_community') || '4', 10);
+
+        if (!officialGrid.children.length || officialGrid.querySelector('.wk-loading')) {
+            officialGrid.innerHTML = getWkCardSkeletonHTML(cachedOfficial);
+        }
+        if (communityGrid && (!communityGrid.children.length || communityGrid.querySelector('.wk-loading'))) {
+            communityGrid.innerHTML = getWkCardSkeletonHTML(cachedCommunity);
+        }
 
         const loginState = await getLoginState();
 
@@ -392,7 +495,12 @@
             if (communityGrid) communityGrid.innerHTML = '<div class="wk-empty"><i class="fas fa-exclamation-circle"></i><p>Could not load.</p></div>';
         }
 
-        renderModPackGrid(officialGrid, allItems.filter(function(i) { return i.isOfficial; }));
+        const officialItems = allItems.filter(function(i) { return i.isOfficial; });
+        allCommunityModPacks = allItems.filter(function(i) { return !i.isOfficial; });
+        localStorage.setItem('wk_count_official', officialItems.length);
+        localStorage.setItem('wk_count_community', allCommunityModPacks.length);
+
+        renderModPackGrid(officialGrid, officialItems);
 
         if (loginState !== 'online') {
             if (communityLock) communityLock.style.display = 'flex';
@@ -499,9 +607,15 @@
         const mySection = document.getElementById('wkMyItemsSection');
         const myGrid = document.getElementById('wkMyItemsGrid');
         if (!mySection || !myGrid) return;
+        const cachedMy = parseInt(localStorage.getItem('wk_count_my') || '0', 10);
+        if (cachedMy > 0) {
+            mySection.style.display = 'block';
+            myGrid.innerHTML = getWkCardSkeletonHTML(cachedMy, 'mine');
+        }
         try {
             const res = await api().workshop_get_my_items();
             const items = (res && res.items) || [];
+            localStorage.setItem('wk_count_my', items.length);
             if (items.length === 0) { mySection.style.display = 'none'; return; }
             mySection.style.display = 'block';
             myGrid.innerHTML = items.map(function(item) { return renderModPackCardHTML(item, 'mine'); }).join('');
@@ -1085,14 +1199,40 @@
             }
         }
 
-        if (!wkCustomIconName) {
-            wkCustomIconName = p.icon || '';
+        if (!wkCustomIconName && !wkCustomIconBase64) {
             const placeholder = document.getElementById('wkCreateIconPlaceholder');
             const preview = document.getElementById('wkCreateIconPreview');
-            if (placeholder) placeholder.style.display = 'none';
-            if (preview) {
-                preview.style.display = 'block';
-                preview.src = await resolveIcon(p.icon, null);
+            const profIcon = p.icon || '';
+            if (profIcon) {
+                if (isLauncherDefaultIcon(profIcon)) {
+                    wkCustomIconName = profIcon;
+                    wkCustomIconBase64 = null;
+                    if (placeholder) placeholder.style.display = 'none';
+                    if (preview) {
+                        preview.style.display = 'block';
+                        preview.src = await resolveIcon(profIcon, null);
+                    }
+                } else {
+                    // Custom icon on installation -> encode to base64
+                    try {
+                        const b64 = await api().get_profile_icon(profIcon);
+                        if (b64 && (b64.startsWith('data:') || b64.length > 50)) {
+                            wkCustomIconBase64 = b64;
+                            wkCustomIconName = '';
+                            if (placeholder) placeholder.style.display = 'none';
+                            if (preview) {
+                                preview.style.display = 'block';
+                                preview.src = b64;
+                            }
+                        } else {
+                            wkCustomIconName = profIcon;
+                            wkCustomIconBase64 = null;
+                        }
+                    } catch (_) {
+                        wkCustomIconName = profIcon;
+                        wkCustomIconBase64 = null;
+                    }
+                }
             }
         }
         closeWkProfileSelectModal();
@@ -1166,12 +1306,47 @@
                 snap.configZipB64 = configZipB64;
             }
 
+            let finalIcon = wkCustomIconName || '';
+            let finalIconB64 = wkCustomIconBase64 || null;
+
+            // If no icon explicitly chosen yet, check the selected installation
+            if (!finalIcon && !finalIconB64 && wkSelectedInstallation) {
+                const instIcon = wkSelectedInstallation.icon || '';
+                if (isLauncherDefaultIcon(instIcon)) {
+                    finalIcon = instIcon;
+                    finalIconB64 = null;
+                } else if (instIcon) {
+                    try {
+                        const rawB64 = await api().get_profile_icon(instIcon);
+                        if (rawB64 && (rawB64.startsWith('data:') || rawB64.length > 50)) {
+                            finalIconB64 = rawB64;
+                            finalIcon = '';
+                        } else {
+                            finalIcon = instIcon;
+                        }
+                    } catch (_) {
+                        finalIcon = instIcon;
+                    }
+                }
+            }
+
+            // Safety check: if finalIcon is not in launcher defaults and we don't have base64 yet, convert it!
+            if (finalIcon && !finalIconB64 && !isLauncherDefaultIcon(finalIcon)) {
+                try {
+                    const rawB64 = await api().get_profile_icon(finalIcon);
+                    if (rawB64 && (rawB64.startsWith('data:') || rawB64.length > 50)) {
+                        finalIconB64 = rawB64;
+                        finalIcon = '';
+                    }
+                } catch (_) {}
+            }
+
             const data = {
                 type: 'modpack',
                 title: title,
                 desc: desc,
-                icon: wkCustomIconName || wkSelectedInstallation.icon || '',
-                iconB64: wkCustomIconBase64 || null,
+                icon: finalIcon,
+                iconB64: finalIconB64,
                 snap: snap
             };
             const res = await api().workshop_submit_item(data);
@@ -1319,6 +1494,15 @@
 
     // Hook showSection
     document.addEventListener('DOMContentLoaded', function() {
+        // Hook showSection and section-changed event
+        window.addEventListener('section-changed', function(e) {
+            if (e && e.detail && e.detail.section === 'workshop') {
+                if (typeof window.initWorkshop === 'function') {
+                    window.initWorkshop();
+                }
+            }
+        });
+
         const origShowSection = window.showSection;
         if (origShowSection) {
             window.showSection = function(sectionId, contentType) {
@@ -1330,23 +1514,43 @@
         // Hook imageModal icon selection for workshop
         const imageGrid = document.getElementById('imageGrid');
         if (imageGrid) {
-            imageGrid.addEventListener('click', function(e) {
+            imageGrid.addEventListener('click', async function(e) {
                 if (!window._wkIconMode) return;
                 const item = e.target.closest('.image-grid-item');
                 if (!item || item.classList.contains('upload-item')) return;
+                e.stopPropagation();
                 window._wkIconMode = false;
-                const iconName = item.dataset.icon || item.dataset.src || '';
-                wkCustomIconName = iconName;
-                wkCustomIconBase64 = null;
-                resolveIcon(iconName, null).then(function(src) {
-                    const placeholder = document.getElementById('wkCreateIconPlaceholder');
-                    const preview = document.getElementById('wkCreateIconPreview');
+                const iconName = item.dataset.imageName || item.dataset.icon || item.dataset.src || '';
+                const placeholder = document.getElementById('wkCreateIconPlaceholder');
+                const preview = document.getElementById('wkCreateIconPreview');
+
+                if (isLauncherDefaultIcon(iconName)) {
+                    wkCustomIconName = iconName;
+                    wkCustomIconBase64 = null;
+                    const src = await resolveIcon(iconName, null);
                     if (placeholder) placeholder.style.display = 'none';
                     if (preview) { preview.style.display = 'block'; preview.src = src; }
-                });
+                } else {
+                    // Custom image selected from the grid -> encode to base64!
+                    try {
+                        const b64 = await api().get_profile_icon(iconName);
+                        if (b64 && (b64.startsWith('data:') || b64.length > 50)) {
+                            wkCustomIconBase64 = b64;
+                            wkCustomIconName = '';
+                            if (placeholder) placeholder.style.display = 'none';
+                            if (preview) { preview.style.display = 'block'; preview.src = b64; }
+                        } else {
+                            wkCustomIconName = iconName;
+                            wkCustomIconBase64 = null;
+                        }
+                    } catch (err) {
+                        wkCustomIconName = iconName;
+                        wkCustomIconBase64 = null;
+                    }
+                }
                 const imageModal = document.getElementById('imageModal');
                 if (imageModal) imageModal.classList.remove('show');
-            });
+            }, true);
         }
 
         // Hook custom upload in imageModal for workshop
@@ -1356,6 +1560,7 @@
                 if (!window._wkIconMode) return;
                 const file = e.target.files && e.target.files[0];
                 if (!file) return;
+                e.stopPropagation();
                 window._wkIconMode = false;
                 const reader = new FileReader();
                 reader.onload = function(ev) {
@@ -1373,18 +1578,19 @@
                         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
                         const resized = canvas.toDataURL('image/png');
                         wkCustomIconBase64 = resized;
-                        wkCustomIconName = 'custom_' + Date.now();
+                        wkCustomIconName = '';
                         const placeholder = document.getElementById('wkCreateIconPlaceholder');
                         const preview = document.getElementById('wkCreateIconPreview');
                         if (placeholder) placeholder.style.display = 'none';
                         if (preview) { preview.style.display = 'block'; preview.src = resized; }
                         const imageModal = document.getElementById('imageModal');
                         if (imageModal) imageModal.classList.remove('show');
+                        try { customImageInput.value = ''; } catch(_) {}
                     };
                     img.src = dataUrl;
                 };
                 reader.readAsDataURL(file);
-            });
+            }, true);
         }
 
         // Submodals and workshop modals backdrop click handlers

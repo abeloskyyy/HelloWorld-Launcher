@@ -22,8 +22,8 @@
 
     // --- Helpers ---
     function showNotification(title, body, senderId) {
-        if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.show_desktop_notification === 'function') {
-            window.pywebview.api.show_desktop_notification({ title, body, senderId });
+        if (window.hwlAPI && typeof window.hwlAPI.show_desktop_notification === 'function') {
+            window.hwlAPI.show_desktop_notification({ title, body, senderId });
             return;
         }
         if (!('Notification' in window)) return;
@@ -210,7 +210,7 @@
     }
 
     function api() {
-        return window.pywebview && window.pywebview.api;
+        return window.hwlAPI;
     }
 
     function formatVersionString(version) {
@@ -472,13 +472,57 @@
         else if (tab === 'requests') loadRequests(true);
     }
 
+    // --- Social Skeleton Helpers ---
+    function getSocialUserSkeletonsHTML(count = 5) {
+        let html = '';
+        for (let i = 0; i < count; i++) {
+            const nameWidth = 45 + (i % 3) * 15;
+            const subWidth = 30 + (i % 2) * 15;
+            html += '<div class="social-user-item social-user-skeleton">' +
+                '<div class="social-item-avatar wk-skeleton-shimmer" style="border: none;"></div>' +
+                '<div class="social-item-info" style="gap: 6px;">' +
+                    '<div class="wk-skeleton-shimmer" style="height: 14px; width: ' + nameWidth + '%; border-radius: 4px;"></div>' +
+                    '<div class="wk-skeleton-shimmer" style="height: 11px; width: ' + subWidth + '%; border-radius: 4px;"></div>' +
+                '</div>' +
+                '<div class="social-item-actions" style="display: flex; gap: 6px;">' +
+                    '<div class="wk-skeleton-shimmer" style="width: 28px; height: 28px; border-radius: 6px;"></div>' +
+                    '<div class="wk-skeleton-shimmer" style="width: 28px; height: 28px; border-radius: 6px;"></div>' +
+                '</div>' +
+            '</div>';
+        }
+        return html;
+    }
+
+    function getInboxSkeletonsHTML(count = 4) {
+        let html = '';
+        for (let i = 0; i < count; i++) {
+            const titleWidth = 100 + (i % 3) * 25;
+            const line1Width = 85 + (i % 2) * 10;
+            const line2Width = 45 + (i % 3) * 18;
+            html += '<div class="inbox-item social-inbox-skeleton" style="padding: 16px 24px; border-bottom: 1px solid rgba(255,255,255,0.05); width: 100%; box-sizing: border-box;">' +
+                '<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px;">' +
+                    '<div class="wk-skeleton-shimmer" style="height: 15px; width: ' + titleWidth + 'px; border-radius: 4px;"></div>' +
+                    '<div class="wk-skeleton-shimmer" style="height: 11px; width: 45px; border-radius: 4px;"></div>' +
+                '</div>' +
+                '<div style="display: flex; flex-direction: column; gap: 6px;">' +
+                    '<div class="wk-skeleton-shimmer" style="height: 13px; width: ' + line1Width + '%; border-radius: 4px;"></div>' +
+                    '<div class="wk-skeleton-shimmer" style="height: 13px; width: ' + line2Width + '%; border-radius: 4px;"></div>' +
+                '</div>' +
+            '</div>';
+        }
+        return html;
+    }
+
     // --- Friends Tab ---
     async function loadFriends(showLoading) {
         const loading = document.getElementById('friendsLoading');
         const container = document.getElementById('friendsListContainer');
-        if (showLoading) {
-            if (loading) loading.style.display = 'flex';
-            if (container) container.style.display = 'none';
+        const list = document.getElementById('friendsList');
+        if (loading) loading.style.display = 'none';
+        if (container) container.style.display = 'block';
+
+        if (showLoading && list && (!list.children.length || list.querySelector('.social-empty'))) {
+            list.innerHTML = getSocialUserSkeletonsHTML(5);
         }
         try {
             const res = await api().social_get_friends();
@@ -491,7 +535,6 @@
             renderFriendsList([]);
         }
         loadBlocked();
-        // Removed loadInboxMessages from loadFriends to prevent double-fetching which destroys the blue dot
     }
 
     function renderFriendsList(friends) {
@@ -621,7 +664,7 @@
         }
 
         // Load profiles directly from API
-        const clientApi = (typeof api === 'function' && api()) || (window.pywebview && window.pywebview.api);
+        const clientApi = (typeof api === 'function' && api()) || (window.hwlAPI);
         if (clientApi && typeof clientApi.get_profiles === 'function') {
             clientApi.get_profiles().then(profilesData => {
                 if (profilesData && profilesData.profiles) {
@@ -658,7 +701,7 @@
             return;
         }
 
-        const clientApi = (typeof api === 'function' && api()) || (window.pywebview && window.pywebview.api);
+        const clientApi = (typeof api === 'function' && api()) || (window.hwlAPI);
         const htmlArr = await Promise.all(profileIds.map(async id => {
             const profile = profiles[id];
             
@@ -2012,7 +2055,18 @@
     // --- Requests Tab ---
     async function loadRequests(showLoading) {
         const loading = document.getElementById('requestsLoading');
-        if (showLoading && loading) loading.style.display = 'flex';
+        const reqReceivedList = document.getElementById('reqReceivedList');
+        const reqSentList = document.getElementById('reqSentList');
+        if (loading) loading.style.display = 'none';
+
+        if (showLoading) {
+            if (reqReceivedList && (!reqReceivedList.children.length || reqReceivedList.querySelector('.social-empty'))) {
+                reqReceivedList.innerHTML = getSocialUserSkeletonsHTML(3);
+            }
+            if (reqSentList && (!reqSentList.children.length || reqSentList.querySelector('.social-empty'))) {
+                reqSentList.innerHTML = getSocialUserSkeletonsHTML(2);
+            }
+        }
         try {
             const res = await api().social_get_requests();
             if (loading) loading.style.display = 'none';
@@ -2561,8 +2615,8 @@
                 basePath = await api().getDocumentsPath();
             } else if (typeof api === 'function' && api() && typeof api().get_documents_path === 'function') {
                 basePath = await api().get_documents_path();
-            } else if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.getDocumentsPath === 'function') {
-                basePath = await window.pywebview.api.getDocumentsPath();
+            } else if (window.hwlAPI && typeof window.hwlAPI.getDocumentsPath === 'function') {
+                basePath = await window.hwlAPI.getDocumentsPath();
             }
 
             if (basePath) {
@@ -3344,7 +3398,7 @@
             const targetTab = detail?.targetTab || 'received';
             if (targetId && window.performAccountSwitch) {
                 try {
-                    const userData = await window.pywebview.api.get_user_json();
+                    const userData = await window.hwlAPI.get_user_json();
                     const currentActiveUid = userData?.account_type === 'microsoft'
                         ? (userData?.firebase_ms_uid || null)
                         : (userData?.account_type === 'helloworld' ? (userData?.firebase_uid || null) : null);
@@ -3579,6 +3633,10 @@
 
     async function loadInboxMessages(initial = false) {
         if (!socialAuth) return;
+        const container = document.getElementById('inboxMessages');
+        if (container && (initial || !container.children.length)) {
+            container.innerHTML = getInboxSkeletonsHTML(4);
+        }
         try {
             const isSentTab = currentInboxTab === 'sent';
             if (isSentTab) {

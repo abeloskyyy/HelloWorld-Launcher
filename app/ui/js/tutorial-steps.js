@@ -157,9 +157,9 @@
         window.currentActiveTutorialStep = 2;
         // --- Auto-logout if already authenticated ---
         try {
-            const userData = await window.pywebview.api.get_user_json();
+            const userData = await window.hwlAPI.get_user_json();
             if (userData && userData.username && userData.username.trim()) {
-                await window.pywebview.api.logout_user();
+                await window.hwlAPI.logout_user();
                 // Reset UI to logged-out state
                 const loginBtn = document.getElementById('loginButton');
                 const badge = document.getElementById('userBadge');
@@ -327,7 +327,7 @@
 
                         // Check account type and branch
                         try {
-                            const data = await window.pywebview.api.get_user_json();
+                            const data = await window.hwlAPI.get_user_json();
                             if (data && data.account_type === 'microsoft') {
                                 startMicrosoftFlow();
                             } else if (data && data.account_type === 'helloworld') {
@@ -535,8 +535,8 @@
         // Check if user has any moddable profiles first
         let hasModdableProfiles = false;
         try {
-            if (window.pywebview && window.pywebview.api && window.pywebview.api.get_profiles_for_addon) {
-                const data = await window.pywebview.api.get_profiles_for_addon('mod');
+            if (window.hwlAPI && window.hwlAPI.get_profiles_for_addon) {
+                const data = await window.hwlAPI.get_profiles_for_addon('mod');
                 const profiles = data && data.profiles ? data.profiles : {};
                 hasModdableProfiles = Object.keys(profiles).length > 0;
             }

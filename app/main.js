@@ -314,6 +314,7 @@ const DEFAULT_USER_DATA = {
   dev_mode: false,
   show_snapshots: false,
   show_old: false,
+  reopen_on_game_close: true,
   addons_per_page: 20,
   launch_count: 0,
   has_reviewed: false,
@@ -1892,6 +1893,16 @@ async function handleLauncherClose(e) {
       console.log(`[Stats] Game session under 30s (${(elapsedMs / 1000).toFixed(1)}s) or cancelled, skipping streak and playtime.`);
     }
   }
+
+  // Restore & maximize launcher window when game closes if enabled (default: true)
+  try {
+    const userData = loadUserData();
+    if (userData.reopen_on_game_close !== false && e !== 'cancelled') {
+      maximizeAndFocusLauncher();
+    }
+  } catch (err) {
+    console.error('[handleLauncherClose] Error checking reopen setting:', err);
+  }
 }
 
 function focusMainWindow() {
@@ -1899,6 +1910,39 @@ function focusMainWindow() {
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
+}
+
+function maximizeAndFocusLauncher() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const restoreAndFocus = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    try {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      if (!mainWindow.isVisible()) {
+        mainWindow.show();
+      }
+      mainWindow.maximize();
+      mainWindow.show();
+      mainWindow.focus();
+
+      // Ensure launcher comes to foreground on Windows even if backgrounded
+      mainWindow.setAlwaysOnTop(true);
+      mainWindow.focus();
+      mainWindow.setAlwaysOnTop(false);
+
+      try { mainWindow.flashFrame(true); } catch (_) {}
+      try { mainWindow.webContents.invalidate(); } catch (_) {}
+      try { if (typeof updateTrayMenu === 'function') updateTrayMenu(); } catch (_) {}
+    } catch (err) {
+      console.error('[Launch] Error restoring/maximizing launcher window:', err);
+    }
+  };
+
+  restoreAndFocus();
+  // Second pass ensures window state is finalized if the OS was transitioning from Minecraft's display mode/fullscreen
+  setTimeout(restoreAndFocus, 150);
 }
 
 let presencePollingInterval = null;
@@ -2797,7 +2841,7 @@ function startLocalServer() {
     const fs = require('fs');
     const mime = {
       '.html': 'text/html', '.js': 'application/javascript',
-      '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg',
+      '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp',
       '.ico': 'image/x-icon', '.svg': 'image/svg+xml',
       '.ttf': 'font/ttf', '.woff': 'font/woff', '.woff2': 'font/woff2',
       '.mp4': 'video/mp4', '.txt': 'text/plain; charset=utf-8', '.json': 'application/json'
@@ -2805,12 +2849,22 @@ function startLocalServer() {
     const srv = http.createServer((req, res) => {
       const rawUrl = req.url.split('?')[0].split('#')[0];
       const cleanUrl = rawUrl.replace(/^\/ui\//, '/');
+      const distDir = path.join(__dirname, 'ui', 'dist');
+      const hasDist = fs.existsSync(path.join(distDir, 'index.html'));
+      const baseDir = hasDist ? distDir : path.join(__dirname, 'ui');
       let filePath;
       if (cleanUrl === '/tips.txt') {
         const rootTips = path.join(__dirname, 'tips.txt');
-        filePath = fs.existsSync(rootTips) ? rootTips : path.join(__dirname, 'ui', 'tips.txt');
+        filePath = fs.existsSync(rootTips) ? rootTips : path.join(baseDir, 'tips.txt');
       } else {
-        filePath = path.join(__dirname, 'ui', cleanUrl === '/' ? '/index.html' : cleanUrl);
+        filePath = path.join(baseDir, cleanUrl === '/' ? '/index.html' : cleanUrl);
+        // Fallback for images and assets in ui/ when serving dist
+        if (hasDist && !fs.existsSync(filePath)) {
+          const fallbackPath = path.join(__dirname, 'ui', cleanUrl);
+          if (fs.existsSync(fallbackPath)) {
+            filePath = fallbackPath;
+          }
+        }
       }
       const ext = path.extname(filePath);
       fs.readFile(filePath, (err, data) => {
@@ -2966,6 +3020,12 @@ function updateTrayMenu() {
             mainWindow.destroy();
           }
           app.quit();
+          setTimeout(() => {
+            try {
+              if (app && !app.isDestroyed?.()) app.exit(0);
+            } catch (_) {}
+            process.exit(0);
+          }, 400);
         }
       }
     );
@@ -3100,6 +3160,12 @@ function updateTrayMenu() {
           mainWindow.destroy();
         }
         app.quit();
+        setTimeout(() => {
+          try {
+            if (app && !app.isDestroyed?.()) app.exit(0);
+          } catch (_) {}
+          process.exit(0);
+        }, 400);
       }
     }
   ]);
@@ -3251,8 +3317,13 @@ const createWindow = async () => {
   });
 
   // Start directly with index.html for instant launch
-  if (!localPort) await startLocalServer();
-  win.loadURL(`http://127.0.0.1:${localPort}/index.html`)
+  const isViteDev = process.env.VITE_DEV === 'true' || process.argv.includes('--vite-dev');
+  if (isViteDev) {
+    win.loadURL('http://127.0.0.1:5173');
+  } else {
+    if (!localPort) await startLocalServer();
+    win.loadURL(`http://127.0.0.1:${localPort}/index.html`);
+  }
 
   let hasShown = false;
   const showWindow = () => {
@@ -5015,14 +5086,24 @@ ipcMain.handle('refresh-session', async () => {
   }
 });
 
-// --- Legacy Handlers ---
 ipcMain.handle('close-app', async () => {
   isQuitting = true;
-  await presenceManager.setOffline();
+  try {
+    await presenceManager.setOffline();
+  } catch (_) {}
   if (tray && !tray.isDestroyed()) {
     try { tray.destroy(); } catch (_) {}
   }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.destroy(); } catch (_) {}
+  }
   app.quit();
+  setTimeout(() => {
+    try {
+      if (app && !app.isDestroyed?.()) app.exit(0);
+    } catch (_) {}
+    process.exit(0);
+  }, 500);
 });
 ipcMain.handle('get-version', () => app.getVersion())
 ipcMain.handle('check-internet', async () => {
@@ -6724,12 +6805,15 @@ ipcMain.handle('save-version-settings', async (e, showSnapshots, showOld) => {
   return { success: true };
 })
 
-ipcMain.handle('save-app-settings', async (e, enableTransitions, hwAccel, privacyMode) => {
+ipcMain.handle('save-app-settings', async (e, enableTransitions, hwAccel, privacyMode, reopenOnGameClose) => {
   const data = loadUserData();
   // hwAccel needs restart, enableTransitions is instant
   data.enable_transitions = enableTransitions !== false;
   data.hw_accel = hwAccel !== false;
   data.privacy_mode = privacyMode === true;
+  if (reopenOnGameClose !== undefined) {
+    data.reopen_on_game_close = reopenOnGameClose !== false;
+  }
   saveUserData(data);
 
   if (process.platform === 'win32') {
@@ -6737,6 +6821,11 @@ ipcMain.handle('save-app-settings', async (e, enableTransitions, hwAccel, privac
     registerAllKnownJavaRuntimes(data.hw_accel);
   }
 
+  return { success: true };
+})
+
+ipcMain.handle('maximize-launcher', async () => {
+  maximizeAndFocusLauncher();
   return { success: true };
 })
 
@@ -9492,6 +9581,38 @@ ipcMain.handle('workshop-submit-item', async (e, data) => {
     } catch(_) {}
 
     const now = new Date().toISOString();
+    let iconName = data.icon || '';
+    let iconB64 = data.iconB64 || null;
+
+    if (typeof iconName === 'string' && iconName.startsWith('data:')) {
+      iconB64 = iconName;
+      iconName = '';
+    }
+
+    // Helper: is this a built-in launcher profile icon?
+    const isLauncherIcon = (name) => {
+      if (!name || typeof name !== 'string') return false;
+      const base = path.basename(name).toLowerCase();
+      const p1 = path.join(__dirname, 'ui', 'img', 'profiles', base);
+      const p2 = path.join(__dirname, 'ui', 'img', base);
+      return fs.existsSync(p1) || fs.existsSync(p2);
+    };
+
+    if (iconName && !iconB64) {
+      if (!isLauncherIcon(iconName)) {
+        // It's a custom icon! Convert it to base64 so other users don't get 404 / default icon
+        try {
+          const rawB64 = profileManager.getProfileIconAsBase64(iconName);
+          if (rawB64 && (rawB64.startsWith('data:') || rawB64.length > 50)) {
+            iconB64 = rawB64;
+            iconName = '';
+          }
+        } catch (err) {
+          console.warn('[workshop-submit-item] Could not convert custom icon to base64:', err.message);
+        }
+      }
+    }
+
     const docData = {
       type: data.type || 'modpack',
       xst: 'pnd',             // pending
@@ -9499,7 +9620,7 @@ ipcMain.handle('workshop-submit-item', async (e, data) => {
       authorName,
       title: (data.title || '').slice(0, 30),
       desc: (data.desc || '').slice(0, 200),
-      icon: data.icon || '',
+      icon: iconName,
       isOfficial: false,
       ts: now,
       likes: 0,
@@ -9510,7 +9631,7 @@ ipcMain.handle('workshop-submit-item', async (e, data) => {
     };
 
     // Add icon base64 if custom
-    if (data.iconB64) docData.iconB64 = data.iconB64;
+    if (iconB64) docData.iconB64 = iconB64;
 
     // Add snapshot (can't use buildFSFields for nested, use REST directly)
     const snapFields = {};
@@ -10000,4 +10121,12 @@ app.on('before-quit', async () => {
   // 2. Kill main game process if running (optional, but good practice)
   // Assuming 'launcher' might have internal state, but MCLC doesn't expose the main process easily globally unless we track it
   // But we have rpc.setIdle() which is good.
+
+  // Hard exit fallback to guarantee process singleton lock is freed
+  setTimeout(() => {
+    try {
+      if (app && !app.isDestroyed?.()) app.exit(0);
+    } catch (_) {}
+    process.exit(0);
+  }, 1000);
 });

@@ -557,6 +557,8 @@
     "show_old_tooltip": "Shows old Alpha and Beta versions in the version selector.",
     "privacy": "Privacy Mode",
     "privacy_tooltip": "Hides your server IP address from friends in Rich Presence. Your status will still show you're playing on a server, but the IP will be hidden.",
+    "reopen_on_game_close": "Maximize Launcher on Game Close",
+    "reopen_on_game_close_tooltip": "Automatically restores, maximizes, and focuses the launcher when Minecraft closes.",
     "save_btn": "Save Settings",
     "launcher_version": "Launcher Version:",
     "replay_tutorial": "Replay Tutorial",

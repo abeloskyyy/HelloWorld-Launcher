@@ -557,6 +557,8 @@
     "show_old_tooltip": "Muestra versiones antiguas (Alpha y Beta) en el selector de versiones.",
     "privacy": "Modo Privacidad",
     "privacy_tooltip": "Oculta la IP del servidor a tus amigos en Rich Presence (Discord). Tu estado seguirá mostrando que estás jugando en un servidor, pero la IP estará oculta.",
+    "reopen_on_game_close": "Maximizar y abrir al cerrar el juego",
+    "reopen_on_game_close_tooltip": "Restaura, maximiza y enfoca el launcher automáticamente cuando se detecte que Minecraft se ha cerrado.",
     "save_btn": "Guardar Ajustes",
     "launcher_version": "Versión del Launcher:",
     "replay_tutorial": "Repetir Tutorial",

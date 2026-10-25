@@ -554,6 +554,14 @@ input, textarea {
     background: rgba(255, 255, 255, 0.12);
 }
 
+html, body {
+    height: 100vh;
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
 body {
     font-family: 'Segoe UI', 'Inter', 'Roboto', sans-serif;
     background: #0f2027;
@@ -561,9 +569,23 @@ body {
     background: linear-gradient(to bottom, #0f2027, #203a43, #2c5364);
     color: #fff;
     height: 100vh;
+    width: 100vw;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    position: relative;
+    z-index: 1;
+}
+
+#root {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
     position: relative;
     z-index: 1;
 }
@@ -870,6 +892,7 @@ body:not(.disable-transitions) .full-screen-overlay.closing .review-overlay-cont
     display: flex;
     flex: 1;
     min-height: 0;
+    height: 100%;
     overflow: hidden;
     position: relative;
 }
@@ -947,15 +970,15 @@ body:not(.disable-transitions) .full-screen-overlay.closing .review-overlay-cont
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
-    transition: max-height 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-                opacity 0.25s ease,
-                margin 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-                padding 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-                visibility 0.32s;
+    transition: max-height 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.18s ease,
+                margin 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                padding 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                visibility 0.22s;
 }
 
 .sidebar-submenu.active {
-    max-height: 300px;
+    max-height: 210px;
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
@@ -1092,15 +1115,25 @@ body:not(.disable-transitions) .full-screen-overlay.closing .review-overlay-cont
 }
 
 /* Mod menu chevron */
-#modsMenuArrow {
+#modsMenuArrow,
+.mods-menu-chevron {
     margin-left: auto;
-    width: auto;
-    transition: transform 0.3s ease;
+    width: 16px;
+    height: 16px;
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.2s ease, opacity 0.2s ease;
     flex-shrink: 0;
+    opacity: 0.75;
 }
 
-.sidebar-button.active #modsMenuArrow {
+.sidebar-button:hover #modsMenuArrow,
+.sidebar-button:hover .mods-menu-chevron {
+    opacity: 1;
+}
+
+.sidebar-button.active #modsMenuArrow,
+.sidebar-button.active .mods-menu-chevron {
     color: inherit;
+    opacity: 1;
 }
 
 /* Sponsor Sidebar Link (Apex Hosting) */
@@ -1538,8 +1571,11 @@ body:not(.disable-transitions) .full-screen-overlay.closing .review-overlay-cont
 
 .main-content {
     flex: 1;
+    min-height: 0;
+    height: 100%;
     padding: 40px 25px;
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     justify-content: center;
 }
@@ -6686,36 +6722,33 @@ label {
 
 .skin-upload-area {
     width: 100%;
-    min-height: 550px;
-    background: rgba(0, 0, 0, 0.2);
-    border: 2px dashed rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
+    height: 480px;
+    min-height: 480px;
+    max-height: 480px;
+    background: rgba(0, 0, 0, 0.22);
+    border: 2px dashed rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: background 0.22s ease, color 0.18s ease, transform 0.18s ease, box-shadow 0.22s ease, border-color 0.18s ease, opacity 0.2s ease;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
-    /* Remove overflow hidden to fix clipping issues with the model */
-    overflow: visible;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 .skin-upload-area.active {
-    background: transparent;
-    border: 2px solid transparent;
+    background: rgba(0, 0, 0, 0.32);
+    border: 1px solid rgba(79, 172, 254, 0.35);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 0 40px rgba(79, 172, 254, 0.04);
     cursor: default;
 }
 
-.skin-upload-area:hover {
+.skin-upload-area:hover:not(.active) {
     background: rgba(0, 0, 0, 0.3);
     border-color: #4facfe;
-    box-shadow: 0 0 20px rgba(79, 172, 254, 0.1);
-}
-
-.skin-upload-area.active:hover {
-    background: transparent;
-    border-color: transparent;
-    box-shadow: none;
+    box-shadow: 0 0 20px rgba(79, 172, 254, 0.15);
 }
 
 .skin-upload-placeholder {
@@ -6761,41 +6794,68 @@ label {
 }
 
 /* 3D Viewer Container inside Upload Area */
+.skin-upload-area .skin-3d-viewer-container,
 .skin-3d-viewer-container {
     width: 100%;
-    
-    height: 100%;
-    min-height: 550px;
+    height: 480px;
+    min-height: 480px;
+    max-height: 480px;
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    border: none;
+    background: transparent;
+    border-radius: 14px;
+    overflow: hidden;
 }
 
-/* Ensure the viewer spin class centers properly */
-.mc-skin-viewer-11x {
-    transform-style: preserve-3d;
-    margin-top: 0;
+#skinViewer3D {
+    width: 100%;
+    height: 480px;
+    min-height: 480px;
+    max-height: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.skinview3d-modal-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    border-radius: 14px;
 }
 
 .change-skin-btn {
     position: absolute;
-    bottom: -10px;
-    right: -10px;
-    width: 50px;
-    height: 50px;
-    border-radius: 12px;
-    background: rgba(79, 172, 254, 0.9);
+    bottom: 14px;
+    right: 14px;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: rgba(79, 172, 254, 0.85);
     color: #fff;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: background 0.22s ease, color 0.18s ease, transform 0.18s ease, box-shadow 0.22s ease, border-color 0.18s ease, opacity 0.2s ease;
-    z-index: 100;
-    font-size: 18px;
+    transition: all 0.2s ease;
+    z-index: 10;
+    font-size: 16px;
+}
+
+.change-skin-btn:hover {
+    background: #4facfe;
+    transform: scale(1.08);
+    box-shadow: 0 6px 20px rgba(79, 172, 254, 0.4);
 }
 
 .change-skin-btn:hover {
@@ -6893,27 +6953,22 @@ label {
 }
 
 /* ========== 3D Skin Viewer Styles ========== */
+.skin-upload-area .skin-3d-viewer-container,
 .skin-3d-viewer-container {
-    margin-top: 30px;
-    padding: 30px;
-    background: rgba(0, 0, 0, 0.4);
-    border-radius: 16px;
-    border: 2px solid rgba(79, 172, 254, 0.2);
+    width: 100%;
+    height: 480px;
+    min-height: 480px;
+    max-height: 480px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    border-radius: 14px;
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 400px;
-}
-
-.skin-3d-viewer-container .mc-skin-viewer-11x {
-    /* Remove spin animation - we want static view */
-    animation: none !important;
-}
-
-.skin-3d-viewer-container .mc-skin-viewer-11x>.player {
-    /* Position from a higher angle (looking down at character) */
-    transform: rotateX(-15deg) rotateY(25deg);
-    animation: none !important;
+    position: relative;
+    overflow: hidden;
 }
 
 
@@ -8619,6 +8674,25 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
 .social-btn-join:hover { background: rgba(52,211,153,0.2); color: #34d399; border-color: #34d399; }
 .social-btn-unblock:hover { background: rgba(52,211,153,0.2); color: #34d399; border-color: #34d399; }
 .social-btn-add.social-btn-sent { background: rgba(52,211,153,0.15); color: #34d399; border-color: #34d399; cursor: default; }
+
+/* Social Skeletons */
+.social-user-skeleton {
+    pointer-events: none !important;
+    user-select: none !important;
+    cursor: default !important;
+    opacity: 0.85;
+}
+
+.social-user-skeleton:hover {
+    background: transparent !important;
+}
+
+.social-inbox-skeleton {
+    pointer-events: none !important;
+    user-select: none !important;
+    cursor: default !important;
+    opacity: 0.85;
+}
 
 .join-server-profile-item {
     padding: 12px 16px;
@@ -11446,6 +11520,42 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
     font-size: 14px;
 }
 
+/* --- Workshop Card Skeletons --- */
+@keyframes wkSkeletonShimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+.wk-card-skeleton,
+.mod-card-skeleton {
+    pointer-events: none !important;
+    user-select: none !important;
+    cursor: default !important;
+    opacity: 0.85;
+}
+
+.wk-card-skeleton:hover,
+.mod-card-skeleton:hover {
+    transform: none !important;
+    box-shadow: none !important;
+    border-color: rgba(79, 172, 254, 0.2) !important;
+}
+
+.wk-card-skeleton::after,
+.mod-card-skeleton::after {
+    display: none !important;
+}
+
+.wk-skeleton-shimmer {
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 25%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.04) 75%);
+    background-size: 200% 100%;
+    animation: wkSkeletonShimmer 1.6s infinite ease-in-out;
+}
+
 /* --- Buttons --- */
 .wk-btn {
     display: inline-flex;
@@ -12225,10 +12335,12 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
     left: 0;
     right: 0;
     bottom: 0;
+    width: 100vw;
+    height: 100vh;
     background: #0a0e1a;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-    z-index: 9000;
+    z-index: 99999;
     display: flex;
     align-items: center;
     justify-content: center;

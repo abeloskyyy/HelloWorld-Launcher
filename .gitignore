@@ -2,6 +2,8 @@ legacy/
 old-beta/
 node_modules/
 dist/
+app/ui/dist/
+**/dist/
 build-linux.sh
 firebase-backend/functions/keys.json
 firebase-backend/functions/node_modules/
@@ -12,3 +14,4 @@ scripts/*.json
 serviceAccountKey.json
 release/
 version-build-old.md
+*.psd

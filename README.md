@@ -33,25 +33,35 @@ HelloWorld Launcher is a launcher for Minecraft: Java Edition. It is open source
 
 ---
 
-### Screenshots
+### Showcase
 
-![Play Screen](assets/screenshots/play.png)
-*Main Play Screen*
+![Free Minecraft](assets/showcase/1-free-minecraft.png)
 
-![Create Installation](assets/screenshots/create-installation.png)
-*Creating a New Installation*
+![Play With Friends](assets/showcase/2-play-with-friends.png)
 
-![Mod Search](assets/screenshots/search-mods.png)
-*Mod Search and Download*
+![Easy Mods & Shaders](assets/showcase/3-easy-mods-shaders.png)
 
-![Skins & Capes](assets/screenshots/skins.png)
-*Skin & Cape Customization*
+![Custom Skins & Capes](assets/showcase/4-custom-skins-capes.png)
 
-![Account Management](assets/screenshots/accounts.png)
-*Account Management*
+![Clean & Optimized UI](assets/showcase/5-clean-optimized-ui.png)
 
-![Social & Community](assets/screenshots/social.png)
-*Social and Community Features*
+<details>
+<summary><b>📷 View detailed launcher screenshots</b></summary>
+<br>
+
+| Main Screen | Create Installation |
+|:---:|:---:|
+| ![Play Screen](assets/screenshots/play.png) | ![Create Installation](assets/screenshots/create-installation.png) |
+
+| Mod Search | Skins & Capes |
+|:---:|:---:|
+| ![Mod Search](assets/screenshots/search-mods.png) | ![Skins & Capes](assets/screenshots/skins.png) |
+
+| Account Management | Social & Community |
+|:---:|:---:|
+| ![Account Management](assets/screenshots/accounts.png) | ![Social & Community](assets/screenshots/social.png) |
+
+</details>
 
 ---
 

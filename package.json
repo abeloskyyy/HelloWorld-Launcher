@@ -10,6 +10,8 @@
   "scripts": {
     "test": "electron .",
     "start": "electron .",
+    "dev:ui": "vite",
+    "build:ui": "vite build",
     "build": "electron-builder",
     "build:win": "electron-builder --win -p never --config.win.target=zip",
     "build:linux": "electron-builder --linux -p never",
@@ -100,9 +102,15 @@
   "homepage": "https://github.com/Abeloskyyy/HelloWorld-Launcher",
   "license": "ISC",
   "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
     "electron": "^40.1.0",
     "electron-builder": "^24.13.3",
-    "firebase-admin": "^14.2.0"
+    "firebase-admin": "^14.2.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
   },
   "dependencies": {
     "adm-zip": "^0.4.16",
@@ -117,6 +125,9 @@
     "minecraft-launcher-core": "^3.18.2",
     "msmc": "^5.0.5",
     "prismarine-nbt": "^2.8.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "skinview3d": "^3.4.2",
     "uuid": "^13.0.0"
   }
 }

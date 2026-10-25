@@ -29,6 +29,9 @@ class ModManager {
             if (filters.loader && typeof filters.loader === 'string') {
                 const l = filters.loader.toLowerCase();
                 facets.push([`loaders:${l}`]);
+            } else if (projectType === 'mod') {
+                // When searching for mods without a specific loader, restrict to client mod loaders so server plugins are excluded
+                facets.push(['loaders:fabric', 'loaders:forge', 'loaders:neoforge', 'loaders:quilt']);
             }
 
             // Allow frontend to specify sort index, fallback to default behavior
@@ -75,7 +78,16 @@ class ModManager {
             if (loader) params.loaders = JSON.stringify([loader]);
 
             const res = await axios.get(`https://api.modrinth.com/v2/project/${projectId}/version`, { params });
-            return { success: true, versions: res.data };
+            let versions = res.data || [];
+
+            // Quilt is compatible with Fabric mods: if no quilt versions found, fallback to fabric
+            if (loader === 'quilt' && versions.length === 0) {
+                params.loaders = JSON.stringify(['fabric']);
+                const fbRes = await axios.get(`https://api.modrinth.com/v2/project/${projectId}/version`, { params });
+                versions = fbRes.data || [];
+            }
+
+            return { success: true, versions };
         } catch (e) {
             return { success: false, error: e.message };
         }
@@ -181,6 +193,8 @@ class ModManager {
         installedDatapackFilenames = new Set()
     ) {
         const MAX_DEPTH = 4;
+        const CLIENT_MOD_LOADERS = ['fabric', 'forge', 'neoforge', 'quilt', 'legacy-fabric', 'babric', 'liteloader', 'rift'];
+        const SERVER_PLUGIN_LOADERS = ['bukkit', 'spigot', 'paper', 'purpur', 'folia', 'bungeecord', 'velocity', 'waterfall', 'sponge', 'geyser'];
 
         // Normalize sets for fast case-insensitive lookup
         const normalizedInstalledIds = new Set();
@@ -208,6 +222,8 @@ class ModManager {
             });
         }
 
+        const normalizedClientLoader = loader ? loader.toLowerCase().trim() : null;
+
         // resolved maps: projectId -> dep info
         const resolvedRequired = new Map();
         const resolvedOptional = new Map();
@@ -215,7 +231,31 @@ class ModManager {
 
         const visited = new Set(); // version IDs we've already crawled
 
-        const fetchVersionDeps = async (vid, depth) => {
+        // 1. Identify the root mod so we NEVER suggest or require the root mod as a dependency of itself
+        let rootProjectId = null;
+        let rootProjectSlug = null;
+        try {
+            const rootRes = await axios.get(`https://api.modrinth.com/v2/version/${versionId}`);
+            if (rootRes.data && rootRes.data.project_id) {
+                rootProjectId = String(rootRes.data.project_id).trim();
+                if (!this._modDetailsCache) this._modDetailsCache = new Map();
+                if (!this._modDetailsCache.has(rootProjectId)) {
+                    const rpRes = await axios.get(`https://api.modrinth.com/v2/project/${rootProjectId}`);
+                    this._modDetailsCache.set(rootProjectId, rpRes.data);
+                    if (rpRes.data.slug) {
+                        this._modDetailsCache.set(rpRes.data.slug, rpRes.data);
+                    }
+                }
+                const rpData = this._modDetailsCache.get(rootProjectId);
+                if (rpData && rpData.slug) {
+                    rootProjectSlug = String(rpData.slug).toLowerCase().trim();
+                }
+            }
+        } catch (e) {
+            console.warn(`[resolveModDependencies] Could not fetch root version ${versionId}:`, e.message);
+        }
+
+        const fetchVersionDeps = async (vid, depth, isFromRequiredParent = true) => {
             if (depth > MAX_DEPTH) return;
             if (visited.has(vid)) return;
             visited.add(vid);
@@ -233,10 +273,15 @@ class ModManager {
 
             for (const dep of deps) {
                 if (!dep.project_id) continue; // version-only dep with no project (skip)
-                let depProjectId = dep.project_id;
+                const depProjectId = dep.project_id;
+                const depProjIdLower = String(depProjectId).toLowerCase().trim();
                 const depType = dep.dependency_type; // "required" | "optional" | "incompatible" | "embedded"
 
-                if (depType === 'incompatible') continue;
+                // NEVER process incompatible or embedded dependencies (embedded is already bundled in the jar!)
+                if (depType === 'incompatible' || depType === 'embedded') continue;
+
+                // NEVER let a mod depend on itself
+                if (rootProjectId && depProjIdLower === rootProjectId.toLowerCase()) continue;
 
                 // Enrich with project details FIRST so already-installed deps have data
                 let projectDetails = null;
@@ -248,25 +293,37 @@ class ModManager {
                         const pRes = await axios.get(`https://api.modrinth.com/v2/project/${depProjectId}`);
                         projectDetails = pRes.data;
                         this._modDetailsCache.set(depProjectId, projectDetails);
+                        if (projectDetails.id) this._modDetailsCache.set(projectDetails.id, projectDetails);
+                        if (projectDetails.slug) this._modDetailsCache.set(projectDetails.slug, projectDetails);
                     }
                 } catch (e) {
                     console.warn(`[resolveModDependencies] Could not fetch project details for ${depProjectId}:`, e.message);
                 }
 
+                const projSlugLower = projectDetails?.slug ? String(projectDetails.slug).toLowerCase().trim() : null;
+                if (rootProjectSlug && projSlugLower === rootProjectSlug) continue;
+
                 // Check if already in our resolved sets (avoid duplicates)
                 if (resolvedRequired.has(depProjectId) || resolvedOptional.has(depProjectId) || alreadyInstalled.has(depProjectId)) continue;
 
-                // Determine whether this dependency is a datapack or a mod
+                // Determine loaders supported by this dependency
                 const projectLoaders = Array.isArray(projectDetails?.loaders) ? projectDetails.loaders.map(l => l.toLowerCase()) : [];
-                const hasDatapackLoader = projectLoaders.includes('datapack');
-                const hasModLoader = projectLoaders.some(l => ['fabric', 'forge', 'neoforge'].includes(l));
+                const hasClientLoader = projectLoaders.some(l => CLIENT_MOD_LOADERS.includes(l));
+                const hasDatapackLoader = projectLoaders.includes('datapack') || projectDetails?.project_type === 'datapack';
+                const isServerOnlyPlugin = !hasClientLoader && !hasDatapackLoader && projectLoaders.some(l => SERVER_PLUGIN_LOADERS.includes(l));
+
+                // If this is purely a server-side plugin (Paper/Spigot/Velocity/etc.), SKIP IT!
+                if (isServerOnlyPlugin) {
+                    console.log(`[resolveModDependencies] Skipping server-only plugin: ${projectDetails?.title || depProjectId}`);
+                    continue;
+                }
 
                 let depAddonType = 'mod';
-                if (projectDetails?.project_type === 'datapack' || (hasDatapackLoader && !hasModLoader)) {
+                if (projectDetails?.project_type === 'datapack' || (hasDatapackLoader && !hasClientLoader)) {
                     depAddonType = 'datapack';
-                } else if (hasDatapackLoader && hasModLoader) {
+                } else if (hasDatapackLoader && hasClientLoader) {
                     // Hybrid project (like Terralith)
-                    if (loader && projectLoaders.includes(loader.toLowerCase())) {
+                    if (normalizedClientLoader && projectLoaders.includes(normalizedClientLoader)) {
                         depAddonType = 'mod';
                     } else {
                         depAddonType = 'datapack';
@@ -278,18 +335,28 @@ class ModManager {
                 if (depAddonType === 'datapack') {
                     targetDepLoader = 'datapack';
                 } else {
-                    targetDepLoader = loader || (hasModLoader ? projectLoaders.find(l => ['fabric', 'forge', 'neoforge'].includes(l)) : null);
+                    if (normalizedClientLoader) {
+                        const supportsTarget = projectLoaders.includes(normalizedClientLoader) ||
+                            (normalizedClientLoader === 'quilt' && projectLoaders.includes('fabric')) ||
+                            (normalizedClientLoader === 'fabric' && projectLoaders.includes('quilt'));
+                        if (!supportsTarget) {
+                            // Incompatible with current client loader!
+                            console.log(`[resolveModDependencies] Skipping ${projectDetails?.title || depProjectId}: not compatible with client loader ${normalizedClientLoader}`);
+                            continue;
+                        }
+                        targetDepLoader = normalizedClientLoader;
+                    } else {
+                        targetDepLoader = projectLoaders.find(l => CLIENT_MOD_LOADERS.includes(l)) || null;
+                    }
                 }
 
                 // Check if already installed in appropriate target directory
                 const targetInstalledIds = depAddonType === 'datapack' ? normalizedInstalledDatapackIds : normalizedInstalledIds;
                 const targetInstalledFilenames = depAddonType === 'datapack' ? normalizedInstalledDatapackFilenames : normalizedInstalledFilenames;
 
-                const projIdLower = String(depProjectId).toLowerCase().trim();
                 const projDetailsIdLower = projectDetails?.id ? String(projectDetails.id).toLowerCase().trim() : null;
-                const projSlugLower = projectDetails?.slug ? String(projectDetails.slug).toLowerCase().trim() : null;
 
-                let isAlreadyInstalled = targetInstalledIds.has(projIdLower) ||
+                let isAlreadyInstalled = targetInstalledIds.has(depProjIdLower) ||
                     (projDetailsIdLower && targetInstalledIds.has(projDetailsIdLower)) ||
                     (projSlugLower && targetInstalledIds.has(projSlugLower));
 
@@ -327,7 +394,11 @@ class ModManager {
                         if (targetDepLoader) params.loaders = JSON.stringify([targetDepLoader]);
 
                         const listRes = await axios.get(`https://api.modrinth.com/v2/project/${depProjectId}/version`, { params });
-                        const versions = listRes.data || [];
+                        let versions = listRes.data || [];
+                        if (targetDepLoader) {
+                            const matchingLoaderVersions = versions.filter(v => Array.isArray(v.loaders) && v.loaders.map(l => l.toLowerCase()).includes(targetDepLoader.toLowerCase()));
+                            if (matchingLoaderVersions.length > 0) versions = matchingLoaderVersions;
+                        }
                         resolvedVersion = versions.find(v => v.version_type === 'release' && v.featured)
                             || versions.find(v => v.version_type === 'release')
                             || versions.find(v => v.featured)
@@ -340,7 +411,11 @@ class ModManager {
                             const fbParams = {};
                             if (targetDepLoader) fbParams.loaders = JSON.stringify([targetDepLoader]);
                             const fallbackRes = await axios.get(`https://api.modrinth.com/v2/project/${depProjectId}/version`, { params: fbParams });
-                            const fbVersions = fallbackRes.data || [];
+                            let fbVersions = fallbackRes.data || [];
+                            if (targetDepLoader) {
+                                const matchingLoaderFb = fbVersions.filter(v => Array.isArray(v.loaders) && v.loaders.map(l => l.toLowerCase()).includes(targetDepLoader.toLowerCase()));
+                                if (matchingLoaderFb.length > 0) fbVersions = matchingLoaderFb;
+                            }
                             resolvedVersion = fbVersions.find(v => v.version_type === 'release') || fbVersions[0] || null;
                         }
 
@@ -355,12 +430,23 @@ class ModManager {
                     console.warn(`[resolveModDependencies] Could not resolve version for dep ${depProjectId}:`, e.message);
                 }
 
+                // Discard version if it has only server plugin loaders
+                if (resolvedVersion) {
+                    const vLoaders = Array.isArray(resolvedVersion.loaders) ? resolvedVersion.loaders.map(l => l.toLowerCase()) : [];
+                    const vHasClient = vLoaders.some(l => CLIENT_MOD_LOADERS.includes(l));
+                    const vHasDatapack = vLoaders.includes('datapack');
+                    if (!vHasClient && !vHasDatapack) {
+                        console.log(`[resolveModDependencies] Version ${resolvedVersion.id} for ${depProjectId} has only plugin loaders (${vLoaders.join(', ')}), discarding`);
+                        resolvedVersion = null;
+                    }
+                }
+
                 // Final check on resolvedVersion: refine depAddonType based on resolved files & loaders
                 if (resolvedVersion) {
                     const vLoaders = Array.isArray(resolvedVersion.loaders) ? resolvedVersion.loaders.map(l => l.toLowerCase()) : [];
-                    if (vLoaders.includes('datapack') && !vLoaders.some(l => ['fabric', 'forge', 'neoforge'].includes(l))) {
+                    if (vLoaders.includes('datapack') && !vLoaders.some(l => CLIENT_MOD_LOADERS.includes(l))) {
                         depAddonType = 'datapack';
-                    } else if (vLoaders.some(l => ['fabric', 'forge', 'neoforge'].includes(l))) {
+                    } else if (vLoaders.some(l => CLIENT_MOD_LOADERS.includes(l))) {
                         depAddonType = 'mod';
                     }
                 }
@@ -391,20 +477,22 @@ class ModManager {
                 if (isAlreadyInstalled) {
                     alreadyInstalled.set(depProjectId, depEntry);
                 } else {
-                    if (depType === 'required') {
+                    if (depType === 'required' && isFromRequiredParent) {
                         resolvedRequired.set(depProjectId, depEntry);
-                    } else if (depType === 'optional') {
+                    } else {
                         resolvedOptional.set(depProjectId, depEntry);
                     }
                 }
 
-                if (!isAlreadyInstalled && resolvedVersion && resolvedVersion.id) {
-                    await fetchVersionDeps(resolvedVersion.id, depth + 1);
+                // CRITICAL: ONLY recursively crawl dependencies if this dependency is REQUIRED and its parent is REQUIRED!
+                // Never crawl optional dependencies to prevent massive exponential trees and irrelevant dependencies!
+                if (!isAlreadyInstalled && resolvedVersion && resolvedVersion.id && depType === 'required' && isFromRequiredParent) {
+                    await fetchVersionDeps(resolvedVersion.id, depth + 1, true);
                 }
             }
         };
 
-        await fetchVersionDeps(versionId, 1);
+        await fetchVersionDeps(versionId, 1, true);
 
         return {
             success: true,

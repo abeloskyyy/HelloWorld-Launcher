@@ -277,10 +277,12 @@ async function saveSettings() {
 
         const privacyMode = document.getElementById("privacyModeCheckbox")?.checked || false;
 
+        const reopenOnGameClose = document.getElementById("reopenOnGameCloseCheckbox")?.checked !== false;
+
 
         // Get current data to check for restart requirements
 
-        const currentData = await window.pywebview.api.get_user_json();
+        const currentData = await window.hwlAPI.get_user_json();
 
 
 
@@ -295,39 +297,39 @@ async function saveSettings() {
 
         // 1. Save core user info
 
-        if (window.pywebview.api.save_user_settings) {
-            const payload = { username, mcdir, ui_scale: uiScale };
+        if (window.hwlAPI.save_user_settings) {
+            const payload = { username, mcdir, ui_scale: uiScale, reopen_on_game_close: reopenOnGameClose };
             if (typeof window.currentLanguage !== 'undefined') {
                 payload.language = window.currentLanguage;
             }
-            await window.pywebview.api.save_user_settings(payload);
+            await window.hwlAPI.save_user_settings(payload);
         } else {
-            await window.pywebview.api.save_user_json(username, mcdir);
+            await window.hwlAPI.save_user_json(username, mcdir);
         }
 
 
 
         // 2. Save version listing filters
 
-        await window.pywebview.api.save_version_settings(showSnapshots, showOld);
+        await window.hwlAPI.save_version_settings(showSnapshots, showOld);
 
 
 
         // 3. Save developer mode
 
-        await window.pywebview.api.save_dev_mode(devMode);
+        await window.hwlAPI.save_dev_mode(devMode);
 
 
 
         // 4. Save app performance settings
 
-        await window.pywebview.api.save_app_settings(enableTransitions, hwAccel, privacyMode);
+        await window.hwlAPI.save_app_settings(enableTransitions, hwAccel, privacyMode, reopenOnGameClose);
 
 
 
         // 5. Save addons per page
 
-        await window.pywebview.api.save_addons_per_page(addonsPerPage);
+        await window.hwlAPI.save_addons_per_page(addonsPerPage);
 
 
 
@@ -351,7 +353,7 @@ async function saveSettings() {
 
         if (restartRequired) {
 
-            window.pywebview.api.info(window.t('toasts.settings_saved_restart') || 'Settings saved. One or more changes (Dev Mode or Hardware Acceleration) require a launcher restart to be applied.');
+            window.hwlAPI.info(window.t('toasts.settings_saved_restart') || 'Settings saved. One or more changes (Dev Mode or Hardware Acceleration) require a launcher restart to be applied.');
 
         }
 
@@ -395,7 +397,7 @@ if (document.getElementById("mcdir")) {
 
         const mcdir = document.getElementById("mcdir").value;
 
-        window.pywebview.api.save_user_json(nick, mcdir);
+        window.hwlAPI.save_user_json(nick, mcdir);
 
     });
 
@@ -427,7 +429,7 @@ const initLauncher = async () => {
     // Check internet connection first
     try {
 
-        window.hasInternet = await window.pywebview.api.check_internet();
+        window.hasInternet = await window.hwlAPI.check_internet();
 
 
 
@@ -453,7 +455,7 @@ const initLauncher = async () => {
 
                     closeAppBtn.addEventListener('click', async () => {
 
-                        await window.pywebview.api.close_app();
+                        await window.hwlAPI.close_app();
 
                     });
 
@@ -489,7 +491,7 @@ const initLauncher = async () => {
 
         // Load initial user data
         updateLoaderProgress(35, window.t('loader.downloading_account') || "Downloading account data...");
-        const data = await window.pywebview.api.get_user_json();
+        const data = await window.hwlAPI.get_user_json();
 
         // Load saved language
         const langToUse = data.language || window.currentLanguage || 'en';
@@ -563,6 +565,9 @@ const initLauncher = async () => {
         const privacyModeCheckbox = document.getElementById("privacyModeCheckbox");
         if (privacyModeCheckbox) privacyModeCheckbox.checked = data.privacy_mode || false;
 
+        const reopenOnGameCloseCheckbox = document.getElementById("reopenOnGameCloseCheckbox");
+        if (reopenOnGameCloseCheckbox) reopenOnGameCloseCheckbox.checked = (data.reopen_on_game_close !== false);
+
         // Apply visual settings that don't need restart (on load)
         if (data.enable_transitions === false) {
             document.body.classList.add('disable-transitions');
@@ -580,8 +585,8 @@ const initLauncher = async () => {
         }
 
         // Register mod download progress listener
-        if (window.pywebview.api.on_mod_download_progress) {
-            window.pywebview.api.on_mod_download_progress((prog) => {
+        if (window.hwlAPI.on_mod_download_progress) {
+            window.hwlAPI.on_mod_download_progress((prog) => {
                 if (window.onModDownloadProgress) {
                     window.onModDownloadProgress(prog.projectId, prog.percentage, 'downloading');
                 }
@@ -602,7 +607,7 @@ const initLauncher = async () => {
 
         // Load launcher version
         try {
-            const version = await window.pywebview.api.get_launcher_version();
+            const version = await window.hwlAPI.get_launcher_version();
             const vEl = document.getElementById("launcherVersion");
             if (vEl) vEl.textContent = version;
         } catch (err) { }
@@ -646,18 +651,18 @@ const initLauncher = async () => {
 
         // --- BACKGROUND NON-BLOCKING TASKS ---
         const refreshUserSession = async () => {
-            const currentData = await window.pywebview.api.get_user_json();
+            const currentData = await window.hwlAPI.get_user_json();
             if ((currentData.account_type === 'microsoft' || currentData.account_type === 'helloworld') && window.hasInternet) {
                 try {
-                    const res = await window.pywebview.api.refresh_session();
+                    const res = await window.hwlAPI.refresh_session();
                     if (res.success) {
-                        const refreshedData = await window.pywebview.api.get_user_json();
+                        const refreshedData = await window.hwlAPI.get_user_json();
                         await updateUserInterface(refreshedData);
                         loadSkinData();
                     } else if (res.expired && currentData.account_type === 'microsoft') {
                         console.warn("[Init] Session expired");
-                        window.pywebview.api.info(window.t("toasts.session_expired") || "Your Microsoft session has expired. Please log in again.");
-                        const offlineData = await window.pywebview.api.save_user_json(currentData.username, currentData.mcdir, 'offline');
+                        window.hwlAPI.info(window.t("toasts.session_expired") || "Your Microsoft session has expired. Please log in again.");
+                        const offlineData = await window.hwlAPI.save_user_json(currentData.username, currentData.mcdir, 'offline');
                         await updateUserInterface(offlineData);
                         loadSkinData();
                     }
@@ -686,8 +691,8 @@ const initLauncher = async () => {
 
         if (window.hwlAPI && window.hwlAPI.onAutoLaunchProfile) {
             window.hwlAPI.onAutoLaunchProfile(onAutoLaunch);
-        } else if (window.pywebview && window.pywebview.api && window.pywebview.api.on_auto_launch_profile) {
-            window.pywebview.api.on_auto_launch_profile(onAutoLaunch);
+        } else if (window.hwlAPI && window.hwlAPI.on_auto_launch_profile) {
+            window.hwlAPI.on_auto_launch_profile(onAutoLaunch);
         }
 
     } catch (error) {
@@ -706,8 +711,8 @@ const initLauncher = async () => {
     window.isLauncherReady = true;
 
     // Check if Minecraft is already running on launcher startup
-    if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.is_minecraft_running === 'function') {
-        window.pywebview.api.is_minecraft_running().then(running => {
+    if (window.hwlAPI && typeof window.hwlAPI.is_minecraft_running === 'function') {
+        window.hwlAPI.is_minecraft_running().then(running => {
             if (running) {
                 console.log('[Init] Minecraft process already running detected on startup');
                 onMinecraftReady();
@@ -720,8 +725,8 @@ const initLauncher = async () => {
         const pid = window.pendingLaunchProfileId;
         window.pendingLaunchProfileId = null;
         setTimeout(() => { launchProfileById(pid); }, 350);
-    } else if (window.pywebview && window.pywebview.api && window.pywebview.api.get_pending_launch_profile) {
-        window.pywebview.api.get_pending_launch_profile().then(pid => {
+    } else if (window.hwlAPI && window.hwlAPI.get_pending_launch_profile) {
+        window.hwlAPI.get_pending_launch_profile().then(pid => {
             if (pid) setTimeout(() => { launchProfileById(pid); }, 350);
         }).catch(() => {});
     }
@@ -941,7 +946,7 @@ function initMaintenanceUIListeners() {
     if (bypassBtn) {
         bypassBtn.addEventListener('click', async () => {
             try {
-                const api = window.api || (window.pywebview && window.pywebview.api);
+                const api = window.api || (window.hwlAPI);
                 if (!api || typeof api.enable_admin_bypass !== 'function') {
                     throw new Error('API not available');
                 }
@@ -985,7 +990,7 @@ async function handleMaintenanceState(maintenance) {
     initMaintenanceUIListeners();
     const modal = document.getElementById('maintenanceModal');
     const bypassBanner = document.getElementById('maintenanceAdminBypassBanner');
-    const api = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
+    const api = window.hwlAPI || window.api || (window.hwlAPI);
 
     if (!maintenance || maintenance.enabled !== true) {
         _isMaintenanceActive = false;
@@ -1377,7 +1382,7 @@ async function fetchFeaturedServerStatus(ip, serverId, serverObj = {}) {
     }
 
     try {
-        const api = window.api || (window.pywebview && window.pywebview.api);
+        const api = window.api || (window.hwlAPI);
         let mergedData = null;
 
         // 1. Preferred: IPC call to Node.js backend (cero CSP/CORS, parallel mcstatus & minetools proxy support)
@@ -1738,7 +1743,7 @@ window.HW_DISMISSED_ANNOUNCEMENTS = new Set();
 
 async function initDismissedAnnouncements() {
     try {
-        const api = window.api || (window.pywebview && window.pywebview.api);
+        const api = window.api || (window.hwlAPI);
         if (api && typeof api.get_dismissed_announcements === 'function') {
             const list = await api.get_dismissed_announcements();
             if (Array.isArray(list)) {
@@ -1771,7 +1776,7 @@ function recordAnnouncementDismissed(id) {
     }
     const storageKey = 'hw_dismissed_announcement_' + strId;
     localStorage.setItem(storageKey, 'true');
-    const api = window.api || (window.pywebview && window.pywebview.api);
+    const api = window.api || (window.hwlAPI);
     if (api && typeof api.dismiss_announcement === 'function') {
         api.dismiss_announcement(strId).catch(() => {});
     }
@@ -2124,7 +2129,7 @@ function initUpdateModalListeners() {
             if (_currentUpdateState && _currentUpdateState.isMandatory) {
                 return; // Cannot dismiss if mandatory
             }
-            const api = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
+            const api = window.hwlAPI || window.api || (window.hwlAPI);
             if (api && typeof api.set_mandatory_update_state === 'function') {
                 try { api.set_mandatory_update_state(false); } catch (_) {}
             } else if (api && typeof api.setMandatoryUpdateState === 'function') {
@@ -2146,7 +2151,7 @@ function initUpdateModalListeners() {
             e.preventDefault();
             if (!_currentUpdateState) return;
 
-            const api = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
+            const api = window.hwlAPI || window.api || (window.hwlAPI);
 
             const progressSection = document.getElementById('updateProgressSection');
             const statusText = document.getElementById('updateProgressStatusText');
@@ -2334,7 +2339,7 @@ async function showUpdateModal(updateData) {
     _currentUpdateState = updateData;
     initUpdateModalListeners();
 
-    const api = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
+    const api = window.hwlAPI || window.api || (window.hwlAPI);
     if (api && typeof api.set_mandatory_update_state === 'function') {
         try { await api.set_mandatory_update_state(Boolean(updateData && updateData.isMandatory)); } catch (_) {}
     } else if (api && typeof api.setMandatoryUpdateState === 'function') {
@@ -2439,7 +2444,7 @@ async function checkAppUpdates(changelog) {
 
     let currentVersion = window.APP_VERSION || '2.1.0';
     try {
-        const api = window.hwlAPI || window.api || (window.pywebview && window.pywebview.api);
+        const api = window.hwlAPI || window.api || (window.hwlAPI);
         if (api && typeof api.get_launcher_version === 'function') {
             currentVersion = await api.get_launcher_version();
         } else if (api && typeof api.getUserJson === 'function') {
@@ -2562,7 +2567,7 @@ async function fetchAndApplyRemoteConfig(forceRefresh = false) {
     }
 
     try {
-        const api = window.api || (window.pywebview && window.pywebview.api);
+        const api = window.api || (window.hwlAPI);
         let data = null;
 
         // 1. Fetch via backend Node.js (cero CORS, más rápido y confiable)
@@ -2689,8 +2694,8 @@ function applyUiScale(percent, save = true) {
 
     if (window.hwlAPI && typeof window.hwlAPI.setZoomFactor === 'function') {
         window.hwlAPI.setZoomFactor(factor);
-    } else if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.setZoomFactor === 'function') {
-        window.pywebview.api.setZoomFactor(factor);
+    } else if (window.hwlAPI && typeof window.hwlAPI.setZoomFactor === 'function') {
+        window.hwlAPI.setZoomFactor(factor);
     } else if (window.electronAPI && typeof window.electronAPI.setZoomFactor === 'function') {
         window.electronAPI.setZoomFactor(factor);
     } else {
@@ -2778,10 +2783,10 @@ async function loadOwnBadges(userData) {
 
     try {
         let badges = [];
-        if (window.pywebview && window.pywebview.api && window.pywebview.api.get_own_badges) {
+        if (window.hwlAPI && window.hwlAPI.get_own_badges) {
             // Fetch own badges from backend with a safety timeout of 3.5s so loader is never stuck
             const res = await Promise.race([
-                window.pywebview.api.get_own_badges(),
+                window.hwlAPI.get_own_badges(),
                 new Promise((resolve) => setTimeout(() => resolve({ success: false, badges: [] }), 3500))
             ]);
             if (res && res.success && Array.isArray(res.badges)) {
@@ -3233,7 +3238,7 @@ async function loadSkinData() {
 
     try {
 
-        const userData = await window.pywebview.api.get_user_json();
+        const userData = await window.hwlAPI.get_user_json();
 
         
 
@@ -3299,7 +3304,7 @@ async function loadSkinData() {
 
 window.onLoginSuccess = async function () {
 
-    const data = await window.pywebview.api.get_user_json();
+    const data = await window.hwlAPI.get_user_json();
 
     await updateUserInterface(data);
 
@@ -3359,7 +3364,7 @@ window.addEventListener('login-success', async (event) => {
 
     if (profile && profile.account_type !== 'offline') {
 
-        const data = await window.pywebview.api.get_user_json().catch(() => null);
+        const data = await window.hwlAPI.get_user_json().catch(() => null);
 
         if (data && data.account_type === 'microsoft') {
 
@@ -3411,7 +3416,7 @@ async function silentMicrosoftVerify(username, uuid) {
 
             if (typeof window.hideMsVerifyBanner === 'function') window.hideMsVerifyBanner(true);
 
-            const updatedData = await window.pywebview.api.get_user_json();
+            const updatedData = await window.hwlAPI.get_user_json();
 
             await updateUserInterface(updatedData);
 
@@ -3481,7 +3486,7 @@ async function silentMicrosoftVerify(username, uuid) {
 
                 if (typeof window.hideMsVerifyBanner === 'function') window.hideMsVerifyBanner(true);
 
-                const updatedData = await window.pywebview.api.get_user_json();
+                const updatedData = await window.hwlAPI.get_user_json();
 
                 await updateUserInterface(updatedData);
 
@@ -3513,7 +3518,7 @@ async function writeMsVerified(fb, msUser, username, uuid) {
 
     const refreshToken = msUser.stsTokenManager?.refreshToken || '';
 
-    await window.pywebview.api.ms_write_verified(emailKey, email, username, uuid, msUser.uid, refreshToken);
+    await window.hwlAPI.ms_write_verified(emailKey, email, username, uuid, msUser.uid, refreshToken);
 
     return email;
 
@@ -3527,7 +3532,7 @@ async function verifyWithPopup() {
 
     if (!fb) return { success: false, error: 'Firebase SDK not loaded' };
 
-    const data = await window.pywebview.api.get_user_json().catch(() => null);
+    const data = await window.hwlAPI.get_user_json().catch(() => null);
 
     if (!data || data.account_type !== 'microsoft') return { success: false, error: 'Not a Microsoft account' };
 
@@ -3543,7 +3548,7 @@ async function verifyWithPopup() {
 
         // Reload user data from backend to get updated firebase_ms_uid
 
-        const updatedData = await window.pywebview.api.get_user_json();
+        const updatedData = await window.hwlAPI.get_user_json();
 
         await updateUserInterface(updatedData);
 
@@ -3575,7 +3580,7 @@ window.addEventListener('login-error', (event) => {
 
 window.onLoginError = function (err) {
 
-    window.pywebview.api.error(window.t("toasts.login_failed", {err: err}) || ("Login failed: " + err));
+    window.hwlAPI.error(window.t("toasts.login_failed", {err: err}) || ("Login failed: " + err));
 
     // Reset button state
 
@@ -3617,7 +3622,7 @@ if (selectMicrosoftBtn) {
 
         selectMicrosoftBtn.disabled = true;
 
-        window.pywebview.api.login_microsoft();
+        window.hwlAPI.login_microsoft();
 
     };
 
@@ -3651,7 +3656,7 @@ window.cancelLaunch = function() {
     }
 
     // Call API to cancel launch immediately
-    window.pywebview.api.cancel_launch().catch(err => console.error("Cancel launch error:", err));
+    window.hwlAPI.cancel_launch().catch(err => console.error("Cancel launch error:", err));
 };
 
 async function launchGame() {
@@ -3660,7 +3665,7 @@ async function launchGame() {
 
     const profileSelectElement = document.getElementById("profileSelect");
     if (!profileSelectElement || !profileSelectElement.value) {
-        window.pywebview.api.error(window.t("toasts.select_installation_play") || "You must select an installation before playing");
+        window.hwlAPI.error(window.t("toasts.select_installation_play") || "You must select an installation before playing");
         return;
     }
 
@@ -3713,25 +3718,25 @@ async function launchGame() {
     const selectedProfile = profileSelectElement.value;
 
     // Get nickname from user data
-    const userData = await window.pywebview.api.get_user_json();
+    const userData = await window.hwlAPI.get_user_json();
     const nickname = userData.username || "";
 
     if (!nickname) {
         revertPlayState();
-        window.pywebview.api.error(window.t("toasts.login_before_play") || "You must log in before playing");
+        window.hwlAPI.error(window.t("toasts.login_before_play") || "You must log in before playing");
         return;
     }
 
     // Block Microsoft accounts if offline (verification requires internet)
     if (userData.account_type === 'microsoft' && !window.hasInternet) {
         revertPlayState();
-        window.pywebview.api.error(window.t("toasts.microsoft_offline_error") || "You cannot play with a Microsoft account without an internet connection. Please use an Offline account to play offline.");
+        window.hwlAPI.error(window.t("toasts.microsoft_offline_error") || "You cannot play with a Microsoft account without an internet connection. Please use an Offline account to play offline.");
         return;
     }
 
     // Check for old versions (<= 1.14) running in the default launcher directory
     try {
-        const profilesData = await window.pywebview.api.get_profiles();
+        const profilesData = await window.hwlAPI.get_profiles();
         const profile = profilesData && profilesData.profiles ? profilesData.profiles[selectedProfile] : null;
         if (profile) {
             const defaultMcDir = (userData.mcdir || "").trim().replace(/\\/g, '/').toLowerCase();
@@ -3755,7 +3760,7 @@ async function launchGame() {
             }
 
             if (isUsingDefaultDir && isOldVersion) {
-                const continueOld = await window.pywebview.api.confirm(window.t("toasts.old_version_warning") || "You are launching an older version of Minecraft (1.14 or older) in the main launcher directory.\n\nSharing this folder with modern versions will likely cause errors or crashes.\n\nIt is strongly recommended to edit the installation and set a custom 'Game Directory'.\n\nDo you want to launch anyway?");
+                const continueOld = await window.hwlAPI.confirm(window.t("toasts.old_version_warning") || "You are launching an older version of Minecraft (1.14 or older) in the main launcher directory.\n\nSharing this folder with modern versions will likely cause errors or crashes.\n\nIt is strongly recommended to edit the installation and set a custom 'Game Directory'.\n\nDo you want to launch anyway?");
                 if (!continueOld) {
                     revertPlayState();
                     return;
@@ -3785,7 +3790,7 @@ async function launchGame() {
     const serverParam = window.pendingServerParam || null;
     const saveServerParam = typeof window.pendingSaveServerParam === 'boolean' ? window.pendingSaveServerParam : false;
     await new Promise(r => setTimeout(r, 10));
-    const result = await pywebview.api.start_game(selectedProfile, nickname, false, serverParam, saveServerParam);
+    const result = await window.hwlAPI.start_game(selectedProfile, nickname, false, serverParam, saveServerParam);
     
     if (!window.isLaunching || (result && result.status === 'cancelled')) {
         console.log('[Launch] Launch was cancelled by user, ignoring start_game result.');
@@ -3808,10 +3813,10 @@ async function launchGame() {
 
     // Handle duplicate instance
     if (result.status === "already_running") {
-        const confirm = await window.pywebview.api.confirm(window.t("toasts.already_open_warning") || "Minecraft is already open. Do you want to open another instance?");
+        const confirm = await window.hwlAPI.confirm(window.t("toasts.already_open_warning") || "Minecraft is already open. Do you want to open another instance?");
         if (confirm) {
             // Force launch
-            const forceResult = await pywebview.api.start_game(selectedProfile, nickname, true, serverParam, saveServerParam);
+            const forceResult = await window.hwlAPI.start_game(selectedProfile, nickname, true, serverParam, saveServerParam);
             window.pendingServerParam = null;
             window.pendingSaveServerParam = false;
             if (forceResult.status === "error") {
@@ -3936,7 +3941,7 @@ window.joinMinecraftServer = async function(ip, save = false, profileId = null, 
                 try { profileSelect.dispatchEvent(new Event('change')); } catch (_) {}
             }
         } else if (!effectiveProfileId) {
-            const api = (typeof pywebview !== 'undefined' && pywebview.api) || window.api;
+            const api = window.hwlAPI || window.api;
             let profilesData = window.profilesData;
             if (!profilesData && api && typeof api.get_profiles === 'function') {
                 try { profilesData = await api.get_profiles(); } catch (_) {}
@@ -3962,7 +3967,7 @@ window.joinMinecraftServer = async function(ip, save = false, profileId = null, 
 
         // 2. Add to servers.dat in active profile directory and root .minecraft
         try {
-            const api = (typeof pywebview !== 'undefined' && pywebview.api) || window.api;
+            const api = window.hwlAPI || window.api;
             if (api && typeof api.add_server_to_servers_dat === 'function') {
                 await api.add_server_to_servers_dat(serverIp, effectiveProfileId || (profileSelect ? profileSelect.value : null));
             }
@@ -4003,7 +4008,7 @@ window.addServerToMinecraft = async function(serverIp, serverName = null) {
     try {
         const profileSelect = document.getElementById('profileSelect');
         const profileId = profileSelect ? profileSelect.value : null;
-        const api = (typeof pywebview !== 'undefined' && pywebview.api) || window.api;
+        const api = window.hwlAPI || window.api;
         if (api && typeof api.add_server_to_servers_dat === 'function') {
             const res = await api.add_server_to_servers_dat(serverIp.trim(), profileId, serverName);
             if (res && res.success) {
@@ -4292,7 +4297,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
             }
 
-            window.pywebview.api.get_mod_details(q.data.project_id)
+            window.hwlAPI.get_mod_details(q.data.project_id)
 
                 .then(result => {
 
@@ -4336,7 +4341,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
             if (window.currentSyncTask.type === 'version') {
 
-                window.pywebview.api.cancel_download(window.currentSyncTask.id).catch(e => console.error(e));
+                window.hwlAPI.cancel_download(window.currentSyncTask.id).catch(e => console.error(e));
 
             }
 
@@ -4434,7 +4439,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
                 
 
-                const res = await window.pywebview.api.install_version(task.id);
+                const res = await window.hwlAPI.install_version(task.id);
 
                 window.removeEventListener('download-progress', handleProg);
 
@@ -4468,7 +4473,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
                 
 
-                const res = await window.pywebview.api.install_project(
+                const res = await window.hwlAPI.install_project(
 
                     a.project_id, a.version_id, profileId, a.type, null, task.type === 'update'
 
@@ -4502,7 +4507,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
             window.onDownloadComplete = savedOnDownloadComplete;
 
-            window.pywebview.api.error(window.t("toasts.download_failed", {err: err.message}) || `Failed to download: ${err.message}`);
+            window.hwlAPI.error(window.t("toasts.download_failed", {err: err.message}) || `Failed to download: ${err.message}`);
 
             modal.classList.remove('show');
 
@@ -4540,7 +4545,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
             const a = window.currentSyncTask.data;
 
-            window.pywebview.api.delete_addon_file(profileId, a.type, a.filename).catch(() => {});
+            window.hwlAPI.delete_addon_file(profileId, a.type, a.filename).catch(() => {});
 
         }
 
@@ -4672,7 +4677,7 @@ window.loadOptions = async function loadOptions() {
 
     const seq = ++loadOptionsSeq;
 
-    const profilesData = await window.pywebview.api.get_profiles();
+    const profilesData = await window.hwlAPI.get_profiles();
 
     if (seq !== loadOptionsSeq) return; // Abort if a newer call started
 
@@ -4933,7 +4938,7 @@ window.loadOptions = async function loadOptions() {
 
 
 
-                const iconUrl = await window.pywebview.api.get_profile_icon(profile.icon);
+                const iconUrl = await window.hwlAPI.get_profile_icon(profile.icon);
 
                 profile.iconUrl = iconUrl;
 
@@ -5167,7 +5172,7 @@ async function selectOption(id, profile) {
     if (iconEl) {
         if (!profile.iconUrl && profile.icon) {
             try {
-                const iconData = await window.pywebview.api.get_profile_icon(profile.icon);
+                const iconData = await window.hwlAPI.get_profile_icon(profile.icon);
                 if (iconData) {
                     profile.iconUrl = window.resolveImageSource ? window.resolveImageSource(iconData) : iconData;
                 }
@@ -5217,19 +5222,19 @@ async function launchProfileById(profileId) {
     }
 
     try {
-        let profilesData = await window.pywebview.api.get_profiles();
+        let profilesData = await window.hwlAPI.get_profiles();
         let profile = profilesData && profilesData.profiles ? profilesData.profiles[profileId] : null;
 
         if (!profile && typeof loadProfiles === 'function') {
             await loadProfiles();
-            profilesData = await window.pywebview.api.get_profiles();
+            profilesData = await window.hwlAPI.get_profiles();
             profile = profilesData && profilesData.profiles ? profilesData.profiles[profileId] : null;
         }
 
         if (profile) {
             if (!profile.iconUrl && profile.icon) {
                 try {
-                    const iconData = await window.pywebview.api.get_profile_icon(profile.icon);
+                    const iconData = await window.hwlAPI.get_profile_icon(profile.icon);
                     if (iconData) {
                         profile.iconUrl = window.resolveImageSource ? window.resolveImageSource(iconData) : iconData;
                     }
@@ -5367,7 +5372,7 @@ async function loadProfiles() {
 
     const seq = ++loadProfilesSeq;
 
-    const profilesData = await window.pywebview.api.get_profiles();
+    const profilesData = await window.hwlAPI.get_profiles();
 
     if (seq !== loadProfilesSeq) return; // Abort if a newer call started
 
@@ -5409,7 +5414,7 @@ async function loadProfiles() {
 
         const id = profile.id;
 
-        const iconUrlRaw = await window.pywebview.api.get_profile_icon(profile.icon);
+        const iconUrlRaw = await window.hwlAPI.get_profile_icon(profile.icon);
 
         const iconUrl = window.resolveImageSource(iconUrlRaw);
 
@@ -5456,7 +5461,7 @@ async function loadProfiles() {
                 try {
                     shortcutBtn.disabled = true;
                     shortcutBtn.style.opacity = '0.6';
-                    const res = await window.pywebview.api.create_profile_shortcut(id, profile.name, profile.icon);
+                    const res = await window.hwlAPI.create_profile_shortcut(id, profile.name, profile.icon);
                     if (res && res.success) {
                         showToast(window.t('installations.shortcut_created') || 'Acceso directo creado en el Escritorio y Menú Inicio', 'success');
                     } else {
@@ -5482,15 +5487,15 @@ async function loadProfiles() {
         if (deleteBtn) {
             deleteBtn.onclick = async (e) => {
                 e.stopPropagation();
-                const confirmed = await window.pywebview.api.confirm(window.t('installations.delete_confirm', { name: profile.name }));
+                const confirmed = await window.hwlAPI.confirm(window.t('installations.delete_confirm', { name: profile.name }));
                 if (confirmed) {
-                    const result = await window.pywebview.api.delete_profile(id);
+                    const result = await window.hwlAPI.delete_profile(id);
                     if (result.success) {
                         await loadProfiles();
                         await loadOptions();
                         await loadModdableProfiles();
                     } else {
-                        window.pywebview.api.error(result.error || window.t('installations.delete_failed'));
+                        window.hwlAPI.error(result.error || window.t('installations.delete_failed'));
                     }
                 }
             };
@@ -5541,7 +5546,8 @@ function showSection(sectionId) {
         'play': 'playNavBtn',
         'profiles': 'profilesNavBtn',
         'workshop': 'workshopNavBtn',
-        'skins': 'skinsSidebarBtn'
+        'skins': 'skinsSidebarBtn',
+        'settings': 'settingsNavBtn'
     };
     const targetNavBtn = sectionNavMap[sectionId] ? document.getElementById(sectionNavMap[sectionId]) : null;
     if (targetNavBtn) {
@@ -5549,6 +5555,11 @@ function showSection(sectionId) {
     } else if (typeof event !== 'undefined' && event && event.target && event.target.classList && event.target.classList.contains('sidebar-button')) {
         event.target.classList.add('active');
     }
+    try {
+        window.dispatchEvent(new CustomEvent('section-changed', {
+            detail: { section: sectionId }
+        }));
+    } catch (_) {}
 }
 
 
@@ -5595,8 +5606,8 @@ async function resetProfileModal() {
         let basePath = '';
         if (window.hwlAPI && window.hwlAPI.getDocumentsPath) {
             basePath = await window.hwlAPI.getDocumentsPath();
-        } else if (window.pywebview && window.pywebview.api && window.pywebview.api.getDocumentsPath) {
-            basePath = await window.pywebview.api.getDocumentsPath();
+        } else if (window.hwlAPI && window.hwlAPI.getDocumentsPath) {
+            basePath = await window.hwlAPI.getDocumentsPath();
         }
 
         if (document.getElementById('profileDir')) {
@@ -5606,7 +5617,7 @@ async function resetProfileModal() {
                 const uuid = crypto.randomUUID();
                 document.getElementById('profileDir').value = `${basePath}${separator}MinecraftDirectories${separator}${uuid}`;
             } else {
-                const userData = await window.pywebview.api.get_user_json();
+                const userData = await window.hwlAPI.get_user_json();
                 document.getElementById('profileDir').value = userData.mcdir || '';
             }
         }
@@ -5625,7 +5636,7 @@ async function resetProfileModal() {
 
     try {
 
-        const url = await window.pywebview.api.get_profile_icon('default.png');
+        const url = await window.hwlAPI.get_profile_icon('default.png');
 
         if (iconPreview) {
 
@@ -5857,7 +5868,7 @@ async function openEditProfileModal(id, profile) {
         }
         if (placeholderIcon) placeholderIcon.style.display = 'none';
     } else {
-        window.pywebview.api.get_profile_icon(iconToLoad).then(url => {
+        window.hwlAPI.get_profile_icon(iconToLoad).then(url => {
             if (iconPreview && editingProfileId === id && url) {
                 iconPreview.src = url;
                 iconPreview.style.display = 'block';
@@ -5925,7 +5936,7 @@ if (acceptProfileBtn) {
 
         if (!profileName) {
 
-            window.pywebview.api.error(window.t("toasts.install_name_required") || "Installation name is required");
+            window.hwlAPI.error(window.t("toasts.install_name_required") || "Installation name is required");
 
             return;
 
@@ -5935,7 +5946,7 @@ if (acceptProfileBtn) {
 
         if (isReservedProfileName(profileName)) {
 
-            window.pywebview.api.error(window.t("toasts.name_reserved") || "This name is reserved for automatic installations.");
+            window.hwlAPI.error(window.t("toasts.name_reserved") || "This name is reserved for automatic installations.");
 
             return;
 
@@ -5989,7 +6000,7 @@ if (acceptProfileBtn) {
 
         } else if (trimmedName.length < 2) {
 
-            window.pywebview.api.error(window.t('toasts.name_too_short') || 'Installation name must be at least 2 characters');
+            window.hwlAPI.error(window.t('toasts.name_too_short') || 'Installation name must be at least 2 characters');
 
             return;
 
@@ -6005,7 +6016,7 @@ if (acceptProfileBtn) {
 
         if (missingFields.length > 0) {
 
-            window.pywebview.api.error(window.t('toasts.fields_empty', {fields: '- ' + missingFields.join('\n- ')}) || `You cannot leave these fields empty:\n- ${missingFields.join('\n- ')}`);
+            window.hwlAPI.error(window.t('toasts.fields_empty', {fields: '- ' + missingFields.join('\n- ')}) || `You cannot leave these fields empty:\n- ${missingFields.join('\n- ')}`);
 
             return;
 
@@ -6017,7 +6028,7 @@ if (acceptProfileBtn) {
 
             // Edit existing profile - API expects individual arguments
 
-            await window.pywebview.api.edit_profile(
+            await window.hwlAPI.edit_profile(
 
                 editingProfileId,    // profile_id
 
@@ -6059,7 +6070,7 @@ if (acceptProfileBtn) {
 
                 // Note: add_profile in backend might still try to install if missing, 
 
-                const result = await window.pywebview.api.add_profile(profileName, profileVersion, profileIcon, profileDir, profileJVMArgs, profileJavaPath);
+                const result = await window.hwlAPI.add_profile(profileName, profileVersion, profileIcon, profileDir, profileJVMArgs, profileJavaPath);
 
 
 
@@ -6075,7 +6086,7 @@ if (acceptProfileBtn) {
 
                 } else {
 
-                    window.pywebview.api.error(result.message);
+                    window.hwlAPI.error(result.message);
 
                 }
 
@@ -6083,7 +6094,7 @@ if (acceptProfileBtn) {
 
                 console.error('Error creating installation:', error);
 
-                window.pywebview.api.error(window.t('toasts.error_creating_installation') || 'Error creating installation');
+                window.hwlAPI.error(window.t('toasts.error_creating_installation') || 'Error creating installation');
 
             }
 
@@ -6105,7 +6116,7 @@ if (selectFolderBtn) {
 
         const currentDir = document.getElementById('profileDir').value;
 
-        const selectedPath = await window.pywebview.api.select_folder(currentDir);
+        const selectedPath = await window.hwlAPI.select_folder(currentDir);
 
 
 
@@ -6129,7 +6140,7 @@ if (selectMcdirBtn) {
 
         const currentDir = document.getElementById('mcdir').value;
 
-        const selectedPath = await window.pywebview.api.select_folder(currentDir);
+        const selectedPath = await window.hwlAPI.select_folder(currentDir);
 
 
 
@@ -6167,6 +6178,7 @@ if (cancelImageModalBtn) {
 
     cancelImageModalBtn.addEventListener('click', () => {
 
+        window._wkIconMode = false;
         if (imageModal) imageModal.classList.remove('show');
 
     });
@@ -6185,7 +6197,7 @@ if (selectJavaBtn) {
 
         const currentPath = document.getElementById('profileJavaPath').value;
 
-        const selectedPath = await window.pywebview.api.select_file(currentPath);
+        const selectedPath = await window.hwlAPI.select_file(currentPath);
 
 
 
@@ -6243,13 +6255,13 @@ async function loadImageModal() {
 
     try {
 
-        const images = await window.pywebview.api.get_profile_images();
+        const images = await window.hwlAPI.get_profile_images();
 
 
 
         for (const imageName of images) {
 
-            const imageUrl = await window.pywebview.api.get_profile_icon(imageName);
+            const imageUrl = await window.hwlAPI.get_profile_icon(imageName);
 
 
 
@@ -6315,6 +6327,8 @@ async function loadImageModal() {
 
 function selectImageFromGrid(imageName, imageUrl) {
 
+    if (window._wkIconMode) return;
+
     // Mark the selected image in the grid
 
     document.querySelectorAll('.image-grid-item:not(.upload-item)').forEach(item => {
@@ -6364,6 +6378,8 @@ function selectImageFromGrid(imageName, imageUrl) {
 if (customImageInput) {
 
     customImageInput.addEventListener('change', function (e) {
+
+        if (window._wkIconMode) return;
 
         const file = e.target.files[0];
 
@@ -6496,9 +6512,9 @@ if (loginButton) {
         if (loginModal) loginModal.classList.add('show');
 
         const savedBtn = document.getElementById('selectSavedAccountsBtn');
-        if (savedBtn && window.pywebview && window.pywebview.api && window.pywebview.api.get_saved_accounts) {
+        if (savedBtn && window.hwlAPI && window.hwlAPI.get_saved_accounts) {
             try {
-                const accs = await window.pywebview.api.get_saved_accounts();
+                const accs = await window.hwlAPI.get_saved_accounts();
                 if (accs && accs.length > 0) {
                     savedBtn.style.display = 'inline-flex';
                 } else {
@@ -6584,7 +6600,7 @@ async function checkLoginState() {
 
     try {
 
-        const userData = await window.pywebview.api.get_user_json();
+        const userData = await window.hwlAPI.get_user_json();
 
         if (userData.username && userData.username.trim()) {
 
@@ -6672,23 +6688,23 @@ async function loadProfileMcVersions(type) {
 
             if (type === 'vanilla') {
 
-                versions = await window.pywebview.api.get_vanilla_versions();
+                versions = await window.hwlAPI.get_vanilla_versions();
 
             } else if (type === 'fabric') {
 
-                versions = await window.pywebview.api.get_fabric_mc_versions();
+                versions = await window.hwlAPI.get_fabric_mc_versions();
 
             } else if (type === 'forge') {
 
-                versions = await window.pywebview.api.get_forge_mc_versions();
+                versions = await window.hwlAPI.get_forge_mc_versions();
 
             } else if (type === 'neoforge') {
 
-                versions = await window.pywebview.api.get_neoforge_mc_versions();
+                versions = await window.hwlAPI.get_neoforge_mc_versions();
 
             } else if (type === 'optifine') {
-                if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.get_optifine_versions === 'function') {
-                    versions = await window.pywebview.api.get_optifine_versions();
+                if (window.hwlAPI && typeof window.hwlAPI.get_optifine_versions === 'function') {
+                    versions = await window.hwlAPI.get_optifine_versions();
                 } else {
                     versions = [];
                 }
@@ -6757,7 +6773,7 @@ async function loadProfileLoaderVersions(type, mcVersion) {
 
     try {
 
-        const loaders = await window.pywebview.api.get_loader_versions(type, mcVersion);
+        const loaders = await window.hwlAPI.get_loader_versions(type, mcVersion);
 
         profileLoaderVersionSelect.innerHTML = '';
 
@@ -6976,7 +6992,7 @@ window.onDownloadComplete = async function (version) {
 
     setTimeout(() => {
 
-        window.pywebview.api.info(window.t("toasts.version_installed_success", {version: version}) || `Version ${version} installed successfully.`);
+        window.hwlAPI.info(window.t("toasts.version_installed_success", {version: version}) || `Version ${version} installed successfully.`);
 
     }, 1000);
 
@@ -7145,7 +7161,7 @@ if (viewOwnProfileBtn) {
             await window.viewOwnProfile();
         } else if (typeof window.viewUserProfile === 'function') {
             try {
-                const apiObj = (window.pywebview && window.pywebview.api) || window.electronAPI;
+                const apiObj = (window.hwlAPI) || window.electronAPI;
                 if (apiObj && apiObj.social_get_auth) {
                     const auth = await apiObj.social_get_auth();
                     if (auth && auth.success && auth.uid) {
@@ -7185,9 +7201,9 @@ if (editProfileBtn) {
 
             await window.electronAPI.openUrl(dashboardUrl);
 
-        } else if (window.pywebview && window.pywebview.api && window.pywebview.api.open_url) {
+        } else if (window.hwlAPI && window.hwlAPI.open_url) {
 
-            await window.pywebview.api.open_url(dashboardUrl);
+            await window.hwlAPI.open_url(dashboardUrl);
 
         } else {
 
@@ -7245,7 +7261,7 @@ if (saveOfflineBtn) {
 
 
 
-            const data = await window.pywebview.api.save_user_json(nickname, mcdir, 'offline');
+            const data = await window.hwlAPI.save_user_json(nickname, mcdir, 'offline');
 
 
 
@@ -7261,7 +7277,7 @@ if (saveOfflineBtn) {
 
         } else {
 
-            window.pywebview.api.error(window.t('toasts.username_invalid') || 'Username must be 3-16 characters and contain only letters, numbers, and underscores.');
+            window.hwlAPI.error(window.t('toasts.username_invalid') || 'Username must be 3-16 characters and contain only letters, numbers, and underscores.');
 
         }
 
@@ -7455,7 +7471,7 @@ if (hwLoginBtn) {
 
         try {
 
-            const result = await window.pywebview.api.login_helloworld(identifier, password);
+            const result = await window.hwlAPI.login_helloworld(identifier, password);
 
             if (result.success) {
 
@@ -7467,7 +7483,7 @@ if (hwLoginBtn) {
 
                 // Fetch updated user data and refresh UI
 
-                const data = await window.pywebview.api.get_user_json();
+                const data = await window.hwlAPI.get_user_json();
 
                 await updateUserInterface(data);
 
@@ -7617,7 +7633,7 @@ window.logout = async function () {
 
         console.log('[Auth] Logging out...');
 
-        const newData = await window.pywebview.api.logout_user();
+        const newData = await window.hwlAPI.logout_user();
 
         
 
@@ -7668,9 +7684,9 @@ window.logout = async function () {
 
         console.error('Error logging out:', error);
 
-        if (window.pywebview && window.pywebview.api && window.pywebview.api.error) {
+        if (window.hwlAPI && window.hwlAPI.error) {
 
-            window.pywebview.api.error(window.t('toasts.logout_error') || 'Error logging out');
+            window.hwlAPI.error(window.t('toasts.logout_error') || 'Error logging out');
 
         }
 
@@ -7701,7 +7717,7 @@ function getAccountAvatarUrl(acc) {
 // Helper: get current active account id to highlight it
 async function getCurrentAccountId() {
     try {
-        const data = await window.pywebview.api.get_user_json();
+        const data = await window.hwlAPI.get_user_json();
         if (!data || !data.username) return null;
         if (data.account_type === 'helloworld') {
             // Match by firebase_uid or by username
@@ -7729,7 +7745,7 @@ async function renderAccountSwitcherList() {
 
     let accounts = [];
     try {
-        const res = await window.pywebview.api.get_saved_accounts();
+        const res = await window.hwlAPI.get_saved_accounts();
         accounts = (res && res.accounts) ? res.accounts : [];
     } catch (e) {
         console.error('[AccountSwitcher] Failed to load accounts:', e);
@@ -7747,7 +7763,7 @@ async function renderAccountSwitcherList() {
     if (emptyEl) emptyEl.style.display = 'none';
 
     // Get current user to mark active
-    const currentData = await window.pywebview.api.get_user_json().catch(() => null);
+    const currentData = await window.hwlAPI.get_user_json().catch(() => null);
 
     let hasActive = false;
 
@@ -7870,7 +7886,7 @@ async function renderAccountSwitcherList() {
 // Switch to an account from the modal
 window.performAccountSwitch = async function (accountId, openInboxAfter = false, optionalEmail = '', optionalUsername = '', optionalType = '') {
     try {
-        const res = await window.pywebview.api.switch_account(accountId, optionalType);
+        const res = await window.hwlAPI.switch_account(accountId, optionalType);
 
         if (res && res.success && res.newData) {
             // Close modal and refresh UI
@@ -7950,7 +7966,7 @@ window.performAccountSwitch = async function (accountId, openInboxAfter = false,
                     selectMsBtnEl.disabled = true;
                 }
                 try {
-                    const msRes = await window.pywebview.api.login_microsoft();
+                    const msRes = await window.hwlAPI.login_microsoft();
                     if (msRes && msRes.success && msRes.profile) {
                         if (window.onLoginSuccess) window.onLoginSuccess();
                         if (openInboxAfter) {
@@ -8053,12 +8069,12 @@ window.addEventListener('quick-launch-profile', async (event) => {
     }
 
     try {
-        const profilesData = await window.pywebview.api.get_profiles();
+        const profilesData = await window.hwlAPI.get_profiles();
         const profile = profilesData && profilesData.profiles ? profilesData.profiles[profileId] : null;
         if (profile) {
             profile.id = profileId;
             if (typeof selectOption === 'function') {
-                const iconUrl = await window.pywebview.api.get_profile_icon(profile.icon);
+                const iconUrl = await window.hwlAPI.get_profile_icon(profile.icon);
                 profile.iconUrl = iconUrl;
                 selectOption(profileId, profile);
             } else if (originalSelect) {
@@ -8115,11 +8131,11 @@ window.addEventListener('open-account-switcher', async () => {
 
 // Remove an account from the switcher
 async function removeAccountFromSwitcher(accountId, username, itemEl) {
-    const confirmed = await window.pywebview.api.confirm(window.t("toasts.remove_account_confirm", {username: username}) || `Remove "${username}" from saved accounts?`);
+    const confirmed = await window.hwlAPI.confirm(window.t("toasts.remove_account_confirm", {username: username}) || `Remove "${username}" from saved accounts?`);
     if (!confirmed) return;
 
     try {
-        const res = await window.pywebview.api.remove_saved_account(accountId);
+        const res = await window.hwlAPI.remove_saved_account(accountId);
         if (res && res.success) {
             // Animate removal
             if (itemEl) {
@@ -8220,11 +8236,11 @@ function initAccountSwitcherEvents() {
     if (signOutAll && !signOutAll._asInit) {
         signOutAll._asInit = true;
         signOutAll.addEventListener('click', async (e) => {
-            const confirmed = await window.pywebview.api.confirm(window.t("toasts.signout_all_confirm") || "Sign out of all accounts? This will remove all saved accounts.");
+            const confirmed = await window.hwlAPI.confirm(window.t("toasts.signout_all_confirm") || "Sign out of all accounts? This will remove all saved accounts.");
             if (!confirmed) return;
 
             try {
-                const res = await window.pywebview.api.remove_all_accounts();
+                const res = await window.hwlAPI.remove_all_accounts();
                 if (res && res.success && res.newData) {
                     const modal = document.getElementById('accountSwitcherModal');
                     if (modal) modal.classList.remove('show');
@@ -8321,7 +8337,7 @@ if (msVerifyBannerBtn) {
 
         } else {
 
-            window.pywebview.api.error(window.t('toasts.verify_failed', {err: res.error}) || ('Verification failed: ' + res.error));
+            window.hwlAPI.error(window.t('toasts.verify_failed', {err: res.error}) || ('Verification failed: ' + res.error));
 
             msVerifyBannerBtn.disabled = false;
 
@@ -8763,26 +8779,37 @@ window.showSection = function (sectionId, contentType = null) {
 
 
     // Sidebar active state
-
     if (sectionId === 'mods') {
-
-        const submenuItem = document.querySelector(`.submenu-item[onclick*="'${contentType}'"]`);
-
+        const submenuItem = document.querySelector(`.submenu-item[data-content-type="${contentType}"], .submenu-item[onclick*="'${contentType}'"]`);
         if (submenuItem) submenuItem.classList.add('active');
-
-        document.getElementById('modsMenuBtn').classList.add('active');
-
-        document.getElementById('modsSubmenu').classList.add('active'); // Ensure open
-
+        const modsMenuBtn = document.getElementById('modsMenuBtn');
+        if (modsMenuBtn) modsMenuBtn.classList.add('active');
+        const modsSubmenu = document.getElementById('modsSubmenu');
+        if (modsSubmenu) modsSubmenu.classList.add('active');
     } else {
-
         // Activate standard buttons
-
-        const btn = document.querySelector(`.sidebar-button[onclick="showSection('${sectionId}')"]`);
-
-        if (btn) btn.classList.add('active');
-
+        const sectionNavMap = {
+            'play': 'playNavBtn',
+            'profiles': 'profilesNavBtn',
+            'workshop': 'workshopNavBtn',
+            'skins': 'skinsSidebarBtn',
+            'settings': 'settingsNavBtn'
+        };
+        const targetNavBtn = sectionNavMap[sectionId] ? document.getElementById(sectionNavMap[sectionId]) : null;
+        if (targetNavBtn) {
+            targetNavBtn.classList.add('active');
+        } else {
+            const btn = document.querySelector(`.sidebar-button[data-section="${sectionId}"], .sidebar-button[onclick*="'${sectionId}'"]`);
+            if (btn) btn.classList.add('active');
+        }
     }
+
+    // Notify React component of section change
+    try {
+        window.dispatchEvent(new CustomEvent('section-changed', {
+            detail: { section: sectionId, subType: contentType }
+        }));
+    } catch (_) {}
 
 
 
@@ -9011,7 +9038,7 @@ async function loadModdableProfiles(skipSearch = false) {
 
         // Use new backend method with strict filtering
 
-        const data = await window.pywebview.api.get_profiles_for_addon(currentContentType);
+        const data = await window.hwlAPI.get_profiles_for_addon(currentContentType);
 
         if (seq !== loadModdableProfilesSeq) return; // Abort if a newer call started
 
@@ -9173,7 +9200,7 @@ async function loadModdableProfiles(skipSearch = false) {
 
 
 
-                const iconUrl = await window.pywebview.api.get_profile_icon(profile.icon);
+                const iconUrl = await window.hwlAPI.get_profile_icon(profile.icon);
 
                 profile.iconUrl = iconUrl;
 
@@ -9369,7 +9396,7 @@ async function refreshInstalledAddonsCache() {
         worldName = worldSelect.value;
     }
     try {
-        const result = await window.pywebview.api.get_installed_addons(currentModsProfile, currentContentType, worldName);
+        const result = await window.hwlAPI.get_installed_addons(currentModsProfile, currentContentType, worldName);
         const cache = new Set();
         if (result && result.success && result.mods) {
             result.mods.forEach(m => {
@@ -9444,7 +9471,7 @@ async function loadInstalledAddons(silent = false) {
 
         // Backend call (updated to get_installed_addons)
 
-        const result = await window.pywebview.api.get_installed_addons(currentModsProfile, currentContentType, worldName);
+        const result = await window.hwlAPI.get_installed_addons(currentModsProfile, currentContentType, worldName);
 
         if (seq !== loadAddonsSeq) return; // Abort if a newer call started
 
@@ -9518,7 +9545,7 @@ async function openAddonsFolder() {
 
     try {
 
-        await window.pywebview.api.open_addons_folder(currentModsProfile, currentContentType, worldSelect?.value);
+        await window.hwlAPI.open_addons_folder(currentModsProfile, currentContentType, worldSelect?.value);
 
     } catch (error) {
 
@@ -9560,7 +9587,7 @@ async function importLocalAddonFile() {
 
     if (!currentModsProfile) {
 
-        window.pywebview.api.error(window.t("toasts.select_installation_first") || "Please select an installation first.");
+        window.hwlAPI.error(window.t("toasts.select_installation_first") || "Please select an installation first.");
 
         return;
 
@@ -9570,7 +9597,7 @@ async function importLocalAddonFile() {
 
     if (currentContentType === 'datapack' && (!worldSelect || !worldSelect.value)) {
 
-        window.pywebview.api.error(window.t("toasts.select_world_first") || "Please select a world first.");
+        window.hwlAPI.error(window.t("toasts.select_world_first") || "Please select a world first.");
 
         return;
 
@@ -9580,17 +9607,17 @@ async function importLocalAddonFile() {
 
     try {
 
-        const result = await window.pywebview.api.import_addon_file(currentModsProfile, currentContentType, worldSelect?.value);
+        const result = await window.hwlAPI.import_addon_file(currentModsProfile, currentContentType, worldSelect?.value);
 
         if (result.success) {
 
-            window.pywebview.api.info(window.t("toasts.addon_imported_success") || "Addon imported successfully!");
+            window.hwlAPI.info(window.t("toasts.addon_imported_success") || "Addon imported successfully!");
 
             await loadInstalledAddons(true); // Refresh list silently
 
         } else if (result.error) {
 
-            window.pywebview.api.error(window.t("toasts.import_failed", {err: result.error}) || ("Import failed: " + result.error));
+            window.hwlAPI.error(window.t("toasts.import_failed", {err: result.error}) || ("Import failed: " + result.error));
 
         }
 
@@ -9730,7 +9757,7 @@ function createInstalledItem(itemData) {
         let details = modrinthDetailsCache[projectId];
         if (!details) {
           try {
-            const result = await window.pywebview.api.get_mod_details(projectId);
+            const result = await window.hwlAPI.get_mod_details(projectId);
             if (result.success && result.details) {
               details = result.details;
               modrinthDetailsCache[projectId] = details;
@@ -9774,7 +9801,7 @@ window.deleteAddon = async function (filename) {
 
     // Use Python API confirm dialog
 
-    const confirmed = await window.pywebview.api.confirm(window.t("toasts.delete_file_confirm", {filename: filename}) || `Are you sure you want to delete ${filename}?`);
+    const confirmed = await window.hwlAPI.confirm(window.t("toasts.delete_file_confirm", {filename: filename}) || `Are you sure you want to delete ${filename}?`);
 
     if (!confirmed) return;
 
@@ -9788,7 +9815,7 @@ window.deleteAddon = async function (filename) {
 
     try {
 
-        const res = await window.pywebview.api.delete_addon(filename, currentModsProfile, currentContentType, worldName);
+        const res = await window.hwlAPI.delete_addon(filename, currentModsProfile, currentContentType, worldName);
 
         if (res.success) {
 
@@ -9798,7 +9825,7 @@ window.deleteAddon = async function (filename) {
 
             console.error("Delete failed:", res.error);
 
-            window.pywebview.api.error(window.t("toasts.delete_failed", {err: res.error || "Unknown error"}) || ("Failed to delete: " + (res.error || "Unknown error")));
+            window.hwlAPI.error(window.t("toasts.delete_failed", {err: res.error || "Unknown error"}) || ("Failed to delete: " + (res.error || "Unknown error")));
 
         }
 
@@ -9828,7 +9855,7 @@ window.toggleAddon = async function (filename, enabled) {
 
     try {
 
-        const res = await window.pywebview.api.toggle_mod(currentModsProfile, currentContentType, filename, enabled, worldName);
+        const res = await window.hwlAPI.toggle_mod(currentModsProfile, currentContentType, filename, enabled, worldName);
 
         if (res.success) {
 
@@ -9836,7 +9863,7 @@ window.toggleAddon = async function (filename, enabled) {
 
         } else {
 
-            window.pywebview.api.error(window.t('toasts.toggle_addon_error', {err: res.error || 'Unknown error'}) || ('Error toggling addon: ' + (res.error || 'Unknown error')));
+            window.hwlAPI.error(window.t('toasts.toggle_addon_error', {err: res.error || 'Unknown error'}) || ('Error toggling addon: ' + (res.error || 'Unknown error')));
 
         }
 
@@ -9868,7 +9895,7 @@ async function loadWorlds(profileId) {
 
     try {
 
-        const result = await window.pywebview.api.get_worlds(profileId);
+        const result = await window.hwlAPI.get_worlds(profileId);
 
         worldSelect.innerHTML = '<option value="">Select a world...</option>';
 
@@ -10107,7 +10134,7 @@ async function loadModCategories() {
 
     try {
 
-        const result = await window.pywebview.api.get_mod_categories();
+        const result = await window.hwlAPI.get_mod_categories();
 
         container.innerHTML = ''; // Clear loading
 
@@ -10552,11 +10579,12 @@ async function searchMods(page = 1) {
 
         if (currentModsProfile && currentContentType === 'mod') {
             try {
-                const profilesData = await window.pywebview.api.get_profiles();
+                const profilesData = await window.hwlAPI.get_profiles();
                 if (profilesData && profilesData.profiles && profilesData.profiles[currentModsProfile]) {
                     const vStr = profilesData.profiles[currentModsProfile].version || '';
                     let parsedLoader = undefined;
-                    if (vStr.toLowerCase().includes('fabric')) parsedLoader = 'fabric';
+                    if (vStr.toLowerCase().includes('quilt')) parsedLoader = 'quilt';
+                    else if (vStr.toLowerCase().includes('fabric')) parsedLoader = 'fabric';
                     else if (vStr.toLowerCase().includes('neoforge')) parsedLoader = 'neoforge';
                     else if (vStr.toLowerCase().includes('forge')) parsedLoader = 'forge';
                     queryOptions.filters.loader = parsedLoader;
@@ -10570,7 +10598,7 @@ async function searchMods(page = 1) {
 
         // Pass structured options
 
-        const result = await window.pywebview.api.search_modrinth_mods(query, queryOptions, currentContentType);
+        const result = await window.hwlAPI.search_modrinth_mods(query, queryOptions, currentContentType);
 
 
 
@@ -10900,7 +10928,7 @@ window.openModDetails = async function (projectId) {
 
 
 
-        const result = await window.pywebview.api.get_mod_details(projectId);
+        const result = await window.hwlAPI.get_mod_details(projectId);
 
 
 
@@ -11182,7 +11210,7 @@ window.onModDownloadError = function (projectId, errorMsg) {
         }
     });
 
-    window.pywebview.api.error(window.t("toasts.error_prefix", {msg: errorMsg}) || `Error: ${errorMsg}`);
+    window.hwlAPI.error(window.t("toasts.error_prefix", {msg: errorMsg}) || `Error: ${errorMsg}`);
 
 };
 
@@ -11207,7 +11235,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
                                (detailBtn && detailBtn.getAttribute('data-installed') === 'true' && detailBtn.getAttribute('data-project-id') === projectId);
 
     if (isAlreadyInstalled) {
-        const confirmed = await window.pywebview.api.confirm(window.t("toasts.reinstall_addon_confirm") || "This addon is already installed in the current profile. Do you want to reinstall it?");
+        const confirmed = await window.hwlAPI.confirm(window.t("toasts.reinstall_addon_confirm") || "This addon is already installed in the current profile. Do you want to reinstall it?");
         if (!confirmed) {
             return;
         }
@@ -11231,7 +11259,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
         });
 
         if (currentContentType === 'modpack') {
-            const versionsResult = await window.pywebview.api.get_mod_versions(projectId, null, null);
+            const versionsResult = await window.hwlAPI.get_mod_versions(projectId, null, null);
             let version = null;
             if (versionsResult && versionsResult.success && versionsResult.versions) {
                 const list = versionsResult.versions;
@@ -11244,7 +11272,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
             }
 
             if (!version || !version.id) {
-                window.pywebview.api.error(window.t('toasts.no_downloadable_versions') || 'No downloadable versions found for this modpack');
+                window.hwlAPI.error(window.t('toasts.no_downloadable_versions') || 'No downloadable versions found for this modpack');
                 if (btn) {
                     btn.innerHTML = `<i class="fas fa-download"></i> ${window.t('workshop.modal.download') || 'Download'}`;
                     btn.disabled = false;
@@ -11256,7 +11284,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
             let iconUrl = modIconUrl || document.getElementById('modDetailIcon')?.src;
             if (!modName || modName === 'Loading...' || modName === 'Modrinth Modpack' || !iconUrl || iconUrl === window.location.href || iconUrl.includes('placeholder')) {
                 try {
-                    const resDetails = await window.pywebview.api.get_mod_details(projectId);
+                    const resDetails = await window.hwlAPI.get_mod_details(projectId);
                     if (resDetails?.success && resDetails?.details) {
                         if (resDetails.details.title) modName = resDetails.details.title;
                         if (resDetails.details.icon_url) iconUrl = resDetails.details.icon_url;
@@ -11281,7 +11309,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
         }
 
         if (!currentModsProfile) {
-            window.pywebview.api.error(window.t('toasts.select_installation_short') || 'Select an installation first');
+            window.hwlAPI.error(window.t('toasts.select_installation_short') || 'Select an installation first');
             restoreButtonState(projectId);
             return;
         }
@@ -11294,7 +11322,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
 
         // We can reuse get_profiles_for_addon which is already filtered correctly for currentContentType
 
-        const profilesData = await window.pywebview.api.get_profiles_for_addon(currentContentType);
+        const profilesData = await window.hwlAPI.get_profiles_for_addon(currentContentType);
 
         const profile = profilesData.profiles[currentModsProfile];
 
@@ -11302,7 +11330,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
 
         if (!profile) {
 
-            window.pywebview.api.error(window.t('toasts.installation_not_found') || 'Installation not found');
+            window.hwlAPI.error(window.t('toasts.installation_not_found') || 'Installation not found');
 
             restoreButtonState(projectId);
 
@@ -11322,48 +11350,34 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
         const isNeoForgeProfile = profile.type === 'neoforge' || versionStr.includes('neoforge');
         const isForgeProfile = !isNeoForgeProfile && (profile.type === 'forge' || versionStr.includes('forge'));
         const isFabricProfile = !isForgeProfile && !isNeoForgeProfile && (profile.type === 'fabric' || versionStr.includes('fabric'));
+        const isQuiltProfile = !isForgeProfile && !isNeoForgeProfile && !isFabricProfile && (profile.type === 'quilt' || versionStr.includes('quilt'));
 
-        const loader = isFabricProfile ? 'fabric' : isNeoForgeProfile ? 'neoforge' : isForgeProfile ? 'forge' : 'fabric';
+        const loader = isQuiltProfile ? 'quilt' : isFabricProfile ? 'fabric' : isNeoForgeProfile ? 'neoforge' : isForgeProfile ? 'forge' : 'fabric';
 
         const matches = String(profile.version || '').match(/\b\d+\.\d+(?:\.\d+)?\b/g) || [];
         let gameVersion = matches.find(m => m.startsWith('1.')) || matches[0] || profile.version;
 
-
-
         // For Shaders and RPs, loader might not matter, or we treat "canvas/iris/optifine" as loaders?
-
         // Modrinth API often returns versions compatible with "minecraft", but for shaders it might list "iris" as loader.
-
         // We should pass 'iris' or 'optifine' if we are on fabric/forge respectively for shaders? 
-
         // Or just pass null to get all and let user decide?
-
         // Let's pass the loader derived from profile for Mods/Shaders. For RPs/DPs, loader is irrelevant (null).
 
-
-
         // Loader logic
-
         let searchLoader = loader;
         if (currentContentType === 'resourcepack' || currentContentType === 'modpack') {
             searchLoader = null;
         } else if (currentContentType === 'datapack') {
             searchLoader = 'datapack';
         } else if (currentContentType === 'shader') {
-
             // For shaders, Modrinth usually expects 'iris' or 'optifine'
-
-            if (loader === 'fabric') searchLoader = 'iris';
+            if (loader === 'fabric' || loader === 'quilt') searchLoader = 'iris';
             else if (loader === 'forge' || loader === 'neoforge') searchLoader = 'optifine';
             else searchLoader = null; // Fallback
-
         }
 
-
-
         // Get compatible versions
-
-        const versionsResult = await window.pywebview.api.get_mod_versions(projectId, gameVersion, searchLoader);
+        const versionsResult = await window.hwlAPI.get_mod_versions(projectId, gameVersion, searchLoader);
 
         let version = null;
 
@@ -11373,6 +11387,10 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
             if (currentContentType === 'datapack') {
                 const dpList = list.filter(v => (v.loaders && v.loaders.includes('datapack')) || (v.files && v.files.some(f => f.filename && f.filename.endsWith('.zip'))));
                 if (dpList.length > 0) list = dpList;
+            } else if (currentContentType === 'mod' && loader) {
+                // Prioritize versions that match the client loader (prevent picking server plugin versions)
+                const matchingLoaderList = list.filter(v => Array.isArray(v.loaders) && (v.loaders.map(l => l.toLowerCase()).includes(loader.toLowerCase()) || (loader === 'quilt' && v.loaders.map(l => l.toLowerCase()).includes('fabric'))));
+                if (matchingLoaderList.length > 0) list = matchingLoaderList;
             }
             return list.find(v => v.version_type === 'release' && v.featured)
                 || list.find(v => v.version_type === 'release')
@@ -11381,18 +11399,13 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
                 || list[0];
         };
 
-
-
         if (!versionsResult.success || versionsResult.versions.length === 0) {
-
             // Error Message Logic
-
             let msg = "";
 
             if (currentContentType === 'resourcepack' || currentContentType === 'datapack') {
-
                 // For resourcepacks and datapacks, allow installation anyway with confirmation
-                const confirmed = await window.pywebview.api.confirm(window.t("toasts.install_anyway_confirm", {version: gameVersion}) || `No compatible versions found for Minecraft ${gameVersion}. Do you want to install anyway?`);
+                const confirmed = await window.hwlAPI.confirm(window.t("toasts.install_anyway_confirm", {version: gameVersion}) || `No compatible versions found for Minecraft ${gameVersion}. Do you want to install anyway?`);
 
                 if (!confirmed) {
                     restoreButtonState(projectId);
@@ -11400,18 +11413,18 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
                 }
 
                 // If confirmed, fetch all versions
-                const allVersionsResult = await window.pywebview.api.get_mod_versions(projectId, null, currentContentType === 'datapack' ? 'datapack' : null);
+                const allVersionsResult = await window.hwlAPI.get_mod_versions(projectId, null, currentContentType === 'datapack' ? 'datapack' : searchLoader);
 
                 let candidateVersions = (allVersionsResult.success && allVersionsResult.versions) ? allVersionsResult.versions : [];
                 if (candidateVersions.length === 0 && currentContentType === 'datapack') {
-                    const fbResult = await window.pywebview.api.get_mod_versions(projectId, null, null);
+                    const fbResult = await window.hwlAPI.get_mod_versions(projectId, null, null);
                     if (fbResult.success && fbResult.versions) {
                         candidateVersions = fbResult.versions;
                     }
                 }
 
                 if (candidateVersions.length === 0) {
-                    window.pywebview.api.error(window.t('toasts.no_versions_project') || 'No versions available for this project');
+                    window.hwlAPI.error(window.t('toasts.no_versions_project') || 'No versions available for this project');
                     restoreButtonState(projectId);
                     return;
                 }
@@ -11427,7 +11440,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
 
                 msg = `No compatible versions for ${shaderLoader} on Minecraft ${gameVersion}`;
 
-                window.pywebview.api.error(msg);
+                window.hwlAPI.error(msg);
 
                 restoreButtonState(projectId);
 
@@ -11439,7 +11452,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
 
                 msg = `No compatible versions for ${loader} ${gameVersion}`;
 
-                window.pywebview.api.error(msg);
+                window.hwlAPI.error(msg);
 
                 restoreButtonState(projectId);
 
@@ -11466,7 +11479,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
 
             if (!worldName) {
 
-                window.pywebview.api.error(window.t('toasts.select_world_first_no_dot') || 'Please select a world first');
+                window.hwlAPI.error(window.t('toasts.select_world_first_no_dot') || 'Please select a world first');
 
                 restoreButtonState(projectId);
 
@@ -11481,7 +11494,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
             try {
                 await refreshInstalledAddonsCache();
                 const installedIdsArr = Array.from(window.installedAddonsCache || []);
-                const depsResult = await window.pywebview.api.resolve_mod_dependencies(
+                const depsResult = await window.hwlAPI.resolve_mod_dependencies(
                     version.id,
                     gameVersion,
                     loader,
@@ -11539,7 +11552,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
                             const depWorld = depType === 'datapack' ? worldName : null;
 
                             try {
-                                await window.pywebview.api.install_project(
+                                await window.hwlAPI.install_project(
                                     dep.project_id,
                                     dep.resolved_version.id,
                                     currentModsProfile,
@@ -11570,7 +11583,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
         }
 
         // Start Download (Now Async) - New "install_project" method
-        const downloadResult = await window.pywebview.api.install_project(projectId, version.id, currentModsProfile, currentContentType, worldName, isAlreadyInstalled);
+        const downloadResult = await window.hwlAPI.install_project(projectId, version.id, currentModsProfile, currentContentType, worldName, isAlreadyInstalled);
 
         // If immediate error
         if (!downloadResult.success) {
@@ -11661,7 +11674,7 @@ window.toggleModEnabled = async function (filename, enabled) {
 
     try {
 
-        const result = await window.pywebview.api.toggle_mod(currentModsProfile, filename, enabled);
+        const result = await window.hwlAPI.toggle_mod(currentModsProfile, filename, enabled);
 
 
 
@@ -11671,7 +11684,7 @@ window.toggleModEnabled = async function (filename, enabled) {
 
         } else {
 
-            window.pywebview.api.error(window.t('toasts.error_prefix', {msg: result.error}) || `Error: ${result.error}`);
+            window.hwlAPI.error(window.t('toasts.error_prefix', {msg: result.error}) || `Error: ${result.error}`);
 
         }
 
@@ -11679,7 +11692,7 @@ window.toggleModEnabled = async function (filename, enabled) {
 
         console.error('Error toggling mod:', error);
 
-        window.pywebview.api.error(window.t('toasts.change_mod_state_error') || 'Error changing mod state');
+        window.hwlAPI.error(window.t('toasts.change_mod_state_error') || 'Error changing mod state');
 
     }
 
@@ -11857,9 +11870,9 @@ document.addEventListener('click', function (e) {
 
                 window.electronAPI.openUrl(url);
 
-            } else if (window.pywebview && window.pywebview.api && window.pywebview.api.open_url) {
+            } else if (window.hwlAPI && window.hwlAPI.open_url) {
 
-                window.pywebview.api.open_url(url);
+                window.hwlAPI.open_url(url);
 
             } else {
 
@@ -11891,7 +11904,7 @@ window.deleteModFile = async function (filename) {
 
 
 
-    const confirmed = await window.pywebview.api.confirm(window.t("toasts.delete_mod_confirm", {mod: filename.replace('.jar.disabled', '').replace('.jar', '')}) || `Delete the mod "${filename.replace('.jar.disabled', '').replace('.jar', '')}"?`);
+    const confirmed = await window.hwlAPI.confirm(window.t("toasts.delete_mod_confirm", {mod: filename.replace('.jar.disabled', '').replace('.jar', '')}) || `Delete the mod "${filename.replace('.jar.disabled', '').replace('.jar', '')}"?`);
 
 
 
@@ -11901,7 +11914,7 @@ window.deleteModFile = async function (filename) {
 
     try {
 
-        const result = await window.pywebview.api.delete_mod(currentModsProfile, filename);
+        const result = await window.hwlAPI.delete_mod(currentModsProfile, filename);
 
 
 
@@ -11911,7 +11924,7 @@ window.deleteModFile = async function (filename) {
 
         } else {
 
-            window.pywebview.api.error(window.t('toasts.error_prefix', {msg: result.error}) || `Error: ${result.error}`);
+            window.hwlAPI.error(window.t('toasts.error_prefix', {msg: result.error}) || `Error: ${result.error}`);
 
         }
 
@@ -11919,7 +11932,7 @@ window.deleteModFile = async function (filename) {
 
         console.error('Error deleting mod:', error);
 
-        window.pywebview.api.error(window.t('toasts.delete_mod_error') || 'Error deleting mod');
+        window.hwlAPI.error(window.t('toasts.delete_mod_error') || 'Error deleting mod');
 
     }
 
@@ -12097,7 +12110,7 @@ const neverShowAgainCheckbox = document.getElementById('neverShowAgainCheckbox')
 
 function openReviewUrl() {
 
-    window.pywebview.api.open_url(REVIEW_URL);
+    window.hwlAPI.open_url(REVIEW_URL);
 
 }
 
@@ -12109,7 +12122,7 @@ async function checkReviewReminder() {
 
     try {
 
-        const shouldShow = await window.pywebview.api.check_review_reminder();
+        const shouldShow = await window.hwlAPI.check_review_reminder();
 
         if (shouldShow && reviewReminderModal) {
 
@@ -12151,7 +12164,7 @@ if (closeDonationModalBtn) {
 
 if (openKofiBtn) {
     openKofiBtn.addEventListener('click', () => {
-        window.pywebview.api.open_url("https://ko-fi.com/abelosky");
+        window.hwlAPI.open_url("https://ko-fi.com/abelosky");
         if (donationModal) donationModal.classList.remove('show');
     });
 }
@@ -12164,7 +12177,7 @@ if (doReviewBtn) {
 
         openReviewUrl();
 
-        await window.pywebview.api.mark_review_action('reviewed');
+        await window.hwlAPI.mark_review_action('reviewed');
 
         if (reviewReminderModal) reviewReminderModal.classList.remove('show');
 
@@ -12182,11 +12195,11 @@ if (remindLaterBtn) {
 
         if (neverShowAgainCheckbox && neverShowAgainCheckbox.checked) {
 
-            await window.pywebview.api.mark_review_action('never');
+            await window.hwlAPI.mark_review_action('never');
 
         } else {
 
-            await window.pywebview.api.mark_review_action('later');
+            await window.hwlAPI.mark_review_action('later');
 
         }
 
@@ -12394,19 +12407,19 @@ if (window.electronAPI && window.electronAPI.on) {
                 } catch (err) {
                     console.warn('[InAppNotif] notificationClickNavigate error, falling back:', err);
                 }
-            } else if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.notification_click_navigate === 'function') {
+            } else if (window.hwlAPI && typeof window.hwlAPI.notification_click_navigate === 'function') {
                 try {
-                    await window.pywebview.api.notification_click_navigate(data);
+                    await window.hwlAPI.notification_click_navigate(data);
                     return;
                 } catch (err) {
-                    console.warn('[InAppNotif] pywebview notification_click_navigate error:', err);
+                    console.warn('[InAppNotif] hwlAPI notification_click_navigate error:', err);
                 }
             }
 
             const targetId = data.accountId || data.recipientAccountId || data.recipientUid;
             if (targetId && window.performAccountSwitch) {
                 try {
-                    const userData = await window.pywebview.api.get_user_json();
+                    const userData = await window.hwlAPI.get_user_json();
                     const currentActiveUid = userData?.account_type === 'microsoft'
                         ? (userData?.firebase_ms_uid || null)
                         : (userData?.account_type === 'helloworld' ? (userData?.firebase_uid || null) : null);
@@ -12992,8 +13005,8 @@ function initLockedFeatureListeners() {
             const url = "https://abeloskyyy.github.io/HelloWorld-Launcher/?register=true";
             if (window.electronAPI && window.electronAPI.openUrl) {
                 await window.electronAPI.openUrl(url);
-            } else if (window.pywebview && window.pywebview.api && window.pywebview.api.open_url) {
-                await window.pywebview.api.open_url(url);
+            } else if (window.hwlAPI && window.hwlAPI.open_url) {
+                await window.hwlAPI.open_url(url);
             } else {
                 window.open(url, '_blank');
             }

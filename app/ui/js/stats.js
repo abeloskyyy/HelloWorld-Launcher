@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Check auth and load stats
     try {
-        if (!window.pywebview || !window.pywebview.api) {
+        if (!window.hwlAPI) {
             window.addEventListener('pywebviewready', () => {
                 loadMyStats();
                 setupStatsListener();
@@ -28,9 +28,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         let lastFocusCheck = 0;
         window.addEventListener('focus', () => {
             const now = Date.now();
-            if (now - lastFocusCheck > 5000 && window.pywebview && window.pywebview.api && window.pywebview.api.get_user_json) {
+            if (now - lastFocusCheck > 5000 && window.hwlAPI && window.hwlAPI.get_user_json) {
                 lastFocusCheck = now;
-                window.pywebview.api.get_user_json().then(u => {
+                window.hwlAPI.get_user_json().then(u => {
                     if (u && window.updateProfileCompletion) {
                         window.updateProfileCompletion(u);
                     }
@@ -67,9 +67,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     async function loadMyStats() {
         try {
-            const userJson = await window.pywebview.api.get_user_json();
+            const userJson = await window.hwlAPI.get_user_json();
             if (userJson) {
-                const res = await window.pywebview.api.stats_get_my_stats();
+                const res = await window.hwlAPI.stats_get_my_stats();
                 if (res.success && res.stats) {
                     const targetStreak = res.stats.streak || 0;
                     const currentStreak = parseInt(streakCount.innerText) || 0;
@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const uid = userJson.firebase_ms_uid || userJson.firebase_uid || null;
             if (!uid) return;
 
-            const res = await window.pywebview.api.get_user_profile(uid);
+            const res = await window.hwlAPI.get_user_profile(uid);
             if (!res || !res.success || !res.data) return;
             const d = res.data;
 
@@ -197,7 +197,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Loading state
             showStatsModal(username, { streak: '...', maxStreak: '...', totalHours: '...', totalDaysPlayed: '...', totalSessions: '...' }, avatarUrl);
             
-            const res = await window.pywebview.api.stats_get_user(uid);
+            const res = await window.hwlAPI.stats_get_user(uid);
             if (res.success && res.stats) {
                 showStatsModal(username, res.stats, avatarUrl);
             } else {

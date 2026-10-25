@@ -7,9 +7,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // We added getOnboardingStatus and completeOnboarding to hwlAPI.
     // However, saving settings (dev_mode etc) is currently in pywebviewAPI (legacy) in preload.js?
     // Let's check preload... yes, save_version_settings is in pywebviewAPI.
-    // We should probably access window.pywebview.api for those or expose them in hwlAPI too.
-    // For now, let's access window.pywebview.api for settings since that's where they are.
-    const legacyApi = window.pywebview ? window.pywebview.api : null;
+    // We should probably access window.hwlAPI for those or expose them in hwlAPI too.
+    // For now, let's access window.hwlAPI for settings since that's where they are.
+    const legacyApi = window.hwlAPI ? window.hwlAPI : null;
 
     // Elements
     const overlay = document.getElementById('onboardingOverlay');
@@ -610,7 +610,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Start
-    if (window.pywebview) {
+    if (window.hwlAPI) {
         initWizard();
     } else {
         window.addEventListener('pywebviewready', initWizard);

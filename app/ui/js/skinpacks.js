@@ -266,11 +266,11 @@ function handlePackSubmit() {
         if (editingPackId) {
             // When editing, only pass capeBase64 if we have it
             // Otherwise pass undefined to preserve existing cape_data
-            window.pywebview.api.edit_skin_pack(editingPackId, name, skinBase64, modelType, capeId, capeBase64 || undefined, capeAlias || undefined)
+            window.hwlAPI.edit_skin_pack(editingPackId, name, skinBase64, modelType, capeId, capeBase64 || undefined, capeAlias || undefined)
                 .then(response => handleResponse(response))
                 .catch(handleError);
         } else {
-            window.pywebview.api.create_skin_pack(name, skinBase64, modelType, capeId, capeBase64, capeAlias)
+            window.hwlAPI.create_skin_pack(name, skinBase64, modelType, capeId, capeBase64, capeAlias)
                 .then(response => handleResponse(response))
                 .catch(handleError);
         }
@@ -377,13 +377,13 @@ window.editPack = function (packId) {
 };
 
 window.loadSkinPacks = function () {
-    if (!window.pywebview || !window.pywebview.api) {
+    if (!window.hwlAPI) {
         // Retry a bit later if API not ready
         setTimeout(window.loadSkinPacks, 500);
         return;
     }
 
-    window.pywebview.api.get_skin_packs().then(data => {
+    window.hwlAPI.get_skin_packs().then(data => {
         const grid = document.getElementById('skinPacksGrid');
         if (!grid) return;
 
@@ -426,39 +426,12 @@ window.loadSkinPacks = function () {
 
             const card = document.createElement('div');
             card.className = `skin-pack-card ${isActive ? 'active' : ''}`;
-            card.dataset.packId = id; // Store ID for DOM logic
+            card.dataset.packId = id;
 
-            // We use inline styles for background images
-            const faces = ['top', 'left', 'front', 'right', 'back', 'bottom'];
-            const parts = ['head', 'body', 'left-arm', 'right-arm', 'left-leg', 'right-leg'];
-
-            let viewerHTML = `<div class="pack-preview-container" style="height: 220px; width: auto; background: rgba(0, 0, 0, 0.2); border-radius: 8px; margin: 15px; display: flex; justify-content: center; align-items: center; overflow: hidden; clip-path: inset(0 round 8px); position: relative;"><div class="mc-skin-viewer-9x ${isSlim ? 'slim' : ''} legacy" style="transform: scale(0.65) !important; animation: none; flex-shrink: 0;"><div class="player" style="transform: rotateX(-5deg) rotateY(-20deg) !important;">`;
-
-            parts.forEach(part => {
-                viewerHTML += `<div class="${part}">`;
-                faces.forEach(face => {
-                    viewerHTML += `<div class="${face}" style="background-image: url('${skinPreview}')"></div>`;
-                });
-                viewerHTML += `<div class="accessory">`;
-                faces.forEach(face => {
-                    viewerHTML += `<div class="${face}" style="background-image: url('${skinPreview}')"></div>`;
-                });
-                viewerHTML += `</div></div>`;
-            });
-
-            // Add cape if needed
-            if (hasCape && pack.cape_preview) {
-                viewerHTML += `<div class="cape" style="background-image: url('${pack.cape_preview}')">`;
-                faces.forEach(face => {
-                    viewerHTML += `<div class="${face}"></div>`;
-                });
-                viewerHTML += `</div>`;
-            }
-
-            viewerHTML += `</div></div></div>`;
+            let previewContainer = `<div class="pack-preview-container" id="packCardPreview_${id}" style="height: 220px; width: auto; background: rgba(0, 0, 0, 0.25); border-radius: 12px; margin: 12px; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative;"></div>`;
 
             card.innerHTML = `
-                ${viewerHTML}
+                ${previewContainer}
                 <div class="active-badge" data-i18n="skins.btn_active" style="display: none; position: absolute; top: 10px; right: 10px; background-color: #4facfe; color: #fff; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; z-index: 2; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);">${_t('skins.btn_active', 'Active')}</div>
                 <div class="pack-info" style="padding: 8px 15px 5px 15px;">
                     <h3 style="margin: 0; font-size: 18px; color: #fff;">${pack.name}</h3>
@@ -480,6 +453,21 @@ window.loadSkinPacks = function () {
                 </div>
             `;
             grid.appendChild(card);
+
+            // Render crisp WebGL 3D preview in card
+            const prevBox = card.querySelector('.pack-preview-container');
+            if (prevBox && typeof window.renderCardSkin === 'function') {
+                window.renderCardSkin(prevBox, pack);
+            }
+
+            // Click card to update large 3D preview
+            card.style.cursor = 'pointer';
+            card.addEventListener('click', (e) => {
+                if (e.target.closest('button')) return;
+                if (typeof window.updateLargeSkinPreview === 'function') {
+                    window.updateLargeSkinPreview({ ...pack, id });
+                }
+            });
         });
 
         // Restore cooldown visuals if needed
@@ -495,52 +483,9 @@ window.loadSkinPacks = function () {
 
 // Function to update the large preview
 window.updateLargeSkinPreview = function (pack) {
-    const container = document.getElementById('largeSkinViewerContainer');
-    if (!container) return;
-
-    const skinPreview = pack.skin_preview;
-    const isSlim = pack.skin_model === 'slim';
-    const hasCape = pack.cape_id && pack.cape_id !== 'none';
-
-    // Build 3D viewer HTML structure
-    const faces = ['top', 'left', 'front', 'right', 'back', 'bottom'];
-    const parts = ['head', 'body', 'left-arm', 'right-arm', 'left-leg', 'right-leg'];
-
-    // Use mc-skin-viewer-9x and scale with CSS
-    // We add 'spin' class for animation if desired, or remove it for static
-    // The user didn't explicitly ask for rotation, but "skin seleccionada" might imply static or rotating. 
-    // The mini previews spin. Let's make the large one spin too for "w factor".
-
-    let viewerHTML = `<div class="mc-skin-viewer-9x spin ${isSlim ? 'slim' : ''} legacy"><div class="player">`;
-
-    parts.forEach(part => {
-        viewerHTML += `<div class="${part}">`;
-        faces.forEach(face => {
-            viewerHTML += `<div class="${face}" style="background-image: url('${skinPreview}')"></div>`;
-        });
-        viewerHTML += `<div class="accessory">`;
-        faces.forEach(face => {
-            viewerHTML += `<div class="${face}" style="background-image: url('${skinPreview}')"></div>`;
-        });
-        viewerHTML += `</div></div>`;
-    });
-
-    // Add cape if needed
-    if (hasCape && pack.cape_preview) {
-        viewerHTML += `<div class="cape" style="background-image: url('${pack.cape_preview}')">`;
-        faces.forEach(face => {
-            viewerHTML += `<div class="${face}"></div>`;
-        });
-        viewerHTML += `</div>`;
+    if (window.skinViewerManager && typeof window.skinViewerManager.updateLargeSkinPreview === 'function') {
+        window.skinViewerManager.updateLargeSkinPreview(pack);
     }
-
-    viewerHTML += `</div></div>`;
-
-    container.innerHTML = viewerHTML;
-
-    // Update title/info if needed
-    // const titleEl = document.querySelector('.large-skin-preview-sticky h3');
-    // if(titleEl) titleEl.textContent = pack.name;
 };
 
 // Cooldown System
@@ -591,7 +536,7 @@ function startCooldown() {
 // Global activate pack function with optimistic UI updates
 window.activatePack = function (packId) {
     if (activationCooldown) return;
-    if (!window.pywebview || !window.pywebview.api) return;
+    if (!window.hwlAPI) return;
 
     // Start Cooldown immediately
     startCooldown();
@@ -640,7 +585,7 @@ window.activatePack = function (packId) {
     updateCooldownVisuals();
 
     // Call backend
-    window.pywebview.api.activate_skin_pack(packId).then(response => {
+    window.hwlAPI.activate_skin_pack(packId).then(response => {
         if (!response.success) {
             showToast('Error activating skin: ' + (response.error || 'Unknown error'));
             loadSkinPacks();
@@ -655,12 +600,12 @@ window.activatePack = function (packId) {
 
 // Delete a skin pack
 window.deletePack = function (packId) {
-    if (!window.pywebview || !window.pywebview.api) return;
+    if (!window.hwlAPI) return;
 
-    window.pywebview.api.confirm(window.t('toasts.confirm_delete_skinpack') || 'Are you sure you want to delete this skin pack?').then(confirmed => {
+    window.hwlAPI.confirm(window.t('toasts.confirm_delete_skinpack') || 'Are you sure you want to delete this skin pack?').then(confirmed => {
         if (!confirmed) return;
 
-        window.pywebview.api.delete_skin_pack(packId).then(response => {
+        window.hwlAPI.delete_skin_pack(packId).then(response => {
             if (response.success) {
                 loadSkinPacks();
             } else {
@@ -681,7 +626,7 @@ function _t(key, fallback) {
 
 // Load User Capes Dynamically
 window.loadUserCapes = function () {
-    if (!window.pywebview || !window.pywebview.api) return;
+    if (!window.hwlAPI) return;
     if (capeLoadLock) return;
 
     const grid = document.getElementById('capeSelectionGrid');
@@ -708,7 +653,7 @@ window.loadUserCapes = function () {
         </div>
     `;
 
-    window.pywebview.api.get_user_capes().then(response => {
+    window.hwlAPI.get_user_capes().then(response => {
         // Clear Loader
         grid.innerHTML = '';
         window.loadedCapes = []; // CRITICAL: Use window.loadedCapes not loadedCapes
@@ -791,98 +736,22 @@ function handleCapeSelection(element) {
     triggerPreviewUpdate();
 }
 
-// Smart update to preserve rotation
+// Smart update via skinview3d WebGL engine
 function update3DSkinPreview(skinData, capeData, model, isLegacy) {
-    const container = document.getElementById('skinViewer3D');
-    if (!container) return;
-
-    const isSlim = model === 'slim';
-
-    // Check if we already have a viewer we can update
-    let viewer = container.querySelector('.mc-skin-viewer-11x');
-    if (viewer) {
-        // Update Classes
-        if (isSlim) viewer.classList.add('slim'); else viewer.classList.remove('slim');
-
-        if (isLegacy) viewer.classList.add('legacy-cape'); else viewer.classList.remove('legacy-cape');
-
-        // Update Skin Textures
-        // Select all non-cape faces (and non-player container)
-        // Accessing children of children directly is safest
-        // Structure: .player > .part > .face
-        // And .player > .part > .accessory > .face
-        const allSkinFaces = viewer.querySelectorAll('.player > div:not(.cape) div');
-        allSkinFaces.forEach(div => {
-            div.style.backgroundImage = `url('${skinData}')`;
-        });
-
-        // Update Cape
-        let capeDiv = viewer.querySelector('.player > .cape');
-        if (capeData) {
-            if (capeDiv) {
-                // Update existing cape
-                capeDiv.style.backgroundImage = `url('${capeData}')`;
-                // Note: The faces inherit, but we set style on parent cape div in loop below. 
-                // Actually my loop below sets it on faces? 
-                // Let's see original: <div class="cape" style="bg-image..."><div class="face"></div>...
-                // So setting on capeDiv is enough due to inheritance?
-                // Let's set on capeDiv AND faces to be sure/consistent with recreation logic
-                // Actually inheritance is forced in CSS line 1473: background-image: inherit !important;
-                // So setting on capeDiv is enough!
-            } else {
-                // Create Cape if missing
-                const faces = ['top', 'left', 'front', 'right', 'back', 'bottom'];
-                let capeHTML = `<div class="cape" style="background-image: url('${capeData}')">`;
-                faces.forEach(face => {
-                    capeHTML += `<div class="${face}"></div>`;
-                });
-                capeHTML += `</div>`;
-                viewer.querySelector('.player').insertAdjacentHTML('beforeend', capeHTML);
-            }
-        } else {
-            if (capeDiv) capeDiv.remove();
-        }
+    if (window.skinViewerManager && typeof window.skinViewerManager.update3DSkinPreview === 'function') {
+        window.skinViewerManager.update3DSkinPreview(skinData, capeData, model);
         return;
     }
-
-    // Fallback: Create New
-    // Build 3D viewer HTML structure
-    const faces = ['top', 'left', 'front', 'right', 'back', 'bottom'];
-    const parts = ['head', 'body', 'left-arm', 'right-arm', 'left-leg', 'right-leg'];
-
-    // Modal viewer always spins
-    let viewerHTML = `<div class="mc-skin-viewer-11x spin ${isSlim ? 'slim' : ''} ${isLegacy ? 'legacy-cape' : ''}"><div class="player">`;
-
-    parts.forEach(part => {
-        viewerHTML += `<div class="${part}">`;
-        faces.forEach(face => {
-            viewerHTML += `<div class="${face}" style="background-image: url('${skinData}')"></div>`;
-        });
-        viewerHTML += `<div class="accessory">`;
-        faces.forEach(face => {
-            viewerHTML += `<div class="${face}" style="background-image: url('${skinData}')"></div>`;
-        });
-        viewerHTML += `</div></div>`;
-    });
-
-    // Add cape if needed
-    if (capeData) {
-        viewerHTML += `<div class="cape" style="background-image: url('${capeData}')">`;
-        faces.forEach(face => {
-            viewerHTML += `<div class="${face}"></div>`;
-        });
-        viewerHTML += `</div>`;
-    }
-
-    viewerHTML += `</div></div>`;
-    container.innerHTML = viewerHTML;
 }
 
 function clear3DSkinPreview() {
+    if (window.skinViewerManager && typeof window.skinViewerManager.clear3DSkinPreview === 'function') {
+        window.skinViewerManager.clear3DSkinPreview();
+        return;
+    }
     const container = document.getElementById('skinViewer3D');
     if (container) container.innerHTML = '';
 }
 
-// Add these to window just in case
 window.update3DSkinPreview = update3DSkinPreview;
 window.clear3DSkinPreview = clear3DSkinPreview;

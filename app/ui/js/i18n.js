@@ -84,15 +84,21 @@ window.applyTranslations = async function() {
             return;
         }
         
-        // Preserve inner icons if they exist
-        const icon = el.querySelector('i');
-        if (icon) {
-            const temp = document.createElement('div');
-            temp.innerHTML = ' ' + translatedText;
-            el.innerHTML = '';
-            el.appendChild(icon);
-            while (temp.firstChild) {
-                el.appendChild(temp.firstChild);
+        // Preserve inner icons and svgs if they exist
+        const mediaNodes = Array.from(el.querySelectorAll(':scope > i, :scope > svg, :scope > span:not([data-i18n])'));
+        if (mediaNodes.length > 0) {
+            // If the element has child structure, replace only its text nodes or append
+            let textNode = Array.from(el.childNodes).find(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0);
+            if (textNode) {
+                textNode.textContent = ' ' + translatedText + ' ';
+            } else {
+                // If no direct text node, preserve mediaNodes and insert text
+                const trailingSvg = mediaNodes.find(n => n.id === 'modsMenuArrow' || n.classList.contains('mods-menu-chevron'));
+                const leadingNodes = mediaNodes.filter(n => n !== trailingSvg);
+                el.innerHTML = '';
+                leadingNodes.forEach(n => el.appendChild(n));
+                el.appendChild(document.createTextNode(' ' + translatedText + ' '));
+                if (trailingSvg) el.appendChild(trailingSvg);
             }
         } else {
             el.innerHTML = translatedText;
@@ -126,8 +132,8 @@ window.setLanguage = async function(lang) {
     updateDropdownUI();
     
     // Ensure it is saved to the python/electron backend persistently
-    if (window.pywebview && window.pywebview.api && window.pywebview.api.save_user_settings) {
-        window.pywebview.api.save_user_settings({ language: lang });
+    if (window.hwlAPI && window.hwlAPI.save_user_settings) {
+        window.hwlAPI.save_user_settings({ language: lang });
     }
 };
 

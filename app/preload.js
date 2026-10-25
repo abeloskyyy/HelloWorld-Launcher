@@ -11,13 +11,40 @@ try {
     }
 } catch (e) {}
 
-// --- Modern API (New Features) ---
-contextBridge.exposeInMainWorld('hwlAPI', {
+// --- Modern API (HelloWorld Launcher API) ---
+const hwlAPI = {
     // User & Auth
     getUserJson: () => ipcRenderer.invoke('get-user-json'),
     saveUserJson: (data) => ipcRenderer.invoke('save-user-json', data),
     loginMicrosoft: () => ipcRenderer.invoke('login-microsoft'),
+    loginHelloWorld: (email, password) => ipcRenderer.invoke('login-helloworld', email, password),
     logout: () => ipcRenderer.invoke('logout'),
+    checkInternet: () => ipcRenderer.invoke('check-internet'),
+    closeApp: () => ipcRenderer.invoke('close-app'),
+
+    // Launch & Versions
+    startGame: (profileId, nickname, force, serverIp, saveServer) => ipcRenderer.invoke('launch-profile', { profileId, nickname, force, serverIp, saveServer }),
+    cancelLaunch: () => ipcRenderer.invoke('cancel-launch'),
+    getAvailableVersions: () => ipcRenderer.invoke('get-available-versions'),
+    getVanillaVersions: () => ipcRenderer.invoke('get-vanilla-versions'),
+    getForgeVersions: () => ipcRenderer.invoke('get-forge-mc-versions'),
+    getFabricVersions: () => ipcRenderer.invoke('get-fabric-mc-versions'),
+    getNeoforgeVersions: () => ipcRenderer.invoke('get-neoforge-mc-versions'),
+    getLoaderVersions: (type, mc_version) => ipcRenderer.invoke('get-loader-versions', { type, mc_version }),
+    installVersion: (version_id) => ipcRenderer.invoke('install-version', version_id),
+    getLauncherVersion: () => ipcRenderer.invoke('get-version'),
+    deleteVersion: (version_id) => ipcRenderer.invoke('delete-version', version_id),
+    cancelDownload: (version_id) => ipcRenderer.invoke('cancel-download', version_id),
+
+    // Settings
+    saveVersionSettings: (showSnapshots, showOld) => ipcRenderer.invoke('save-version-settings', showSnapshots, showOld),
+    saveAppSettings: (enableTransitions, hwAccel, privacyMode, reopenOnGameClose) => ipcRenderer.invoke('save-app-settings', enableTransitions, hwAccel, privacyMode, reopenOnGameClose),
+    maximizeLauncher: () => ipcRenderer.invoke('maximize-launcher'),
+    saveDevMode: (enabled) => ipcRenderer.invoke('save-dev-mode', enabled),
+    selectFolder: (current_path) => ipcRenderer.invoke('select-folder', current_path),
+    selectFile: (current_path, filters) => ipcRenderer.invoke('select-file', current_path, filters),
+    saveAddonsPerPage: (count) => ipcRenderer.invoke('save-addons-per-page', count),
+
     // Account Switcher
     getSavedAccounts: () => ipcRenderer.invoke('get-saved-accounts'),
     switchAccount: (accountId, targetType) => ipcRenderer.invoke('switch-account', accountId, targetType),
@@ -130,7 +157,7 @@ contextBridge.exposeInMainWorld('hwlAPI', {
     select_file: (current_path, filters) => ipcRenderer.invoke('select-file', current_path, filters),
     openUrl: (url) => ipcRenderer.invoke('open-url', url),
     openExternal: (url) => ipcRenderer.invoke('open-url', url)
-});
+};
 
 
 // --- Legacy Adapter (Python pywebview Compatibility) ---
@@ -188,7 +215,8 @@ const pywebviewAPI = {
 
     // Settings
     save_version_settings: (showSnapshots, showOld) => ipcRenderer.invoke('save-version-settings', showSnapshots, showOld),
-    save_app_settings: (enableTransitions, hwAccel, privacyMode) => ipcRenderer.invoke('save-app-settings', enableTransitions, hwAccel, privacyMode),
+    save_app_settings: (enableTransitions, hwAccel, privacyMode, reopenOnGameClose) => ipcRenderer.invoke('save-app-settings', enableTransitions, hwAccel, privacyMode, reopenOnGameClose),
+    maximize_launcher: () => ipcRenderer.invoke('maximize-launcher'),
     save_dev_mode: (enabled) => ipcRenderer.invoke('save-dev-mode', enabled),
     select_folder: (current_path) => ipcRenderer.invoke('select-folder', current_path),
     select_file: (current_path, filters) => ipcRenderer.invoke('select-file', current_path, filters),
@@ -362,8 +390,15 @@ const pywebviewAPI = {
     workshop_extract_configs: (profile_id, configZipB64) => ipcRenderer.invoke('workshop-extract-configs', { profile_id, configZipB64 })
 };
 
+// Merge legacy aliases into modern hwlAPI
+Object.assign(hwlAPI, pywebviewAPI);
+
+// Expose modern unified API as canonical
+contextBridge.exposeInMainWorld('hwlAPI', hwlAPI);
+
+// Legacy backward-compatibility shim:
 contextBridge.exposeInMainWorld('pywebview', {
-    api: pywebviewAPI
+    api: hwlAPI
 });
 
 // Listen for Main Process signal to trigger ready
