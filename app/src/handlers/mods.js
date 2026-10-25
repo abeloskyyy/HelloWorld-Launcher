@@ -1,8 +1,21 @@
+const { app } = require('electron');
 const axios = require('axios');
 const fs = require('fs-extra');
 const path = require('path');
 const AdmZip = require('adm-zip');
 const versionUtils = require('../utils/version');
+const packageJson = require('../../../package.json');
+
+const getLauncherVersion = () => {
+    try {
+        if (app && typeof app.getVersion === 'function') {
+            return app.getVersion();
+        }
+    } catch (_) {}
+    return packageJson.version || '2.2.1';
+};
+
+const MODRINTH_USER_AGENT = `HelloWorld-Launcher/${getLauncherVersion()} (contact@abelosky.com)`;
 
 class ModManager {
 
@@ -888,7 +901,7 @@ class ModManager {
                         const res = await axios.get(`https://api.modrinth.com/v2/project/${pid}/version`, {
                             params,
                             timeout: 8000,
-                            headers: { 'User-Agent': 'HelloWorld-Launcher/2.2.1 (contact@abelosky.com)' }
+                            headers: { 'User-Agent': MODRINTH_USER_AGENT }
                         });
                         versions = Array.isArray(res.data) ? res.data : [];
 
