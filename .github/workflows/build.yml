@@ -63,6 +63,9 @@ jobs:
             echo '{"FIREBASE_PROJECT_ID":"helloworld-launcher","REMOTE_CONFIG_GIST_URL":"https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json"}' > app/secrets.json
           fi
 
+      - name: Build UI (Vite)
+        run: npm run build:ui
+
       - name: Build Launcher ZIP (dist/helloworld-launcher-win.zip)
         run: npm run build:win
 
@@ -151,6 +154,9 @@ jobs:
             echo '{"FIREBASE_PROJECT_ID":"helloworld-launcher","REMOTE_CONFIG_GIST_URL":"https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json"}' > app/secrets.json
           fi
 
+      - name: Build UI (Vite)
+        run: npm run build:ui
+
       - name: Build Linux (.deb packages)
         run: npm run build:linux
         continue-on-error: true
@@ -205,6 +211,9 @@ jobs:
           else
             echo '{"FIREBASE_PROJECT_ID":"helloworld-launcher","REMOTE_CONFIG_GIST_URL":"https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json"}' > app/secrets.json
           fi
+
+      - name: Build UI (Vite)
+        run: npm run build:ui
 
       - name: Build macOS (.dmg & .zip)
         run: npm run build:mac

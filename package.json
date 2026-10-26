@@ -12,9 +12,13 @@
     "start": "electron .",
     "dev:ui": "vite",
     "build:ui": "vite build",
+    "prebuild": "npm run build:ui",
     "build": "electron-builder",
+    "prebuild:win": "npm run build:ui",
     "build:win": "electron-builder --win -p never --config.win.target=zip",
+    "prebuild:linux": "npm run build:ui",
     "build:linux": "electron-builder --linux -p never",
+    "prebuild:mac": "npm run build:ui",
     "build:mac": "electron-builder --mac -p never"
   },
   "build": {
