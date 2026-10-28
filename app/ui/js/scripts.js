@@ -4166,7 +4166,27 @@ async function startSynchronizationQueue(syncData, profileId) {
 
     let queue = [];
 
-    if (syncData.missing_version) {
+    if (syncData.updated_loader) {
+
+        const ul = syncData.updated_loader;
+
+        const vname = formatVersionName(ul.new_version);
+
+        queue.push({
+
+            type: 'loader_update',
+
+            name: vname,
+
+            displayName: vname,
+
+            id: ul.new_version,
+
+            data: ul
+
+        });
+
+    } else if (syncData.missing_version) {
 
         const vname = formatVersionName(syncData.version_id);
 
@@ -4225,7 +4245,7 @@ async function startSynchronizationQueue(syncData, profileId) {
     }
 
     const subtitleEl = modal.querySelector('.sync-modal-subtitle');
-    const hasUpdates = queue.some(q => q.type === 'update');
+    const hasUpdates = queue.some(q => q.type === 'update' || q.type === 'loader_update');
     const hasMissing = queue.some(q => q.type === 'version' || q.type === 'addon');
     if (subtitleEl) {
         if (hasUpdates && hasMissing) {
@@ -4248,6 +4268,9 @@ async function startSynchronizationQueue(syncData, profileId) {
 
         if (q.type === 'version') {
             iconClass = 'fas fa-cube sync-icon-version';
+        } else if (q.type === 'loader_update') {
+            iconClass = 'fas fa-arrow-alt-circle-up sync-icon-update';
+            badgeHtml = `<span class="sync-badge-update">${window.t('loader.update_badge') || 'UPDATE'}</span>`;
         } else if (q.type === 'update') {
             iconClass = 'fas fa-arrow-alt-circle-up sync-icon-update';
             badgeHtml = `<span class="sync-badge-update">${window.t('loader.update_badge') || 'UPDATE'}</span>`;
@@ -4255,7 +4278,7 @@ async function startSynchronizationQueue(syncData, profileId) {
             iconClass = 'fas fa-puzzle-piece sync-icon-addon';
         }
 
-        return `<div id="sync-task-${i}" class="sync-task-item ${q.type === 'update' ? 'sync-task-update' : ''}">
+        return `<div id="sync-task-${i}" class="sync-task-item ${(q.type === 'update' || q.type === 'loader_update') ? 'sync-task-update' : ''}">
 
             <div class="sync-task-left">
 
@@ -4339,7 +4362,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
         if (window.currentSyncTask) {
 
-            if (window.currentSyncTask.type === 'version') {
+            if (window.currentSyncTask.type === 'version' || window.currentSyncTask.type === 'loader_update') {
 
                 window.hwlAPI.cancel_download(window.currentSyncTask.id).catch(e => console.error(e));
 
@@ -4388,7 +4411,7 @@ async function startSynchronizationQueue(syncData, profileId) {
         
 
         const taskName = task.displayName || task.name;
-        if (task.type === 'update') {
+        if (task.type === 'update' || task.type === 'loader_update') {
             updateTaskStatus(i, '<i class="fas fa-spinner fa-spin"></i>', window.t('loader.updating_simple') || 'Updating...', 'downloading');
             progressText.textContent = window.t('loader.updating_name', { name: taskName }) || `Updating ${taskName}...`;
         } else {
@@ -4409,7 +4432,7 @@ async function startSynchronizationQueue(syncData, profileId) {
 
         try {
 
-            if (task.type === 'version') {
+            if (task.type === 'version' || task.type === 'loader_update') {
 
                 let highestPct = 0;
 
@@ -4561,13 +4584,17 @@ async function startSynchronizationQueue(syncData, profileId) {
 
     
 
-    setTimeout(() => {
+    setTimeout(async () => {
 
         // Restore after backend's 500ms download-complete callback has already fired
 
         window.onDownloadComplete = savedOnDownloadComplete;
 
         window.isSyncing = false;
+
+        if (syncData.updated_loader && typeof loadProfiles === 'function') {
+            try { await loadProfiles(); } catch (_) {}
+        }
 
         modal.classList.remove('show');
 
@@ -5589,10 +5616,13 @@ async function resetProfileModal() {
 
 
     // Set default JVM arguments with optimized settings
-
     const defaultJVMArgs = '-Xmx4G -Xms1G -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M';
-
     if (document.getElementById('profileJVMArgs')) document.getElementById('profileJVMArgs').value = defaultJVMArgs;
+
+    // Initialize RAM Allocation Slider with auto-adjusted memory
+    if (typeof setupRamSliderForModal === 'function') {
+        await setupRamSliderForModal();
+    }
 
 
 
@@ -5682,8 +5712,13 @@ async function openEditProfileModal(id, profile) {
     // 1. Immediately set all inputs synchronously to profile data (no default/UUID glitches during animation)
 
     if (document.getElementById('profileName')) document.getElementById('profileName').value = profile.name || '';
-
     if (document.getElementById('profileJVMArgs')) document.getElementById('profileJVMArgs').value = profile.jvm_args || '';
+
+    // Synchronize RAM Allocation Slider with profile JVM arguments
+    if (typeof setupRamSliderForModal === 'function') {
+        const initialRam = typeof parseXmxFromJvmArgs === 'function' ? parseXmxFromJvmArgs(profile.jvm_args) : null;
+        await setupRamSliderForModal(initialRam);
+    }
 
     if (document.getElementById('profileDir')) document.getElementById('profileDir').value = profile.directory || '';
 
@@ -6202,13 +6237,345 @@ if (selectJavaBtn) {
 
 
         if (selectedPath) {
-
             document.getElementById('profileJavaPath').value = selectedPath;
+        }
+    });
+}
 
+// ========================================================
+// RAM Allocation Manager & Two-Way Sync for Profile Modal
+// ========================================================
+let cachedSystemRamMb = null;
+let isSyncingRam = false;
+
+async function getSystemRamMb() {
+    if (cachedSystemRamMb) return cachedSystemRamMb;
+    try {
+        if (window.hwlAPI && window.hwlAPI.getSystemMemory) {
+            const res = await window.hwlAPI.getSystemMemory();
+            if (res && res.totalMb) {
+                cachedSystemRamMb = res.totalMb;
+                return cachedSystemRamMb;
+            }
+        }
+    } catch (_) {}
+    if (navigator.deviceMemory) {
+        cachedSystemRamMb = navigator.deviceMemory * 1024;
+        return cachedSystemRamMb;
+    }
+    cachedSystemRamMb = 8192;
+    return cachedSystemRamMb;
+}
+
+function parseXmxFromJvmArgs(jvmArgsStr) {
+    if (!jvmArgsStr || typeof jvmArgsStr !== 'string') return null;
+    const match = jvmArgsStr.match(/-Xmx(\d+)([GgMm])?/);
+    if (!match) return null;
+    const num = parseInt(match[1], 10);
+    const unit = (match[2] || 'M').toUpperCase();
+    if (unit === 'G') {
+        return num * 1024;
+    }
+    return num;
+}
+
+function formatRamDisplay(mb) {
+    if (mb >= 1024 && mb % 1024 === 0) {
+        return `${mb / 1024}.0 GB`;
+    } else if (mb >= 1024) {
+        return `${(mb / 1024).toFixed(1)} GB`;
+    }
+    return `${mb} MB`;
+}
+
+function formatJvmXmx(mb) {
+    if (mb >= 1024 && mb % 1024 === 0) {
+        return `-Xmx${mb / 1024}G`;
+    }
+    return `-Xmx${mb}M`;
+}
+
+function getRecommendedRam(totalMb) {
+    let target = Math.round((totalMb * 0.4) / 512) * 512;
+    if (totalMb <= 4096) {
+        target = Math.max(1024, Math.min(2048, totalMb - 1024));
+    } else {
+        target = Math.max(2048, Math.min(6144, target));
+    }
+    return target;
+}
+
+function evaluateRamZone(mb, totalMb) {
+    const maxSafe = Math.min(8192, Math.floor((totalMb * 0.75) / 512) * 512);
+
+    if (mb < 1024) {
+        return {
+            zone: 'danger',
+            thumbColor: '#ef4444',
+            thumbGlow: 'rgba(239, 68, 68, 0.75)',
+            tipClass: 'tip-danger',
+            icon: 'fa-triangle-exclamation',
+            tipKey: 'installations.ram_tip_danger_low',
+            tipText: (window.t && window.t('installations.ram_tip_danger_low') !== 'installations.ram_tip_danger_low') ? window.t('installations.ram_tip_danger_low') : 'Menos de 1 GB puede provocar cierres inesperados (OOM) o impedir que Minecraft arranque.'
+        };
+    }
+    if (mb >= 1024 && mb < 2048) {
+        return {
+            zone: 'caution',
+            thumbColor: '#f59e0b',
+            thumbGlow: 'rgba(245, 158, 11, 0.75)',
+            tipClass: 'tip-caution',
+            icon: 'fa-circle-exclamation',
+            tipKey: 'installations.ram_tip_caution_low',
+            tipText: (window.t && window.t('installations.ram_tip_caution_low') !== 'installations.ram_tip_caution_low') ? window.t('installations.ram_tip_caution_low') : 'Suficiente para Vanilla ligero, pero insuficiente para mods o texturas pesadas.'
+        };
+    }
+    if (mb >= 2048 && mb <= 6144) {
+        return {
+            zone: 'optimal',
+            thumbColor: '#10b981',
+            thumbGlow: 'rgba(16, 185, 129, 0.75)',
+            tipClass: 'tip-optimal',
+            icon: 'fa-check-circle',
+            tipKey: 'installations.ram_tip_optimal',
+            tipText: (window.t && window.t('installations.ram_tip_optimal') !== 'installations.ram_tip_optimal') ? window.t('installations.ram_tip_optimal') : 'Asignación ideal: juego fluido sin micro-tirones del recolector de basura (Java GC).'
+        };
+    }
+    if (mb > 6144 && mb <= maxSafe) {
+        return {
+            zone: 'caution',
+            thumbColor: '#f59e0b',
+            thumbGlow: 'rgba(245, 158, 11, 0.75)',
+            tipClass: 'tip-caution',
+            icon: 'fa-circle-exclamation',
+            tipKey: 'installations.ram_tip_caution_high',
+            tipText: (window.t && window.t('installations.ram_tip_caution_high') !== 'installations.ram_tip_caution_high') ? window.t('installations.ram_tip_caution_high') : 'Solo recomendable si usas modpacks muy pesados (+200 mods) o shaders de alta resolución.'
+        };
+    }
+    return {
+        zone: 'danger',
+        thumbColor: '#ef4444',
+        thumbGlow: 'rgba(239, 68, 68, 0.75)',
+        tipClass: 'tip-danger',
+        icon: 'fa-skull-crossbones',
+        tipKey: 'installations.ram_tip_danger_high',
+        tipText: (window.t && window.t('installations.ram_tip_danger_high') !== 'installations.ram_tip_danger_high') ? window.t('installations.ram_tip_danger_high') : 'Asignar más de 8 GB o más del 75% de tu RAM causa congelamientos graves por Java GC y puede colgar tu PC.'
+    };
+}
+
+function updateRamFromSlider(mb) {
+    if (isSyncingRam) return;
+    isSyncingRam = true;
+    try {
+        const slider = document.getElementById('profileRamSlider');
+        const valEl = document.getElementById('profileRamValue');
+        const tipBoxEl = document.getElementById('profileRamTip');
+        const tipTextEl = document.getElementById('profileRamTipText');
+        const tipIconEl = document.getElementById('profileRamTipIcon');
+        const jvmInput = document.getElementById('profileJVMArgs');
+
+        const totalMb = cachedSystemRamMb || 8192;
+        const evalResult = evaluateRamZone(mb, totalMb);
+
+        if (slider) {
+            slider.style.setProperty('--ram-thumb-color', evalResult.thumbColor);
+            slider.style.setProperty('--ram-thumb-glow', evalResult.thumbGlow);
         }
 
-    });
+        if (valEl) valEl.textContent = formatRamDisplay(mb);
+        if (tipBoxEl) {
+            tipBoxEl.className = `ram-tip-box ${evalResult.tipClass}`;
+            if (tipTextEl) {
+                tipTextEl.setAttribute('data-i18n', evalResult.tipKey);
+                tipTextEl.textContent = evalResult.tipText;
+            }
+            if (tipIconEl) tipIconEl.className = `fas ${evalResult.icon}`;
+        }
 
+        if (jvmInput) {
+            let currentArgs = jvmInput.value ? jvmInput.value.trim() : '';
+            const newXmx = formatJvmXmx(mb);
+
+            if (currentArgs.includes('-Xmx')) {
+                currentArgs = currentArgs.replace(/-Xmx\S+/, newXmx);
+            } else {
+                currentArgs = currentArgs ? `${newXmx} ${currentArgs}` : newXmx;
+            }
+
+            const xmsMatch = currentArgs.match(/-Xms(\d+)([GgMm])?/);
+            if (xmsMatch) {
+                const xmsNum = parseInt(xmsMatch[1], 10);
+                const xmsUnit = (xmsMatch[2] || 'M').toUpperCase();
+                const xmsMb = xmsUnit === 'G' ? xmsNum * 1024 : xmsNum;
+                if (xmsMb > mb) {
+                    const newXms = mb >= 1024 ? `-Xms1G` : `-Xms${mb}M`;
+                    currentArgs = currentArgs.replace(/-Xms\S+/, newXms);
+                }
+            }
+
+            jvmInput.value = currentArgs;
+        }
+    } finally {
+        isSyncingRam = false;
+    }
+}
+
+function syncJvmArgsInputToRamSlider() {
+    if (isSyncingRam) return;
+    const jvmInput = document.getElementById('profileJVMArgs');
+    const slider = document.getElementById('profileRamSlider');
+    if (!jvmInput || !slider) return;
+
+    const parsedMb = parseXmxFromJvmArgs(jvmInput.value);
+    if (parsedMb !== null) {
+        isSyncingRam = true;
+        try {
+            const min = parseInt(slider.min, 10) || 512;
+            const max = parseInt(slider.max, 10) || 12288;
+            const clamped = Math.max(min, Math.min(max, parsedMb));
+            slider.value = clamped;
+
+            const totalMb = cachedSystemRamMb || 8192;
+            const evalResult = evaluateRamZone(clamped, totalMb);
+
+            slider.style.setProperty('--ram-thumb-color', evalResult.thumbColor);
+            slider.style.setProperty('--ram-thumb-glow', evalResult.thumbGlow);
+
+            const valEl = document.getElementById('profileRamValue');
+            const tipBoxEl = document.getElementById('profileRamTip');
+            const tipTextEl = document.getElementById('profileRamTipText');
+            const tipIconEl = document.getElementById('profileRamTipIcon');
+
+            if (valEl) valEl.textContent = formatRamDisplay(clamped);
+            if (tipBoxEl) {
+                tipBoxEl.className = `ram-tip-box ${evalResult.tipClass}`;
+                if (tipTextEl) {
+                    tipTextEl.setAttribute('data-i18n', evalResult.tipKey);
+                    tipTextEl.textContent = evalResult.tipText;
+                }
+                if (tipIconEl) tipIconEl.className = `fas ${evalResult.icon}`;
+            }
+        } finally {
+            isSyncingRam = false;
+        }
+    }
+}
+
+function renderRamTicks(sliderMin, sliderMax) {
+    const ticksContainer = document.getElementById('ramScaleTicks');
+    if (!ticksContainer) return;
+
+    // Milestones every 2GB (2048MB) between sliderMin and sliderMax
+    const milestoneSteps = [2048, 4096, 6144, 8192, 10240];
+    const ticks = [sliderMin];
+    for (const m of milestoneSteps) {
+        if (m > sliderMin && m < sliderMax && (sliderMax - m) >= 1024) {
+            ticks.push(m);
+        }
+    }
+    if (!ticks.includes(sliderMax)) {
+        ticks.push(sliderMax);
+    }
+
+    const range = sliderMax - sliderMin;
+    ticksContainer.innerHTML = ticks.map((val, idx) => {
+        const ratio = range > 0 ? (val - sliderMin) / range : 0;
+        const label = val >= 1024 ? `${Math.round(val / 1024)} GB` : `${val} MB`;
+        let style = '';
+        if (idx === 0) {
+            style = 'left: 0; transform: none;';
+        } else if (idx === ticks.length - 1) {
+            style = 'right: 0; left: auto; transform: none;';
+        } else {
+            style = `left: calc(11px + (100% - 22px) * ${ratio}); transform: translateX(-50%);`;
+        }
+        const idAttr = (idx === ticks.length - 1) ? ' id="profileRamMaxTick"' : '';
+        return `<span class="ram-scale-tick"${idAttr} data-val="${val}" style="${style}">${label}</span>`;
+    }).join('');
+}
+
+async function setupRamSliderForModal(initialMb = null) {
+    const totalMb = await getSystemRamMb();
+    const slider = document.getElementById('profileRamSlider');
+    if (!slider) return;
+
+    const sliderMax = Math.min(12288, totalMb);
+    slider.min = "512";
+    slider.max = String(sliderMax);
+    slider.step = "512";
+
+    renderRamTicks(512, sliderMax);
+
+    const maxSafe = Math.min(8192, Math.floor((totalMb * 0.75) / 512) * 512);
+    const range = sliderMax - 512;
+
+    if (range > 0) {
+        const p1 = Math.max(0, Math.min(100, Math.round(((1024 - 512) / range) * 100)));
+        const p2 = Math.max(p1, Math.min(100, Math.round(((2048 - 512) / range) * 100)));
+        const p3 = Math.max(p2, Math.min(100, Math.round(((Math.min(6144, sliderMax) - 512) / range) * 100)));
+        const p4 = Math.max(p3, Math.min(100, Math.round(((Math.min(maxSafe, sliderMax) - 512) / range) * 100)));
+
+        const trackGradient = `linear-gradient(to right, #ef4444 0%, #ef4444 ${p1}%, #f59e0b ${p1}%, #f59e0b ${p2}%, #10b981 ${p2}%, #10b981 ${p3}%, #f59e0b ${p3}%, #f59e0b ${p4}%, #ef4444 ${p4}%, #ef4444 100%)`;
+        slider.style.setProperty('--ram-track-gradient', trackGradient);
+    }
+
+    let targetMb = initialMb;
+    if (!targetMb) {
+        targetMb = getRecommendedRam(totalMb);
+    }
+    targetMb = Math.max(512, Math.min(sliderMax, targetMb));
+
+    slider.value = targetMb;
+    updateRamFromSlider(targetMb);
+}
+
+function initRamSliderListeners() {
+    const slider = document.getElementById('profileRamSlider');
+    const resetBtn = document.getElementById('profileRamResetBtn');
+    const jvmInput = document.getElementById('profileJVMArgs');
+    const ticksContainer = document.getElementById('ramScaleTicks');
+
+    if (slider) {
+        slider.addEventListener('input', (e) => {
+            const mb = parseInt(e.target.value, 10);
+            updateRamFromSlider(mb);
+        });
+    }
+
+    if (ticksContainer && slider) {
+        ticksContainer.addEventListener('click', (e) => {
+            const tick = e.target.closest('.ram-scale-tick');
+            if (tick && tick.dataset.val) {
+                const val = parseInt(tick.dataset.val, 10);
+                if (!isNaN(val)) {
+                    slider.value = val;
+                    updateRamFromSlider(val);
+                }
+            }
+        });
+    }
+
+    if (resetBtn && slider) {
+        resetBtn.addEventListener('click', async () => {
+            const totalMb = await getSystemRamMb();
+            const recommended = getRecommendedRam(totalMb);
+            slider.value = recommended;
+            updateRamFromSlider(recommended);
+        });
+    }
+
+    if (jvmInput) {
+        jvmInput.addEventListener('input', () => {
+            syncJvmArgsInputToRamSlider();
+        });
+    }
+}
+
+// Initialize RAM slider listeners when DOM/scripts are loaded
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initRamSliderListeners);
+} else {
+    initRamSliderListeners();
 }
 
 
@@ -10583,8 +10950,7 @@ async function searchMods(page = 1) {
                 if (profilesData && profilesData.profiles && profilesData.profiles[currentModsProfile]) {
                     const vStr = profilesData.profiles[currentModsProfile].version || '';
                     let parsedLoader = undefined;
-                    if (vStr.toLowerCase().includes('quilt')) parsedLoader = 'quilt';
-                    else if (vStr.toLowerCase().includes('fabric')) parsedLoader = 'fabric';
+                    if (vStr.toLowerCase().includes('fabric')) parsedLoader = 'fabric';
                     else if (vStr.toLowerCase().includes('neoforge')) parsedLoader = 'neoforge';
                     else if (vStr.toLowerCase().includes('forge')) parsedLoader = 'forge';
                     queryOptions.filters.loader = parsedLoader;
@@ -11350,9 +11716,8 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
         const isNeoForgeProfile = profile.type === 'neoforge' || versionStr.includes('neoforge');
         const isForgeProfile = !isNeoForgeProfile && (profile.type === 'forge' || versionStr.includes('forge'));
         const isFabricProfile = !isForgeProfile && !isNeoForgeProfile && (profile.type === 'fabric' || versionStr.includes('fabric'));
-        const isQuiltProfile = !isForgeProfile && !isNeoForgeProfile && !isFabricProfile && (profile.type === 'quilt' || versionStr.includes('quilt'));
 
-        const loader = isQuiltProfile ? 'quilt' : isFabricProfile ? 'fabric' : isNeoForgeProfile ? 'neoforge' : isForgeProfile ? 'forge' : 'fabric';
+        const loader = isFabricProfile ? 'fabric' : isNeoForgeProfile ? 'neoforge' : isForgeProfile ? 'forge' : 'fabric';
 
         const matches = String(profile.version || '').match(/\b\d+\.\d+(?:\.\d+)?\b/g) || [];
         let gameVersion = matches.find(m => m.startsWith('1.')) || matches[0] || profile.version;
@@ -11371,7 +11736,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
             searchLoader = 'datapack';
         } else if (currentContentType === 'shader') {
             // For shaders, Modrinth usually expects 'iris' or 'optifine'
-            if (loader === 'fabric' || loader === 'quilt') searchLoader = 'iris';
+            if (loader === 'fabric') searchLoader = 'iris';
             else if (loader === 'forge' || loader === 'neoforge') searchLoader = 'optifine';
             else searchLoader = null; // Fallback
         }
@@ -11389,7 +11754,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
                 if (dpList.length > 0) list = dpList;
             } else if (currentContentType === 'mod' && loader) {
                 // Prioritize versions that match the client loader (prevent picking server plugin versions)
-                const matchingLoaderList = list.filter(v => Array.isArray(v.loaders) && (v.loaders.map(l => l.toLowerCase()).includes(loader.toLowerCase()) || (loader === 'quilt' && v.loaders.map(l => l.toLowerCase()).includes('fabric'))));
+                const matchingLoaderList = list.filter(v => Array.isArray(v.loaders) && v.loaders.map(l => l.toLowerCase()).includes(loader.toLowerCase()));
                 if (matchingLoaderList.length > 0) list = matchingLoaderList;
             }
             return list.find(v => v.version_type === 'release' && v.featured)
@@ -11403,8 +11768,8 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
             // Error Message Logic
             let msg = "";
 
-            if (currentContentType === 'resourcepack' || currentContentType === 'datapack') {
-                // For resourcepacks and datapacks, allow installation anyway with confirmation
+            if (currentContentType === 'resourcepack' || currentContentType === 'datapack' || currentContentType === 'shader') {
+                // For resourcepacks, datapacks and shaders, allow installation anyway with confirmation
                 const confirmed = await window.hwlAPI.confirm(window.t("toasts.install_anyway_confirm", {version: gameVersion}) || `No compatible versions found for Minecraft ${gameVersion}. Do you want to install anyway?`);
 
                 if (!confirmed) {
@@ -11416,7 +11781,7 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
                 const allVersionsResult = await window.hwlAPI.get_mod_versions(projectId, null, currentContentType === 'datapack' ? 'datapack' : searchLoader);
 
                 let candidateVersions = (allVersionsResult.success && allVersionsResult.versions) ? allVersionsResult.versions : [];
-                if (candidateVersions.length === 0 && currentContentType === 'datapack') {
+                if (candidateVersions.length === 0 && (currentContentType === 'datapack' || currentContentType === 'shader')) {
                     const fbResult = await window.hwlAPI.get_mod_versions(projectId, null, null);
                     if (fbResult.success && fbResult.versions) {
                         candidateVersions = fbResult.versions;
@@ -11431,20 +11796,6 @@ window.downloadModFromCard = async function (projectId, slug, forcedType, modTit
 
                 // Use the recommended stable/featured version
                 version = selectBestVersion(candidateVersions);
-
-            } else if (currentContentType === 'shader') {
-
-                // Mention mapped loader
-
-                const shaderLoader = (loader === 'fabric') ? 'Iris' : 'Optifine';
-
-                msg = `No compatible versions for ${shaderLoader} on Minecraft ${gameVersion}`;
-
-                window.hwlAPI.error(msg);
-
-                restoreButtonState(projectId);
-
-                return;
 
             } else {
 

@@ -102,6 +102,9 @@ export interface HwlAPI {
   selectFile: (current_path?: string, filters?: any[]) => Promise<string | null>;
   setZoomFactor: (factor: number) => void;
   getZoomFactor: () => number;
+  getPlatformInfo?: () => Promise<{ platform: string; arch: string }>;
+  getSystemMemory?: () => Promise<{ success: boolean; totalBytes?: number; totalMb: number; totalGb?: number }>;
+  get_system_memory?: () => Promise<{ success: boolean; totalBytes?: number; totalMb: number; totalGb?: number }>;
 
   // Addons & Workshop
   searchModrinth: (query: string, options?: any) => Promise<any>;
@@ -118,6 +121,8 @@ export interface HwlAPI {
   resolveModpackCompatibility: (opts: any) => Promise<any>;
   resolveModDependencies: (opts: any) => Promise<any>;
   checkAddonUpdates: (opts: any) => Promise<any>;
+  checkLoaderUpdate?: (profile_id: string) => Promise<any>;
+  check_loader_update?: (profile_id: string) => Promise<any>;
 
   // Skins & Capes
   getSkinData: () => Promise<any>;

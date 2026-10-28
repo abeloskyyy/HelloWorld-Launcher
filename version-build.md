@@ -38,9 +38,12 @@ graph TD
 
 ### Paso 1: Preparar la versión y redactar las notas
 
-1. Abre [package.json](file:///package.json) e incrementa el número de versión:
+1. Abre [package.json](file:///package.json) e incrementa el número de versión siguiendo **SemVer (`MAJOR.MINOR.PATCH`)**:
+   - **`MAJOR` (`X.0.0`) — Muy rara vez**: Cambios estructurales masivos o de arquitectura radical (ej. migrar de Firebase a un backend propio, reescritura nuclear del launcher o ruptura total de compatibilidad).
+   - **`MINOR` (`x.Y.0`) — El incremento habitual**: Nuevas funciones visibles, herramientas de configuración, ajustes de usuario o integraciones con el SO (ej. selector interactivo de RAM, auto-maximizar ventana, Jump Lists).
+   - **`PATCH` (`x.y.Z`) — Correcciones y mantenimiento**: Reservado casi en exclusiva para parcheo de bugs, hotfixes rápidos, correcciones visuales mínimas o dependencias.
    ```json
-   "version": "2.2.0"
+   "version": "2.3.0"
    ```
 2. Abre [RELEASE_NOTES.md](file:///RELEASE_NOTES.md) y escribe las novedades de esta versión:
    ```markdown

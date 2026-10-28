@@ -14,13 +14,32 @@ function applyMclcPatch() {
   const { Client: MCLCore } = require('minecraft-launcher-core');
   const Handler = require('minecraft-launcher-core/components/handler');
 
-  // 1. Patch Client.prototype.launch & startMinecraft for cancellation support
+  // 1. Patch Client.prototype.launch & startMinecraft for cancellation support and client jar integrity
   const originalLaunch = MCLCore.prototype.launch;
   MCLCore.prototype.launch = async function(options) {
     this._cancelled = false;
     if (this.handler) {
       this.handler._cancelled = false;
     }
+
+    // Auto-repair: check if the client jar is corrupted (0 bytes, truncated, or HTML from school firewall)
+    try {
+      if (options && options.root) {
+        const rootDir = path.resolve(options.root);
+        const versionName = (options.version && (options.version.custom || options.version.number)) || '';
+        const mcJarPath = (options.overrides && options.overrides.minecraftJar) ||
+          (versionName ? path.join(rootDir, 'versions', versionName, `${versionName}.jar`) : null);
+        if (mcJarPath && fs.existsSync(mcJarPath) && !isJarValid(mcJarPath)) {
+          try {
+            fs.unlinkSync(mcJarPath);
+            this.emit('debug', `[Integrity Shield] Auto-repaired corrupted client jar: ${path.basename(mcJarPath)} (deleted for fresh download)`);
+          } catch (_) {}
+        }
+      }
+    } catch (jarCheckErr) {
+      this.emit('debug', `[Integrity Shield] Error checking client jar: ${jarCheckErr.message}`);
+    }
+
     return await originalLaunch.call(this, options);
   };
 
@@ -229,14 +248,220 @@ function applyMclcPatch() {
     this.client.emit('debug', '[MCLC Patch] Assets successfully verified.');
   };
 
-  // 4. Patch Handler.prototype.downloadToDirectory for classes cancellation
-  const originalDownloadToDirectory = Handler.prototype.downloadToDirectory;
-  Handler.prototype.downloadToDirectory = async function(directory, libraries, eventName) {
-    if (this.client && this.client._cancelled) return [];
-    return await originalDownloadToDirectory.call(this, directory, libraries, eventName);
+  // 4. Fast check to verify if a JAR file is valid on disk.
+  // Must exist, be non-empty, have >= 4 bytes, match expected size (if provided),
+  // and begin with standard ZIP magic bytes PK\x03\x04, PK\x05\x06, or PK\x07\x08 (0x50, 0x4B).
+  // Detects 0-byte truncated files and HTML block pages (which start with '<', 0x3C).
+  function isJarValid(filePath, expectedSize) {
+    try {
+      if (!filePath || !fs.existsSync(filePath)) return false;
+      const stat = fs.statSync(filePath);
+      if (stat.size === 0 || stat.size < 4) return false;
+      if (expectedSize && typeof expectedSize === 'number' && expectedSize > 0) {
+        if (stat.size !== expectedSize) return false;
+      }
+      const fd = fs.openSync(filePath, 'r');
+      const buffer = Buffer.alloc(4);
+      fs.readSync(fd, buffer, 0, 4, 0);
+      fs.closeSync(fd);
+      // Standard ZIP magic bytes (0x50, 0x4B)
+      return buffer[0] === 0x50 && buffer[1] === 0x4B;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // 5. Patch Handler.prototype.downloadAsync to prevent writing HTML error pages or leaving 0-byte corrupt files
+  Handler.prototype.downloadAsync = function(url, directory, name, retry, type) {
+    if (this.client && this.client._cancelled) return Promise.resolve(false);
+    return new Promise(resolve => {
+      fs.mkdirSync(directory, { recursive: true });
+      const targetFile = path.join(directory, name);
+
+      let _request;
+      try {
+        _request = this.baseRequest(url);
+      } catch (reqErr) {
+        this.client && this.client.emit('debug', `[MCLC]: Request failed to init for ${url}: ${reqErr.message}`);
+        return resolve(false);
+      }
+
+      let receivedBytes = 0;
+      let totalBytes = 0;
+      let hasErrorStatusCode = false;
+
+      _request.on('response', (data) => {
+        if (data.statusCode !== 200 && data.statusCode !== 206) {
+          hasErrorStatusCode = true;
+          this.client && this.client.emit('debug', `[Integrity Shield] Server/Firewall returned HTTP ${data.statusCode} for ${url} (aborted)`);
+          try { _request.abort(); } catch (_) {}
+          if (fs.existsSync(targetFile)) {
+            try { fs.unlinkSync(targetFile); } catch (_) {}
+          }
+          return resolve(false);
+        }
+        totalBytes = parseInt(data.headers['content-length'] || '0', 10);
+      });
+
+      _request.on('error', async (error) => {
+        if (this.client && this.client._cancelled) return resolve(false);
+        this.client && this.client.emit('debug', `[MCLC]: Failed to download to ${targetFile} due to ${error}. Retrying... ${retry}`);
+        if (fs.existsSync(targetFile)) {
+          try { fs.unlinkSync(targetFile); } catch (_) {}
+        }
+        if (retry && (!this.client || !this.client._cancelled)) {
+          await this.downloadAsync(url, directory, name, false, type);
+        }
+        resolve(false);
+      });
+
+      _request.on('data', (data) => {
+        if (hasErrorStatusCode) return;
+        receivedBytes += data.length;
+        this.client && this.client.emit('download-status', {
+          name,
+          type,
+          current: receivedBytes,
+          total: totalBytes
+        });
+      });
+
+      const file = fs.createWriteStream(targetFile);
+      _request.pipe(file);
+
+      file.once('finish', () => {
+        if (hasErrorStatusCode) {
+          if (fs.existsSync(targetFile)) {
+            try { fs.unlinkSync(targetFile); } catch (_) {}
+          }
+          return resolve(false);
+        }
+        // If it's a jar file, verify it's a real non-empty ZIP, not an HTML error or empty file
+        if (name.endsWith('.jar') && !isJarValid(targetFile)) {
+          if (fs.existsSync(targetFile)) {
+            try { fs.unlinkSync(targetFile); } catch (_) {}
+          }
+          this.client && this.client.emit('debug', `[Integrity Shield] Downloaded file ${name} had invalid header / 0 bytes. Deleted.`);
+          return resolve(false);
+        }
+        this.client && this.client.emit('download', name);
+        resolve({ failed: false, asset: null });
+      });
+
+      file.on('error', async (e) => {
+        if (this.client && this.client._cancelled) return resolve(false);
+        if (fs.existsSync(targetFile)) {
+          try { fs.unlinkSync(targetFile); } catch (_) {}
+        }
+        if (retry && (!this.client || !this.client._cancelled)) {
+          await this.downloadAsync(url, directory, name, false, type);
+        }
+        resolve(false);
+      });
+    });
   };
 
-  // 5. Patch Handler.prototype.getNatives for cancellation
+  // 6. Patch Handler.prototype.downloadToDirectory with integrity auto-repair and proper checksum await
+  Handler.prototype.downloadToDirectory = async function(directory, libraries, eventName) {
+    if (this.client && this.client._cancelled) return [];
+    if (!libraries || !Array.isArray(libraries)) return [];
+
+    // Pre-flight auto-repair: scan libraries for 0-byte or corrupted/HTML files and remove them
+    for (const library of libraries) {
+      if (!library) continue;
+      if (this.parseRule && this.parseRule(library)) continue;
+      const lib = library.name ? library.name.split(':') : null;
+      let jarPath;
+      let name;
+      if (library.downloads && library.downloads.artifact && library.downloads.artifact.path) {
+        name = library.downloads.artifact.path.split('/').pop();
+        jarPath = path.join(directory, this.popString(library.downloads.artifact.path));
+      } else if (lib && lib.length >= 3) {
+        name = `${lib[1]}-${lib[2]}${lib[3] ? '-' + lib[3] : ''}.jar`;
+        jarPath = path.join(directory, `${lib[0].replace(/\./g, path.sep)}`, lib[1], lib[2]);
+      }
+      if (jarPath && name) {
+        const fullPath = path.join(jarPath, name);
+        if (fs.existsSync(fullPath)) {
+          const expectedSize = library.downloads?.artifact?.size;
+          if (name.endsWith('.jar') && !isJarValid(fullPath, expectedSize)) {
+            try {
+              fs.unlinkSync(fullPath);
+              if (this.client) {
+                this.client.emit('debug', `[Integrity Shield] Auto-repaired corrupted library: ${name} (deleted for clean download)`);
+              }
+            } catch (_) {}
+          }
+        }
+      }
+    }
+
+    const libs = [];
+    let counter = 0;
+
+    await Promise.all(libraries.map(async (library) => {
+      if (this.client && this.client._cancelled) return;
+      if (!library) return;
+      if (this.parseRule && this.parseRule(library)) return;
+      const lib = library.name ? library.name.split(':') : null;
+
+      let jarPath;
+      let name;
+      if (library.downloads && library.downloads.artifact && library.downloads.artifact.path) {
+        name = library.downloads.artifact.path.split('/').pop();
+        jarPath = path.join(directory, this.popString(library.downloads.artifact.path));
+      } else if (lib && lib.length >= 3) {
+        name = `${lib[1]}-${lib[2]}${lib[3] ? '-' + lib[3] : ''}.jar`;
+        jarPath = path.join(directory, `${lib[0].replace(/\./g, '/')}/${lib[1]}/${lib[2]}`);
+      } else {
+        return;
+      }
+
+      const fullPath = path.join(jarPath, name);
+
+      const downloadLibrary = async (libObj) => {
+        if (this.client && this.client._cancelled) return;
+        if (libObj.url) {
+          const url = `${libObj.url}${lib[0].replace(/\./g, '/')}/${lib[1]}/${lib[2]}/${name}`;
+          await this.downloadAsync(url, jarPath, name, true, eventName);
+        } else if (libObj.downloads && libObj.downloads.artifact && libObj.downloads.artifact.url) {
+          await this.downloadAsync(libObj.downloads.artifact.url, jarPath, name, true, eventName);
+        }
+      };
+
+      if (!fs.existsSync(fullPath)) {
+        await downloadLibrary(library);
+      } else if (name.endsWith('.jar') && !isJarValid(fullPath, library.downloads?.artifact?.size)) {
+        try { fs.unlinkSync(fullPath); } catch (_) {}
+        await downloadLibrary(library);
+      }
+
+      // Check SHA-1 checksum with proper await (fixing MCLC un-awaited Promise bug)
+      if (library.downloads && library.downloads.artifact && library.downloads.artifact.sha1) {
+        if (fs.existsSync(fullPath)) {
+          const valid = await this.checkSum(library.downloads.artifact.sha1, fullPath);
+          if (!valid) {
+            try { fs.unlinkSync(fullPath); } catch (_) {}
+            await downloadLibrary(library);
+          }
+        }
+      }
+
+      counter++;
+      if (this.client) {
+        this.client.emit('progress', {
+          type: eventName,
+          task: counter,
+          total: libraries.length
+        });
+      }
+      libs.push(`${jarPath}${path.sep}${name}`);
+    }));
+
+    return libs;
+  };
+
+  // 7. Patch Handler.prototype.getNatives for cancellation
   const originalGetNatives = Handler.prototype.getNatives;
   Handler.prototype.getNatives = async function() {
     if (this.client && this.client._cancelled) return '';
@@ -267,8 +492,28 @@ function markExistingIndexesVerified(mcDir) {
   }
 }
 
+// Standalone isJarValid helper for use outside applyMclcPatch
+function isJarValid(filePath, expectedSize) {
+  try {
+    if (!filePath || !fs.existsSync(filePath)) return false;
+    const stat = fs.statSync(filePath);
+    if (stat.size === 0 || stat.size < 4) return false;
+    if (expectedSize && typeof expectedSize === 'number' && expectedSize > 0) {
+      if (stat.size !== expectedSize) return false;
+    }
+    const fd = fs.openSync(filePath, 'r');
+    const buffer = Buffer.alloc(4);
+    fs.readSync(fd, buffer, 0, 4, 0);
+    fs.closeSync(fd);
+    return buffer[0] === 0x50 && buffer[1] === 0x4B;
+  } catch (_) {
+    return false;
+  }
+}
+
 module.exports = {
   applyMclcPatch,
-  markExistingIndexesVerified
+  markExistingIndexesVerified,
+  isJarValid
 };
 

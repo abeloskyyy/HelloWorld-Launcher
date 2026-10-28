@@ -63,6 +63,13 @@
             "x64",
             "arm64"
           ]
+        },
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "icon": "app/build/icons",

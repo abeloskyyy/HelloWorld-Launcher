@@ -44,7 +44,7 @@ class ModManager {
                 facets.push([`loaders:${l}`]);
             } else if (projectType === 'mod') {
                 // When searching for mods without a specific loader, restrict to client mod loaders so server plugins are excluded
-                facets.push(['loaders:fabric', 'loaders:forge', 'loaders:neoforge', 'loaders:quilt']);
+                facets.push(['loaders:fabric', 'loaders:forge', 'loaders:neoforge']);
             }
 
             // Allow frontend to specify sort index, fallback to default behavior
@@ -91,14 +91,7 @@ class ModManager {
             if (loader) params.loaders = JSON.stringify([loader]);
 
             const res = await axios.get(`https://api.modrinth.com/v2/project/${projectId}/version`, { params });
-            let versions = res.data || [];
-
-            // Quilt is compatible with Fabric mods: if no quilt versions found, fallback to fabric
-            if (loader === 'quilt' && versions.length === 0) {
-                params.loaders = JSON.stringify(['fabric']);
-                const fbRes = await axios.get(`https://api.modrinth.com/v2/project/${projectId}/version`, { params });
-                versions = fbRes.data || [];
-            }
+            const versions = res.data || [];
 
             return { success: true, versions };
         } catch (e) {
@@ -206,7 +199,7 @@ class ModManager {
         installedDatapackFilenames = new Set()
     ) {
         const MAX_DEPTH = 4;
-        const CLIENT_MOD_LOADERS = ['fabric', 'forge', 'neoforge', 'quilt', 'legacy-fabric', 'babric', 'liteloader', 'rift'];
+        const CLIENT_MOD_LOADERS = ['fabric', 'forge', 'neoforge', 'legacy-fabric', 'babric', 'liteloader', 'rift'];
         const SERVER_PLUGIN_LOADERS = ['bukkit', 'spigot', 'paper', 'purpur', 'folia', 'bungeecord', 'velocity', 'waterfall', 'sponge', 'geyser'];
 
         // Normalize sets for fast case-insensitive lookup
@@ -349,9 +342,7 @@ class ModManager {
                     targetDepLoader = 'datapack';
                 } else {
                     if (normalizedClientLoader) {
-                        const supportsTarget = projectLoaders.includes(normalizedClientLoader) ||
-                            (normalizedClientLoader === 'quilt' && projectLoaders.includes('fabric')) ||
-                            (normalizedClientLoader === 'fabric' && projectLoaders.includes('quilt'));
+                        const supportsTarget = projectLoaders.includes(normalizedClientLoader);
                         if (!supportsTarget) {
                             // Incompatible with current client loader!
                             console.log(`[resolveModDependencies] Skipping ${projectDetails?.title || depProjectId}: not compatible with client loader ${normalizedClientLoader}`);

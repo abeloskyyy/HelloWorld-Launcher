@@ -98,7 +98,7 @@ jobs:
           gh run download "$BUILD_RUN_ID" --dir raw-artifacts
 
           mkdir -p release-assets
-          find raw-artifacts -type f \( -name "*.exe" -o -name "*.zip" -o -name "*.deb" -o -name "*.dmg" \) ! -name "*blockmap*" -exec cp {} release-assets/ \;
+          find raw-artifacts -type f \( -name "*.exe" -o -name "*.zip" -o -name "*.deb" -o -name "*.dmg" -o -name "*.AppImage" \) ! -name "*blockmap*" -exec cp {} release-assets/ \;
 
           # Asegurar que el instalador Setup.exe esté presente (heredando si hiciera falta para SmartScreen)
           if [ ! -f "release-assets/HelloWorld-Launcher-Setup.exe" ]; then

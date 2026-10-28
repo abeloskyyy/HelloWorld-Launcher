@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, Menu, Tray, shell, dialog, safeStorage, Notification, nativeImage } = require('electron')
 const path = require('path')
+const os = require('os')
 const http = require('http')
 const { URL } = require('url')
 const crypto = require('crypto')
@@ -195,7 +196,7 @@ if (!gotSingleInstanceLock) {
 
 
 const { Client } = require('minecraft-launcher-core')
-const { applyMclcPatch, markExistingIndexesVerified } = require('./src/utils/mclcPatch')
+const { applyMclcPatch, markExistingIndexesVerified, isJarValid } = require('./src/utils/mclcPatch')
 applyMclcPatch()
 const msmc = require('msmc')
 const axios = require('axios')
@@ -5575,6 +5576,18 @@ ipcMain.handle('get-platform-info', () => {
   return { platform: process.platform, arch: process.arch };
 });
 
+ipcMain.handle('get-system-memory', () => {
+  try {
+    const totalBytes = os.totalmem();
+    const totalMb = Math.round(totalBytes / (1024 * 1024));
+    const totalGb = Math.round((totalBytes / (1024 * 1024 * 1024)) * 10) / 10;
+    return { success: true, totalBytes, totalMb, totalGb };
+  } catch (err) {
+    console.warn('[SystemMemory] Failed to read system memory:', err.message);
+    return { success: false, totalMb: 8192, totalGb: 8.0 };
+  }
+});
+
 ipcMain.handle('launch-installer-and-quit', async (event, installerPath) => {
   try {
     let targetExe = installerPath;
@@ -5586,39 +5599,51 @@ ipcMain.handle('launch-installer-and-quit', async (event, installerPath) => {
     }
 
     const targetLower = targetExe.toLowerCase();
+    const currentPid = process.pid;
+    const currentExec = process.execPath;
+    const currentDir = path.dirname(currentExec);
 
-    // Linux: paquete Debian (.deb)
-    if (targetLower.endsWith('.deb')) {
-      console.log('[launch-installer-and-quit] Opening Linux deb with system package installer:', targetExe);
-      await shell.openPath(targetExe);
-      setTimeout(() => {
-        isQuitting = true;
-        app.quit();
-      }, 1500);
-      return { success: true };
-    }
-
-    // macOS: imagen de disco (.dmg)
-    if (targetLower.endsWith('.dmg')) {
-      console.log('[launch-installer-and-quit] Opening macOS DMG image:', targetExe);
-      await shell.openPath(targetExe);
-      setTimeout(() => {
-        isQuitting = true;
-        app.quit();
-      }, 1500);
-      return { success: true };
-    }
-
-    // Linux: AppImage
+    // ── 1. Linux: AppImage ──────────────────────────────────────────────────
     if (targetLower.endsWith('.appimage')) {
-      console.log('[launch-installer-and-quit] Launching Linux AppImage:', targetExe);
+      console.log('[launch-installer-and-quit] Launching Linux AppImage update:', targetExe);
       try { fs.chmodSync(targetExe, 0o755); } catch (_) {}
+
+      const currentAppImage = process.env.APPIMAGE;
+      const scriptPath = path.join(app.getPath('temp'), `hwl-update-appimage-${Date.now()}.sh`);
+
+      let scriptContent = '';
+      if (currentAppImage && fs.existsSync(currentAppImage)) {
+        // Ejecutando desde AppImage existente: reemplazarlo limpiamente y relanzar
+        scriptContent = `#!/usr/bin/env bash
+while kill -0 ${currentPid} 2>/dev/null; do
+  sleep 0.2
+done
+chmod +x "${targetExe}"
+mv -f "${targetExe}" "${currentAppImage}"
+chmod +x "${currentAppImage}"
+nohup "${currentAppImage}" >/dev/null 2>&1 &
+rm -f "$0"
+`;
+      } else {
+        // Lanzar el nuevo AppImage directamente
+        scriptContent = `#!/usr/bin/env bash
+while kill -0 ${currentPid} 2>/dev/null; do
+  sleep 0.2
+done
+chmod +x "${targetExe}"
+nohup "${targetExe}" >/dev/null 2>&1 &
+rm -f "$0"
+`;
+      }
+
+      fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
       const { spawn } = require('child_process');
-      const child = spawn(targetExe, ['--update'], {
+      const child = spawn('bash', [scriptPath], {
         detached: true,
         stdio: 'ignore'
       });
       child.unref();
+
       setTimeout(() => {
         isQuitting = true;
         app.quit();
@@ -5626,7 +5651,181 @@ ipcMain.handle('launch-installer-and-quit', async (event, installerPath) => {
       return { success: true };
     }
 
-    // Windows (.exe)
+    // ── 2. Linux: paquete Debian (.deb) ─────────────────────────────────────
+    if (targetLower.endsWith('.deb')) {
+      console.log('[launch-installer-and-quit] Preparing Linux deb relay update script for:', targetExe);
+
+      const isUserLevel = currentDir.startsWith(os.homedir()) && (() => {
+        try {
+          fs.accessSync(currentDir, fs.constants.W_OK);
+          return true;
+        } catch (_) {
+          return false;
+        }
+      })();
+
+      const scriptPath = path.join(app.getPath('temp'), `hwl-update-deb-${Date.now()}.sh`);
+      const scriptContent = `#!/usr/bin/env bash
+OLD_PID=${currentPid}
+DEB_PATH="${targetExe}"
+LOG="/tmp/hwl_deb_update.log"
+
+echo "Waiting for PID $OLD_PID to exit..." > "$LOG"
+while kill -0 $OLD_PID 2>/dev/null; do
+  sleep 0.2
+done
+
+SUCCESS=0
+
+# A) Si está instalado en espacio de usuario (sin sudo / root):
+if [ "${isUserLevel ? '1' : '0'}" = "1" ]; then
+  echo "Extracting at user level (no root required)..." >> "$LOG"
+  TMP_DIR="/tmp/hwl_deb_user_$$"
+  mkdir -p "$TMP_DIR"
+  if dpkg-deb -x "$DEB_PATH" "$TMP_DIR" 2>>"$LOG"; then
+    SRC_DIR="$TMP_DIR/opt/HelloWorld-Launcher"
+    if [ ! -d "$SRC_DIR" ]; then
+      SRC_DIR="$TMP_DIR/opt/helloworld-launcher"
+    fi
+    if [ -d "$SRC_DIR" ]; then
+      cp -af "$SRC_DIR/." "${currentDir}/"
+      chmod +x "${currentExec}" 2>/dev/null || true
+      SUCCESS=1
+      echo "User-level files successfully updated in ${currentDir}" >> "$LOG"
+    fi
+  fi
+  rm -rf "$TMP_DIR"
+fi
+
+# B) Si es instalación de sistema (/opt), usar elevación nativa pkexec (sin el centro de software):
+if [ "$SUCCESS" -eq 0 ]; then
+  echo "Installing system-wide package via pkexec..." >> "$LOG"
+  if command -v pkexec >/dev/null 2>&1; then
+    if pkexec dpkg -i "$DEB_PATH" >> "$LOG" 2>&1; then
+      SUCCESS=1
+      command -v notify-send >/dev/null 2>&1 && notify-send -a "HelloWorld Launcher" "Actualización completada" "HelloWorld Launcher se ha actualizado con éxito."
+    else
+      echo "pkexec failed or was cancelled." >> "$LOG"
+      command -v notify-send >/dev/null 2>&1 && notify-send -u critical -a "HelloWorld Launcher" "Actualización no completada" "No se pudo instalar el paquete."
+    fi
+  elif command -v gksudo >/dev/null 2>&1; then
+    gksudo -- dpkg -i "$DEB_PATH" && SUCCESS=1
+  elif command -v kdesudo >/dev/null 2>&1; then
+    kdesudo -- dpkg -i "$DEB_PATH" && SUCCESS=1
+  else
+    echo "Fallback to sudo in terminal/direct..." >> "$LOG"
+    sudo dpkg -i "$DEB_PATH" >> "$LOG" 2>&1 && SUCCESS=1
+  fi
+fi
+
+# C) Reabrir el launcher automáticamente
+echo "Relaunching HelloWorld Launcher..." >> "$LOG"
+if [ -x "${currentExec}" ]; then
+  nohup "${currentExec}" >/dev/null 2>&1 &
+elif command -v helloworld-launcher >/dev/null 2>&1; then
+  nohup helloworld-launcher >/dev/null 2>&1 &
+elif [ -f "/opt/HelloWorld-Launcher/helloworld-launcher" ]; then
+  nohup "/opt/HelloWorld-Launcher/helloworld-launcher" >/dev/null 2>&1 &
+fi
+
+rm -f "$0"
+`;
+
+      fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
+      const { spawn } = require('child_process');
+      const child = spawn('bash', [scriptPath], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+
+      setTimeout(() => {
+        isQuitting = true;
+        app.quit();
+      }, 500);
+      return { success: true };
+    }
+
+    // ── 3. macOS: imagen de disco (.dmg) o comprimido (.zip) ────────────────
+    if (targetLower.endsWith('.dmg') || targetLower.endsWith('.zip')) {
+      console.log('[launch-installer-and-quit] Preparing macOS relay update script for:', targetExe);
+
+      let appBundlePath = '/Applications/HelloWorld-Launcher.app';
+      if (currentExec.includes('.app/Contents/MacOS/')) {
+        appBundlePath = currentExec.substring(0, currentExec.indexOf('.app/Contents/MacOS/') + 4);
+      }
+
+      const scriptPath = path.join(app.getPath('temp'), `hwl-update-mac-${Date.now()}.sh`);
+      const scriptContent = `#!/usr/bin/env bash
+OLD_PID=${currentPid}
+TARGET_APP="${appBundlePath}"
+INSTALLER="${targetExe}"
+LOG="/tmp/hwl_mac_update.log"
+TMP_DIR="/tmp/hwl_mac_staging_$$"
+
+mkdir -p "$TMP_DIR"
+echo "Waiting for PID $OLD_PID to exit..." > "$LOG"
+while kill -0 $OLD_PID 2>/dev/null; do
+  sleep 0.2
+done
+
+NEW_APP=""
+if [[ "$INSTALLER" == *.dmg ]]; then
+  MOUNT_DIR="$TMP_DIR/mount"
+  mkdir -p "$MOUNT_DIR"
+  echo "Mounting DMG silently: $INSTALLER" >> "$LOG"
+  hdiutil attach "$INSTALLER" -nobrowse -readonly -mountpoint "$MOUNT_DIR" >> "$LOG" 2>&1
+  if [ -d "$MOUNT_DIR/HelloWorld-Launcher.app" ]; then
+    cp -R "$MOUNT_DIR/HelloWorld-Launcher.app" "$TMP_DIR/HelloWorld-Launcher.app"
+    NEW_APP="$TMP_DIR/HelloWorld-Launcher.app"
+  fi
+  hdiutil detach "$MOUNT_DIR" -force >> "$LOG" 2>&1
+elif [[ "$INSTALLER" == *.zip ]]; then
+  echo "Unzipping macOS update: $INSTALLER" >> "$LOG"
+  unzip -q -o "$INSTALLER" -d "$TMP_DIR" >> "$LOG" 2>&1
+  if [ -d "$TMP_DIR/HelloWorld-Launcher.app" ]; then
+    NEW_APP="$TMP_DIR/HelloWorld-Launcher.app"
+  fi
+fi
+
+if [ -n "$NEW_APP" ] && [ -d "$NEW_APP" ]; then
+  echo "Installing bundle into $TARGET_APP..." >> "$LOG"
+  if [ -w "$TARGET_APP" ] || [ -w "$(dirname "$TARGET_APP")" ]; then
+    echo "Direct copy (user has write permissions)" >> "$LOG"
+    rm -rf "$TARGET_APP"
+    cp -R "$NEW_APP" "$TARGET_APP"
+  else
+    echo "Elevating permissions via macOS osascript..." >> "$LOG"
+    osascript -e "do shell script \\"rm -rf '$TARGET_APP' && cp -R '$NEW_APP' '$TARGET_APP'\\" with administrator privileges" >> "$LOG" 2>&1
+  fi
+  # Quitar cuarentena de Gatekeeper para que la app se abra sin trabas
+  xattr -cr "$TARGET_APP" 2>/dev/null || true
+  open -n "$TARGET_APP"
+  echo "Relaunched $TARGET_APP successfully." >> "$LOG"
+else
+  echo "Extraction failed, reopening existing app..." >> "$LOG"
+  open -n "$TARGET_APP"
+fi
+
+rm -rf "$TMP_DIR" "$0"
+`;
+
+      fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
+      const { spawn } = require('child_process');
+      const child = spawn('bash', [scriptPath], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+
+      setTimeout(() => {
+        isQuitting = true;
+        app.quit();
+      }, 500);
+      return { success: true };
+    }
+
+    // ── 4. Windows (.exe) ───────────────────────────────────────────────────
     const execDir = path.dirname(process.execPath);
     const { spawn } = require('child_process');
     console.log('[launch-installer-and-quit] Executing Windows Setup:', targetExe, 'with installPath:', execDir);
@@ -6117,6 +6316,147 @@ ipcMain.handle('get-loader-versions', async (e, { type, mc_version }) => {
   }
 })
 
+// --- Auto-update for Loaders (Fabric, Forge, NeoForge) ---
+const loaderUpdateCache = new Map();
+
+async function getLatestLoaderVersion(type, mcVersion) {
+  if (!type || type === 'vanilla' || type === 'optifine') return null;
+  const cleanType = type.toLowerCase();
+  const cacheKey = `${cleanType}:${mcVersion}`;
+
+  const cached = loaderUpdateCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp < 300000)) { // 5-min TTL cache
+    return cached.version;
+  }
+
+  let latestVersion = null;
+  try {
+    if (cleanType === 'fabric') {
+      const response = await axios.get(`https://meta.fabricmc.net/v2/versions/loader/${mcVersion}`, { timeout: 4000 });
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        latestVersion = response.data[0]?.loader?.version || null;
+      }
+    } else if (cleanType === 'forge') {
+      const response = await axios.get('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json', { timeout: 4000 });
+      const promos = response.data?.promos || {};
+      if (promos[`${mcVersion}-recommended`]) {
+        latestVersion = promos[`${mcVersion}-recommended`];
+      } else if (promos[`${mcVersion}-latest`]) {
+        latestVersion = promos[`${mcVersion}-latest`];
+      } else {
+        const versions = [];
+        for (const [key, value] of Object.entries(promos)) {
+          if (key.startsWith(mcVersion + '-')) {
+            if (!versions.includes(value)) versions.push(value);
+          }
+        }
+        if (versions.length > 0) {
+          versions.sort((a, b) => {
+            const aParts = a.split('.').map(Number);
+            const bParts = b.split('.').map(Number);
+            for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+              const aVal = aParts[i] || 0;
+              const bVal = bParts[i] || 0;
+              if (aVal !== bVal) return bVal - aVal;
+            }
+            return 0;
+          });
+          latestVersion = versions[0];
+        }
+      }
+    } else if (cleanType === 'neoforge') {
+      const allVersions = await getNeoForgeAllVersions();
+      const versions = allVersions.filter(v => getMcVersionFromNeoForge(v) === mcVersion);
+      if (versions.length > 0) {
+        versions.sort((a, b) => {
+          const aParts = a.split(/[-.]/).map(x => parseInt(x, 10) || 0);
+          const bParts = b.split(/[-.]/).map(x => parseInt(x, 10) || 0);
+          for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+            const aVal = aParts[i] || 0;
+            const bVal = bParts[i] || 0;
+            if (aVal !== bVal) return bVal - aVal;
+          }
+          return 0;
+        });
+        latestVersion = versions[0];
+      }
+    }
+  } catch (err) {
+    console.warn(`[getLatestLoaderVersion] Failed for ${cleanType} ${mcVersion}:`, err.message);
+  }
+
+  if (latestVersion) {
+    loaderUpdateCache.set(cacheKey, { version: latestVersion, timestamp: Date.now() });
+  }
+  return latestVersion;
+}
+
+function isNewerLoader(latest, current) {
+  if (!latest) return false;
+  if (!current || current === 'unknown' || current === 'none') return true;
+  if (latest === current) return false;
+
+  const parseParts = (v) => String(v).split(/[-.+]/).map(p => {
+    const n = parseInt(p, 10);
+    return isNaN(n) ? p : n;
+  });
+
+  const aParts = parseParts(latest);
+  const bParts = parseParts(current);
+  const len = Math.max(aParts.length, bParts.length);
+
+  for (let i = 0; i < len; i++) {
+    const a = aParts[i];
+    const b = bParts[i];
+    if (a === undefined) return false;
+    if (b === undefined) return true;
+    if (typeof a === 'number' && typeof b === 'number') {
+      if (a !== b) return a > b;
+    } else {
+      const cmp = String(a).localeCompare(String(b));
+      if (cmp !== 0) return cmp > 0;
+    }
+  }
+  return false;
+}
+
+async function checkProfileLoaderUpdate(profile) {
+  if (!profile || !profile.version) return null;
+  const verInfo = versionUtils.parseVersionString(profile.version);
+  if (!verInfo || verInfo.type === 'vanilla' || verInfo.type === 'optifine') {
+    return null; // Vanilla and OptiFine do not auto-update loaders
+  }
+
+  const latestLoader = await getLatestLoaderVersion(verInfo.type, verInfo.mcVersion);
+  if (!latestLoader) return null;
+
+  if (isNewerLoader(latestLoader, verInfo.loaderVersion)) {
+    const newVersion = `${verInfo.software} ${verInfo.mcVersion} (${latestLoader})`;
+    console.log(`[LoaderUpdate] Update found for profile "${profile.name || profile.version}": ${verInfo.loaderVersion || 'none'} -> ${latestLoader}`);
+    return {
+      old_version: profile.version,
+      new_version: newVersion,
+      loader: verInfo.software,
+      mcVersion: verInfo.mcVersion,
+      oldLoaderVersion: verInfo.loaderVersion || 'unknown',
+      newLoaderVersion: latestLoader
+    };
+  }
+  return null;
+}
+
+ipcMain.handle('check-loader-update', async (e, profileId) => {
+  try {
+    const profilesData = profileManager.loadProfiles();
+    const profile = profilesData?.profiles?.[profileId];
+    if (!profile) return null;
+    return await checkProfileLoaderUpdate(profile);
+  } catch (err) {
+    console.error('Error in check-loader-update handler:', err);
+    return null;
+  }
+});
+
 // --- Fabric Library Verification & Repair ---
 // MCLC sometimes fails to download Fabric libraries silently (network timeouts, rate limits).
 // These helpers verify all Fabric libraries exist and re-download missing/corrupt ones with retry.
@@ -6191,7 +6531,7 @@ function verifyFabricLibraries(mcDir, fabricVersionName) {
     if (!info) continue;
 
     try {
-      if (!fs.existsSync(info.filePath) || fs.statSync(info.filePath).size === 0) {
+      if (!fs.existsSync(info.filePath) || !isJarValid(info.filePath)) {
         missing.push({ ...info, url: lib.url, downloads: lib.downloads, name: lib.name });
       }
     } catch (e) {
@@ -7373,12 +7713,21 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
     }
 
     const versionPath = path.join(actualMcDir, 'versions', expectedVersionDirName);
+    const versionJsonFile = path.join(versionPath, `${expectedVersionDirName}.json`);
+    const versionJarFile = path.join(versionPath, `${expectedVersionDirName}.jar`);
     console.log(`[Launch] Checking for version at: ${versionPath}`);
     console.log(`[Launch] Expected dir name: ${expectedVersionDirName}, Profile version: ${profile.version}`);
 
     if (!fs.existsSync(versionPath)) {
       isMissingVersion = true;
       console.log(`[Launch] Version directory not found, marking as missing`);
+    } else if (!fs.existsSync(versionJsonFile) || fs.statSync(versionJsonFile).size === 0) {
+      isMissingVersion = true;
+      console.log(`[Launch] Version JSON missing or 0 bytes, marking as missing for re-sync`);
+    } else if (fs.existsSync(versionJarFile) && !isJarValid(versionJarFile)) {
+      console.log(`[Launch] Version JAR corrupted (invalid header or 0 bytes), deleting and marking for re-sync`);
+      try { fs.unlinkSync(versionJarFile); } catch (_) {}
+      isMissingVersion = true;
     }
 
     let missingAddons = [];
@@ -7427,19 +7776,41 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       }
     }
 
+    // Check for compatible loader updates (Fabric, Forge, NeoForge)
+    let updatedLoader = null;
+    if (!isLaunchCancelled && verInfo && verInfo.type !== 'vanilla' && verInfo.type !== 'optifine') {
+      try {
+        updatedLoader = await checkProfileLoaderUpdate(profile);
+      } catch (loaderErr) {
+        console.warn('[Launch] Warning: failed to check loader update:', loaderErr.message);
+      }
+    }
+
     if (isLaunchCancelled) {
       console.log("[Launch] Launch cancelled during sync check.");
       isStartingGame = false;
       return { status: 'cancelled' };
     }
 
-    if (isMissingVersion || missingAddons.length > 0 || (updatedAddons && updatedAddons.length > 0)) {
-      console.log(`[Launch] Missing files or updates detected. isMissingVersion: ${isMissingVersion}, missingAddons: ${missingAddons.length}, updatedAddons: ${updatedAddons ? updatedAddons.length : 0}`);
+    if (isMissingVersion || missingAddons.length > 0 || (updatedAddons && updatedAddons.length > 0) || updatedLoader) {
+      console.log(`[Launch] Missing files or updates detected. isMissingVersion: ${isMissingVersion}, missingAddons: ${missingAddons.length}, updatedAddons: ${updatedAddons ? updatedAddons.length : 0}, updatedLoader: ${updatedLoader ? updatedLoader.new_version : null}`);
       isStartingGame = false;
+
+      // Update profile.version in profiles.json if loader was updated so profile permanently tracks the latest loader version
+      if (updatedLoader && profileId) {
+        try {
+          profileManager.updateProfileVersion(profileId, updatedLoader.new_version);
+          profile.version = updatedLoader.new_version;
+        } catch (e) {
+          console.warn('[Launch] Could not auto-update profile version in JSON:', e);
+        }
+      }
+
       return {
         status: 'missing_files',
         missing_version: isMissingVersion,
-        version_id: profile.version,
+        version_id: updatedLoader ? updatedLoader.new_version : profile.version,
+        updated_loader: updatedLoader,
         missing_addons: missingAddons,
         updated_addons: updatedAddons || []
       };
@@ -7558,8 +7929,20 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
                   strVal = strVal.split(key).join(val);
                 }
               }
-              // Avoid duplicating arguments already in customArgs
-              if (!options.customArgs.includes(strVal)) {
+              // Avoid duplicating arguments already in customArgs, but repeatable JVM flags
+              // (such as --add-opens, --add-exports, -p) must NEVER be deduplicated!
+              const repeatableFlags = new Set([
+                '--add-opens',
+                '--add-exports',
+                '--add-modules',
+                '--add-reads',
+                '--patch-module',
+                '-p',
+                '--module-path',
+                '-cp',
+                '-classpath'
+              ]);
+              if (repeatableFlags.has(strVal) || !options.customArgs.includes(strVal)) {
                 options.customArgs.push(strVal);
               }
             };

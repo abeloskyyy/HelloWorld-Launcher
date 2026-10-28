@@ -100,12 +100,72 @@ export const ProfileModal: React.FC = () => {
               </button>
             </div>
           </div>
+          {/* Maximum RAM Allocation (-Xmx) Slider */}
+          <div className="modal-input-group ram-allocation-group">
+            <div className="ram-header-row">
+              <label htmlFor="profileRamSlider" style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                <span data-i18n="installations.ram_allocation">RAM Allocation (-Xmx)</span>
+                <i
+                  className="fa-regular fa-question-circle help-icon"
+                  data-tooltip="Configure the maximum memory Minecraft can use (-Xmx). Adjusts automatically to your PC's RAM."
+                  data-i18n-tooltip="installations.ram_allocation_tooltip"
+                ></i>
+              </label>
+              <div className="ram-badge-container">
+                <span id="profileRamValue" className="ram-value-badge">4.0 GB</span>
+              </div>
+            </div>
+
+            <div className="ram-slider-wrapper">
+              <div className="ram-slider-container">
+                <div className="ram-slider-track-wrap">
+                  <input
+                    id="profileRamSlider"
+                    type="range"
+                    min="512"
+                    max="12288"
+                    step="512"
+                    defaultValue="4096"
+                    className="ram-range-slider"
+                  />
+                  {/* Ticks Labels */}
+                  <div className="ram-scale-ticks" id="ramScaleTicks">
+                    <span className="ram-scale-tick" style={{ left: 0 }}>512 MB</span>
+                    <span className="ram-scale-tick" style={{ left: 'calc(11px + (100% - 22px) * 0.1304)', transform: 'translateX(-50%)' }}>2 GB</span>
+                    <span className="ram-scale-tick" style={{ left: 'calc(11px + (100% - 22px) * 0.3043)', transform: 'translateX(-50%)' }}>4 GB</span>
+                    <span className="ram-scale-tick" style={{ left: 'calc(11px + (100% - 22px) * 0.4783)', transform: 'translateX(-50%)' }}>6 GB</span>
+                    <span className="ram-scale-tick" style={{ left: 'calc(11px + (100% - 22px) * 0.6522)', transform: 'translateX(-50%)' }}>8 GB</span>
+                    <span className="ram-scale-tick" style={{ left: 'calc(11px + (100% - 22px) * 0.8261)', transform: 'translateX(-50%)' }}>10 GB</span>
+                    <span className="ram-scale-tick" id="profileRamMaxTick" style={{ right: 0, left: 'auto' }}>12 GB</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-scale-reset"
+                  id="profileRamResetBtn"
+                  title="Reset to recommended RAM"
+                  data-i18n-title="installations.ram_reset"
+                >
+                  <i className="fas fa-magic"></i>
+                </button>
+              </div>
+
+              {/* Dynamic Contextual Tip / Warning */}
+              <div id="profileRamTip" className="ram-tip-box tip-optimal">
+                <i id="profileRamTipIcon" className="fas fa-check-circle"></i>
+                <span id="profileRamTipText" data-i18n="installations.ram_tip_optimal">
+                  Ideal balance: smooth gameplay without Java Garbage Collection (GC) latency spikes.
+                </span>
+              </div>
+            </div>
+          </div>
+
           <div className="modal-input-group">
             <label>
               <span data-i18n="installations.jvm_args">JVM Arguments</span>
               <i
                 className="fa-regular fa-question-circle help-icon"
-                data-tooltip="Advanced JVM parameters. Defaults include: -Xmx4G (4GB RAM), -Xms1G (1GB initial), and performance optimizations with G1GC."
+                data-tooltip="Advanced JVM parameters. Automatically synchronized with the RAM slider."
                 data-i18n-tooltip="installations.jvm_args_tooltip"
               ></i>
             </label>

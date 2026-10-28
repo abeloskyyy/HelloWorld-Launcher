@@ -109,6 +109,25 @@ class ProfileManager {
         fs.writeJsonSync(profilesFile, cleanData, { spaces: 4 });
     }
 
+    updateProfileVersion(profileId, newVersion) {
+        try {
+            const data = this.loadProfiles();
+            if (data && data.profiles && data.profiles[profileId]) {
+                data.profiles[profileId].version = newVersion;
+                const info = versionUtils.parseVersionString(newVersion);
+                if (info && info.loaderVersion) {
+                    data.profiles[profileId].loader_version = info.loaderVersion;
+                }
+                this.saveProfiles(data);
+                console.log(`[ProfileManager] Updated profile ${profileId} version to: ${newVersion}`);
+                return true;
+            }
+        } catch (e) {
+            console.error('[ProfileManager] Error updating profile version:', e);
+        }
+        return false;
+    }
+
     async addProfile(name, version, icon, directory, jvmArgs, javaPath, isInternal = false) {
         if (!isInternal && this.isReservedName(name)) {
             return { success: false, error: "Cannot create a profile with a reserved name." };

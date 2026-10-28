@@ -157,7 +157,7 @@ jobs:
       - name: Build UI (Vite)
         run: npm run build:ui
 
-      - name: Build Linux (.deb packages)
+      - name: Build Linux (.deb and .AppImage packages)
         run: npm run build:linux
         continue-on-error: true
 
@@ -166,11 +166,14 @@ jobs:
           if [ -f "dist/helloworld-launcher-linux-x64.deb" ] && [ ! -f "dist/helloworld-launcher-linux-amd64.deb" ]; then
             cp dist/helloworld-launcher-linux-x64.deb dist/helloworld-launcher-linux-amd64.deb
           fi
+          if [ -f "dist/helloworld-launcher-linux-x64.AppImage" ] && [ ! -f "dist/helloworld-launcher-linux-amd64.AppImage" ]; then
+            cp dist/helloworld-launcher-linux-x64.AppImage dist/helloworld-launcher-linux-amd64.AppImage
+          fi
 
       - name: Stage Linux Binaries
         run: |
           mkdir -p dist-linux
-          find dist -maxdepth 1 -type f -name "*.deb" -exec cp {} dist-linux/ \; 2>/dev/null || true
+          find dist -maxdepth 1 -type f \( -name "*.deb" -o -name "*.AppImage" \) -exec cp {} dist-linux/ \; 2>/dev/null || true
           echo "Linux staging contents:"
           ls -lh dist-linux
 

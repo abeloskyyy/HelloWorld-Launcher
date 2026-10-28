@@ -78,6 +78,10 @@ const hwlAPI = {
     deleteAddon: (filename, profile_id, type, world_name) => ipcRenderer.invoke('delete-addon', { filename, profile_id, type, world_name }),
     resolveModpackCompatibility: (opts) => ipcRenderer.invoke('resolve-modpack-compatibility', opts),
     resolveModDependencies: (opts) => ipcRenderer.invoke('resolve-mod-dependencies', opts),
+    checkLoaderUpdate: (profile_id) => ipcRenderer.invoke('check-loader-update', profile_id),
+    check_loader_update: (profile_id) => ipcRenderer.invoke('check-loader-update', profile_id),
+    checkAddonUpdates: (opts) => ipcRenderer.invoke('check-addon-updates', opts),
+    check_addon_updates: (opts) => ipcRenderer.invoke('check-addon-updates', opts),
 
     getSkinPacks: () => ipcRenderer.invoke('get-skin-packs'),
     createSkinPack: (data) => ipcRenderer.invoke('create-skin-pack', data),
@@ -105,6 +109,8 @@ const hwlAPI = {
       ipcRenderer.on('installer-download-progress', (event, data) => callback(data));
     },
     getPlatformInfo: () => ipcRenderer.invoke('get-platform-info'),
+    getSystemMemory: () => ipcRenderer.invoke('get-system-memory'),
+    get_system_memory: () => ipcRenderer.invoke('get-system-memory'),
 
     // Onboarding
     getOnboardingStatus: () => ipcRenderer.invoke('get-onboarding-status'),
@@ -263,6 +269,7 @@ const pywebviewAPI = {
         ipcRenderer.invoke('resolve-mod-dependencies', { version_id, game_version, loader, profile_id, installed_project_ids, world_name, content_type }),
     resolve_modpack_compatibility: (opts) => ipcRenderer.invoke('resolve-modpack-compatibility', opts),
     check_addon_updates: (opts) => ipcRenderer.invoke('check-addon-updates', opts),
+    check_loader_update: (profile_id) => ipcRenderer.invoke('check-loader-update', profile_id),
     on_mod_download_progress: (callback) => ipcRenderer.on('mod-download-progress', (_event, data) => callback(data)),
     toggle_mod: (arg1, arg2, arg3, arg4, arg5) => {
         // Handle multiple signatures:
@@ -311,6 +318,8 @@ const pywebviewAPI = {
       ipcRenderer.on('installer-download-progress', (event, data) => callback(data));
     },
     get_platform_info: () => ipcRenderer.invoke('get-platform-info'),
+    get_system_memory: () => ipcRenderer.invoke('get-system-memory'),
+    getSystemMemory: () => ipcRenderer.invoke('get-system-memory'),
 
     // UI Dialogs
     info: (msg) => ipcRenderer.invoke('info', msg),
