@@ -1,6 +1,6 @@
 {
   "name": "helloworld-launcher",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "description": "The official custom Minecraft launcher for the HelloWorld community, featuring fast updates, rich presence, and smooth performance.",
   "repository": {
     "type": "git",
