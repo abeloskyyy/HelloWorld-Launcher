@@ -28,8 +28,20 @@ const cliInstallPath = (() => {
   if (a64) return Buffer.from(a64.slice('--install-path-b64='.length), 'base64').toString('utf-8')
   
   const a = rawArgs.find(a => a.startsWith('--install-path='))
-  return a ? a.slice('--install-path='.length) : null
+  return a ? a.slice('--install-path='.length).replace(/^"(.*)"$/, '$1') : null
 })()
+
+const cliUpdateFile = (() => {
+  const a64 = rawArgs.find(a => a.startsWith('--update-file-b64='))
+  if (a64) return Buffer.from(a64.slice('--update-file-b64='.length), 'base64').toString('utf-8')
+
+  const a = rawArgs.find(a => a.startsWith('--update-file='))
+  return a ? a.slice('--update-file='.length).replace(/^"(.*)"$/, '$1') : null
+})()
+
+if (cliUpdateFile && !cliMode) {
+  cliMode = 'update'
+}
 
 // ── Modules ───────────────────────────────────────────────────────────────────
 
@@ -126,7 +138,8 @@ ipcMain.handle('get-startup-info', async () => {
     releaseNotes: releaseInfo?.releaseNotes ? marked.parse(releaseInfo.releaseNotes) : '',
     sidebarImages: getSidebarImages(),
     isElevated: rawArgs.includes('--elevated'),
-    isSilent: isSilent,
+    isSilent: isSilent || Boolean(cliUpdateFile),
+    updateFile: cliUpdateFile,
     locale: app.getLocale(),
   }
 })
@@ -176,6 +189,19 @@ ipcMain.handle('run-operation', async (event, { operation, options }) => {
     }
 
     send({ msg: null, percent: 100, done: true, result })
+
+    // Cerrar automáticamente la ventana y proceso del setup cuando se haya relanzado el launcher
+    if (operation === 'update' && (cliUpdateFile || isSilent || options?.autoClose)) {
+      setTimeout(() => {
+        try {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.close()
+          }
+        } catch (_) {}
+        setTimeout(() => app.quit(), 300)
+      }, 1500)
+    }
+
     return result
   } catch (err) {
     send({ msg: null, percent: 0, done: true, error: err.message })

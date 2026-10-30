@@ -6,7 +6,12 @@
 - Automatic mod loader updates (Fabric, Forge, NeoForge) to keep installation loaders up to date
 - Option to install shaders even when not officially marked compatible with the installation's Minecraft version
 - Standalone Linux AppImage packaging for zero-root (no sudo required) user-level installation and updates
-- Automated background relay updater for Linux and macOS that performs silent/assisted bundle updates and automatically restarts the launcher
+- Silent background update download into protected app storage with a sleek bottom dock badge featuring real-time circular progress outline
+- Attention-grabbing ready indicator with checkmark and breathing pulse, enabling one-click instant restart and setup execution
+- Direct setup relay with pre-downloaded launcher package arguments (`--update-file`), performing unattended extraction and automatically terminating setup once the launcher opens
+- Smart local `setup.exe` reuse from the launcher directory with cryptographic hash verification against remote releases to avoid redundant installer downloads
+- Interactive update flow testing button in Developer Mode (Settings) to preview the dock badge, circular progress, and relay execution in development
+- Immediate automated restart for mandatory updates as soon as background download finishes
 
 ## Fixed
 

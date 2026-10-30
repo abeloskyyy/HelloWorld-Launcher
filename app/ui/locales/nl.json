@@ -628,7 +628,10 @@
     "ui_scale": "UI-schaal",
     "ui_scale_tooltip": "Pas de algehele schaal en het zoomniveau van de launcher-interface aan (50% - 150%).",
     "reopen_on_game_close": "Maximaliseren en openen bij sluiten van spel",
-    "reopen_on_game_close_tooltip": "Herstelt, maximaliseert en focust de launcher automatisch wanneer Minecraft wordt gesloten."
+    "reopen_on_game_close_tooltip": "Herstelt, maximaliseert en focust de launcher automatisch wanneer Minecraft wordt gesloten.",
+    "test_update_title": "Achtergrond-update testen",
+    "test_update_desc": "Simuleer update-detectie, downloadvoortgang-badge en setup-overdracht.",
+    "test_update_btn": "Update-stroom testen"
   },
   "skins": {
     "create_pack": "Maak een nieuw skinpakket",
@@ -1022,7 +1025,13 @@
     "new_version_badge": "NIEUWE UPDATE",
     "mandatory_desc": "Je huidige versie ({current}) wordt niet meer ondersteund. Werk bij naar {latest} om te blijven spelen.",
     "launching_setup": "Installatieprogramma starten...",
-    "downloading_installer": "Installatieprogramma downloaden..."
+    "downloading_installer": "Installatieprogramma downloaden...",
+    "badge_downloading": "Update downloaden...",
+    "badge_ready": "Update gereed!",
+    "badge_click_restart": "Klik om te herstarten en toe te passen",
+    "badge_installing": "Installeren...",
+    "badge_restarting": "Launcher herstarten...",
+    "mandatory": "Verplicht"
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Nieuwe Minecraft-versie",

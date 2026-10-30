@@ -628,7 +628,10 @@
     "ui_scale": "界面缩放",
     "ui_scale_tooltip": "调整启动器界面的整体缩放比例（50% - 150%）。",
     "reopen_on_game_close": "游戏关闭时最大化并显示启动器",
-    "reopen_on_game_close_tooltip": "当检测到 Minecraft 关闭时，自动还原、最大化并对焦启动器窗口。"
+    "reopen_on_game_close_tooltip": "当检测到 Minecraft 关闭时，自动还原、最大化并对焦启动器窗口。",
+    "test_update_title": "测试后台更新",
+    "test_update_desc": "模拟更新检测、下载进度角标以及传递给安装程序。",
+    "test_update_btn": "测试更新流程"
   },
   "skins": {
     "create_pack": "创建新皮肤包",
@@ -1022,7 +1025,13 @@
     "new_version_badge": "新版本可用",
     "mandatory_desc": "您当前的客户端版本 ({current}) 已不再受支持。请更新至 {latest} 以继续使用。",
     "launching_setup": "正在启动安装程序...",
-    "downloading_installer": "正在下载安装程序..."
+    "downloading_installer": "正在下载安装程序...",
+    "badge_downloading": "正在下载更新...",
+    "badge_ready": "更新准备就绪！",
+    "badge_click_restart": "点击重启并应用",
+    "badge_installing": "正在安装...",
+    "badge_restarting": "正在重启启动器...",
+    "mandatory": "强制更新"
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Minecraft新版本",

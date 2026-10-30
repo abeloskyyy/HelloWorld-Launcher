@@ -628,7 +628,10 @@
     "ui_scale": "Arayüz Ölçeği",
     "ui_scale_tooltip": "Başlatıcı arayüzünün genel ölçeğini ve yakınlaştırma düzeyini ayarlayın (%50 - %150).",
     "reopen_on_game_close": "Oyun kapandığında büyüt ve aç",
-    "reopen_on_game_close_tooltip": "Minecraft kapandığında başlatıcıyı otomatik olarak geri yükler, büyütür ve odaklar."
+    "reopen_on_game_close_tooltip": "Minecraft kapandığında başlatıcıyı otomatik olarak geri yükler, büyütür ve odaklar.",
+    "test_update_title": "Arka Plan Güncellemesini Test Et",
+    "test_update_desc": "Güncelleme algılamasını, indirme ilerleme rozetini ve kurulum aktarımını simüle edin.",
+    "test_update_btn": "Güncelleme Akışını Test Et"
   },
   "skins": {
     "create_pack": "Yeni Görünüm Paketi Oluştur",
@@ -1022,7 +1025,13 @@
     "new_version_badge": "YENİ GÜNCELLEME",
     "mandatory_desc": "Mevcut sürümünüz ({current}) artık desteklenmiyor. Oynamaya devam etmek için lütfen {latest} sürümüne güncelleyin.",
     "launching_setup": "Yükleyici başlatılıyor...",
-    "downloading_installer": "Yükleyici indiriliyor..."
+    "downloading_installer": "Yükleyici indiriliyor...",
+    "badge_downloading": "Güncelleme indiriliyor...",
+    "badge_ready": "Güncelleme Hazır!",
+    "badge_click_restart": "Yeniden başlatıp uygulamak için tıklayın",
+    "badge_installing": "Yükleniyor...",
+    "badge_restarting": "Başlatıcı yeniden başlatılıyor...",
+    "mandatory": "Zorunlu"
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Yeni Minecraft Sürümü",

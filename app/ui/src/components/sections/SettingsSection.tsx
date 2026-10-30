@@ -1,6 +1,33 @@
 import React from 'react';
 
 export const SettingsSection: React.FC = () => {
+  const [isDevMode, setIsDevMode] = React.useState(false);
+
+  React.useEffect(() => {
+    const checkDevMode = () => {
+      const win = window as any;
+      const cb = document.getElementById('devModeCheckbox') as HTMLInputElement | null;
+      setIsDevMode(Boolean(cb?.checked || win.isDevMode));
+    };
+
+    checkDevMode();
+    const interval = setInterval(checkDevMode, 1000);
+    const cb = document.getElementById('devModeCheckbox');
+    if (cb) cb.addEventListener('change', checkDevMode);
+
+    return () => {
+      clearInterval(interval);
+      if (cb) cb.removeEventListener('change', checkDevMode);
+    };
+  }, []);
+
+  const handleTestUpdate = () => {
+    const win = window as any;
+    if (typeof win.triggerTestUpdateFlow === 'function') {
+      win.triggerTestUpdateFlow();
+    }
+  };
+
   const handleSelectLanguage = (lang: string) => {
     const win = window as any;
     if (typeof win.selectLanguage === 'function') {
@@ -329,6 +356,55 @@ export const SettingsSection: React.FC = () => {
             </span>
           </div>
         </div>
+
+        {/* Developer Mode Testing Tools */}
+        {isDevMode && (
+          <div
+            id="devUpdateTestContainer"
+            className="dev-mode-test-container"
+            style={{
+              marginTop: '10px',
+              marginBottom: '15px',
+              padding: '14px 18px',
+              background: 'rgba(59, 130, 246, 0.08)',
+              border: '1px dashed rgba(59, 130, 246, 0.4)',
+              borderRadius: '8px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#93c5fd', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <i className="fas fa-flask"></i>
+                  <span data-i18n="settings.test_update_title">Test Background Update</span>
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '3px' }} data-i18n="settings.test_update_desc">
+                  Simulate background update detection, download progress badge, and setup relay.
+                </div>
+              </div>
+              <button
+                type="button"
+                id="testUpdateFlowBtn"
+                className="btn-secondary"
+                onClick={handleTestUpdate}
+                style={{
+                  background: 'rgba(59, 130, 246, 0.2)',
+                  borderColor: 'rgba(59, 130, 246, 0.4)',
+                  color: '#60a5fa',
+                  padding: '7px 15px',
+                  fontSize: '12px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <i className="fas fa-play"></i>
+                <span data-i18n="settings.test_update_btn">Test Update Flow</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         <div
           className="input-group"

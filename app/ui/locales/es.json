@@ -641,7 +641,10 @@
     "saved_button": "¡Guardado!",
     "fill_fields": "Por favor, rellena todos los campos.",
     "ui_scale": "Escala de la Interfaz",
-    "ui_scale_tooltip": "Ajusta la escala y nivel de zoom general de la interfaz del launcher (50% - 150%)."
+    "ui_scale_tooltip": "Ajusta la escala y nivel de zoom general de la interfaz del launcher (50% - 150%).",
+    "test_update_title": "Probar actualización en segundo plano",
+    "test_update_desc": "Simula la detección de actualización, el badge con progreso de descarga y el relevo al setup.",
+    "test_update_btn": "Probar actualización"
   },
   "skins": {
     "create_pack": "Crear Nuevo Pack de Skins",
@@ -1035,7 +1038,13 @@
     "new_version_badge": "NUEVA VERSIÓN",
     "mandatory_desc": "Tu versión actual ({current}) ya no es compatible. Por favor, actualiza a {latest} para continuar jugando.",
     "launching_setup": "Iniciando instalador...",
-    "downloading_installer": "Descargando instalador..."
+    "downloading_installer": "Descargando instalador...",
+    "badge_downloading": "Descargando actualización...",
+    "badge_ready": "¡Actualización lista!",
+    "badge_click_restart": "Clic para reiniciar y aplicar",
+    "badge_installing": "Instalando...",
+    "badge_restarting": "Reiniciando launcher...",
+    "mandatory": "Obligatoria"
   },
   "notif_new_message": "Nuevo mensaje",
   "notif_new_mc_version": "Nueva versión de Minecraft",

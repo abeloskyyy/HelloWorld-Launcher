@@ -90,7 +90,8 @@ graph TD
      - `helloworld-launcher-win.zip` (nueva versión de la app)
    * 📦 **`linux-artifacts`**:
      - `helloworld-launcher-linux-amd64.deb` y alias `helloworld-launcher-linux-x64.deb`
-     - `helloworld-launcher-linux-arm64.deb` (si se compiló)
+     - `helloworld-launcher-linux-amd64.AppImage` y alias `helloworld-launcher-linux-x86_64.AppImage`
+     - `helloworld-launcher-linux-arm64.deb` / `arm64.AppImage` (si se compiló)
    * 📦 **`macos-artifacts`**:
      - `helloworld-launcher-mac-x64.dmg` y `helloworld-launcher-mac-arm64.dmg`
      - `helloworld-launcher-mac-x64.zip` y `helloworld-launcher-mac-arm64.zip`

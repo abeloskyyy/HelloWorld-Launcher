@@ -14,6 +14,8 @@ const State = {
   currentOp: null,    // 'install' | 'update' | 'repair' | 'uninstall'
   lastInstallPath: '',
   progressUnsubscribe: null,
+  updateFile: null,
+  isSilent: false,
 }
 
 /* ── Page router ───────────────────────────────────────────────────────────── */
@@ -213,6 +215,13 @@ function showComplete(success, errorMsg, result) {
     } else {
       openFolderBtn.style.display = 'none'
     }
+
+    // Si fue una actualización automatizada o pre-descargada, cerrar automáticamente la ventana del setup
+    if (State.currentOp === 'update' && (State.updateFile || State.isSilent)) {
+      setTimeout(() => {
+        try { window.setup.close() } catch (_) {}
+      }, 1200)
+    }
   } else {
     title.textContent = 'Something went wrong'
     msg.textContent = errorMsg || 'An unexpected error occurred. Please try again.'
@@ -331,8 +340,8 @@ const App = {
     }
   },
 
-  async startUpdate() {
-    const installPath = document.getElementById('update-path-input').value.trim()
+  async startUpdate(customFile) {
+    const installPath = (document.getElementById('update-path-input')?.value || '').trim() || State.installPath
     if (!installPath) return
 
     State.currentOp = 'update'
@@ -344,7 +353,9 @@ const App = {
     try {
       await window.setup.runOperation('update', {
         installPath,
-        launchAfter: document.getElementById('opt-launch-update').checked,
+        updateFile: customFile || State.updateFile,
+        launchAfter: document.getElementById('opt-launch-update')?.checked ?? true,
+        autoClose: Boolean(customFile || State.updateFile || State.isSilent),
       })
     } catch (err) {
       updateProgress({ done: true, error: err.message, percent: 0 })
@@ -443,7 +454,7 @@ document.addEventListener('click', () => {
 
     // Navigate based on CLI mode
     if (info.mode === 'install')   { App.goInstall();   if (info.isElevated) setTimeout(() => App.startInstall(), 100);   return }
-    if (info.mode === 'update')    { App.goUpdate();    if (info.isElevated || info.isSilent) setTimeout(() => App.startUpdate(), 200); return }
+    if (info.mode === 'update')    { App.goUpdate();    if (info.isElevated || info.isSilent || info.updateFile) setTimeout(() => App.startUpdate(info.updateFile), 150); return }
     if (info.mode === 'repair')    { App.goReinstall(); if (info.isElevated) setTimeout(() => App.startReinstall(), 100); return }
     if (info.mode === 'uninstall') { App.goUninstall(); if (info.isElevated) setTimeout(() => App.startUninstall(), 100); return }
 

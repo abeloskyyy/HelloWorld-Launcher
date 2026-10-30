@@ -628,7 +628,10 @@
     "ui_scale": "Scala dell'interfaccia",
     "ui_scale_tooltip": "Regola la scala generale e il livello di zoom dell'interfaccia del launcher (50% - 150%).",
     "reopen_on_game_close": "Massimizza e apri alla chiusura del gioco",
-    "reopen_on_game_close_tooltip": "Ripristina, massimizza e mette a fuoco automaticamente il launcher quando Minecraft viene chiuso."
+    "reopen_on_game_close_tooltip": "Ripristina, massimizza e mette a fuoco automaticamente il launcher quando Minecraft viene chiuso.",
+    "test_update_title": "Testa aggiornamento in background",
+    "test_update_desc": "Simula il rilevamento dell'aggiornamento, il badge di avanzamento download e il passaggio al setup.",
+    "test_update_btn": "Testa aggiornamento"
   },
   "skins": {
     "create_pack": "Crea un nuovo pacchetto skin",
@@ -1022,7 +1025,13 @@
     "new_version_badge": "NUOVO AGGIORNAMENTO",
     "mandatory_desc": "La tua versione attuale ({current}) non è più supportata. Aggiorna a {latest} per continuare a giocare.",
     "launching_setup": "Avvio del programma di installazione...",
-    "downloading_installer": "Download del programma di installazione..."
+    "downloading_installer": "Download del programma di installazione...",
+    "badge_downloading": "Download aggiornamento...",
+    "badge_ready": "Aggiornamento pronto!",
+    "badge_click_restart": "Clicca per riavviare e applicare",
+    "badge_installing": "Installazione...",
+    "badge_restarting": "Riavvio del launcher...",
+    "mandatory": "Obbligatorio"
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Nuova versione di Minecraft",

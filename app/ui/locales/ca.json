@@ -628,7 +628,10 @@
     "ui_scale": "Escala de la Interfície",
     "ui_scale_tooltip": "Ajusta l'escala i el nivell de zoom general de la interfície del llançador (50% - 150%).",
     "reopen_on_game_close": "Maximitzar i obrir en tancar el joc",
-    "reopen_on_game_close_tooltip": "Restaura, maximitza i enfoca el llançador automàticament quan es detecta que Minecraft s'ha tancat."
+    "reopen_on_game_close_tooltip": "Restaura, maximitza i enfoca el llançador automàticament quan es detecta que Minecraft s'ha tancat.",
+    "test_update_title": "Provar actualització en segon pla",
+    "test_update_desc": "Simula la detecció d'actualització, el badge amb progrés de descàrrega i el relleu al setup.",
+    "test_update_btn": "Provar actualització"
   },
   "skins": {
     "create_pack": "Crea un nou paquet d'aspectes",
@@ -1022,7 +1025,13 @@
     "new_version_badge": "NOVA VERSIÓ",
     "mandatory_desc": "La teva versió actual ({current}) ja no és compatible. Si us plau, actualitza a {latest} per continuar jugant.",
     "launching_setup": "Iniciant instal·lador...",
-    "downloading_installer": "Descarregant instal·lador..."
+    "downloading_installer": "Descarregant instal·lador...",
+    "badge_downloading": "Descarregant actualització...",
+    "badge_ready": "Actualització a punt!",
+    "badge_click_restart": "Fes clic per reiniciar i aplicar",
+    "badge_installing": "Instal·lant...",
+    "badge_restarting": "Reiniciant el llançador...",
+    "mandatory": "Obligatòria"
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Nova versió de Minecraft",

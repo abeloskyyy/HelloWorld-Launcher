@@ -5521,14 +5521,16 @@ ipcMain.handle('quit-and-install', () => {
 })
 
 // --- Direct Setup Updater Handlers ---
-async function findLocalInstallerPath() {
+async function findLocalInstallerPath(expectedHash = null) {
   try {
     const execDir = path.dirname(process.execPath);
     let candidates = [];
     if (process.platform === 'win32') {
       candidates = [
-        path.join(execDir, 'HelloWorld-Launcher-Setup.exe'),
         path.join(execDir, 'setup.exe'),
+        path.join(execDir, 'HelloWorld-Launcher-Setup.exe'),
+        path.join(app.getPath('userData'), 'updates', 'setup.exe'),
+        path.join(app.getPath('userData'), 'updates', 'HelloWorld-Launcher-Setup.exe'),
         path.join(execDir, 'Setup.exe'),
         path.join(execDir, 'helloworld-launcher-setup.exe'),
         path.join(__dirname, '..', 'release', 'win', 'HelloWorld-Launcher-Setup.exe'),
@@ -5540,6 +5542,7 @@ async function findLocalInstallerPath() {
       candidates = [
         path.join(execDir, 'HelloWorld-Launcher.dmg'),
         path.join(execDir, '..', '..', '..', 'HelloWorld-Launcher.dmg'),
+        path.join(app.getPath('userData'), 'updates', 'HelloWorld-Launcher.dmg'),
         path.join(__dirname, '..', 'dist', 'HelloWorld-Launcher.dmg'),
         path.join(__dirname, 'dist', 'HelloWorld-Launcher.dmg')
       ];
@@ -5548,6 +5551,8 @@ async function findLocalInstallerPath() {
         path.join(execDir, 'HelloWorld-Launcher.AppImage'),
         path.join(execDir, 'helloworld-launcher.AppImage'),
         path.join(execDir, 'helloworld-launcher.deb'),
+        path.join(app.getPath('userData'), 'updates', 'helloworld-launcher-linux-amd64.AppImage'),
+        path.join(app.getPath('userData'), 'updates', 'helloworld-launcher-linux-amd64.deb'),
         path.join(__dirname, '..', 'dist', 'helloworld-launcher.deb'),
         path.join(__dirname, 'dist', 'helloworld-launcher.deb')
       ];
@@ -5557,6 +5562,21 @@ async function findLocalInstallerPath() {
       if (fs.existsSync(c)) {
         const stat = fs.statSync(c);
         if (stat.size > 1024 * 1024) {
+          // Si se especificó un hash esperado, comparar para evitar usar un setup desactualizado
+          if (expectedHash && typeof expectedHash === 'string') {
+            try {
+              const fileBuf = fs.readFileSync(c);
+              const sha512 = crypto.createHash('sha512').update(fileBuf).digest('base64');
+              const sha256 = crypto.createHash('sha256').update(fileBuf).digest('hex');
+              const cleanExpected = expectedHash.trim();
+              if (sha512 !== cleanExpected && sha256.toLowerCase() !== cleanExpected.toLowerCase()) {
+                console.log(`[findLocalInstallerPath] Local candidate ${c} hash differs from remote expected hash. Skipping to fetch newest setup.`);
+                continue;
+              }
+            } catch (hErr) {
+              console.warn('[findLocalInstallerPath] Error hashing local installer:', hErr.message);
+            }
+          }
           return c;
         }
       }
@@ -5567,9 +5587,27 @@ async function findLocalInstallerPath() {
   return null;
 }
 
-ipcMain.handle('check-local-installer', async () => {
-  const p = await findLocalInstallerPath();
+ipcMain.handle('check-local-installer', async (event, expectedHash) => {
+  const p = await findLocalInstallerPath(expectedHash);
   return { exists: Boolean(p), path: p };
+});
+
+ipcMain.handle('prepare-test-update-file', async () => {
+  try {
+    const updatesDir = path.join(app.getPath('userData'), 'updates');
+    if (!fs.existsSync(updatesDir)) {
+      fs.mkdirSync(updatesDir, { recursive: true });
+    }
+    const testZipPath = path.join(updatesDir, 'helloworld-launcher-test-update.zip');
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip();
+    zip.addFile('update-test.txt', Buffer.from(`HelloWorld-Launcher Test Update generated at ${new Date().toISOString()}`));
+    zip.writeZip(testZipPath);
+    return { success: true, filePath: testZipPath };
+  } catch (err) {
+    console.error('[prepare-test-update-file] Error:', err);
+    return { success: false, error: err.message };
+  }
 });
 
 ipcMain.handle('get-platform-info', () => {
@@ -5588,23 +5626,41 @@ ipcMain.handle('get-system-memory', () => {
   }
 });
 
-ipcMain.handle('launch-installer-and-quit', async (event, installerPath) => {
+ipcMain.handle('launch-installer-and-quit', async (event, optionsOrPath) => {
   try {
-    let targetExe = installerPath;
-    if (!targetExe || !fs.existsSync(targetExe)) {
-      targetExe = await findLocalInstallerPath();
-    }
-    if (!targetExe || !fs.existsSync(targetExe)) {
-      throw new Error('Installer executable not found');
+    let targetExe = null;
+    let updateFile = null;
+    let customInstallPath = null;
+    let expectedSetupHash = null;
+
+    if (typeof optionsOrPath === 'object' && optionsOrPath !== null) {
+      targetExe = optionsOrPath.installerPath || null;
+      updateFile = optionsOrPath.updateFile || null;
+      customInstallPath = optionsOrPath.installPath || null;
+      expectedSetupHash = optionsOrPath.expectedSetupHash || null;
+    } else if (typeof optionsOrPath === 'string') {
+      const lower = optionsOrPath.toLowerCase();
+      if (lower.endsWith('.zip')) {
+        updateFile = optionsOrPath;
+      } else {
+        targetExe = optionsOrPath;
+      }
     }
 
-    const targetLower = targetExe.toLowerCase();
+    if (!targetExe && updateFile && !updateFile.toLowerCase().endsWith('.zip')) {
+      targetExe = updateFile;
+    }
+
+    if (!targetExe && !updateFile) {
+      targetExe = await findLocalInstallerPath(expectedSetupHash);
+    }
+
     const currentPid = process.pid;
     const currentExec = process.execPath;
-    const currentDir = path.dirname(currentExec);
+    const currentDir = customInstallPath || path.dirname(currentExec);
 
     // ── 1. Linux: AppImage ──────────────────────────────────────────────────
-    if (targetLower.endsWith('.appimage')) {
+    if (targetExe && targetExe.toLowerCase().endsWith('.appimage')) {
       console.log('[launch-installer-and-quit] Launching Linux AppImage update:', targetExe);
       try { fs.chmodSync(targetExe, 0o755); } catch (_) {}
 
@@ -5613,7 +5669,6 @@ ipcMain.handle('launch-installer-and-quit', async (event, installerPath) => {
 
       let scriptContent = '';
       if (currentAppImage && fs.existsSync(currentAppImage)) {
-        // Ejecutando desde AppImage existente: reemplazarlo limpiamente y relanzar
         scriptContent = `#!/usr/bin/env bash
 while kill -0 ${currentPid} 2>/dev/null; do
   sleep 0.2
@@ -5625,7 +5680,6 @@ nohup "${currentAppImage}" >/dev/null 2>&1 &
 rm -f "$0"
 `;
       } else {
-        // Lanzar el nuevo AppImage directamente
         scriptContent = `#!/usr/bin/env bash
 while kill -0 ${currentPid} 2>/dev/null; do
   sleep 0.2
@@ -5652,7 +5706,7 @@ rm -f "$0"
     }
 
     // ── 2. Linux: paquete Debian (.deb) ─────────────────────────────────────
-    if (targetLower.endsWith('.deb')) {
+    if (targetExe && targetExe.toLowerCase().endsWith('.deb')) {
       console.log('[launch-installer-and-quit] Preparing Linux deb relay update script for:', targetExe);
 
       const isUserLevel = currentDir.startsWith(os.homedir()) && (() => {
@@ -5747,7 +5801,7 @@ rm -f "$0"
     }
 
     // ── 3. macOS: imagen de disco (.dmg) o comprimido (.zip) ────────────────
-    if (targetLower.endsWith('.dmg') || targetLower.endsWith('.zip')) {
+    if (targetExe && (targetExe.toLowerCase().endsWith('.dmg') || targetExe.toLowerCase().endsWith('.zip'))) {
       console.log('[launch-installer-and-quit] Preparing macOS relay update script for:', targetExe);
 
       let appBundlePath = '/Applications/HelloWorld-Launcher.app';
@@ -5798,7 +5852,6 @@ if [ -n "$NEW_APP" ] && [ -d "$NEW_APP" ]; then
     echo "Elevating permissions via macOS osascript..." >> "$LOG"
     osascript -e "do shell script \\"rm -rf '$TARGET_APP' && cp -R '$NEW_APP' '$TARGET_APP'\\" with administrator privileges" >> "$LOG" 2>&1
   fi
-  # Quitar cuarentena de Gatekeeper para que la app se abra sin trabas
   xattr -cr "$TARGET_APP" 2>/dev/null || true
   open -n "$TARGET_APP"
   echo "Relaunched $TARGET_APP successfully." >> "$LOG"
@@ -5825,23 +5878,71 @@ rm -rf "$TMP_DIR" "$0"
       return { success: true };
     }
 
-    // ── 4. Windows (.exe) ───────────────────────────────────────────────────
-    const execDir = path.dirname(process.execPath);
+    // ── 4. Windows (.exe / Setup o .zip pre-descargado) ──────────────────────
+    const execDir = currentDir;
     const { spawn } = require('child_process');
-    console.log('[launch-installer-and-quit] Executing Windows Setup:', targetExe, 'with installPath:', execDir);
 
-    const child = spawn(targetExe, ['--update', `--install-path=${execDir}`], {
-      detached: true,
-      stdio: 'ignore'
-    });
-    child.unref();
+    if (!targetExe || !fs.existsSync(targetExe)) {
+      targetExe = await findLocalInstallerPath(expectedSetupHash);
+    }
 
-    setTimeout(() => {
-      isQuitting = true;
-      app.quit();
-    }, 500);
+    if (targetExe && fs.existsSync(targetExe)) {
+      console.log('[launch-installer-and-quit] Executing Windows Setup:', targetExe, 'with installPath:', execDir, 'updateFile:', updateFile);
 
-    return { success: true };
+      const args = [
+        'update',
+        `--install-path=${execDir}`,
+        `--install-path-b64=${Buffer.from(execDir).toString('base64')}`
+      ];
+      if (updateFile && fs.existsSync(updateFile)) {
+        args.push(`--update-file=${updateFile}`);
+        args.push(`--update-file-b64=${Buffer.from(updateFile).toString('base64')}`);
+      }
+      args.push('--silent');
+
+      const child = spawn(targetExe, args, {
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+
+      setTimeout(() => {
+        isQuitting = true;
+        app.quit();
+      }, 500);
+
+      return { success: true };
+    }
+
+    // Fallback: Si no hay Setup ejecutable pero tenemos el .zip descargado, extraer via script PowerShell
+    if (updateFile && fs.existsSync(updateFile) && updateFile.toLowerCase().endsWith('.zip')) {
+      console.log('[launch-installer-and-quit] Fallback: updating directly from zip via PowerShell...');
+      const scriptPath = path.join(app.getPath('temp'), `hwl-update-win-${Date.now()}.ps1`);
+      const scriptContent = `
+$pidToWait = ${currentPid}
+while (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) {
+  Start-Sleep -Milliseconds 200
+}
+Expand-Archive -Path "${updateFile}" -DestinationPath "${execDir}" -Force
+Start-Process -FilePath "${path.join(execDir, 'HelloWorld-Launcher.exe')}"
+Remove-Item -Path $PSCommandPath -Force
+`;
+      fs.writeFileSync(scriptPath, scriptContent);
+      const child = spawn('powershell.exe', ['-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', scriptPath], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+
+      setTimeout(() => {
+        isQuitting = true;
+        app.quit();
+      }, 500);
+
+      return { success: true };
+    }
+
+    throw new Error('No setup executable or update file available');
   } catch (err) {
     console.error('[launch-installer-and-quit] Error:', err);
     return { success: false, error: err.message };
@@ -5864,37 +5965,28 @@ function cleanOrphanedTmpFiles(dir) {
 ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
   try {
     if (!downloadUrl) throw new Error('No download URL provided');
-    const execDir = path.dirname(process.execPath);
-    const tempDir = app.getPath('temp');
-
-    let targetDir = execDir;
-    try {
-      fs.accessSync(execDir, fs.constants.W_OK);
-    } catch (_) {
-      targetDir = tempDir;
+    // Carpeta protegida para descargas de actualizaciones dentro de userData (no se borra por limpiadores de temp del SO)
+    const updatesDir = path.join(app.getPath('userData'), 'updates');
+    if (!fs.existsSync(updatesDir)) {
+      fs.mkdirSync(updatesDir, { recursive: true });
     }
 
-    // Limpiar temporales antiguos en ambos directorios para no dejar basura previa
-    cleanOrphanedTmpFiles(execDir);
-    cleanOrphanedTmpFiles(tempDir);
+    cleanOrphanedTmpFiles(updatesDir);
 
-    // Para Windows, guardar siempre el instalador como setup.exe directamente
-    let filename = process.platform === 'win32' ? 'setup.exe' : 'helloworld-launcher-update';
+    let filename = process.platform === 'win32' ? 'helloworld-launcher-win.zip' : 'helloworld-launcher-update';
     try {
       const urlObj = new URL(downloadUrl);
       const parsedBase = path.basename(urlObj.pathname);
-      if (parsedBase && (parsedBase.includes('.deb') || parsedBase.includes('.dmg') || parsedBase.includes('.AppImage') || parsedBase.includes('.zip'))) {
-        if (process.platform !== 'win32') {
-          filename = parsedBase;
-        }
+      if (parsedBase && (parsedBase.includes('.deb') || parsedBase.includes('.dmg') || parsedBase.includes('.AppImage') || parsedBase.includes('.zip') || parsedBase.includes('.exe'))) {
+        filename = parsedBase;
       } else if (process.platform === 'darwin') {
         filename = 'HelloWorld-Launcher.dmg';
       } else if (process.platform === 'linux') {
-        filename = 'helloworld-launcher-linux.deb';
+        filename = 'helloworld-launcher-linux-amd64.AppImage';
       }
     } catch (_) {}
 
-    const destPath = path.join(targetDir, filename);
+    const destPath = path.join(updatesDir, filename);
 
     // Soporte para enlaces de Google Drive automáticos
     let targetUrl = downloadUrl;

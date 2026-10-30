@@ -2488,16 +2488,279 @@ async function checkAppUpdates(changelog) {
         releaseInfo = changelog.versions.find(v => v.version === latestVersion) || changelog.versions[0];
     }
 
-    await showUpdateModal({
+    const updateData = {
         currentVersion,
         latestVersion,
         minVersion,
         isMandatory,
         forceMessage: changelog.forceUpdateMessage,
         releaseInfo
-    });
+    };
+    _currentUpdateState = updateData;
+
+    // Disparar automáticamente la descarga en segundo plano y el badge inferior interactivo
+    startBackgroundUpdate(updateData);
 }
 window.checkAppUpdates = checkAppUpdates;
+
+let _currentUpdateDownloadedPath = null;
+let _isBackgroundDownloading = false;
+
+async function resolvePlatformDownloadUrl(releaseInfo, latestVersion) {
+    const info = releaseInfo || {};
+    const downloads = info.downloads || {};
+    const tag = info.tag || ('v' + latestVersion);
+
+    let platform = 'win32';
+    let arch = 'x64';
+    try {
+        const api = window.hwlAPI || window.api;
+        if (api && typeof api.getPlatformInfo === 'function') {
+            const pInfo = await api.getPlatformInfo();
+            if (pInfo) {
+                platform = pInfo.platform || 'win32';
+                arch = pInfo.arch || 'x64';
+            }
+        }
+    } catch (_) {}
+
+    let downloadUrl = null;
+    if (platform === 'win32') {
+        if (downloads.windows && typeof downloads.windows === 'object') {
+            downloadUrl = downloads.windows.zip || downloads.windows.setup;
+        }
+        if (!downloadUrl) {
+            downloadUrl = downloads.windows_zip || downloads.zip || downloads.windows_setup || downloads.setup;
+        }
+        if (!downloadUrl) {
+            downloadUrl = `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/helloworld-launcher-win.zip`;
+        }
+    } else if (platform === 'darwin') {
+        const macObj = downloads.macos || downloads.mac;
+        if (macObj && typeof macObj === 'object') {
+            const archObj = (arch === 'arm64') ? (macObj.arm64 || macObj.arm) : (macObj.amd64 || macObj.x64 || macObj.intel);
+            if (archObj && typeof archObj === 'object') {
+                downloadUrl = archObj.dmg || archObj.zip;
+            } else if (typeof archObj === 'string') {
+                downloadUrl = archObj;
+            }
+            if (!downloadUrl) downloadUrl = macObj.dmg || macObj.zip;
+        }
+        if (!downloadUrl) downloadUrl = downloads.mac_dmg || downloads.mac_zip;
+        if (!downloadUrl) {
+            const macArch = (arch === 'arm64') ? 'arm64' : 'amd64';
+            downloadUrl = `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/helloworld-launcher-mac-${macArch}.dmg`;
+        }
+    } else {
+        const linObj = downloads.linux;
+        if (linObj && typeof linObj === 'object') {
+            const archObj = (arch === 'arm64') ? (linObj.arm64 || linObj.arm) : (linObj.amd64 || linObj.x64);
+            if (archObj && typeof archObj === 'object') {
+                downloadUrl = archObj.appimage || archObj.deb || archObj.zip;
+            } else if (typeof archObj === 'string') {
+                downloadUrl = archObj;
+            }
+            if (!downloadUrl) downloadUrl = linObj.appimage || linObj.deb;
+        }
+        if (!downloadUrl) {
+            if (arch === 'arm64') {
+                downloadUrl = downloads.linux_arm64_appimage || downloads.linux_arm64_deb || downloads.linux_appimage || downloads.linux_deb;
+            } else {
+                downloadUrl = downloads.linux_amd64_appimage || downloads.linux_amd64_deb || downloads.linux_appimage || downloads.linux_deb;
+            }
+        }
+        if (!downloadUrl) {
+            const linArch = (arch === 'arm64') ? 'arm64' : 'amd64';
+            downloadUrl = `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/helloworld-launcher-linux-${linArch}.AppImage`;
+        }
+    }
+    return downloadUrl;
+}
+window.resolvePlatformDownloadUrl = resolvePlatformDownloadUrl;
+
+async function startBackgroundUpdate(updateData) {
+    if (_isBackgroundDownloading || _currentUpdateDownloadedPath) return;
+    _isBackgroundDownloading = true;
+    _currentUpdateState = updateData;
+
+    const { latestVersion, isMandatory, releaseInfo } = updateData;
+
+    // Disparar evento para que el badge inferior aparezca con 0% y animación de descarga
+    window.dispatchEvent(new CustomEvent('hwl:update-available', {
+        detail: {
+            version: latestVersion,
+            isMandatory: Boolean(isMandatory)
+        }
+    }));
+
+    try {
+        const downloadUrl = await resolvePlatformDownloadUrl(releaseInfo, latestVersion);
+        console.log('[BackgroundUpdater] Starting automatic background download from:', downloadUrl);
+
+        const api = window.hwlAPI || window.api;
+        if (!api) throw new Error('API not available');
+
+        const onProgress = (data) => {
+            window.dispatchEvent(new CustomEvent('hwl:update-progress', {
+                detail: {
+                    version: latestVersion,
+                    percent: data.percent,
+                    transferred: data.transferred,
+                    total: data.total,
+                    speed: data.speed
+                }
+            }));
+        };
+
+        if (typeof api.onInstallerDownloadProgress === 'function') {
+            api.onInstallerDownloadProgress(onProgress);
+        } else if (typeof api.on_installer_download_progress === 'function') {
+            api.on_installer_download_progress(onProgress);
+        }
+
+        let dlResult = null;
+        if (typeof api.downloadInstallerFile === 'function') {
+            dlResult = await api.downloadInstallerFile(downloadUrl);
+        } else if (typeof api.download_installer_file === 'function') {
+            dlResult = await api.download_installer_file(downloadUrl);
+        }
+
+        if (dlResult && dlResult.success && dlResult.filePath) {
+            _currentUpdateDownloadedPath = dlResult.filePath;
+            _isBackgroundDownloading = false;
+            console.log('[BackgroundUpdater] Package downloaded to protected folder:', dlResult.filePath);
+
+            window.dispatchEvent(new CustomEvent('hwl:update-ready', {
+                detail: {
+                    version: latestVersion,
+                    isMandatory: Boolean(isMandatory),
+                    filePath: dlResult.filePath
+                }
+            }));
+
+            // Si la actualización es obligatoria, al terminar la descarga se cierra el launcher y se lanza el setup automáticamente
+            if (isMandatory) {
+                console.log('[BackgroundUpdater] Mandatory update download finished. Executing setup immediately...');
+                setTimeout(() => {
+                    hwlApplyDownloadedUpdate();
+                }, 800);
+            }
+        } else {
+            throw new Error((dlResult && dlResult.error) || 'Download failed');
+        }
+    } catch (err) {
+        _isBackgroundDownloading = false;
+        console.error('[BackgroundUpdater] Download error:', err);
+    }
+}
+window.startBackgroundUpdate = startBackgroundUpdate;
+
+async function hwlApplyDownloadedUpdate() {
+    if (!_currentUpdateDownloadedPath) {
+        console.warn('[hwlApplyDownloadedUpdate] No update file ready.');
+        return;
+    }
+    console.log('[hwlApplyDownloadedUpdate] Applying update from:', _currentUpdateDownloadedPath);
+    const api = window.hwlAPI || window.api;
+    const releaseInfo = (_currentUpdateState && _currentUpdateState.releaseInfo) || {};
+    const downloads = releaseInfo.downloads || {};
+    const winDownloads = downloads.windows || {};
+    const expectedSetupHash = winDownloads.setupHash || releaseInfo.setupHash || releaseInfo.setup_sha512 || null;
+
+    const payload = {
+        updateFile: _currentUpdateDownloadedPath,
+        expectedSetupHash: expectedSetupHash
+    };
+
+    if (api && typeof api.launchInstallerAndQuit === 'function') {
+        await api.launchInstallerAndQuit(payload);
+    } else if (api && typeof api.launch_installer_and_quit === 'function') {
+        await api.launch_installer_and_quit(payload);
+    }
+}
+window.hwlApplyDownloadedUpdate = hwlApplyDownloadedUpdate;
+
+function openUpdateModalIfAvailable() {
+    if (_currentUpdateState) {
+        showUpdateModal(_currentUpdateState);
+    }
+}
+window.openUpdateModalIfAvailable = openUpdateModalIfAvailable;
+
+async function triggerTestUpdateFlow() {
+    console.log('[DevTest] Triggering test update flow...');
+    _isBackgroundDownloading = false;
+    _currentUpdateDownloadedPath = null;
+
+    let targetVersion = '2.3.0';
+    let targetTag = 'v2.3.0';
+
+    const changelog = (window.HW_REMOTE_CONFIG && window.HW_REMOTE_CONFIG.changelog) || {};
+    let releaseInfo = null;
+    if (Array.isArray(changelog.versions) && changelog.versions.length > 0) {
+        releaseInfo = changelog.versions[0];
+        targetVersion = releaseInfo.version || targetVersion;
+        targetTag = releaseInfo.tag || ('v' + targetVersion);
+    }
+
+    const api = window.hwlAPI || window.api;
+    let prepRes = null;
+    if (api && typeof api.prepareTestUpdateFile === 'function') {
+        try {
+            prepRes = await api.prepareTestUpdateFile();
+        } catch (_) {}
+    }
+
+    const testFilePath = (prepRes && prepRes.filePath) || 'mock-update.zip';
+
+    window.dispatchEvent(new CustomEvent('hwl:update-available', {
+        detail: {
+            version: targetVersion,
+            isMandatory: false
+        }
+    }));
+
+    let progress = 0;
+    const interval = setInterval(() => {
+        progress += 10;
+        if (progress > 100) progress = 100;
+        window.dispatchEvent(new CustomEvent('hwl:update-progress', {
+            detail: {
+                version: targetVersion,
+                percent: progress,
+                transferred: progress * 1024 * 1024,
+                total: 100 * 1024 * 1024,
+                speed: 15 * 1024 * 1024
+            }
+        }));
+
+        if (progress >= 100) {
+            clearInterval(interval);
+            _currentUpdateDownloadedPath = testFilePath;
+            _currentUpdateState = {
+                currentVersion: '2.2.0',
+                latestVersion: targetVersion,
+                minVersion: '0.0.0',
+                isMandatory: false,
+                releaseInfo: releaseInfo || {
+                    version: targetVersion,
+                    tag: targetTag
+                }
+            };
+
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('hwl:update-ready', {
+                    detail: {
+                        version: targetVersion,
+                        isMandatory: false,
+                        filePath: testFilePath
+                    }
+                }));
+            }, 300);
+        }
+    }, 150);
+}
+window.triggerTestUpdateFlow = triggerTestUpdateFlow;
 
 async function applyRemoteConfig(data) {
     if (!data) return;

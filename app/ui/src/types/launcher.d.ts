@@ -145,8 +145,9 @@ export interface HwlAPI {
   startDownloadUpdate: () => Promise<any>;
   quitAndInstall: () => Promise<void>;
   onUpdaterStatus: (callback: (data: any) => void) => void;
-  checkLocalInstaller: () => Promise<any>;
-  launchInstallerAndQuit: (path: string) => Promise<void>;
+  checkLocalInstaller: (expectedHash?: string | null) => Promise<{ exists: boolean; path?: string | null }>;
+  prepareTestUpdateFile?: () => Promise<{ success: boolean; filePath?: string; error?: string }>;
+  launchInstallerAndQuit: (optionsOrPath: string | { installerPath?: string; updateFile?: string; installPath?: string; expectedSetupHash?: string | null }) => Promise<any>;
   downloadInstallerFile: (url: string) => Promise<any>;
   onInstallerDownloadProgress: (callback: (data: any) => void) => void;
   getPlatformInfo: () => Promise<any>;

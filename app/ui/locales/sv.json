@@ -628,7 +628,10 @@
     "ui_scale": "UI-skala",
     "ui_scale_tooltip": "Justera startprogrammets övergripande skala och zoomnivå (50% - 150%).",
     "reopen_on_game_close": "Maximera och öppna när spelet stängs",
-    "reopen_on_game_close_tooltip": "Återställer, maximerar och fokuserar launchern automatiskt när Minecraft stängs."
+    "reopen_on_game_close_tooltip": "Återställer, maximerar och fokuserar launchern automatiskt när Minecraft stängs.",
+    "test_update_title": "Testa bakgrundsuppdatering",
+    "test_update_desc": "Simulerar uppdateringsidentifiering, nedladdningsförloppsbricka och överlämning till installationsprogrammet.",
+    "test_update_btn": "Testa uppdatering"
   },
   "skins": {
     "create_pack": "Skapa nytt hudpaket",
@@ -1022,7 +1025,13 @@
     "new_version_badge": "NY UPPDATERING",
     "mandatory_desc": "Din nuvarande version ({current}) stöds inte längre. Uppdatera till {latest} för att fortsätta spela.",
     "launching_setup": "Startar installationsprogrammet...",
-    "downloading_installer": "Laddar ner installationsprogram..."
+    "downloading_installer": "Laddar ner installationsprogram...",
+    "badge_downloading": "Laddar ner uppdatering...",
+    "badge_ready": "Uppdatering redo!",
+    "badge_click_restart": "Klicka för att starta om och tillämpa",
+    "badge_installing": "Installerar...",
+    "badge_restarting": "Startar om startprogrammet...",
+    "mandatory": "Obligatorisk"
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Ny Minecraft-version",

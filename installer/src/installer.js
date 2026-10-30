@@ -213,39 +213,61 @@ async function install({ installPath, createDesktop, createStartMenu, launchAfte
 
 // ── UPDATE ────────────────────────────────────────────────────────────────────
 
-async function update({ installPath, launchAfter }, onProgress) {
+async function update({ installPath, updateFile, launchAfter }, onProgress) {
   const emit = (msg, percent) => onProgress && onProgress({ msg, percent })
   const tempDir = getTempDir()
 
   try {
-    emit('Checking latest version...', 2)
-    const release = await getLatestReleaseInfo()
+    let assetPath = updateFile
+    let targetVersion = null
 
-    if (!release.launcher) {
-      throw new Error(`No launcher asset found for your platform in release ${release.version}`)
+    // Si ya se proporcionó un paquete local pre-descargado (.zip) y existe, usarlo directamente sin volver a descargar
+    if (assetPath && (await fs.pathExists(assetPath))) {
+      emit('Usando paquete pre-descargado...', 10)
+    } else {
+      emit('Checking latest version...', 2)
+      const release = await getLatestReleaseInfo()
+
+      if (!release.launcher) {
+        throw new Error(`No launcher asset found for your platform in release ${release.version}`)
+      }
+      targetVersion = release.version
+
+      emit(`Downloading version ${release.version}...`, 5)
+      await fs.ensureDir(tempDir)
+      assetPath = path.join(tempDir, release.launcher.name)
+
+      await downloadFile(release.launcher.url, assetPath, (pct, transferred, total, speed) => {
+        const msg = `Downloading... ${formatBytes(transferred)} / ${formatBytes(total)}${speed ? ' · ' + formatSpeed(speed) : ''}`
+        emit(msg, 5 + Math.round(pct * 0.65))
+      })
     }
-
-    emit(`Downloading version ${release.version}...`, 5)
-    await fs.ensureDir(tempDir)
-    const assetPath = path.join(tempDir, release.launcher.name)
-
-    await downloadFile(release.launcher.url, assetPath, (pct, transferred, total, speed) => {
-      const msg = `Downloading... ${formatBytes(transferred)} / ${formatBytes(total)}${speed ? ' · ' + formatSpeed(speed) : ''}`
-      emit(msg, 5 + Math.round(pct * 0.65))
-    })
 
     emit('Stopping launcher...', 72)
     await killLauncher()
 
     emit('Applying update...', 75)
     await extractZip(assetPath, installPath, (pct) => {
-      emit('Applying update...', 75 + Math.round(pct * 0.12))
+      emit('Applying update...', 75 + Math.round(pct * 0.15))
     })
 
-    emit('Updating registration...', 90)
+    // Resolver versión actualizada
+    if (!targetVersion) {
+      try {
+        const pkgJson = path.join(installPath, 'resources', 'app', 'package.json')
+        if (await fs.pathExists(pkgJson)) {
+          const pkg = await fs.readJson(pkgJson)
+          targetVersion = pkg.version
+        }
+      } catch (_) {}
+    }
+
+    emit('Updating registration...', 92)
     const installerPath = await copySetupToInstallDir(installPath)
-    await writeRegistry({ installPath, version: release.version, installerPath })
-    await writeState({ installPath, version: release.version, installerPath })
+    if (targetVersion) {
+      await writeRegistry({ installPath, version: targetVersion, installerPath })
+      await writeState({ installPath, version: targetVersion, installerPath })
+    }
 
     emit('Cleaning up...', 97)
     await fs.remove(tempDir).catch(() => {})
@@ -260,7 +282,7 @@ async function update({ installPath, launchAfter }, onProgress) {
       }, 800)
     }
 
-    return { success: true, version: release.version, executablePath }
+    return { success: true, version: targetVersion, executablePath }
   } catch (err) {
     await fs.remove(tempDir).catch(() => {})
     throw err

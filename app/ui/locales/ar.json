@@ -628,7 +628,10 @@
     "ui_scale": "مقياس الواجهة",
     "ui_scale_tooltip": "اضبط المقياس العام ومستوى تكبير واجهة المشغل (50% - 150%).",
     "reopen_on_game_close": "تكبير وفتح عند إغلاق اللعبة",
-    "reopen_on_game_close_tooltip": "يستعيد المشغل ويكبره ويركز عليه تلقائيًا عند إغلاق ماينكرافت."
+    "reopen_on_game_close_tooltip": "يستعيد المشغل ويكبره ويركز عليه تلقائيًا عند إغلاق ماينكرافت.",
+    "test_update_title": "اختبار التحديث في الخلفية",
+    "test_update_desc": "محاكاة اكتشاف التحديث وشارة تقدم التنزيل وتمرير التثبيت.",
+    "test_update_btn": "اختبار مسار التحديث"
   },
   "skins": {
     "create_pack": "إنشاء حزمة الجلد الجديدة",
@@ -1022,7 +1025,13 @@
     "new_version_badge": "تحديث جديد",
     "mandatory_desc": "إصدارك الحالي ({current}) لم يعد مدعوماً. يرجى التحديث إلى {latest} للمتابعة.",
     "launching_setup": "جاري تشغيل برنامج التثبيت...",
-    "downloading_installer": "جاري تنزيل برنامج التثبيت..."
+    "downloading_installer": "جاري تنزيل برنامج التثبيت...",
+    "badge_downloading": "جارٍ تنزيل التحديث...",
+    "badge_ready": "التحديث جاهز!",
+    "badge_click_restart": "انقر لإعادة التشغيل والتطبيق",
+    "badge_installing": "جارٍ التثبيت...",
+    "badge_restarting": "جارٍ إعادة تشغيل المشغّل...",
+    "mandatory": "إلزامي"
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "نسخة ماينكرافت الجديدة",

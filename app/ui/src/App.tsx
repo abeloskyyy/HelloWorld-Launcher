@@ -18,6 +18,7 @@ import { AddonsModals } from './components/modals/AddonsModals';
 import { SkinsModals } from './components/modals/SkinsModals';
 import { SocialModals } from './components/modals/SocialModals';
 import { MiscModals } from './components/modals/MiscModals';
+import { UpdateBadge } from './components/common/UpdateBadge';
 
 export const App: React.FC = () => {
   useEffect(() => {
@@ -122,6 +123,7 @@ export const App: React.FC = () => {
       <SkinsModals />
       <SocialModals />
       <MiscModals />
+      <UpdateBadge />
     </>
   );
 };

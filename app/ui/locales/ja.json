@@ -628,7 +628,10 @@
     "ui_scale": "UIスケール",
     "ui_scale_tooltip": "ランチャーインターフェースの全体的な拡大縮小とズームレベルを調整します（50%〜150%）。",
     "reopen_on_game_close": "ゲーム終了時に最大化して開く",
-    "reopen_on_game_close_tooltip": "Minecraftが終了したときに、ランチャーを自動的に復元、最大化、フォーカスします。"
+    "reopen_on_game_close_tooltip": "Minecraftが終了したときに、ランチャーを自動的に復元、最大化、フォーカスします。",
+    "test_update_title": "バックグラウンド更新をテスト",
+    "test_update_desc": "更新の検出、ダウンロード進行状況バッジ、およびセットアップのリレーをシミュレートします。",
+    "test_update_btn": "更新フローをテスト"
   },
   "skins": {
     "create_pack": "新しいスキン パックの作成",
@@ -1022,7 +1025,13 @@
     "new_version_badge": "新しいアップデート",
     "mandatory_desc": "現在のバージョン ({current}) はサポートされていません。プレイを続けるには {latest} に更新してください。",
     "launching_setup": "インストーラーを起動しています...",
-    "downloading_installer": "インストーラーをダウンロード中..."
+    "downloading_installer": "インストーラーをダウンロード中...",
+    "badge_downloading": "アップデートをダウンロード中...",
+    "badge_ready": "アップデート準備完了！",
+    "badge_click_restart": "クリックして再起動して適用",
+    "badge_installing": "インストール中...",
+    "badge_restarting": "ランチャーを再起動しています...",
+    "mandatory": "必須"
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Minecraftの新しいバージョン",

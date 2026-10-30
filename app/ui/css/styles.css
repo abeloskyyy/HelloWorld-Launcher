@@ -14770,4 +14770,208 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
     color: #fca5a5;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   UPDATE DOCK BADGE (Background Auto-Updater Pill)
+   ══════════════════════════════════════════════════════════════════════════════ */
+.update-dock-badge {
+    position: fixed;
+    bottom: 22px;
+    right: 26px;
+    z-index: 99999;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(15, 23, 42, 0.9);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1.5px solid rgba(59, 130, 246, 0.35);
+    border-radius: 40px;
+    padding: 7px 16px 7px 9px;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5), 0 0 18px rgba(59, 130, 246, 0.2);
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.25s ease,
+                box-shadow 0.25s ease,
+                background 0.25s ease;
+    animation: slideUpBadge 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes slideUpBadge {
+    from {
+        opacity: 0;
+        transform: translateY(24px) scale(0.94);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.update-dock-badge:hover {
+    transform: translateY(-2px) scale(1.02);
+    border-color: rgba(59, 130, 246, 0.7);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.6), 0 0 25px rgba(59, 130, 246, 0.35);
+}
+
+.update-dock-badge:active {
+    transform: translateY(0) scale(0.98);
+}
+
+/* Status: Ready (Completed download with attention-grabbing pulse) */
+.update-dock-badge.status-ready {
+    border-color: rgba(16, 185, 129, 0.65);
+    background: rgba(13, 27, 28, 0.94);
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.55), 0 0 22px rgba(16, 185, 129, 0.3);
+}
+
+.update-dock-badge.status-ready:hover {
+    border-color: rgba(16, 185, 129, 0.95);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.65), 0 0 30px rgba(16, 185, 129, 0.5);
+}
+
+.update-dock-badge.pulse-attention {
+    animation: slideUpBadge 0.4s cubic-bezier(0.16, 1, 0.3, 1) both,
+               badgeReadyPulse 2.4s infinite ease-in-out;
+}
+
+@keyframes badgeReadyPulse {
+    0%, 100% {
+        box-shadow: 0 10px 32px rgba(0, 0, 0, 0.55), 0 0 18px rgba(16, 185, 129, 0.25);
+    }
+    50% {
+        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 32px rgba(16, 185, 129, 0.65);
+        border-color: rgba(16, 185, 129, 0.9);
+    }
+}
+
+/* SVG Progress Ring */
+.update-dock-progress-ring {
+    position: relative;
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.progress-ring-svg {
+    transform: rotate(-90deg);
+}
+
+.progress-ring-circle-bg {
+    stroke: rgba(255, 255, 255, 0.12);
+}
+
+.progress-ring-circle {
+    stroke: #3b82f6;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.35s ease, stroke 0.35s ease;
+}
+
+.status-ready .progress-ring-circle {
+    stroke: #10b981;
+}
+
+.update-dock-icon {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: #3b82f6;
+    pointer-events: none;
+}
+
+.status-ready .update-dock-icon {
+    color: #10b981;
+}
+
+.dl-anim {
+    animation: bounceDl 1.5s infinite ease-in-out;
+}
+
+@keyframes bounceDl {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(2px); }
+}
+
+.check-anim {
+    animation: popCheck 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+@keyframes popCheck {
+    0% { transform: scale(0.4); opacity: 0; }
+    80% { transform: scale(1.2); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* Content Text */
+.update-dock-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5px;
+}
+
+.update-dock-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #f1f5f9;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.2;
+}
+
+.status-ready .update-dock-title {
+    color: #a7f3d0;
+}
+
+.update-dock-subtitle {
+    font-size: 11px;
+    color: #94a3b8;
+    line-height: 1.2;
+    transition: color 0.2s ease;
+}
+
+.status-ready .update-dock-subtitle {
+    color: #6ee7b7;
+    font-weight: 500;
+}
+
+.update-dock-mandatory-tag {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: #ef4444;
+    color: #fff;
+    padding: 1px 5px;
+    border-radius: 4px;
+    letter-spacing: 0.4px;
+}
+
+/* Ready restart action icon */
+.update-dock-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 2px;
+}
+
+.ready-restart-icon {
+    font-size: 12px;
+    color: #10b981;
+    transition: transform 0.3s ease;
+}
+
+.update-dock-badge:hover .ready-restart-icon {
+    transform: rotate(90deg);
+}
+
+
 

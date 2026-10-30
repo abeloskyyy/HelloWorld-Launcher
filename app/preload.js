@@ -101,7 +101,8 @@ const hwlAPI = {
     startDownloadUpdate: () => ipcRenderer.invoke('start-download-update'),
     quitAndInstall: () => ipcRenderer.invoke('quit-and-install'),
     onUpdaterStatus: (callback) => ipcRenderer.on('updater-status', (event, data) => callback(data)),
-    checkLocalInstaller: () => ipcRenderer.invoke('check-local-installer'),
+    checkLocalInstaller: (expectedHash) => ipcRenderer.invoke('check-local-installer', expectedHash),
+    prepareTestUpdateFile: () => ipcRenderer.invoke('prepare-test-update-file'),
     launchInstallerAndQuit: (installerPath) => ipcRenderer.invoke('launch-installer-and-quit', installerPath),
     downloadInstallerFile: (downloadUrl) => ipcRenderer.invoke('download-installer-file', downloadUrl),
     onInstallerDownloadProgress: (callback) => {

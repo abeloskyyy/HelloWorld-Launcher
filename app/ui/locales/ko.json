@@ -628,7 +628,10 @@
     "ui_scale": "UI 배율",
     "ui_scale_tooltip": "실행기 인터페이스의 전체 배율 및 확대/축소 수준을 조정합니다 (50% - 150%).",
     "reopen_on_game_close": "게임 종료 시 런처 최대화 및 열기",
-    "reopen_on_game_close_tooltip": "Minecraft가 닫히면 런처를 자동으로 복원하고 최대화하며 포커스를 맞춥니다."
+    "reopen_on_game_close_tooltip": "Minecraft가 닫히면 런처를 자동으로 복원하고 최대화하며 포커스를 맞춥니다.",
+    "test_update_title": "백그라운드 업데이트 테스트",
+    "test_update_desc": "업데이트 감지, 다운로드 진행 배지 및 셋업 릴레이를 시뮬레이션합니다.",
+    "test_update_btn": "업데이트 흐름 테스트"
   },
   "skins": {
     "create_pack": "새 스킨 팩 만들기",
@@ -1022,7 +1025,13 @@
     "new_version_badge": "새 업데이트",
     "mandatory_desc": "현재 버전({current})은 더 이상 지원되지 않습니다. 계속 플레이하려면 {latest}(으)로 업데이트하세요.",
     "launching_setup": "설치 프로그램 시작 중...",
-    "downloading_installer": "설치 프로그램 다운로드 중..."
+    "downloading_installer": "설치 프로그램 다운로드 중...",
+    "badge_downloading": "업데이트 다운로드 중...",
+    "badge_ready": "업데이트 준비 완료!",
+    "badge_click_restart": "클릭하여 재시작 및 적용",
+    "badge_installing": "설치 중...",
+    "badge_restarting": "런처를 재시작하는 중...",
+    "mandatory": "필수"
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "새로운 Minecraft 버전",

@@ -628,7 +628,10 @@
     "ui_scale": "Interfazearen Eskala",
     "ui_scale_tooltip": "Doitu abiarazlearen interfazearen eskala eta zoom maila orokorra (% 50 - % 150).",
     "reopen_on_game_close": "Maximizatu eta ireki jokoa ixtean",
-    "reopen_on_game_close_tooltip": "Minecraft ixten denean abiarazlea automatikoki leheneratu, maximizatu eta enfokatzen du."
+    "reopen_on_game_close_tooltip": "Minecraft ixten denean abiarazlea automatikoki leheneratu, maximizatu eta enfokatzen du.",
+    "test_update_title": "Probatu atzeko planoko eguneraketa",
+    "test_update_desc": "Simulatu eguneraketa detektatzea, deskargaren aurrerapen intsignia eta setup-erako erreleboa.",
+    "test_update_btn": "Probatu eguneraketa"
   },
   "skins": {
     "create_pack": "Sortu Skin Pakete Berria",
@@ -1022,7 +1025,13 @@
     "new_version_badge": "EGUNERAKETA BERRIA",
     "mandatory_desc": "Zure uneko bertsioa ({current}) ez da bateragarria. Mesedez, eguneratu {latest}-ra jolasten jarraitzeko.",
     "launching_setup": "Instalatzailea abiarazten...",
-    "downloading_installer": "Instalatzailea deskargatzen..."
+    "downloading_installer": "Instalatzailea deskargatzen...",
+    "badge_downloading": "Eguneraketa deskargatzen...",
+    "badge_ready": "Eguneraketa prest!",
+    "badge_click_restart": "Egin klik berrabiarazteko eta aplikatzeko",
+    "badge_installing": "Instalatzen...",
+    "badge_restarting": "Abiarazlea berrabiarazten...",
+    "mandatory": "Derrigorrezkoa"
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Minecraft Bertsio Berria",

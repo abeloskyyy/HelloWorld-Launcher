@@ -628,7 +628,10 @@
     "ui_scale": "यूआई पैमाना",
     "ui_scale_tooltip": "लॉन्चर इंटरफ़ेस का समग्र पैमाना और ज़ूम स्तर समायोजित करें (50% - 150%)।",
     "reopen_on_game_close": "गेम बंद होने पर लॉन्चर को अधिकतम और सक्रिय करें",
-    "reopen_on_game_close_tooltip": "Minecraft बंद होने पर लॉन्चर को स्वचालित रूप से पुनर्स्थापित, अधिकतम और फ़ोकस करता है।"
+    "reopen_on_game_close_tooltip": "Minecraft बंद होने पर लॉन्चर को स्वचालित रूप से पुनर्स्थापित, अधिकतम और फ़ोकस करता है।",
+    "test_update_title": "पृष्ठभूमि अपडेट का परीक्षण करें",
+    "test_update_desc": "अपडेट पहचान, डाउनलोड प्रगति बैज और सेटअप रिले का अनुकरण करें।",
+    "test_update_btn": "अपडेट प्रवाह का परीक्षण करें"
   },
   "skins": {
     "create_pack": "नया स्किन पैक बनाएं",
@@ -1022,7 +1025,13 @@
     "new_version_badge": "नया अपडेट",
     "mandatory_desc": "आपका वर्तमान संस्करण ({current}) अब समर्थित नहीं है। कृपया खेलना जारी रखने के लिए {latest} पर अपडेट करें।",
     "launching_setup": "इंस्टॉलर प्रारंभ हो रहा है...",
-    "downloading_installer": "इंस्टॉलर डाउनलोड हो रहा है..."
+    "downloading_installer": "इंस्टॉलर डाउनलोड हो रहा है...",
+    "badge_downloading": "अपडेट डाउनलोड हो रहा है...",
+    "badge_ready": "अपडेट तैयार है!",
+    "badge_click_restart": "पुनरारंभ करने और लागू करने के लिए क्लिक करें",
+    "badge_installing": "इंस्टॉल हो रहा है...",
+    "badge_restarting": "लॉन्चर पुनरारंभ हो रहा है...",
+    "mandatory": "अनिवार्य"
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "नया Minecraft संस्करण",

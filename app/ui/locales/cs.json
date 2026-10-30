@@ -628,7 +628,10 @@
     "ui_scale": "Měřítko rozhraní",
     "ui_scale_tooltip": "Upravte celkové měřítko a úroveň přiblížení rozhraní spouštěče (50% - 150%).",
     "reopen_on_game_close": "Maximalizovat a otevřít po zavření hry",
-    "reopen_on_game_close_tooltip": "Automaticky obnoví, maximalizuje a zaměří launcher, jakmile je Minecraft ukončen."
+    "reopen_on_game_close_tooltip": "Automaticky obnoví, maximalizuje a zaměří launcher, jakmile je Minecraft ukončen.",
+    "test_update_title": "Otestovat aktualizaci na pozadí",
+    "test_update_desc": "Simuluje zjištění aktualizace, odznak průběhu stahování a předání instalátoru.",
+    "test_update_btn": "Otestovat aktualizaci"
   },
   "skins": {
     "create_pack": "Vytvořte nový Skin Pack",
@@ -1022,7 +1025,13 @@
     "new_version_badge": "NOVÁ AKTUALIZACE",
     "mandatory_desc": "Vaše aktuální verze ({current}) již není podporována. Aktualizujte na {latest}, abyste mohli pokračovat ve hře.",
     "launching_setup": "Spouštění instalačního programu...",
-    "downloading_installer": "Stahování instalačního programu..."
+    "downloading_installer": "Stahování instalačního programu...",
+    "badge_downloading": "Stahování aktualizace...",
+    "badge_ready": "Aktualizace připravena!",
+    "badge_click_restart": "Kliknutím restartujte a použijte",
+    "badge_installing": "Instalace...",
+    "badge_restarting": "Restartování spouštěče...",
+    "mandatory": "Povinná"
   },
   "notif_new_message": "New message",
   "notif_new_mc_version": "Nová verze Minecraftu",

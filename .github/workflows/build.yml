@@ -163,11 +163,23 @@ jobs:
 
       - name: Setup Canonical Linux Names
         run: |
+          # DEB: Soportar tanto amd64 como x64
           if [ -f "dist/helloworld-launcher-linux-x64.deb" ] && [ ! -f "dist/helloworld-launcher-linux-amd64.deb" ]; then
             cp dist/helloworld-launcher-linux-x64.deb dist/helloworld-launcher-linux-amd64.deb
           fi
+          if [ -f "dist/helloworld-launcher-linux-amd64.deb" ] && [ ! -f "dist/helloworld-launcher-linux-x64.deb" ]; then
+            cp dist/helloworld-launcher-linux-amd64.deb dist/helloworld-launcher-linux-x64.deb
+          fi
+
+          # AppImage: electron-builder genera x86_64 por defecto; asegurar alias amd64 para total consistencia
+          if [ -f "dist/helloworld-launcher-linux-x86_64.AppImage" ] && [ ! -f "dist/helloworld-launcher-linux-amd64.AppImage" ]; then
+            cp dist/helloworld-launcher-linux-x86_64.AppImage dist/helloworld-launcher-linux-amd64.AppImage
+          fi
           if [ -f "dist/helloworld-launcher-linux-x64.AppImage" ] && [ ! -f "dist/helloworld-launcher-linux-amd64.AppImage" ]; then
             cp dist/helloworld-launcher-linux-x64.AppImage dist/helloworld-launcher-linux-amd64.AppImage
+          fi
+          if [ -f "dist/helloworld-launcher-linux-amd64.AppImage" ] && [ ! -f "dist/helloworld-launcher-linux-x86_64.AppImage" ]; then
+            cp dist/helloworld-launcher-linux-amd64.AppImage dist/helloworld-launcher-linux-x86_64.AppImage
           fi
 
       - name: Stage Linux Binaries
