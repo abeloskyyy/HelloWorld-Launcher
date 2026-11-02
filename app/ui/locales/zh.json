@@ -479,7 +479,8 @@
     "update_badge": "更新",
     "waiting": "等待中",
     "done": "完成",
-    "error": "错误"
+    "error": "错误",
+    "corrupted_notice": "检测到损坏的文件并已删除。请确保在稳定且无网络限制的环境下启动游戏。"
   },
   "toasts": {
     "login_failed": "登录失败: {err}",
@@ -600,7 +601,8 @@
     "minecraft_running_server_saved": "Minecraft 已在运行。我们已将该服务器添加到您的多人游戏列表中。",
     "launch_failed": "启动游戏失败。",
     "connecting_to_server": "正在连接至 {server}...",
-    "copied_to_clipboard": "已复制到剪贴板！"
+    "copied_to_clipboard": "已复制到剪贴板！",
+    "corrupted_files_warning": "检测到已损坏的 Minecraft 文件并已将其删除。请确保在稳定且无网络限制的环境下启动 Minecraft。"
   },
   "settings": {
     "language": "Language / 语言",
@@ -618,8 +620,8 @@
     "show_snapshots_tooltip": "在版本选择器中显示开发中的测试版本 (snapshots)。",
     "show_old": "显示旧版本",
     "show_old_tooltip": "在版本选择器中显示古老的 Alpha 和 Beta 版本。",
-    "privacy": "隐私模式",
-    "privacy_tooltip": "在 Rich Presence (例如 Discord 状态) 中对好友隐藏您的服务器 IP 地址。您的状态仍将显示您正在服务器上游玩，但 IP 会被隐藏。",
+    "privacy": "隐藏服务器 IP",
+    "privacy_tooltip": "在 Discord 和启动器状态中隐藏服务器地址，仅显示“正在多人游戏中”而不显示 IP。",
     "save_btn": "保存设置",
     "launcher_version": "启动器版本:",
     "replay_tutorial": "重播教程",
@@ -631,7 +633,22 @@
     "reopen_on_game_close_tooltip": "当检测到 Minecraft 关闭时，自动还原、最大化并对焦启动器窗口。",
     "test_update_title": "测试后台更新",
     "test_update_desc": "模拟更新检测、下载进度角标以及传递给安装程序。",
-    "test_update_btn": "测试更新流程"
+    "test_update_btn": "测试更新流程",
+    "start_on_boot": "随系统启动",
+    "start_on_boot_tooltip": "开机时自动启动 HelloWorld Launcher。",
+    "presence_title": "状态与活动 (RPC)",
+    "discord_rpc": "Discord Rich Presence",
+    "discord_rpc_tooltip": "在您的 Discord 个人资料中显示当前 Minecraft 状态与活动。",
+    "app_presence": "启动器内社交在线状态",
+    "app_presence_tooltip": "允许 HelloWorld Launcher 好友查看您的状态。关闭以隐身离线显示。",
+    "show_singleplayer_world": "显示单人游戏世界名称",
+    "show_singleplayer_world_tooltip": "在单人游戏中显示世界名称。关闭后仅显示“正在单人游戏中”。",
+    "show_game_version": "显示游戏版本与加载器",
+    "show_game_version_tooltip": "在状态中显示 Minecraft 版本和 Mod 加载器（例如 Fabric 1.21.1）。",
+    "show_profile_name": "显示配置/安装名称",
+    "show_profile_name_tooltip": "在状态详情中显示您的安装配置名称。",
+    "show_player_ign": "显示游戏内名称 (IGN)",
+    "show_player_ign_tooltip": "在状态详情中显示您的 Minecraft 角色名称。"
   },
   "skins": {
     "create_pack": "创建新皮肤包",

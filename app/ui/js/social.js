@@ -56,13 +56,18 @@
     }
 
     function getAvatarHtml(profile, size) {
+        if (!profile) return '<span class="avatar-letter">?</span>';
         const sz = size || 38;
         const letter = (profile.username || '?')[0].toUpperCase();
-        if (profile.accountType === 'microsoft' && profile.mcUuid) {
-            return `<img src="https://mc-heads.net/avatar/${profile.mcUuid}/${sz}" alt="" style="width:100%;height:100%;object-fit:cover;image-rendering:pixelated;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="avatar-letter" style="display:none">${letter}</span>`;
+        const mcId = profile.mcUuid || profile.uuid || (profile.accountType === 'microsoft' ? profile.username : null);
+        if (profile.accountType === 'microsoft' && mcId) {
+            return `<img src="https://mc-heads.net/avatar/${encodeURIComponent(mcId)}/${sz}" alt="" style="width:100%;height:100%;object-fit:cover;image-rendering:pixelated;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="avatar-letter" style="display:none">${letter}</span>`;
         }
         if (profile.avatarBase64) {
             return `<img src="${profile.avatarBase64}" alt="" style="width:100%;height:100%;object-fit:cover;image-rendering:pixelated;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="avatar-letter" style="display:none">${letter}</span>`;
+        }
+        if (mcId) {
+            return `<img src="https://mc-heads.net/avatar/${encodeURIComponent(mcId)}/${sz}" alt="" style="width:100%;height:100%;object-fit:cover;image-rendering:pixelated;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="avatar-letter" style="display:none">${letter}</span>`;
         }
         return `<span class="avatar-letter">${letter}</span>`;
     }
@@ -74,8 +79,42 @@
         creator:   { cls: 'hw-badge-creator',    icon: 'fa-crown',       key: 'badges.creator',   defaultTitle: 'Creador'        },
     };
 
+// --- Playstyle Tags Data ---
+    const PLAYSTYLE_TAGS = [
+        // Combat / PvP
+        { id: 'pvp',         label: 'PvP',           icon: 'fas fa-shield-halved', bg: 'rgba(239,68,68,0.15)',    color: '#f87171', border: 'rgba(239,68,68,0.3)' },
+        { id: 'pvp_pro',     label: 'PvP Pro',        icon: 'fas fa-fire',          bg: 'rgba(220,38,38,0.18)',    color: '#ef4444', border: 'rgba(220,38,38,0.35)' },
+        // Building
+        { id: 'builder',     label: 'Builder',        icon: 'fas fa-hammer',        bg: 'rgba(251,191,36,0.15)',   color: '#fbbf24', border: 'rgba(251,191,36,0.3)' },
+        { id: 'architect',   label: 'Architect',      icon: 'fas fa-drafting-compass', bg: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
+        // Survival
+        { id: 'survival',    label: 'Survival',       icon: 'fas fa-tree',          bg: 'rgba(34,197,94,0.15)',    color: '#4ade80', border: 'rgba(34,197,94,0.3)' },
+        { id: 'hardcore',    label: 'Hardcore',       icon: 'fas fa-skull',         bg: 'rgba(127,29,29,0.25)',    color: '#fca5a5', border: 'rgba(185,28,28,0.4)' },
+        // Technical
+        { id: 'redstone',    label: 'Redstone',       icon: 'fas fa-bolt',          bg: 'rgba(239,68,68,0.12)',    color: '#fca5a5', border: 'rgba(239,68,68,0.25)' },
+        { id: 'technical',   label: 'Technical',      icon: 'fas fa-cog',           bg: 'rgba(107,114,128,0.2)',   color: '#9ca3af', border: 'rgba(107,114,128,0.35)' },
+        { id: 'farms',       label: 'Farm Builder',   icon: 'fas fa-tractor',       bg: 'rgba(132,204,22,0.15)',   color: '#a3e635', border: 'rgba(132,204,22,0.3)' },
+        // Exploration
+        { id: 'explorer',    label: 'Explorer',       icon: 'fas fa-compass',       bg: 'rgba(6,182,212,0.15)',    color: '#22d3ee', border: 'rgba(6,182,212,0.3)' },
+        { id: 'speedrunner', label: 'Speedrunner',    icon: 'fas fa-person-running', bg: 'rgba(168,85,247,0.15)',  color: '#c084fc', border: 'rgba(168,85,247,0.3)' },
+        // Social
+        { id: 'socialite',   label: 'Socialite',      icon: 'fas fa-users',         bg: 'rgba(236,72,153,0.15)',   color: '#f472b6', border: 'rgba(236,72,153,0.3)' },
+        { id: 'roleplayer',  label: 'Roleplayer',     icon: 'fas fa-masks-theater', bg: 'rgba(139,92,246,0.15)',   color: '#a78bfa', border: 'rgba(139,92,246,0.3)' },
+        // Modded
+        { id: 'modded',      label: 'Modded',         icon: 'fas fa-puzzle-piece',  bg: 'rgba(79,172,254,0.15)',   color: '#60a5fa', border: 'rgba(79,172,254,0.3)' },
+        { id: 'modpack',     label: 'Modpack Player', icon: 'fas fa-layer-group',   bg: 'rgba(59,130,246,0.15)',   color: '#93c5fd', border: 'rgba(59,130,246,0.3)' },
+        // Creative
+        { id: 'creative',    label: 'Creative',       icon: 'fas fa-paintbrush',    bg: 'rgba(234,179,8,0.15)',    color: '#fde047', border: 'rgba(234,179,8,0.3)' },
+        { id: 'artist',      label: 'Pixel Artist',   icon: 'fas fa-palette',       bg: 'rgba(244,114,182,0.15)',  color: '#f9a8d4', border: 'rgba(244,114,182,0.3)' },
+        // Misc
+        { id: 'streamer',    label: 'Streamer',       icon: 'fas fa-video',         bg: 'rgba(124,58,237,0.15)',   color: '#c4b5fd', border: 'rgba(124,58,237,0.3)' },
+        { id: 'casual',      label: 'Casual',         icon: 'fas fa-couch',         bg: 'rgba(75,85,99,0.2)',      color: '#9ca3af', border: 'rgba(75,85,99,0.35)' },
+        { id: 'minigames',   label: 'Minigames',      icon: 'fas fa-gamepad',       bg: 'rgba(20,184,166,0.15)',   color: '#2dd4bf', border: 'rgba(20,184,166,0.3)' },
+        { id: 'skyblock',    label: 'Skyblock',       icon: 'fas fa-cloud',         bg: 'rgba(14,165,233,0.15)',   color: '#38bdf8', border: 'rgba(14,165,233,0.3)' },
+    ];
+
     // Authentic 12-scallop Twitter/Meta verified rosette SVG
-    const BADGE_ROSETTE_SVG = '<svg class="hw-badge-shape" viewBox="0 0 22 22" aria-hidden="true"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.887-1.692-.474-.45-1.058-.756-1.692-.887-.633-.13-1.29-.083-1.897.14-.274-.586-.706-1.084-1.246-1.438C12.275 1.808 11.646 1.61 11 1.628c-.646.018-1.275.215-1.816.57-.54.354-.972.852-1.246 1.438-.607-.223-1.264-.27-1.897-.14-.634.131-1.218.437-1.692.887-.45.474-.756 1.058-.887 1.692-.13.633-.083 1.29.14 1.897-.586.274-1.084.706-1.438 1.246C1.808 9.725 1.61 10.354 1.628 11c.018.646.215 1.275.57 1.816.354.54.852.972 1.438 1.246-.223.607-.27 1.264-.14 1.897.131.634.437 1.218.887 1.692.474.45 1.058.756 1.692.887.633.13 1.29.083 1.897-.14.274.586.706 1.084 1.246 1.438.541.355 1.17.552 1.816.57.646-.018 1.275-.215 1.816-.57.54-.354.972-.852 1.246-1.438.607.223 1.264.27 1.897.14.634-.131 1.218-.437 1.692-.887.45-.474.756-1.058.887-1.692.13-.633.083-1.29-.14-1.897.586-.274 1.084-.706 1.438-1.246.355-.541.552-1.17.57-1.816z"/></svg>';
+    const BADGE_ROSETTE_SVG = '<svg class="hw-badge-shape" viewBox="0 0 22 22" overflow="visible" aria-hidden="true"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816z"/></svg>';
 
     /**
      * Renders an HTML string with badge icons for a given badges array.
@@ -473,20 +512,37 @@
     }
 
     // --- Social Skeleton Helpers ---
-    function getSocialUserSkeletonsHTML(count = 5) {
+    function getSocialUserSkeletonsHTML(count = 5, type = 'friends') {
         let html = '';
         for (let i = 0; i < count; i++) {
             const nameWidth = 45 + (i % 3) * 15;
-            const subWidth = 30 + (i % 2) * 15;
+            let subHtml = '';
+            let actionsHtml = '';
+
+            if (type === 'received') {
+                subHtml = '<div class="wk-skeleton-shimmer" style="height: 12px; width: 110px; border-radius: 4px; margin-top: 3px;"></div>';
+                actionsHtml = '<div class="wk-skeleton-shimmer" style="width: 30px; height: 30px; border-radius: 6px;"></div>' +
+                              '<div class="wk-skeleton-shimmer" style="width: 30px; height: 30px; border-radius: 6px;"></div>' +
+                              '<div class="wk-skeleton-shimmer" style="width: 30px; height: 30px; border-radius: 6px;"></div>';
+            } else if (type === 'sent') {
+                subHtml = '<div class="wk-skeleton-shimmer" style="height: 12px; width: 95px; border-radius: 4px; margin-top: 3px;"></div>';
+                actionsHtml = '<div class="wk-skeleton-shimmer" style="width: 30px; height: 30px; border-radius: 6px;"></div>';
+            } else {
+                // 'friends'
+                const presenceWidth = 80 + (i % 2) * 20;
+                subHtml = '<div style="margin-top: 6px;"><div class="wk-skeleton-shimmer" style="height: 22px; width: ' + presenceWidth + 'px; border-radius: 999px;"></div></div>';
+                actionsHtml = '<div class="wk-skeleton-shimmer" style="width: 30px; height: 30px; border-radius: 6px;"></div>' +
+                              '<div class="wk-skeleton-shimmer" style="width: 30px; height: 30px; border-radius: 6px;"></div>';
+            }
+
             html += '<div class="social-user-item social-user-skeleton">' +
-                '<div class="social-item-avatar wk-skeleton-shimmer" style="border: none;"></div>' +
-                '<div class="social-item-info" style="gap: 6px;">' +
+                '<div class="social-item-avatar wk-skeleton-shimmer" style="width: 38px; height: 38px; border-radius: 8px; border: 1px solid rgba(79,172,254,0.15); flex-shrink: 0;"></div>' +
+                '<div class="social-item-info" style="gap: 2px;">' +
                     '<div class="wk-skeleton-shimmer" style="height: 14px; width: ' + nameWidth + '%; border-radius: 4px;"></div>' +
-                    '<div class="wk-skeleton-shimmer" style="height: 11px; width: ' + subWidth + '%; border-radius: 4px;"></div>' +
+                    subHtml +
                 '</div>' +
-                '<div class="social-item-actions" style="display: flex; gap: 6px;">' +
-                    '<div class="wk-skeleton-shimmer" style="width: 28px; height: 28px; border-radius: 6px;"></div>' +
-                    '<div class="wk-skeleton-shimmer" style="width: 28px; height: 28px; border-radius: 6px;"></div>' +
+                '<div class="social-item-actions" style="display: flex; gap: 4px;">' +
+                    actionsHtml +
                 '</div>' +
             '</div>';
         }
@@ -497,16 +553,16 @@
         let html = '';
         for (let i = 0; i < count; i++) {
             const titleWidth = 100 + (i % 3) * 25;
-            const line1Width = 85 + (i % 2) * 10;
+            const line1Width = 88 + (i % 2) * 8;
             const line2Width = 45 + (i % 3) * 18;
             html += '<div class="inbox-item social-inbox-skeleton" style="padding: 16px 24px; border-bottom: 1px solid rgba(255,255,255,0.05); width: 100%; box-sizing: border-box;">' +
-                '<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px;">' +
-                    '<div class="wk-skeleton-shimmer" style="height: 15px; width: ' + titleWidth + 'px; border-radius: 4px;"></div>' +
-                    '<div class="wk-skeleton-shimmer" style="height: 11px; width: 45px; border-radius: 4px;"></div>' +
+                '<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">' +
+                    '<div class="wk-skeleton-shimmer" style="height: 16px; width: ' + titleWidth + 'px; border-radius: 4px;"></div>' +
+                    '<div class="wk-skeleton-shimmer" style="height: 12px; width: 50px; border-radius: 4px;"></div>' +
                 '</div>' +
                 '<div style="display: flex; flex-direction: column; gap: 6px;">' +
-                    '<div class="wk-skeleton-shimmer" style="height: 13px; width: ' + line1Width + '%; border-radius: 4px;"></div>' +
-                    '<div class="wk-skeleton-shimmer" style="height: 13px; width: ' + line2Width + '%; border-radius: 4px;"></div>' +
+                    '<div class="wk-skeleton-shimmer" style="height: 14px; width: ' + line1Width + '%; border-radius: 4px;"></div>' +
+                    '<div class="wk-skeleton-shimmer" style="height: 14px; width: ' + line2Width + '%; border-radius: 4px;"></div>' +
                 '</div>' +
             '</div>';
         }
@@ -522,7 +578,7 @@
         if (container) container.style.display = 'block';
 
         if (showLoading && list && (!list.children.length || list.querySelector('.social-empty'))) {
-            list.innerHTML = getSocialUserSkeletonsHTML(5);
+            list.innerHTML = getSocialUserSkeletonsHTML(5, 'friends');
         }
         try {
             const res = await api().social_get_friends();
@@ -537,15 +593,37 @@
         loadBlocked();
     }
 
+    let lastRenderedFriendsSig = '';
+
     function renderFriendsList(friends) {
         cachedFriends = friends;
         const list = document.getElementById('friendsList');
         if (!list) return;
-        if (friends.length === 0) {
-            list.innerHTML = '<div class="social-empty"><i class="fas fa-user-friends"></i><p>No friends yet. Add some!</p></div>';
+        if (!friends || friends.length === 0) {
+            lastRenderedFriendsSig = '__empty__';
+            list.innerHTML = '<div class="social-empty social-item-fade-in"><i class="fas fa-user-friends"></i><p>No friends yet. Add some!</p></div>';
             return;
         }
-        list.innerHTML = friends.filter(f => !f.isGroup).map(f => {
+
+        const nonGroupFriends = friends.filter(f => !f.isGroup);
+        const currentSig = JSON.stringify(nonGroupFriends.map(f => ({
+            fid: f.friendshipId,
+            unread: f.unread,
+            p: f.profile ? { uid: f.profile.uid, u: f.profile.username, a: f.profile.accountType, b: f.profile.badges, av: f.profile.avatarBase64, mc: f.profile.mcUuid || f.profile.uuid } : null,
+            pres: f.presence ? { s: f.presence.state, srv: f.presence.serverIp, w: f.presence.worldName, i: f.presence.instanceName } : null
+        })));
+
+        const hadSkeletons = list.querySelector('.social-user-skeleton') !== null;
+        if (currentSig === lastRenderedFriendsSig && list.children.length > 0 && !hadSkeletons) {
+            // Data has not changed and list is already rendered — avoid re-render to eliminate flicker!
+            return;
+        }
+        lastRenderedFriendsSig = currentSig;
+
+        const isInitial = hadSkeletons || !list.children.length;
+        const fadeCls = isInitial ? ' social-item-fade-in' : '';
+
+        list.innerHTML = nonGroupFriends.map(f => {
             const isGroup = f.isGroup;
             let p, avatarHtml, nameHtml, profileJson, actionHtml;
             const unread = f.unread > 0 ? `<span class="chat-unread-badge">${f.unread}</span>` : '';
@@ -620,7 +698,7 @@
 
             const usernameClickAttr = isGroup ? '' : `style="cursor: pointer;" onclick='viewUserProfile("${escapeHtml(p.uid)}", "${escapeHtml(p.username)}")'`;
 
-            return `<div class="social-user-item">
+            return `<div class="social-user-item${fadeCls}">
               <div class="social-item-avatar">${avatarHtml}</div>
               <div class="social-item-info">
                 <div class="social-item-name" ${usernameClickAttr}>${nameHtml}</div>
@@ -1174,7 +1252,7 @@
         
         try {
             // Fetch user profile data from Firestore
-            const res = await api().get_user_profile(uid);
+            const res = await api().get_user_profile(uid, username);
             console.log('Profile data response:', res);
             
             if (res && res.success && res.data) {
@@ -1203,9 +1281,11 @@
                     // Check if avatarBase64 already has the prefix
                     const avatarSrc = data.avatarBase64.startsWith('data:') ? data.avatarBase64 : `data:image/png;base64,${data.avatarBase64}`;
                     avatarPreview.src = avatarSrc;
-                } else if (data.accountType === 'microsoft' && data.uuid && avatarPreview) {
-                    // Premium account with no custom avatar - use mc-heads
-                    avatarPreview.src = `https://mc-heads.net/avatar/${data.uuid}`;
+                } else if (avatarPreview) {
+                    const id = data.mcUuid || data.uuid || (data.accountType === 'microsoft' ? data.username : null) || username;
+                    if (id && (data.accountType === 'microsoft' || data.mcUuid || data.uuid)) {
+                        avatarPreview.src = `https://mc-heads.net/avatar/${encodeURIComponent(id)}`;
+                    }
                 }
                 
                 // Update biography
@@ -1228,15 +1308,15 @@
                     memberSinceEl.textContent = memberSinceText;
                 }
 
-                // Update Playstyle Tags
+                // Update Playstyle Tags (robust, safe mapping)
                 const playstyleSection = document.getElementById('profilePlaystyleSection');
                 const playstyleTagsEl = document.getElementById('profilePlaystyleTags');
                 if (playstyleSection && playstyleTagsEl) {
                     const tags = data.playstyleTags;
                     if (tags && Array.isArray(tags) && tags.length > 0) {
+                        const tagList = (typeof PLAYSTYLE_TAGS !== 'undefined' && Array.isArray(PLAYSTYLE_TAGS)) ? PLAYSTYLE_TAGS : [];
                         playstyleTagsEl.innerHTML = tags.map(tag => {
-                            const def = PLAYSTYLE_TAGS.find(t => t.id === tag);
-                            if (!def) return '';
+                            const def = tagList.find(t => t.id === tag) || { label: tag, bg: 'rgba(79,172,254,0.15)', color: '#60a5fa', border: 'rgba(79,172,254,0.3)', icon: 'fas fa-tag' };
                             const iconHtml = def.icon ? `<i class="${def.icon}" style="color:${def.color};font-size:10px;line-height:1;flex-shrink:0;"></i>` : '';
                             return `<span class="playstyle-badge" style="background:${def.bg};border:1px solid ${def.border};">${iconHtml}<span style="color:${def.color};font-size:12px;font-weight:600;line-height:1;">${escapeHtml(def.label)}</span></span>`;
                         }).join('');
@@ -1364,8 +1444,18 @@
                     linksContainer.innerHTML = '<p style="margin: 0; color: #6b7280; font-size: 0.9rem; font-style: italic;">No links</p>';
                 }
                 
+                // Helper to cleanly hide profile loading spinner
+                const hideSpinner = () => {
+                    if (loadingSpinner) {
+                        loadingSpinner.style.opacity = '0';
+                        setTimeout(() => {
+                            if (loadingSpinner) loadingSpinner.style.display = 'none';
+                        }, 250);
+                    }
+                };
+
                 // Apply background
-                if (backgroundPreview && data.background) {
+                if (backgroundPreview && data.background && data.background !== 'default') {
                     const gradients = {
                         'gradient1': 'linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%)',
                         'gradient2': 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
@@ -1388,18 +1478,16 @@
                     
                     const overlay = document.createElement('div');
                     overlay.className = 'background-overlay';
-                    overlay.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: 16px 16px 0 0; z-index: 0; pointer-events: none;';
+                    overlay.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: 0; z-index: 0; pointer-events: none;';
                     
                     if (gradients[data.background]) {
                         overlay.style.background = gradients[data.background];
-                        // Gradients load immediately
-                        if (gradients[data.background] || imageBackgrounds[data.background]) {
-                            const existingOverlay = backgroundPreview.querySelector('.background-overlay');
-                            const existingDarkening = backgroundPreview.querySelector('.darkening-overlay');
-                            if (existingOverlay) existingOverlay.remove();
-                            if (existingDarkening) existingDarkening.remove();
-                            backgroundPreview.prepend(overlay);
-                        }
+                        const existingOverlay = backgroundPreview.querySelector('.background-overlay');
+                        const existingDarkening = backgroundPreview.querySelector('.darkening-overlay');
+                        if (existingOverlay) existingOverlay.remove();
+                        if (existingDarkening) existingDarkening.remove();
+                        backgroundPreview.prepend(overlay);
+                        hideSpinner();
                     } else if (imageBackgrounds[data.background]) {
                         // Load image and wait for it to load before hiding spinner
                         const img = new Image();
@@ -1414,35 +1502,22 @@
                             if (existingOverlay) existingOverlay.remove();
                             if (existingDarkening) existingDarkening.remove();
                             backgroundPreview.prepend(overlay);
-                            
-                            // Hide spinner after image loads with fade-out animation
-                            if (loadingSpinner) {
-                                loadingSpinner.style.opacity = '0';
-                                setTimeout(() => {
-                                    if (loadingSpinner) loadingSpinner.style.display = 'none';
-                                }, 300);
-                            }
+                            hideSpinner();
                         };
                         img.onerror = () => {
-                            // Hide spinner even if image fails to load with fade-out animation
-                            if (loadingSpinner) {
-                                loadingSpinner.style.opacity = '0';
-                                setTimeout(() => {
-                                    if (loadingSpinner) loadingSpinner.style.display = 'none';
-                                }, 300);
-                            }
+                            hideSpinner();
                         };
                         img.src = imageBackgrounds[data.background].replace('url(', '').replace(')', '');
+                    } else {
+                        hideSpinner();
                     }
                 } else {
-                    // No background, hide spinner with fade-out animation
-                    if (loadingSpinner) {
-                        loadingSpinner.style.opacity = '0';
-                        setTimeout(() => {
-                            if (loadingSpinner) loadingSpinner.style.display = 'none';
-                        }, 300);
-                    }
+                    // No background or default background: hide spinner immediately
+                    hideSpinner();
                 }
+
+                // Safety timeout: ensure loading spinner is NEVER stuck visible
+                setTimeout(hideSpinner, 1200);
                 
                 // Update country badge
                 if (countryBadge && countryFlagSvg && data.country && data.country !== '' && data.country !== 'OTHER') {
@@ -1574,39 +1649,7 @@
         });
     }
 
-    // --- Playstyle Tags Data ---
-    const PLAYSTYLE_TAGS = [
-        // Combat / PvP
-        { id: 'pvp',         label: 'PvP',           icon: 'fas fa-shield-halved', bg: 'rgba(239,68,68,0.15)',    color: '#f87171', border: 'rgba(239,68,68,0.3)' },
-        { id: 'pvp_pro',     label: 'PvP Pro',        icon: 'fas fa-fire',          bg: 'rgba(220,38,38,0.18)',    color: '#ef4444', border: 'rgba(220,38,38,0.35)' },
-        // Building
-        { id: 'builder',     label: 'Builder',        icon: 'fas fa-hammer',        bg: 'rgba(251,191,36,0.15)',   color: '#fbbf24', border: 'rgba(251,191,36,0.3)' },
-        { id: 'architect',   label: 'Architect',      icon: 'fas fa-drafting-compass', bg: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
-        // Survival
-        { id: 'survival',    label: 'Survival',       icon: 'fas fa-tree',          bg: 'rgba(34,197,94,0.15)',    color: '#4ade80', border: 'rgba(34,197,94,0.3)' },
-        { id: 'hardcore',    label: 'Hardcore',       icon: 'fas fa-skull',         bg: 'rgba(127,29,29,0.25)',    color: '#fca5a5', border: 'rgba(185,28,28,0.4)' },
-        // Technical
-        { id: 'redstone',    label: 'Redstone',       icon: 'fas fa-bolt',          bg: 'rgba(239,68,68,0.12)',    color: '#fca5a5', border: 'rgba(239,68,68,0.25)' },
-        { id: 'technical',   label: 'Technical',      icon: 'fas fa-cog',           bg: 'rgba(107,114,128,0.2)',   color: '#9ca3af', border: 'rgba(107,114,128,0.35)' },
-        { id: 'farms',       label: 'Farm Builder',   icon: 'fas fa-tractor',       bg: 'rgba(132,204,22,0.15)',   color: '#a3e635', border: 'rgba(132,204,22,0.3)' },
-        // Exploration
-        { id: 'explorer',    label: 'Explorer',       icon: 'fas fa-compass',       bg: 'rgba(6,182,212,0.15)',    color: '#22d3ee', border: 'rgba(6,182,212,0.3)' },
-        { id: 'speedrunner', label: 'Speedrunner',    icon: 'fas fa-person-running', bg: 'rgba(168,85,247,0.15)',  color: '#c084fc', border: 'rgba(168,85,247,0.3)' },
-        // Social
-        { id: 'socialite',   label: 'Socialite',      icon: 'fas fa-users',         bg: 'rgba(236,72,153,0.15)',   color: '#f472b6', border: 'rgba(236,72,153,0.3)' },
-        { id: 'roleplayer',  label: 'Roleplayer',     icon: 'fas fa-masks-theater', bg: 'rgba(139,92,246,0.15)',   color: '#a78bfa', border: 'rgba(139,92,246,0.3)' },
-        // Modded
-        { id: 'modded',      label: 'Modded',         icon: 'fas fa-puzzle-piece',  bg: 'rgba(79,172,254,0.15)',   color: '#60a5fa', border: 'rgba(79,172,254,0.3)' },
-        { id: 'modpack',     label: 'Modpack Player', icon: 'fas fa-layer-group',   bg: 'rgba(59,130,246,0.15)',   color: '#93c5fd', border: 'rgba(59,130,246,0.3)' },
-        // Creative
-        { id: 'creative',    label: 'Creative',       icon: 'fas fa-paintbrush',    bg: 'rgba(234,179,8,0.15)',    color: '#fde047', border: 'rgba(234,179,8,0.3)' },
-        { id: 'artist',      label: 'Pixel Artist',   icon: 'fas fa-palette',       bg: 'rgba(244,114,182,0.15)',  color: '#f9a8d4', border: 'rgba(244,114,182,0.3)' },
-        // Misc
-        { id: 'streamer',    label: 'Streamer',       icon: 'fas fa-video',         bg: 'rgba(124,58,237,0.15)',   color: '#c4b5fd', border: 'rgba(124,58,237,0.3)' },
-        { id: 'casual',      label: 'Casual',         icon: 'fas fa-couch',         bg: 'rgba(75,85,99,0.2)',      color: '#9ca3af', border: 'rgba(75,85,99,0.35)' },
-        { id: 'minigames',   label: 'Minigames',      icon: 'fas fa-gamepad',       bg: 'rgba(20,184,166,0.15)',   color: '#2dd4bf', border: 'rgba(20,184,166,0.3)' },
-        { id: 'skyblock',    label: 'Skyblock',       icon: 'fas fa-cloud',         bg: 'rgba(14,165,233,0.15)',   color: '#38bdf8', border: 'rgba(14,165,233,0.3)' },
-    ];
+    // (PLAYSTYLE_TAGS moved to top of file for safe global access)
 
     // --- Link Types Data ---
     const linkTypes = [
@@ -2061,10 +2104,10 @@
 
         if (showLoading) {
             if (reqReceivedList && (!reqReceivedList.children.length || reqReceivedList.querySelector('.social-empty'))) {
-                reqReceivedList.innerHTML = getSocialUserSkeletonsHTML(3);
+                reqReceivedList.innerHTML = getSocialUserSkeletonsHTML(3, 'received');
             }
             if (reqSentList && (!reqSentList.children.length || reqSentList.querySelector('.social-empty'))) {
-                reqSentList.innerHTML = getSocialUserSkeletonsHTML(2);
+                reqSentList.innerHTML = getSocialUserSkeletonsHTML(2, 'sent');
             }
         }
         try {
@@ -2085,14 +2128,14 @@
     function renderReceivedRequests(reqs) {
         const list = document.getElementById('reqReceivedList');
         if (!list) return;
-        if (reqs.length === 0) { list.innerHTML = '<div class="social-empty"><i class="fas fa-inbox"></i><p>No pending requests</p></div>'; return; }
+        if (reqs.length === 0) { list.innerHTML = '<div class="social-empty social-item-fade-in"><i class="fas fa-inbox"></i><p>No pending requests</p></div>'; return; }
         list.innerHTML = reqs.map(r => {
             const p = r.profile || {};
             const pb = renderBadgesHtml(Array.isArray(p.badges) ? p.badges : (p.accountType === 'microsoft' ? ['premium'] : []));
             const idSafe = escapeHtml(r.id);
             const uidSafe = escapeHtml(p.uid);
             const nameSafe = escapeHtml(p.username || 'Unknown');
-            return `<div class="social-user-item">
+            return `<div class="social-user-item social-item-fade-in">
               <div class="social-item-avatar">${getAvatarHtml(p, 38)}</div>
               <div class="social-item-info">
                 <div class="social-item-name">${escapeHtml(p.username || 'Unknown')} ${pb}</div>
@@ -2110,12 +2153,12 @@
     function renderSentRequests(reqs) {
         const list = document.getElementById('reqSentList');
         if (!list) return;
-        if (reqs.length === 0) { list.innerHTML = '<div class="social-empty"><i class="fas fa-paper-plane"></i><p>No sent requests</p></div>'; return; }
+        if (reqs.length === 0) { list.innerHTML = '<div class="social-empty social-item-fade-in"><i class="fas fa-paper-plane"></i><p>No sent requests</p></div>'; return; }
         list.innerHTML = reqs.map(r => {
             const p = r.profile || {};
             const pb = renderBadgesHtml(Array.isArray(p.badges) ? p.badges : (p.accountType === 'microsoft' ? ['premium'] : []));
             const idSafe = escapeHtml(r.id);
-            return `<div class="social-user-item">
+            return `<div class="social-user-item social-item-fade-in">
               <div class="social-item-avatar">${getAvatarHtml(p, 38)}</div>
               <div class="social-item-info">
                 <div class="social-item-name">${escapeHtml(p.username || 'Unknown')} ${pb}</div>
@@ -3657,6 +3700,8 @@
         }
     }
 
+    let lastRenderedInboxSig = '';
+
     function renderInboxMessages(messages, scrollToBottom, lastRead, isSentTab = false) {
         const container = document.getElementById('inboxMessages');
         if (!container) return;
@@ -3670,6 +3715,7 @@
             });
 
         if (displayMessages.length === 0) {
+            lastRenderedInboxSig = '__empty__';
             let noMsgText = isSentTab ? 'No sent messages yet.' : 'No messages yet.';
             if (window.t) {
                 if (isSentTab) {
@@ -3693,6 +3739,17 @@
             const tb = typeof b.timestamp === 'string' ? new Date(b.timestamp).getTime() : (Number(b.timestamp) || 0);
             return tb - ta;
         });
+
+        const hadSkeletons = container.querySelector('.social-inbox-skeleton') !== null;
+        const currentInboxSig = (isSentTab ? 'sent:' : 'inbox:') + displayMessages.map(m => `${m.id}:${m.read}:${m.timestamp}`).join('|');
+        if (currentInboxSig === lastRenderedInboxSig && container.children.length > 0 && !hadSkeletons) {
+            // Unchanged inbox, do not re-render or wipe DOM
+            return;
+        }
+        lastRenderedInboxSig = currentInboxSig;
+
+        const isInitial = hadSkeletons || !container.children.length;
+        const fadeCls = isInitial ? ' social-item-fade-in' : '';
 
         const viewText = (window.t && window.t('social.view') !== 'social.view') ? window.t('social.view') : 'View';
         const installText = (window.t && window.t('social.install') !== 'social.install') ? window.t('social.install') : 'Install';
@@ -3841,7 +3898,7 @@
             
             // Render as flat inbox item (email style)
             const html = `
-            <div class="inbox-item ${isUnread ? 'is-unread' : ''}" data-msg-id="${escapeHtml(msg.id)}" style="padding: 16px 24px; border-bottom: 1px solid rgba(255,255,255,0.05); width: 100%; box-sizing: border-box; background: transparent; transition: background 0.2s; cursor: default;" onmouseover="handleInboxHover(this)" onmouseout="this.style.background='transparent'">
+            <div class="inbox-item${fadeCls} ${isUnread ? 'is-unread' : ''}" data-msg-id="${escapeHtml(msg.id)}" style="padding: 16px 24px; border-bottom: 1px solid rgba(255,255,255,0.05); width: 100%; box-sizing: border-box; background: transparent; transition: background 0.2s; cursor: default;" onmouseover="handleInboxHover(this)" onmouseout="this.style.background='transparent'">
                 <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
                     <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 2px;">
                         ${unreadDot}

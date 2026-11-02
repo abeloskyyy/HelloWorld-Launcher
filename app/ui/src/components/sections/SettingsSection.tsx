@@ -490,27 +490,6 @@ export const SettingsSection: React.FC = () => {
         >
           <div className="toggle-container">
             <label className="toggle-switch">
-              <input type="checkbox" id="privacyModeCheckbox" />
-              <span className="toggle-slider"></span>
-            </label>
-            <span className="toggle-label">
-              <span data-i18n="settings.privacy">Privacy Mode</span>
-              <i
-                className="fa-regular fa-question-circle help-icon"
-                style={{ color: '#fff' }}
-                data-tooltip="Hides your server IP address from friends in Rich Presence. Your status will still show you're playing on a server, but the IP will be hidden."
-                data-i18n-tooltip="settings.privacy_tooltip"
-              ></i>
-            </span>
-          </div>
-        </div>
-
-        <div
-          className="input-group"
-          style={{ paddingTop: '15px', borderTop: '1px solid rgba(255, 255, 255, 0.1)', marginTop: '15px' }}
-        >
-          <div className="toggle-container">
-            <label className="toggle-switch">
               <input type="checkbox" id="reopenOnGameCloseCheckbox" defaultChecked />
               <span className="toggle-slider"></span>
             </label>
@@ -523,6 +502,170 @@ export const SettingsSection: React.FC = () => {
                 data-i18n-tooltip="settings.reopen_on_game_close_tooltip"
               ></i>
             </span>
+          </div>
+        </div>
+
+        <div
+          className="input-group"
+          style={{ paddingTop: '15px', borderTop: '1px solid rgba(255, 255, 255, 0.1)', marginTop: '15px' }}
+        >
+          <div className="toggle-container">
+            <label className="toggle-switch">
+              <input type="checkbox" id="startOnBootCheckbox" />
+              <span className="toggle-slider"></span>
+            </label>
+            <span className="toggle-label">
+              <span data-i18n="settings.start_on_boot">Start with System</span>
+              <i
+                className="fa-regular fa-question-circle help-icon"
+                style={{ color: '#fff' }}
+                data-tooltip="Automatically launches HelloWorld Launcher when you start your computer."
+                data-i18n-tooltip="settings.start_on_boot_tooltip"
+              ></i>
+            </span>
+          </div>
+        </div>
+
+        {/* Presence & Activity (RPC) Group */}
+        <div
+          style={{
+            marginTop: '25px',
+            marginBottom: '15px',
+            paddingTop: '15px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' }}>
+            <i className="fas fa-satellite-dish" style={{ color: '#4facfe', fontSize: '15px' }}></i>
+            <span style={{ fontSize: '15px', fontWeight: 600, color: '#4facfe' }} data-i18n="settings.presence_title">
+              Presence & Activity (RPC)
+            </span>
+          </div>
+
+          <div className="input-group">
+            <div className="toggle-container">
+              <label className="toggle-switch">
+                <input type="checkbox" id="discordRpcCheckbox" defaultChecked />
+                <span className="toggle-slider"></span>
+              </label>
+              <span className="toggle-label">
+                <span data-i18n="settings.discord_rpc">Discord Rich Presence</span>
+                <i
+                  className="fa-regular fa-question-circle help-icon"
+                  style={{ color: '#fff' }}
+                  data-tooltip="Displays your current Minecraft status and activity on your Discord profile."
+                  data-i18n-tooltip="settings.discord_rpc_tooltip"
+                ></i>
+              </span>
+            </div>
+          </div>
+
+          <div className="input-group" style={{ marginTop: '12px' }}>
+            <div className="toggle-container">
+              <label className="toggle-switch">
+                <input type="checkbox" id="appPresenceCheckbox" defaultChecked />
+                <span className="toggle-slider"></span>
+              </label>
+              <span className="toggle-label">
+                <span data-i18n="settings.app_presence">Social Presence in Launcher</span>
+                <i
+                  className="fa-regular fa-question-circle help-icon"
+                  style={{ color: '#fff' }}
+                  data-tooltip="Allows friends on HelloWorld Launcher to see your status. Disable to appear offline (Invisible mode)."
+                  data-i18n-tooltip="settings.app_presence_tooltip"
+                ></i>
+              </span>
+            </div>
+          </div>
+
+          <div className="input-group" style={{ marginTop: '12px' }}>
+            <div className="toggle-container">
+              <label className="toggle-switch">
+                <input type="checkbox" id="privacyModeCheckbox" />
+                <span className="toggle-slider"></span>
+              </label>
+              <span className="toggle-label">
+                <span data-i18n="settings.privacy">Hide Server IP</span>
+                <i
+                  className="fa-regular fa-question-circle help-icon"
+                  style={{ color: '#fff' }}
+                  data-tooltip="Hides server address in Discord and Launcher status. Shows 'Playing Multiplayer' without the IP."
+                  data-i18n-tooltip="settings.privacy_tooltip"
+                ></i>
+              </span>
+            </div>
+          </div>
+
+          <div className="input-group" style={{ marginTop: '12px' }}>
+            <div className="toggle-container">
+              <label className="toggle-switch">
+                <input type="checkbox" id="showSingleplayerWorldCheckbox" defaultChecked />
+                <span className="toggle-slider"></span>
+              </label>
+              <span className="toggle-label">
+                <span data-i18n="settings.show_singleplayer_world">Show Singleplayer World Name</span>
+                <i
+                  className="fa-regular fa-question-circle help-icon"
+                  style={{ color: '#fff' }}
+                  data-tooltip="Displays the world name when playing singleplayer. Disable to show 'Playing Singleplayer' instead."
+                  data-i18n-tooltip="settings.show_singleplayer_world_tooltip"
+                ></i>
+              </span>
+            </div>
+          </div>
+
+          <div className="input-group" style={{ marginTop: '12px' }}>
+            <div className="toggle-container">
+              <label className="toggle-switch">
+                <input type="checkbox" id="showGameVersionCheckbox" defaultChecked />
+                <span className="toggle-slider"></span>
+              </label>
+              <span className="toggle-label">
+                <span data-i18n="settings.show_game_version">Show Game Version & Loader</span>
+                <i
+                  className="fa-regular fa-question-circle help-icon"
+                  style={{ color: '#fff' }}
+                  data-tooltip="Displays the Minecraft version and modloader (e.g., Fabric 1.21.1) in your status."
+                  data-i18n-tooltip="settings.show_game_version_tooltip"
+                ></i>
+              </span>
+            </div>
+          </div>
+
+          <div className="input-group" style={{ marginTop: '12px' }}>
+            <div className="toggle-container">
+              <label className="toggle-switch">
+                <input type="checkbox" id="showProfileNameCheckbox" defaultChecked />
+                <span className="toggle-slider"></span>
+              </label>
+              <span className="toggle-label">
+                <span data-i18n="settings.show_profile_name">Show Profile / Installation Name</span>
+                <i
+                  className="fa-regular fa-question-circle help-icon"
+                  style={{ color: '#fff' }}
+                  data-tooltip="Displays your profile or installation name in your status details."
+                  data-i18n-tooltip="settings.show_profile_name_tooltip"
+                ></i>
+              </span>
+            </div>
+          </div>
+
+          <div className="input-group" style={{ marginTop: '12px' }}>
+            <div className="toggle-container">
+              <label className="toggle-switch">
+                <input type="checkbox" id="showPlayerIgnCheckbox" defaultChecked />
+                <span className="toggle-slider"></span>
+              </label>
+              <span className="toggle-label">
+                <span data-i18n="settings.show_player_ign">Show In-Game Name (IGN)</span>
+                <i
+                  className="fa-regular fa-question-circle help-icon"
+                  style={{ color: '#fff' }}
+                  data-tooltip="Displays your Minecraft character name in your status details."
+                  data-i18n-tooltip="settings.show_player_ign_tooltip"
+                ></i>
+              </span>
+            </div>
           </div>
         </div>
 

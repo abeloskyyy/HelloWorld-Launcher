@@ -108,3 +108,60 @@ Sigue estos pasos rigurosos cada vez que vayas a liberar una actualización:
   - Subirá todos los binarios empaquetados.
   - Actualizará el Gist remoto de metadatos de actualización.
   - Enviará un anuncio formateado con el changelog al canal de Discord `#updates`.
+
+---
+
+## 6. Formatos de Distribución Multiplataforma
+
+HelloWorld Launcher se empaqueta en formatos optimizados para cada sistema operativo para garantizar la mejor experiencia de instalación y actualización:
+
+| Sistema Operativo | Formato de Archivo | Finalidad y Beneficios |
+| :--- | :--- | :--- |
+| **Windows** | `helloworld-launcher-win.zip` | Paquete portable principal con todos los binarios y recursos. El instalador `setup.exe` lo descomprime directamente en la carpeta de instalación. |
+| **Windows** | `HelloWorld-Launcher-Setup.exe` | Instalador bootstrapper ligero (`installer/`). Se mantiene con el mismo binario a lo largo de versiones menores para acumular reputación en SmartScreen. Se copia como `setup.exe` en el directorio de la aplicación. |
+| **Linux** | `helloworld-launcher-linux-${arch}.AppImage` | **Formato universal portable sin permisos de root ("Zero-Root").** Funciona en cualquier distro (Ubuntu, Debian, Fedora, Arch, Manjaro, openSUSE) y en **SteamOS (Steam Deck)**. Permite actualizaciones atómicas en caliente sin pedir contraseña de administrador (`sudo`). |
+| **Linux** | `helloworld-launcher-linux-${arch}.deb` | Paquete nativo para distribuciones basadas en Debian/Ubuntu. Se instala en el sistema (`/opt/HelloWorld-Launcher`). Al actualizar, utiliza elevación nativa gráfica `pkexec` en lugar de los centros de software lentos o inestables. |
+| **macOS** | `helloworld-launcher-mac-${arch}.dmg` | Imagen de disco estándar. El relay de actualización lo monta de forma silenciosa, sobrescribe `/Applications/HelloWorld-Launcher.app`, limpia la cuarentena de Gatekeeper con `xattr -cr` y relanza la app sin fricción. |
+
+### ¿Por qué mantener tanto `.AppImage` como `.deb` en Linux?
+1. **`.AppImage` resuelve la fragmentación de distros:** Los usuarios de Arch Linux, Fedora o Steam Deck no pueden instalar un archivo `.deb`. AppImage les permite jugar sin dependencias externas.
+2. **Cero contraseñas con AppImage:** El usuario descarga el AppImage en cualquier carpeta de usuario (`~/Applications`) y el launcher se actualiza solo en 200 ms reemplazando el archivo con `mv -f`.
+3. **`.deb` para integración de sistema:** Los usuarios puristas de Ubuntu/Debian que prefieren su gestor de paquetes de sistema conservan el paquete `.deb`.
+4. **Detección Automática en Tiempo de Ejecución:** El launcher consulta `process.env.APPIMAGE`. Si el usuario está ejecutando desde un AppImage, descarga automáticamente el `.AppImage`; si se ejecuta desde una instalación de sistema, descarga el `.deb`.
+
+---
+
+## 7. Arquitectura del Sistema de Actualizaciones Silenciosas (Background Updater)
+
+El launcher incorpora un sistema de actualización en segundo plano no invasivo inspirado en navegadores modernos:
+
+```mermaid
+graph TD
+    A[Remote Config / Gist detecta versión más reciente] --> B{¿Paquete ya descargado en disco?}
+    B -- Sí (check-downloaded-update) --> C[Montar badge directamente en estado READY]
+    B -- No --> D[Iniciar descarga silenciosa a userData/updates/]
+    D --> E[Badge dock centrado abajo: 0% ➔ 100%]
+    E --> F[Termina descarga: Almacenar en disco y localStorage]
+    F --> C
+    C --> G[Badge verde con checkmark y pulso de atención]
+    G --> H[Usuario hace clic en el badge]
+    H --> I[launch-installer-and-quit]
+    I --> J{Plataforma}
+    J -- Windows --> K[Ejecutar setup.exe local con --update-file='zip' --silent]
+    J -- Linux AppImage --> L[Bash relay: mv -f nuevo_appimage actual_appimage y relanzar]
+    J -- Linux DEB --> M[Bash relay: pkexec dpkg -i deb y relanzar]
+    J -- macOS --> N[Bash relay: montar DMG, cp -R a /Applications, xattr -cr y relanzar]
+```
+
+### Características Clave:
+1. **Sin descargas repetidas:**
+   El paquete se descarga en la carpeta protegida de la app (`app.getPath('userData')/updates/`). Cuando `setup.exe` arranca en Windows, recibe el argumento `--update-file="<ruta_del_zip>"`, por lo que **no vuelve a descargar nada de GitHub**, sino que extrae directamente el archivo ya descargado.
+2. **Reutilización inteligente de `setup.exe`:**
+   El launcher busca `setup.exe` en su propia carpeta de ejecución (`execDir`). Compara el hash SHA-512/SHA-256 del setup local contra el esperado remotamente. Si coinciden, reutiliza el `setup.exe` local. Si difieren (nueva versión mayor del instalador), descarga el setup nuevo.
+3. **Persistencia del estado "Listo":**
+   El IPC `check-downloaded-update` y `localStorage` guardan la ruta y versión descargada. Si el usuario cierra el launcher y lo vuelve a abrir antes de reiniciar para aplicar, el badge se monta inmediatamente en verde (100% listo) sin volver a iniciar la descarga desde cero.
+4. **Badge Dock Centrado:**
+   Componente `<UpdateBadge />` con CSS glassmorphism posicionado en `bottom: 24px; left: 50%; transform: translateX(-50%)`, aro SVG interactivo y pulso de atención que alerta al usuario cuando la versión está lista para aplicar en un clic.
+5. **Modo de Prueba para Desarrolladores:**
+   En **Ajustes ➔ Modo Desarrollador**, el botón *"Probar flujo de actualización"* invoca `triggerTestUpdateFlow()`, que genera un paquete zip local válido mediante `prepare-test-update-file`, simula la progresión visual del 0 al 100% y permite probar la ejecución desatendida del setup en caliente.
+

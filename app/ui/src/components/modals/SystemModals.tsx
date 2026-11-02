@@ -50,6 +50,13 @@ export const SystemModals: React.FC = () => {
             Downloading missing files for this installation.
           </p>
 
+          <div id="syncCorruptedNotice" className="sync-corrupted-notice">
+            <i className="fas fa-exclamation-triangle"></i>
+            <span data-i18n="loader.corrupted_notice">
+              Damaged files were detected and removed. Make sure to launch Minecraft using a stable, unrestricted internet connection.
+            </span>
+          </div>
+
           <div id="syncTasksList" className="sync-tasks-list">
             {/* Queue Items go here */}
           </div>

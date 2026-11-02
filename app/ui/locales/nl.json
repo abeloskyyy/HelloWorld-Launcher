@@ -479,7 +479,8 @@
     "update_badge": "Update",
     "waiting": "Wachten",
     "done": "Klaar",
-    "error": "Fout"
+    "error": "Fout",
+    "corrupted_notice": "Beschadigde bestanden zijn gedetecteerd en verwijderd. Zorg ervoor dat je het spel start met een stabiele verbinding zonder beperkingen."
   },
   "toasts": {
     "login_failed": "Inloggen mislukt: {err}",
@@ -600,7 +601,8 @@
     "minecraft_running_server_saved": "Minecraft is al geopend. We hebben de server toegevoegd aan je multiplayer-lijst.",
     "launch_failed": "Kan de game niet starten.",
     "connecting_to_server": "Verbinden met {server}...",
-    "copied_to_clipboard": "Gekopieerd naar klembord!"
+    "copied_to_clipboard": "Gekopieerd naar klembord!",
+    "corrupted_files_warning": "Beschadigde Minecraft-bestanden zijn gedetecteerd en verwijderd. Zorg ervoor dat je Minecraft start met een stabiele internetverbinding zonder beperkingen."
   },
   "settings": {
     "language": "Language / Taal",
@@ -618,8 +620,8 @@
     "show_snapshots_tooltip": "Toont ontwikkelingsversies (momentopnamen) in de versiekiezer.",
     "show_old": "Toon oude versies",
     "show_old_tooltip": "Toont oude alfa- en bètaversies in de versiekiezer.",
-    "privacy": "Privacymodus",
-    "privacy_tooltip": "Verbergt het IP-adres van uw server voor vrienden in Rich Presence. Je status laat nog steeds zien dat je op een server speelt, maar het IP-adres is verborgen.",
+    "privacy": "Server-IP verbergen",
+    "privacy_tooltip": "Verbergt het serveradres op Discord en in de Launcher. Toont 'Speelt Multiplayer' zonder IP.",
     "save_btn": "Instellingen opslaan",
     "launcher_version": "Launcher-versie:",
     "replay_tutorial": "Zelfstudie opnieuw afspelen",
@@ -631,7 +633,22 @@
     "reopen_on_game_close_tooltip": "Herstelt, maximaliseert en focust de launcher automatisch wanneer Minecraft wordt gesloten.",
     "test_update_title": "Achtergrond-update testen",
     "test_update_desc": "Simuleer update-detectie, downloadvoortgang-badge en setup-overdracht.",
-    "test_update_btn": "Update-stroom testen"
+    "test_update_btn": "Update-stroom testen",
+    "start_on_boot": "Starten met systeem",
+    "start_on_boot_tooltip": "Start HelloWorld Launcher automatisch op wanneer je computer opstart.",
+    "presence_title": "Aanwezigheid & Activiteit (RPC)",
+    "discord_rpc": "Discord Rich Presence",
+    "discord_rpc_tooltip": "Toont je huidige Minecraft-status en activiteit op je Discord-profiel.",
+    "app_presence": "Sociale aanwezigheid in Launcher",
+    "app_presence_tooltip": "Laat vrienden in HelloWorld Launcher je status zien. Schakel uit om offline te lijken (Onzichtbare modus).",
+    "show_singleplayer_world": "Wereldnaam in Singleplayer tonen",
+    "show_singleplayer_world_tooltip": "Toont de wereldnaam in singleplayer. Schakel uit om alleen 'Speelt Singleplayer' te tonen.",
+    "show_game_version": "Spelversie & Modloader tonen",
+    "show_game_version_tooltip": "Toont de Minecraft-versie en modloader (bijv. Fabric 1.21.1) in je status.",
+    "show_profile_name": "Profiel-/Installatienaam tonen",
+    "show_profile_name_tooltip": "Toont je installatienaam in de statusdetails.",
+    "show_player_ign": "Spelersnaam (IGN) tonen",
+    "show_player_ign_tooltip": "Toont je Minecraft-spelersnaam in de statusdetails."
   },
   "skins": {
     "create_pack": "Maak een nieuw skinpakket",

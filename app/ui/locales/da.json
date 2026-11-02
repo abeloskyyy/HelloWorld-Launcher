@@ -479,7 +479,8 @@
     "update_badge": "Opdatering",
     "waiting": "Venter",
     "done": "Færdig",
-    "error": "Fejl"
+    "error": "Fejl",
+    "corrupted_notice": "Beskadigede filer blev fundet og fjernet. Sørg for at starte spillet med en stabil forbindelse uden begrænsninger."
   },
   "toasts": {
     "login_failed": "Login failed: {err}",
@@ -600,7 +601,8 @@
     "minecraft_running_server_saved": "Minecraft kører allerede. Vi har tilføjet serveren til din multiplayer-liste.",
     "launch_failed": "Kunne ikke starte spillet.",
     "connecting_to_server": "Forbinder til {server}...",
-    "copied_to_clipboard": "Kopieret til udklipsholder!"
+    "copied_to_clipboard": "Kopieret til udklipsholder!",
+    "corrupted_files_warning": "Beskadigede Minecraft-filer blev fundet og fjernet. Sørg for at starte Minecraft med en stabil internetforbindelse uden begrænsninger."
   },
   "settings": {
     "language": "Language / Sprog",
@@ -618,8 +620,8 @@
     "show_snapshots_tooltip": "Shows development versions (snapshots) in the version selector.",
     "show_old": "Show Old Versions",
     "show_old_tooltip": "Shows old Alpha and Beta versions in the version selector.",
-    "privacy": "Privacy Mode",
-    "privacy_tooltip": "Hides your server IP address from friends in Rich Presence. Your status will still show you're playing on a server, but the IP will be hidden.",
+    "privacy": "Skjul server-IP",
+    "privacy_tooltip": "Skjuler serveradressen på Discord og i launcheren. Viser 'Spiller multiplayer' uden IP.",
     "save_btn": "Save Settings",
     "launcher_version": "Launcher Version:",
     "replay_tutorial": "Replay Tutorial",
@@ -631,7 +633,22 @@
     "reopen_on_game_close_tooltip": "Gendanner, maksimerer og fokuserer automatisk launcheren, når Minecraft lukkes.",
     "test_update_title": "Test baggrundsopdatering",
     "test_update_desc": "Simuler opdateringsregistrering, downloadfremdriftsmærke og setup-relæ.",
-    "test_update_btn": "Test opdateringsflow"
+    "test_update_btn": "Test opdateringsflow",
+    "start_on_boot": "Start med systemet",
+    "start_on_boot_tooltip": "Starter automatisk HelloWorld Launcher når computeren tænder.",
+    "presence_title": "Tilstedeværelse & Aktivitet (RPC)",
+    "discord_rpc": "Discord Rich Presence",
+    "discord_rpc_tooltip": "Viser din aktuelle Minecraft-status og aktivitet på din Discord-profil.",
+    "app_presence": "Social tilstedeværelse i launcheren",
+    "app_presence_tooltip": "Tillader venner i HelloWorld Launcher at se din status. Slå fra for at optræde offline (Usynlig tilstand).",
+    "show_singleplayer_world": "Vis verdenens navn i singleplayer",
+    "show_singleplayer_world_tooltip": "Viser verdenens navn i singleplayer. Slå fra for kun at vise 'Spiller singleplayer'.",
+    "show_game_version": "Vis spilversion & modloader",
+    "show_game_version_tooltip": "Viser Minecraft-version og modloader (f.eks. Fabric 1.21.1) i din status.",
+    "show_profile_name": "Vis profil-/installationsnavn",
+    "show_profile_name_tooltip": "Viser installationsnavnet i statusdetaljerne.",
+    "show_player_ign": "Vis spillernavn (IGN)",
+    "show_player_ign_tooltip": "Viser dit Minecraft-spillernavn i statusdetaljerne."
   },
   "skins": {
     "create_pack": "Create New Skin Pack",

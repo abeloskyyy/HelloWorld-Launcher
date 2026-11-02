@@ -6,7 +6,9 @@ function showToast(message, type = 'error') {
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     
-    const icon = type === 'error' ? 'fas fa-exclamation-circle' : (type === 'info' ? 'fas fa-info-circle' : 'fas fa-check-circle');
+    const icon = type === 'error' ? 'fas fa-exclamation-circle' :
+                 type === 'warning' ? 'fas fa-exclamation-triangle' :
+                 (type === 'info' ? 'fas fa-info-circle' : 'fas fa-check-circle');
     
     toast.innerHTML = `
         <i class="${icon} toast-icon"></i>
@@ -15,7 +17,8 @@ function showToast(message, type = 'error') {
     
     container.appendChild(toast);
     
-    // Auto-remove after 3 seconds
+    // Auto-remove after 4 seconds for warnings, 3 seconds for others
+    const timeout = type === 'warning' ? 5000 : 3000;
     setTimeout(() => {
         toast.style.animation = 'toastSlideOut 0.3s ease forwards';
         setTimeout(() => {
@@ -23,7 +26,23 @@ function showToast(message, type = 'error') {
                 toast.parentNode.removeChild(toast);
             }
         }, 300);
-    }, 3000);
+    }, timeout);
+}
+
+// Global listener for corrupted library detection
+if (typeof window !== 'undefined') {
+    const attachCorruptedListener = () => {
+        if (window.hwlAPI?.onCorruptedFilesDetected && !window._hasCorruptedFilesListener) {
+            window._hasCorruptedFilesListener = true;
+            window.hwlAPI.onCorruptedFilesDetected(() => {
+                const msg = (window.t && window.t('toasts.corrupted_files_warning')) ||
+                    "Damaged Minecraft files were detected and removed. Make sure to launch Minecraft using a stable, unrestricted internet connection.";
+                showToast(msg, 'warning');
+            });
+        }
+    };
+    attachCorruptedListener();
+    window.addEventListener('DOMContentLoaded', attachCorruptedListener);
 }
 
 // UI Elements
@@ -295,10 +314,37 @@ async function saveSettings() {
 
 
 
+        const startOnBoot = document.getElementById("startOnBootCheckbox")?.checked || false;
+
+        const discordRpc = document.getElementById("discordRpcCheckbox")?.checked !== false;
+
+        const appPresence = document.getElementById("appPresenceCheckbox")?.checked !== false;
+
+        const showSingleplayerWorld = document.getElementById("showSingleplayerWorldCheckbox")?.checked !== false;
+
+        const showGameVersion = document.getElementById("showGameVersionCheckbox")?.checked !== false;
+
+        const showProfileName = document.getElementById("showProfileNameCheckbox")?.checked !== false;
+
+        const showPlayerIgn = document.getElementById("showPlayerIgnCheckbox")?.checked !== false;
+
         // 1. Save core user info
 
         if (window.hwlAPI.save_user_settings) {
-            const payload = { username, mcdir, ui_scale: uiScale, reopen_on_game_close: reopenOnGameClose };
+            const payload = {
+                username,
+                mcdir,
+                ui_scale: uiScale,
+                reopen_on_game_close: reopenOnGameClose,
+                start_on_boot: startOnBoot,
+                discord_rpc_enabled: discordRpc,
+                app_presence_enabled: appPresence,
+                privacy_mode: privacyMode,
+                show_singleplayer_world: showSingleplayerWorld,
+                show_game_version: showGameVersion,
+                show_profile_name: showProfileName,
+                show_player_ign: showPlayerIgn
+            };
             if (typeof window.currentLanguage !== 'undefined') {
                 payload.language = window.currentLanguage;
             }
@@ -567,6 +613,27 @@ const initLauncher = async () => {
 
         const reopenOnGameCloseCheckbox = document.getElementById("reopenOnGameCloseCheckbox");
         if (reopenOnGameCloseCheckbox) reopenOnGameCloseCheckbox.checked = (data.reopen_on_game_close !== false);
+
+        const startOnBootCheckbox = document.getElementById("startOnBootCheckbox");
+        if (startOnBootCheckbox) startOnBootCheckbox.checked = (data.start_on_boot === true);
+
+        const discordRpcCheckbox = document.getElementById("discordRpcCheckbox");
+        if (discordRpcCheckbox) discordRpcCheckbox.checked = (data.discord_rpc_enabled !== false);
+
+        const appPresenceCheckbox = document.getElementById("appPresenceCheckbox");
+        if (appPresenceCheckbox) appPresenceCheckbox.checked = (data.app_presence_enabled !== false);
+
+        const showSingleplayerWorldCheckbox = document.getElementById("showSingleplayerWorldCheckbox");
+        if (showSingleplayerWorldCheckbox) showSingleplayerWorldCheckbox.checked = (data.show_singleplayer_world !== false);
+
+        const showGameVersionCheckbox = document.getElementById("showGameVersionCheckbox");
+        if (showGameVersionCheckbox) showGameVersionCheckbox.checked = (data.show_game_version !== false);
+
+        const showProfileNameCheckbox = document.getElementById("showProfileNameCheckbox");
+        if (showProfileNameCheckbox) showProfileNameCheckbox.checked = (data.show_profile_name !== false);
+
+        const showPlayerIgnCheckbox = document.getElementById("showPlayerIgnCheckbox");
+        if (showPlayerIgnCheckbox) showPlayerIgnCheckbox.checked = (data.show_player_ign !== false);
 
         // Apply visual settings that don't need restart (on load)
         if (data.enable_transitions === false) {
@@ -1099,6 +1166,11 @@ async function handleMaintenanceState(maintenance) {
     // Display fullscreen screen
     if (modal) {
         modal.classList.add('show');
+
+    const corruptedNotice = document.getElementById('syncCorruptedNotice');
+    if (corruptedNotice) {
+        corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
+    }
         modal.style.display = 'flex';
     }
 }
@@ -2436,6 +2508,11 @@ async function showUpdateModal(updateData) {
 
     // Display modal
     modal.classList.add('show');
+
+    const corruptedNotice = document.getElementById('syncCorruptedNotice');
+    if (corruptedNotice) {
+        corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
+    }
     modal.style.display = 'flex';
 }
 
@@ -2458,8 +2535,14 @@ async function checkAppUpdates(changelog) {
     const latestVersion = changelog.latestVersion;
     const minVersion = changelog.minVersion || '0.0.0';
 
-    // Si ya estamos en la última o superior, nada que hacer
+    // Si ya estamos en la última o superior, limpiar cualquier estado guardado
     if (compareSemver(currentVersion, latestVersion) >= 0) {
+        try {
+            localStorage.removeItem('hw_downloaded_update_version');
+            localStorage.removeItem('hw_downloaded_update_path');
+        } catch (_) {}
+        _currentUpdateDownloadedPath = null;
+        window._currentUpdateDownloadedPath = null;
         return;
     }
 
@@ -2513,6 +2596,8 @@ async function resolvePlatformDownloadUrl(releaseInfo, latestVersion) {
 
     let platform = 'win32';
     let arch = 'x64';
+    let isAppImage = false;
+    let isDeb = false;
     try {
         const api = window.hwlAPI || window.api;
         if (api && typeof api.getPlatformInfo === 'function') {
@@ -2520,6 +2605,8 @@ async function resolvePlatformDownloadUrl(releaseInfo, latestVersion) {
             if (pInfo) {
                 platform = pInfo.platform || 'win32';
                 arch = pInfo.arch || 'x64';
+                isAppImage = Boolean(pInfo.isAppImage);
+                isDeb = Boolean(pInfo.isDeb);
             }
         }
     } catch (_) {}
@@ -2556,22 +2643,34 @@ async function resolvePlatformDownloadUrl(releaseInfo, latestVersion) {
         if (linObj && typeof linObj === 'object') {
             const archObj = (arch === 'arm64') ? (linObj.arm64 || linObj.arm) : (linObj.amd64 || linObj.x64);
             if (archObj && typeof archObj === 'object') {
-                downloadUrl = archObj.appimage || archObj.deb || archObj.zip;
+                if (isDeb) {
+                    downloadUrl = archObj.deb || archObj.appimage || archObj.zip;
+                } else {
+                    downloadUrl = archObj.appimage || archObj.deb || archObj.zip;
+                }
             } else if (typeof archObj === 'string') {
                 downloadUrl = archObj;
             }
-            if (!downloadUrl) downloadUrl = linObj.appimage || linObj.deb;
+            if (!downloadUrl) {
+                downloadUrl = isDeb ? (linObj.deb || linObj.appimage) : (linObj.appimage || linObj.deb);
+            }
         }
         if (!downloadUrl) {
             if (arch === 'arm64') {
-                downloadUrl = downloads.linux_arm64_appimage || downloads.linux_arm64_deb || downloads.linux_appimage || downloads.linux_deb;
+                downloadUrl = isDeb
+                    ? (downloads.linux_arm64_deb || downloads.linux_deb || downloads.linux_arm64_appimage)
+                    : (downloads.linux_arm64_appimage || downloads.linux_arm64_deb || downloads.linux_appimage || downloads.linux_deb);
             } else {
-                downloadUrl = downloads.linux_amd64_appimage || downloads.linux_amd64_deb || downloads.linux_appimage || downloads.linux_deb;
+                downloadUrl = isDeb
+                    ? (downloads.linux_amd64_deb || downloads.linux_deb || downloads.linux_amd64_appimage)
+                    : (downloads.linux_amd64_appimage || downloads.linux_amd64_deb || downloads.linux_appimage || downloads.linux_deb);
             }
         }
         if (!downloadUrl) {
             const linArch = (arch === 'arm64') ? 'arm64' : 'amd64';
-            downloadUrl = `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/helloworld-launcher-linux-${linArch}.AppImage`;
+            downloadUrl = isDeb
+                ? `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/helloworld-launcher-linux-${linArch}.deb`
+                : `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/helloworld-launcher-linux-${linArch}.AppImage`;
         }
     }
     return downloadUrl;
@@ -2580,24 +2679,65 @@ window.resolvePlatformDownloadUrl = resolvePlatformDownloadUrl;
 
 async function startBackgroundUpdate(updateData) {
     if (_isBackgroundDownloading || _currentUpdateDownloadedPath) return;
-    _isBackgroundDownloading = true;
     _currentUpdateState = updateData;
+    window._currentUpdateState = updateData;
 
     const { latestVersion, isMandatory, releaseInfo } = updateData;
-
-    // Disparar evento para que el badge inferior aparezca con 0% y animación de descarga
-    window.dispatchEvent(new CustomEvent('hwl:update-available', {
-        detail: {
-            version: latestVersion,
-            isMandatory: Boolean(isMandatory)
-        }
-    }));
+    const api = window.hwlAPI || window.api;
 
     try {
         const downloadUrl = await resolvePlatformDownloadUrl(releaseInfo, latestVersion);
-        console.log('[BackgroundUpdater] Starting automatic background download from:', downloadUrl);
+        const downloads = (releaseInfo && releaseInfo.downloads) || {};
+        const winDownloads = downloads.windows || {};
+        const expectedPackageHash = winDownloads.zipHash || releaseInfo.packageHash || releaseInfo.sha512 || null;
 
-        const api = window.hwlAPI || window.api;
+        // 1. Comprobar si el archivo de actualización ya fue descargado previamente y sigue existiendo intacto
+        if (api && typeof api.checkDownloadedUpdate === 'function') {
+            const check = await api.checkDownloadedUpdate({
+                downloadUrl: downloadUrl,
+                expectedHash: expectedPackageHash,
+                minSizeMb: 10
+            });
+            if (check && check.exists && check.filePath) {
+                console.log('[BackgroundUpdater] Update package already downloaded previously and ready:', check.filePath);
+                _currentUpdateDownloadedPath = check.filePath;
+                window._currentUpdateDownloadedPath = check.filePath;
+                _isBackgroundDownloading = false;
+                try {
+                    localStorage.setItem('hw_downloaded_update_version', latestVersion);
+                    localStorage.setItem('hw_downloaded_update_path', check.filePath);
+                } catch (_) {}
+
+                // Notificar directamente que la actualización está lista para aplicar sin volver a descargar
+                window.dispatchEvent(new CustomEvent('hwl:update-ready', {
+                    detail: {
+                        version: latestVersion,
+                        isMandatory: Boolean(isMandatory),
+                        filePath: check.filePath
+                    }
+                }));
+
+                if (isMandatory) {
+                    console.log('[BackgroundUpdater] Mandatory update pre-downloaded. Applying immediately...');
+                    setTimeout(() => {
+                        hwlApplyDownloadedUpdate();
+                    }, 800);
+                }
+                return;
+            }
+        }
+
+        _isBackgroundDownloading = true;
+
+        // Disparar evento para que el badge inferior aparezca con 0% y animación de descarga
+        window.dispatchEvent(new CustomEvent('hwl:update-available', {
+            detail: {
+                version: latestVersion,
+                isMandatory: Boolean(isMandatory)
+            }
+        }));
+
+        console.log('[BackgroundUpdater] Starting automatic background download from:', downloadUrl);
         if (!api) throw new Error('API not available');
 
         const onProgress = (data) => {
@@ -2627,7 +2767,12 @@ async function startBackgroundUpdate(updateData) {
 
         if (dlResult && dlResult.success && dlResult.filePath) {
             _currentUpdateDownloadedPath = dlResult.filePath;
+            window._currentUpdateDownloadedPath = dlResult.filePath;
             _isBackgroundDownloading = false;
+            try {
+                localStorage.setItem('hw_downloaded_update_version', latestVersion);
+                localStorage.setItem('hw_downloaded_update_path', dlResult.filePath);
+            } catch (_) {}
             console.log('[BackgroundUpdater] Package downloaded to protected folder:', dlResult.filePath);
 
             window.dispatchEvent(new CustomEvent('hwl:update-ready', {
@@ -2737,6 +2882,12 @@ async function triggerTestUpdateFlow() {
         if (progress >= 100) {
             clearInterval(interval);
             _currentUpdateDownloadedPath = testFilePath;
+            window._currentUpdateDownloadedPath = testFilePath;
+            try {
+                localStorage.setItem('hw_downloaded_update_version', targetVersion);
+                localStorage.setItem('hw_downloaded_update_path', testFilePath);
+            } catch (_) {}
+
             _currentUpdateState = {
                 currentVersion: '2.2.0',
                 latestVersion: targetVersion,
@@ -2747,6 +2898,7 @@ async function triggerTestUpdateFlow() {
                     tag: targetTag
                 }
             };
+            window._currentUpdateState = _currentUpdateState;
 
             setTimeout(() => {
                 window.dispatchEvent(new CustomEvent('hwl:update-ready', {
@@ -4423,7 +4575,15 @@ async function startSynchronizationQueue(syncData, profileId) {
 
     modal.classList.add('show');
 
-    
+    const corruptedNotice = document.getElementById('syncCorruptedNotice');
+    if (corruptedNotice) {
+        corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
+    }
+
+    const corruptedNotice = document.getElementById('syncCorruptedNotice');
+    if (corruptedNotice) {
+        corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
+    }
 
     // Build queue with filenames as placeholder
 
@@ -5417,6 +5577,11 @@ window.showLaunchError = function (type, message, log) {
 
 
     modal.classList.add('show');
+
+    const corruptedNotice = document.getElementById('syncCorruptedNotice');
+    if (corruptedNotice) {
+        corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
+    }
 
 };
 
@@ -8815,6 +8980,11 @@ window.openAccountSwitcher = async function () {
     if (userBadgeEl) userBadgeEl.classList.remove('active');
 
     modal.classList.add('show');
+
+    const corruptedNotice = document.getElementById('syncCorruptedNotice');
+    if (corruptedNotice) {
+        corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
+    }
     await renderAccountSwitcherList();
 };
 
@@ -11547,6 +11717,11 @@ window.openModDetails = async function (projectId) {
 
     modal.classList.add('show');
 
+    const corruptedNotice = document.getElementById('syncCorruptedNotice');
+    if (corruptedNotice) {
+        corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
+    }
+
 
 
     try {
@@ -13807,6 +13982,11 @@ if (window.hwlAPI && window.hwlAPI.onServicesDown429) {
         }
 
         modal.classList.add('show');
+
+    const corruptedNotice = document.getElementById('syncCorruptedNotice');
+    if (corruptedNotice) {
+        corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
+    }
 
         // Apply i18n translation to newly rendered elements
         if (window.applyI18n) window.applyI18n(modal);

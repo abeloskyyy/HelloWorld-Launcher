@@ -479,7 +479,8 @@
     "update_badge": "Aktualizace",
     "waiting": "Čekání",
     "done": "Hotovo",
-    "error": "Chyba"
+    "error": "Chyba",
+    "corrupted_notice": "Byly zjištěny a odstraněny poškozené soubory. Ujistěte se, že spouštíte hru se stabilním připojením bez omezení."
   },
   "toasts": {
     "login_failed": "Přihlášení se nezdařilo: {err}",
@@ -600,7 +601,8 @@
     "minecraft_running_server_saved": "Minecraft již běží. Přidali jsme server do vašeho seznamu pro více hráčů.",
     "launch_failed": "Nepodařilo se spustit hru.",
     "connecting_to_server": "Připojování k {server}...",
-    "copied_to_clipboard": "Zkopírováno do schránky!"
+    "copied_to_clipboard": "Zkopírováno do schránky!",
+    "corrupted_files_warning": "Byly zjištěny a odstraněny poškozené soubory Minecraftu. Ujistěte se, že spouštíte Minecraft se stabilním internetovým připojením bez omezení."
   },
   "settings": {
     "language": "Language / Jazyk",
@@ -618,8 +620,8 @@
     "show_snapshots_tooltip": "Zobrazuje vývojové verze (snímky) ve voliči verzí.",
     "show_old": "Zobrazit staré verze",
     "show_old_tooltip": "Zobrazuje staré verze Alpha a Beta ve voliči verzí.",
-    "privacy": "Režim soukromí",
-    "privacy_tooltip": "Skryje IP adresu vašeho serveru před přáteli v Rich Presence. Váš stav bude stále ukazovat, že hrajete na serveru, ale IP bude skrytá.",
+    "privacy": "Skrýt IP serveru",
+    "privacy_tooltip": "Skryje adresu serveru na Discordu a v launcheru. Zobrazí 'Hraje pro více hráčů' bez IP.",
     "save_btn": "Uložit nastavení",
     "launcher_version": "Verze spouštěče:",
     "replay_tutorial": "Replay Tutorial",
@@ -631,7 +633,22 @@
     "reopen_on_game_close_tooltip": "Automaticky obnoví, maximalizuje a zaměří launcher, jakmile je Minecraft ukončen.",
     "test_update_title": "Otestovat aktualizaci na pozadí",
     "test_update_desc": "Simuluje zjištění aktualizace, odznak průběhu stahování a předání instalátoru.",
-    "test_update_btn": "Otestovat aktualizaci"
+    "test_update_btn": "Otestovat aktualizaci",
+    "start_on_boot": "Spustit se systémem",
+    "start_on_boot_tooltip": "Automaticky spustí HelloWorld Launcher při spuštění počítače.",
+    "presence_title": "Stav a Aktivita (RPC)",
+    "discord_rpc": "Discord Rich Presence",
+    "discord_rpc_tooltip": "Zobrazuje váš aktuální stav a aktivitu v Minecraftu na vašem Discord profilu.",
+    "app_presence": "Sociální stav v launcheru",
+    "app_presence_tooltip": "Umožňuje přátelům v HelloWorld Launcheru vidět váš stav. Vypněte pro neviditelný režim.",
+    "show_singleplayer_world": "Zobrazit název světa pro jednoho hráče",
+    "show_singleplayer_world_tooltip": "Zobrazuje název světa v režimu jednoho hráče. Vypněte pro zobrazení pouze 'Hraje pro jednoho hráče'.",
+    "show_game_version": "Zobrazit verzi hry a modloader",
+    "show_game_version_tooltip": "Zobrazuje verzi Minecraftu a modloader (např. Fabric 1.21.1) ve vašem stavu.",
+    "show_profile_name": "Zobrazit název instalace/profilu",
+    "show_profile_name_tooltip": "Zobrazuje název vaší instalace v podrobnostech stavu.",
+    "show_player_ign": "Zobrazit herní jméno (IGN)",
+    "show_player_ign_tooltip": "Zobrazuje vaše herní jméno z Minecraftu v podrobnostech stavu."
   },
   "skins": {
     "create_pack": "Vytvořte nový Skin Pack",

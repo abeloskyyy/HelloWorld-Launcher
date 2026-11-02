@@ -42,14 +42,16 @@ export const SocialModals: React.FC = () => {
                   <div id="friendsList" className="social-user-list">
                     {Array.from({ length: 5 }).map((_, i) => (
                       <div key={i} className="social-user-item social-user-skeleton">
-                        <div className="social-item-avatar wk-skeleton-shimmer" style={{ border: 'none' }}></div>
-                        <div className="social-item-info" style={{ gap: '6px' }}>
+                        <div className="social-item-avatar wk-skeleton-shimmer" style={{ width: '38px', height: '38px', borderRadius: '8px', border: '1px solid rgba(79,172,254,0.15)', flexShrink: 0 }}></div>
+                        <div className="social-item-info" style={{ gap: '2px' }}>
                           <div className="wk-skeleton-shimmer" style={{ height: '14px', width: `${45 + (i % 3) * 15}%`, borderRadius: '4px' }}></div>
-                          <div className="wk-skeleton-shimmer" style={{ height: '11px', width: `${30 + (i % 2) * 15}%`, borderRadius: '4px' }}></div>
+                          <div style={{ marginTop: '6px' }}>
+                            <div className="wk-skeleton-shimmer" style={{ height: '20px', width: `${80 + (i % 2) * 20}px`, borderRadius: '999px' }}></div>
+                          </div>
                         </div>
-                        <div className="social-item-actions" style={{ display: 'flex', gap: '6px' }}>
-                          <div className="wk-skeleton-shimmer" style={{ width: '28px', height: '28px', borderRadius: '6px' }}></div>
-                          <div className="wk-skeleton-shimmer" style={{ width: '28px', height: '28px', borderRadius: '6px' }}></div>
+                        <div className="social-item-actions" style={{ display: 'flex', gap: '4px' }}>
+                          <div className="wk-skeleton-shimmer" style={{ width: '30px', height: '30px', borderRadius: '6px' }}></div>
+                          <div className="wk-skeleton-shimmer" style={{ width: '30px', height: '30px', borderRadius: '6px' }}></div>
                         </div>
                       </div>
                     ))}
@@ -105,8 +107,36 @@ export const SocialModals: React.FC = () => {
                     Sent
                   </button>
                 </div>
-                <div id="reqReceivedList" className="social-user-list"></div>
-                <div id="reqSentList" className="social-user-list" style={{ display: 'none' }}></div>
+                <div id="reqReceivedList" className="social-user-list">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="social-user-item social-user-skeleton">
+                      <div className="social-item-avatar wk-skeleton-shimmer" style={{ width: '38px', height: '38px', borderRadius: '8px', border: '1px solid rgba(79,172,254,0.15)', flexShrink: 0 }}></div>
+                      <div className="social-item-info" style={{ gap: '4px' }}>
+                        <div className="wk-skeleton-shimmer" style={{ height: '14px', width: `${50 + (i % 3) * 12}%`, borderRadius: '4px' }}></div>
+                        <div className="wk-skeleton-shimmer" style={{ height: '12px', width: '110px', borderRadius: '4px' }}></div>
+                      </div>
+                      <div className="social-item-actions" style={{ display: 'flex', gap: '4px' }}>
+                        <div className="wk-skeleton-shimmer" style={{ width: '30px', height: '30px', borderRadius: '6px' }}></div>
+                        <div className="wk-skeleton-shimmer" style={{ width: '30px', height: '30px', borderRadius: '6px' }}></div>
+                        <div className="wk-skeleton-shimmer" style={{ width: '30px', height: '30px', borderRadius: '6px' }}></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div id="reqSentList" className="social-user-list" style={{ display: 'none' }}>
+                  {Array.from({ length: 2 }).map((_, i) => (
+                    <div key={i} className="social-user-item social-user-skeleton">
+                      <div className="social-item-avatar wk-skeleton-shimmer" style={{ width: '38px', height: '38px', borderRadius: '8px', border: '1px solid rgba(79,172,254,0.15)', flexShrink: 0 }}></div>
+                      <div className="social-item-info" style={{ gap: '4px' }}>
+                        <div className="wk-skeleton-shimmer" style={{ height: '14px', width: `${50 + (i % 2) * 15}%`, borderRadius: '4px' }}></div>
+                        <div className="wk-skeleton-shimmer" style={{ height: '12px', width: '95px', borderRadius: '4px' }}></div>
+                      </div>
+                      <div className="social-item-actions" style={{ display: 'flex', gap: '4px' }}>
+                        <div className="wk-skeleton-shimmer" style={{ width: '30px', height: '30px', borderRadius: '6px' }}></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
                 <div id="requestsLoading" className="social-loading" style={{ display: 'none' }}>
                   <div className="spinner"></div>
                 </div>
@@ -178,13 +208,13 @@ export const SocialModals: React.FC = () => {
               <div className="chat-messages" id="inboxMessages">
                 {Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="inbox-item social-inbox-skeleton" style={{ padding: '16px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)', width: '100%', boxSizing: 'border-box' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '10px' }}>
-                      <div className="wk-skeleton-shimmer" style={{ height: '15px', width: `${100 + (i % 3) * 25}px`, borderRadius: '4px' }}></div>
-                      <div className="wk-skeleton-shimmer" style={{ height: '11px', width: '45px', borderRadius: '4px' }}></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px' }}>
+                      <div className="wk-skeleton-shimmer" style={{ height: '16px', width: `${100 + (i % 3) * 25}px`, borderRadius: '4px' }}></div>
+                      <div className="wk-skeleton-shimmer" style={{ height: '12px', width: '50px', borderRadius: '4px' }}></div>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <div className="wk-skeleton-shimmer" style={{ height: '13px', width: `${85 + (i % 2) * 10}%`, borderRadius: '4px' }}></div>
-                      <div className="wk-skeleton-shimmer" style={{ height: '13px', width: `${45 + (i % 3) * 18}%`, borderRadius: '4px' }}></div>
+                      <div className="wk-skeleton-shimmer" style={{ height: '14px', width: `${88 + (i % 2) * 8}%`, borderRadius: '4px' }}></div>
+                      <div className="wk-skeleton-shimmer" style={{ height: '14px', width: `${45 + (i % 3) * 18}%`, borderRadius: '4px' }}></div>
                     </div>
                   </div>
                 ))}
@@ -801,8 +831,10 @@ export const SocialModals: React.FC = () => {
             background: 'rgba(20,20,25,0.98)',
             border: '1px solid rgba(255,255,255,0.1)',
             borderRadius: '16px',
+            clipPath: 'inset(0 round 16px)',
             maxHeight: '85vh',
-            overflowY: 'auto'
+            overflowY: 'auto',
+            overflowX: 'hidden'
           }}
         >
           <button
@@ -833,7 +865,7 @@ export const SocialModals: React.FC = () => {
               position: 'absolute',
               inset: 0,
               background: 'rgb(20,20,25)',
-              borderRadius: '16px',
+              borderRadius: 0,
               zIndex: 50,
               alignItems: 'center',
               justifyContent: 'center',
@@ -855,7 +887,7 @@ export const SocialModals: React.FC = () => {
           <div
             id="profileBackgroundPreview"
             style={{
-              borderRadius: '16px 16px 0 0',
+              borderRadius: 0,
               padding: '26px 20px 22px',
               background: 'rgba(255,255,255,0.05)',
               minHeight: '250px',

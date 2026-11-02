@@ -8,8 +8,28 @@ class RPCManager {
     constructor() {
         this.startTimestamp = new Date();
         this.currentState = null;
+        this.enabled = true;
         console.log('Discord RPC Initialized (Rich Presence)');
         this.setLauncher();
+    }
+
+    setEnabled(enabled) {
+        const wasEnabled = this.enabled;
+        this.enabled = Boolean(enabled);
+        if (wasEnabled && !this.enabled) {
+            this.clear();
+        } else if (!wasEnabled && this.enabled) {
+            this.setLauncher();
+        }
+    }
+
+    clear() {
+        try {
+            client.updatePresence({});
+            this.currentState = null;
+        } catch (e) {
+            console.warn('[Discord RPC] Clear failed:', e);
+        }
     }
 
     basePresence() {
@@ -24,15 +44,16 @@ class RPCManager {
         };
     }
 
-    buildDetails(version, profileName, ign) {
+    buildDetails(version, profileName, ign, options = {}) {
         const parts = [];
-        if (version) parts.push(`Version: ${version}`);
-        if (profileName) parts.push(`Profile: ${profileName}`);
-        if (ign) parts.push(`IGN: ${ign}`);
+        if (version && options.showGameVersion !== false) parts.push(`Version: ${version}`);
+        if (profileName && options.showProfileName !== false) parts.push(`Profile: ${profileName}`);
+        if (ign && options.showPlayerIgn !== false) parts.push(`IGN: ${ign}`);
         return parts.length > 0 ? parts.join(' • ') : 'HelloWorld Launcher';
     }
 
     updatePresence(payload) {
+        if (!this.enabled) return;
         try {
             client.updatePresence(payload);
             this.currentState = payload;
@@ -42,6 +63,7 @@ class RPCManager {
     }
 
     setLauncher() {
+        if (!this.enabled) return;
         this.startTimestamp = new Date();
         this.updatePresence({
             ...this.basePresence(),
@@ -50,36 +72,40 @@ class RPCManager {
         });
     }
 
-    setMenu({ version, profileName, ign } = {}) {
+    setMenu({ version, profileName, ign, showGameVersion, showProfileName, showPlayerIgn } = {}) {
+        if (!this.enabled) return;
         this.startTimestamp = new Date();
         this.updatePresence({
             ...this.basePresence(),
             state: 'In Menu',
-            details: this.buildDetails(version, profileName, ign)
+            details: this.buildDetails(version, profileName, ign, { showGameVersion, showProfileName, showPlayerIgn })
         });
     }
 
-    setPlaying({ version, profileName, ign, worldName } = {}) {
+    setPlaying({ version, profileName, ign, worldName, showWorldName, showGameVersion, showProfileName, showPlayerIgn } = {}) {
+        if (!this.enabled) return;
         this.startTimestamp = new Date();
         const cleanWorld = (worldName || '').replace(/ServerLevel\[([^\]]+)\]/i, '$1').trim();
+        const displayWorld = (showWorldName !== false && cleanWorld) ? `Playing ${cleanWorld}` : 'Playing Minecraft';
         this.updatePresence({
             ...this.basePresence(),
-            state: cleanWorld ? `Playing ${cleanWorld}` : 'Playing Minecraft',
-            details: this.buildDetails(version, profileName, ign),
+            state: displayWorld,
+            details: this.buildDetails(version, profileName, ign, { showGameVersion, showProfileName, showPlayerIgn }),
             smallImageKey: 'minecraft_icon',
-            smallImageText: version || 'Minecraft'
+            smallImageText: (showGameVersion !== false && version) ? version : 'Minecraft'
         });
     }
 
-    setServer({ version, profileName, ign, serverIp, privacyMode } = {}) {
+    setServer({ version, profileName, ign, serverIp, privacyMode, showGameVersion, showProfileName, showPlayerIgn } = {}) {
+        if (!this.enabled) return;
         this.startTimestamp = new Date();
         const displayServerIp = privacyMode ? '' : serverIp;
         this.updatePresence({
             ...this.basePresence(),
             state: displayServerIp ? `Playing on ${displayServerIp}` : 'Playing Multiplayer',
-            details: this.buildDetails(version, profileName, ign),
+            details: this.buildDetails(version, profileName, ign, { showGameVersion, showProfileName, showPlayerIgn }),
             smallImageKey: 'minecraft_icon',
-            smallImageText: version || 'Minecraft'
+            smallImageText: (showGameVersion !== false && version) ? version : 'Minecraft'
         });
     }
 }

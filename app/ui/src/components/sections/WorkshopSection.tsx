@@ -1,35 +1,8 @@
 import React, { useState, useEffect } from 'react';
-
-const renderCardSkeletons = (count = 4) => {
-  return Array.from({ length: count }).map((_, i) => (
-    <div key={i} className="wk-card wk-card-skeleton">
-      <div className="wk-card-header">
-        <div className="wk-card-icon wk-skeleton-shimmer"></div>
-        <div className="wk-card-title-wrap">
-          <div className="wk-skeleton-shimmer" style={{ height: '16px', width: '68%', borderRadius: '6px', marginBottom: '6px' }}></div>
-          <div className="wk-skeleton-shimmer" style={{ height: '12px', width: '42%', borderRadius: '4px' }}></div>
-        </div>
-        <div className="wk-skeleton-shimmer" style={{ height: '20px', width: '38px', borderRadius: '12px', marginLeft: 'auto' }}></div>
-      </div>
-      <div className="wk-card-desc" style={{ display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center', minHeight: '58px', maxHeight: '58px' }}>
-        <div className="wk-skeleton-shimmer" style={{ height: '12px', width: '100%', borderRadius: '4px' }}></div>
-        <div className="wk-skeleton-shimmer" style={{ height: '12px', width: '85%', borderRadius: '4px' }}></div>
-        <div className="wk-skeleton-shimmer" style={{ height: '12px', width: '45%', borderRadius: '4px' }}></div>
-      </div>
-      <div className="wk-card-actions">
-        <div className="wk-card-actions-row">
-          <div className="wk-skeleton-shimmer" style={{ height: '34px', width: '100%', borderRadius: '8px' }}></div>
-        </div>
-        <div className="wk-card-actions-row">
-          <div className="wk-skeleton-shimmer" style={{ height: '34px', flex: 1, borderRadius: '8px' }}></div>
-          <div className="wk-skeleton-shimmer" style={{ height: '34px', width: '38px', borderRadius: '8px', flexShrink: 0 }}></div>
-        </div>
-      </div>
-    </div>
-  ));
-};
+import { buildSkeletonHTML, getInitialSkeletonCounts } from '../../utils/wkSkeleton';
 
 export const WorkshopSection: React.FC = () => {
+  const [skeletonCounts] = useState(() => getInitialSkeletonCounts());
   const [accStates, setAccStates] = useState(() => ({
     wkMyBody: typeof window !== 'undefined' ? localStorage.getItem('wk_acc_wkMyBody') === 'open' : false,
     wkOfficialBody: typeof window !== 'undefined' ? localStorage.getItem('wk_acc_wkOfficialBody') !== 'closed' : true,
@@ -170,7 +143,11 @@ export const WorkshopSection: React.FC = () => {
         {/* Mod Packs Panel */}
         <div className="workshop-tab-panel" data-panel="modpacks" style={{ display: 'block' }}>
           {/* My Items (pending/denied) */}
-          <div id="wkMyItemsSection" style={{ display: 'none', marginBottom: '16px' }}>
+          <div
+            id="wkMyItemsSection"
+            className="wk-collapsible-section"
+            style={{ display: skeletonCounts.mine > 0 ? 'block' : 'none', marginBottom: '16px' }}
+          >
             <div className="wk-accordion-header" data-accordion="wkMyBody" onClick={() => handleToggleWkAccordion('wkMyBody')}>
               <div className="wk-accordion-label">
                 <i className="fas fa-user-clock"></i>
@@ -180,7 +157,11 @@ export const WorkshopSection: React.FC = () => {
             </div>
             <div className={`wk-accordion-body ${accStates.wkMyBody ? 'open' : ''}`} id="wkMyBody">
               <div>
-                <div className="wk-grid" id="wkMyItemsGrid"></div>
+                <div
+                  className="wk-grid"
+                  id="wkMyItemsGrid"
+                  dangerouslySetInnerHTML={{ __html: buildSkeletonHTML(skeletonCounts.mine, 'mine') }}
+                ></div>
               </div>
             </div>
           </div>
@@ -198,9 +179,11 @@ export const WorkshopSection: React.FC = () => {
           </div>
           <div className={`wk-accordion-body ${accStates.wkOfficialBody ? 'open' : ''}`} id="wkOfficialBody">
             <div>
-              <div className="wk-grid" id="wkOfficialGrid">
-                {renderCardSkeletons(2)}
-              </div>
+              <div
+                className="wk-grid"
+                id="wkOfficialGrid"
+                dangerouslySetInnerHTML={{ __html: buildSkeletonHTML(skeletonCounts.official, 'public') }}
+              ></div>
             </div>
           </div>
 
@@ -356,9 +339,11 @@ export const WorkshopSection: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <div className="wk-grid" id="wkCommunityGrid">
-                {renderCardSkeletons(4)}
-              </div>
+              <div
+                className="wk-grid"
+                id="wkCommunityGrid"
+                dangerouslySetInnerHTML={{ __html: buildSkeletonHTML(skeletonCounts.community, 'public') }}
+              ></div>
             </div>
           </div>
 
@@ -409,7 +394,11 @@ export const WorkshopSection: React.FC = () => {
                 <div className="wk-spinner"></div>
                 <span data-i18n="workshop.modrinth.searching">Searching Modrinth...</span>
               </div>
-              <div className="wk-grid" id="wkModrinthGrid"></div>
+              <div
+                className="wk-grid"
+                id="wkModrinthGrid"
+                dangerouslySetInnerHTML={{ __html: buildSkeletonHTML(skeletonCounts.modrinth, 'modrinth') }}
+              ></div>
               <div id="wkModrinthSentinel" style={{ height: '20px', width: '100%', marginTop: '20px' }}></div>
               <div id="wkModrinthMoreLoading" className="wk-loading" style={{ display: 'none', padding: '16px 0' }}>
                 <div className="wk-spinner"></div>

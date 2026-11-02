@@ -479,7 +479,8 @@
     "update_badge": "Eguneratzea",
     "waiting": "Itxaroten",
     "done": "Eginda",
-    "error": "Errorea"
+    "error": "Errorea",
+    "corrupted_notice": "Hondatutako fitxategiak hauteman eta ezabatu dira. Ziurtatu jokoa konexio egonkor eta murrizketarik gabearekin abiarazten duzula."
   },
   "toasts": {
     "login_failed": "Saio-hasierak huts egin du: {err}",
@@ -600,7 +601,8 @@
     "minecraft_running_server_saved": "Minecraft martxan dago dagoeneko. Zerbitzaria zure jokalari anitzeko zerrendara gehitu dugu.",
     "launch_failed": "Errorea jokoa abiaraztean.",
     "connecting_to_server": "{server}-(e)ra konektatzen...",
-    "copied_to_clipboard": "Arbelean kopiatuta!"
+    "copied_to_clipboard": "Arbelean kopiatuta!",
+    "corrupted_files_warning": "Hondatutako Minecraft fitxategiak hauteman eta ezabatu dira. Ziurtatu Minecraft konexio egonkor eta murrizketarik gabearekin abiarazten duzula."
   },
   "settings": {
     "language": "Language / Hizkuntza",
@@ -618,8 +620,8 @@
     "show_snapshots_tooltip": "Garapeneko bertsioak (snapshots) erakusten ditu bertsio-hautatzailean.",
     "show_old": "Erakutsi Bertsio Zaharrak",
     "show_old_tooltip": "Alpha eta Beta bertsio zaharrak erakusten ditu bertsio-hautatzailean.",
-    "privacy": "Pribatutasun Modua",
-    "privacy_tooltip": "Zure zerbitzariaren IP helbidea ezkutatzen die zure lagunei Rich Presence-n. Zure egoerak zerbitzari batean jolasten ari zarela erakutsiko du, baina IPa ezkutatuta egongo da.",
+    "privacy": "Zerbitzariaren IPa ezkutatu",
+    "privacy_tooltip": "Zerbitzariaren helbidea ezkutatzen du Discord-en eta Launcher-ean. 'Jokalari Anitzean Jolasten' erakutsiko du IPrik gabe.",
     "save_btn": "Gorde Ezarpenak",
     "launcher_version": "Abiarazlearen Bertsioa:",
     "replay_tutorial": "Errepikatu Tutoriala",
@@ -631,7 +633,22 @@
     "reopen_on_game_close_tooltip": "Minecraft ixten denean abiarazlea automatikoki leheneratu, maximizatu eta enfokatzen du.",
     "test_update_title": "Probatu atzeko planoko eguneraketa",
     "test_update_desc": "Simulatu eguneraketa detektatzea, deskargaren aurrerapen intsignia eta setup-erako erreleboa.",
-    "test_update_btn": "Probatu eguneraketa"
+    "test_update_btn": "Probatu eguneraketa",
+    "start_on_boot": "Sistemarekin abiarazi",
+    "start_on_boot_tooltip": "HelloWorld Launcher automatikoki abiarazten du ordenagailua piztean.",
+    "presence_title": "Presentzia eta Jarduera (RPC)",
+    "discord_rpc": "Discord Rich Presence",
+    "discord_rpc_tooltip": "Zure Minecraft-eko egoera eta jarduera erakusten ditu zure Discord-eko profilean.",
+    "app_presence": "Presentzia Soziala Launcher-ean",
+    "app_presence_tooltip": "HelloWorld Launcher-eko lagunei zure egoera ikusteko aukera ematen die. Desgaitu deskonektatuta agertzeko (Modu Ikusezina).",
+    "show_singleplayer_world": "Jokalari Bakarreko munduaren izena erakutsi",
+    "show_singleplayer_world_tooltip": "Jokalari bakarreko partidetan munduaren izena erakusten du. Desgaitu 'Jokalari Bakarrean Jolasten' bakarrik erakusteko.",
+    "show_game_version": "Bertsioa eta modloader-a erakutsi",
+    "show_game_version_tooltip": "Minecraft-en bertsioa eta modloader-a erakusten ditu (adib. Fabric 1.21.1) zure egoeran.",
+    "show_profile_name": "Instalazioaren izena erakutsi",
+    "show_profile_name_tooltip": "Zure profilaren edo instalazioaren izena erakusten du egoeraren xehetasunetan.",
+    "show_player_ign": "Jokalari-izena (IGN) erakutsi",
+    "show_player_ign_tooltip": "Zure Minecraft-eko jokalari-izena erakusten du egoeraren xehetasunetan."
   },
   "skins": {
     "create_pack": "Sortu Skin Pakete Berria",

@@ -479,7 +479,8 @@
     "update_badge": "Aggiornamento",
     "waiting": "In attesa",
     "done": "Fatto",
-    "error": "Errore"
+    "error": "Errore",
+    "corrupted_notice": "Sono stati rilevati ed eliminati file danneggiati. Assicurati di avviare il gioco con una connessione stabile e senza restrizioni."
   },
   "toasts": {
     "login_failed": "Accesso non riuscito: {err}",
@@ -600,7 +601,8 @@
     "minecraft_running_server_saved": "Minecraft è già avviato. Abbiamo aggiunto il server all'elenco multigiocatore.",
     "launch_failed": "Impossibile avviare il gioco.",
     "connecting_to_server": "Connessione a {server}...",
-    "copied_to_clipboard": "Copiato negli appunti!"
+    "copied_to_clipboard": "Copiato negli appunti!",
+    "corrupted_files_warning": "Sono stati rilevati ed eliminati file di Minecraft danneggiati. Assicurati di avviare Minecraft con una connessione Internet stabile e senza restrizioni."
   },
   "settings": {
     "language": "Language / Lingua",
@@ -618,8 +620,8 @@
     "show_snapshots_tooltip": "Mostra le versioni di sviluppo (istantanee) nel selettore di versione.",
     "show_old": "Mostra versioni precedenti",
     "show_old_tooltip": "Mostra le vecchie versioni Alpha e Beta nel selettore di versione.",
-    "privacy": "Modalità privacy",
-    "privacy_tooltip": "Nasconde l'indirizzo IP del tuo server agli amici in Rich Presence. Il tuo stato mostrerà comunque che stai giocando su un server, ma l'IP sarà nascosto.",
+    "privacy": "Nascondi IP del server",
+    "privacy_tooltip": "Nasconde l'indirizzo del server su Discord e nel Launcher. Mostrerà 'Giocando in Multigiocatore' senza l'IP.",
     "save_btn": "Salva impostazioni",
     "launcher_version": "Versione di avvio:",
     "replay_tutorial": "Riproduci il tutorial",
@@ -631,7 +633,22 @@
     "reopen_on_game_close_tooltip": "Ripristina, massimizza e mette a fuoco automaticamente il launcher quando Minecraft viene chiuso.",
     "test_update_title": "Testa aggiornamento in background",
     "test_update_desc": "Simula il rilevamento dell'aggiornamento, il badge di avanzamento download e il passaggio al setup.",
-    "test_update_btn": "Testa aggiornamento"
+    "test_update_btn": "Testa aggiornamento",
+    "start_on_boot": "Avvia con il sistema",
+    "start_on_boot_tooltip": "Avvia automaticamente HelloWorld Launcher all'accensione del computer.",
+    "presence_title": "Presenza e Attività (RPC)",
+    "discord_rpc": "Discord Rich Presence",
+    "discord_rpc_tooltip": "Mostra il tuo stato e la tua attività di Minecraft sul tuo profilo Discord.",
+    "app_presence": "Presenza Sociale nel Launcher",
+    "app_presence_tooltip": "Permette ai tuoi amici su HelloWorld Launcher di vedere il tuo stato. Disattiva per risultare offline (Modalità Invisibile).",
+    "show_singleplayer_world": "Mostra nome del mondo in Giocatore Singolo",
+    "show_singleplayer_world_tooltip": "Mostra il nome del mondo in giocatore singolo. Disattiva per mostrare solo 'In Giocatore Singolo'.",
+    "show_game_version": "Mostra versione e modloader",
+    "show_game_version_tooltip": "Mostra la versione di Minecraft e il modloader (es. Fabric 1.21.1) nel tuo stato.",
+    "show_profile_name": "Mostra nome dell'installazione",
+    "show_profile_name_tooltip": "Mostra il nome del tuo profilo o installazione nei dettagli dello stato.",
+    "show_player_ign": "Mostra nome in gioco (IGN)",
+    "show_player_ign_tooltip": "Mostra il tuo nome giocatore di Minecraft nei dettagli dello stato."
   },
   "skins": {
     "create_pack": "Crea un nuovo pacchetto skin",

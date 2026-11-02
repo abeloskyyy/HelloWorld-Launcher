@@ -479,7 +479,8 @@
     "update_badge": "Actualització",
     "waiting": "Esperant",
     "done": "Fet",
-    "error": "Error"
+    "error": "Error",
+    "corrupted_notice": "S'han detectat fitxers danyats i s'han eliminat. Assegura't d'iniciar el joc amb una connexió estable i sense restriccions."
   },
   "toasts": {
     "login_failed": "Error d'inici de sessió: {err}",
@@ -600,7 +601,8 @@
     "minecraft_running_server_saved": "El Minecraft ja està obert. Hem afegit el servidor a la teva llista multijugador.",
     "launch_failed": "Error en iniciar el joc.",
     "connecting_to_server": "Iniciant connexió a {server}...",
-    "copied_to_clipboard": "Copiat al porta-retalls!"
+    "copied_to_clipboard": "Copiat al porta-retalls!",
+    "corrupted_files_warning": "S'han detectat fitxers de Minecraft danyats i s'han eliminat. Assegura't d'iniciar Minecraft amb una connexió a Internet estable i sense restriccions."
   },
   "settings": {
     "language": "Language / Idioma",
@@ -618,8 +620,8 @@
     "show_snapshots_tooltip": "Mostra les versions de desenvolupament (snapshots) al selector de versions.",
     "show_old": "Mostra les versions antigues",
     "show_old_tooltip": "Mostra les versions antigues alfa i beta al selector de versions.",
-    "privacy": "Mode de privadesa",
-    "privacy_tooltip": "Oculta l'adreça IP del vostre servidor als amics a Rich Presence. El teu estat encara mostrarà que estàs jugant en un servidor, però la IP s'amagarà.",
+    "privacy": "Amagar IP del servidor",
+    "privacy_tooltip": "Amaga l'adreça del servidor a Discord i al Launcher. Mostrarà 'Jugant Multijugador' sense la IP.",
     "save_btn": "Desa la configuració",
     "launcher_version": "Versió del llançador:",
     "replay_tutorial": "Tutorial de repetició",
@@ -631,7 +633,22 @@
     "reopen_on_game_close_tooltip": "Restaura, maximitza i enfoca el llançador automàticament quan es detecta que Minecraft s'ha tancat.",
     "test_update_title": "Provar actualització en segon pla",
     "test_update_desc": "Simula la detecció d'actualització, el badge amb progrés de descàrrega i el relleu al setup.",
-    "test_update_btn": "Provar actualització"
+    "test_update_btn": "Provar actualització",
+    "start_on_boot": "Iniciar amb el sistema",
+    "start_on_boot_tooltip": "Inicia HelloWorld Launcher automàticament en engegar l'ordinador.",
+    "presence_title": "Presència i Activitat (RPC)",
+    "discord_rpc": "Discord Rich Presence",
+    "discord_rpc_tooltip": "Mostra la teva activitat i estat de Minecraft al teu perfil de Discord.",
+    "app_presence": "Presència Social al Launcher",
+    "app_presence_tooltip": "Permet que els teus amics a HelloWorld Launcher vegin el teu estat. Desactiva-ho per aparèixer desconnectat (Mode Invisible).",
+    "show_singleplayer_world": "Mostrar nom del món en Un Jugador",
+    "show_singleplayer_world_tooltip": "Mostra el nom del món en partides individuals. Desactiva-ho per mostrar només 'Jugant Un Jugador'.",
+    "show_game_version": "Mostrar versió i modloader",
+    "show_game_version_tooltip": "Mostra la versió de Minecraft i el modloader (ex. Fabric 1.21.1) al teu estat.",
+    "show_profile_name": "Mostrar nom de la instal·lació",
+    "show_profile_name_tooltip": "Mostra el nom del teu perfil o instal·lació als detalls de l'estat.",
+    "show_player_ign": "Mostrar nom de jugador (IGN)",
+    "show_player_ign_tooltip": "Mostra el teu nom de jugador de Minecraft als detalls de l'estat."
   },
   "skins": {
     "create_pack": "Crea un nou paquet d'aspectes",

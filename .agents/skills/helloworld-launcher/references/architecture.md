@@ -81,9 +81,16 @@ El launcher almacena sus datos de configuración dentro de `<mcDir>/.HWLauncher/
   "dev_mode": false,
   "show_snapshots": false,
   "show_old": false,
+  "start_on_boot": false,
+  "discord_rpc_enabled": true,
+  "app_presence_enabled": true,
+  "privacy_mode": false,
+  "show_singleplayer_world": true,
+  "show_game_version": true,
+  "show_profile_name": true,
+  "show_player_ign": true,
   "enable_transitions": true,
   "hw_accel": true,
-  "privacy_mode": false,
   "reopen_on_game_close": true,
   "ui_scale": 1.0,
   "language": "es"
@@ -156,8 +163,19 @@ Se expone en el objeto canónico `window.hwlAPI` y mediante los adaptadores de c
 | `deleteAddon(...)` | `delete-addon` | Filename, profile_id, type, world_name | Elimina el archivo del addon |
 | `resolveModDependencies(o)`| `resolve-mod-dependencies`| Objeto con versión y loader | Árbol de dependencias requeridas |
 
+### Actualizaciones Silenciosas (Auto-Updater)
+| Método `hwlAPI` | Canal IPC (`invoke`) | Parámetros | Retorno |
+| :--- | :--- | :--- | :--- |
+| `checkLocalInstaller(hash)`| `check-local-installer` | `expectedHash?: string` | `{ exists: boolean, path?: string }` |
+| `checkDownloadedUpdate(p)`| `check-downloaded-update` | `{ downloadUrl, expectedHash, minSizeMb }` | `{ exists: boolean, filePath?: string, size?: number }` |
+| `downloadInstallerFile(url)`| `download-installer-file` | `downloadUrl: string` | `{ success: boolean, filePath?: string }` |
+| `prepareTestUpdateFile()` | `prepare-test-update-file` | Ninguno | `{ success: boolean, filePath?: string }` |
+| `launchInstallerAndQuit(o)`| `launch-installer-and-quit` | `optionsOrPath: string \| { installerPath, updateFile, installPath, expectedSetupHash }` | `{ success: boolean }` |
+| `getPlatformInfo()` | `get-platform-info` | Ninguno | `{ platform, arch, isAppImage, isDeb, appImagePath }` |
+
 ### Eventos Globales (Main ➔ Renderer)
 - `download-progress`: Progreso porcentual y bytes descargados en assets/librerías/Java.
+- `installer-download-progress`: Progreso en tiempo real de la descarga del paquete de actualización (bytes, velocidad y porcentaje).
 - `info-message`: Notificaciones informativas o errores emergentes en UI.
 - `reload-profiles`: Ordena al cliente recargar la lista de perfiles tras un cambio.
 - `quick-launch-profile`: Disparado por accesos directos o JumpList de Windows.

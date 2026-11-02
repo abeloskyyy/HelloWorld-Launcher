@@ -8,8 +8,9 @@
   },
   "main": "app/main.js",
   "scripts": {
-    "test": "electron .",
-    "start": "electron .",
+    "test": "node scripts/start.js",
+    "start": "node scripts/start.js",
+    "notify": "node scripts/notify-ntfy.js",
     "dev:ui": "vite",
     "build:ui": "vite build",
     "prebuild": "npm run build:ui",

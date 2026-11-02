@@ -95,6 +95,7 @@ const hwlAPI = {
     onLoginUpdate: (callback) => ipcRenderer.on('login-update', (event, data) => callback(data)),
     onStatsUpdated: (callback) => ipcRenderer.on('stats-updated', () => callback()),
     onServicesDown429: (callback) => ipcRenderer.on('services-down-429', () => callback()),
+    onCorruptedFilesDetected: (callback) => ipcRenderer.on('corrupted-files-detected', (event, data) => callback(data)),
 
     // Auto-Updater
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
@@ -102,6 +103,8 @@ const hwlAPI = {
     quitAndInstall: () => ipcRenderer.invoke('quit-and-install'),
     onUpdaterStatus: (callback) => ipcRenderer.on('updater-status', (event, data) => callback(data)),
     checkLocalInstaller: (expectedHash) => ipcRenderer.invoke('check-local-installer', expectedHash),
+    ensureLocalInstaller: (params) => ipcRenderer.invoke('ensure-local-installer', params),
+    checkDownloadedUpdate: (params) => ipcRenderer.invoke('check-downloaded-update', params),
     prepareTestUpdateFile: () => ipcRenderer.invoke('prepare-test-update-file'),
     launchInstallerAndQuit: (installerPath) => ipcRenderer.invoke('launch-installer-and-quit', installerPath),
     downloadInstallerFile: (downloadUrl) => ipcRenderer.invoke('download-installer-file', downloadUrl),
@@ -312,6 +315,8 @@ const pywebviewAPI = {
     openExternal: (url) => ipcRenderer.invoke('open-url', url),
     ms_write_verified: (emailKey, email, username, uuid, firebaseUid, firebaseRefreshToken) => ipcRenderer.invoke('ms-write-verified', emailKey, email, username, uuid, firebaseUid, firebaseRefreshToken),
     check_local_installer: () => ipcRenderer.invoke('check-local-installer'),
+    ensure_local_installer: (params) => ipcRenderer.invoke('ensure-local-installer', params),
+    ensureLocalInstaller: (params) => ipcRenderer.invoke('ensure-local-installer', params),
     launch_installer_and_quit: (installerPath) => ipcRenderer.invoke('launch-installer-and-quit', installerPath),
     download_installer_file: (downloadUrl) => ipcRenderer.invoke('download-installer-file', downloadUrl),
     on_installer_download_progress: (callback) => {
@@ -370,7 +375,7 @@ const pywebviewAPI = {
     get_launcher_version: () => ipcRenderer.invoke('get-version'),
     get_my_presence_server: () => ipcRenderer.invoke('get-my-presence-server'),
     get_server_history: () => ipcRenderer.invoke('get-server-history'),
-    get_user_profile: (uid) => ipcRenderer.invoke('get-user-profile', uid),
+    get_user_profile: (uid, username) => ipcRenderer.invoke('get-user-profile', uid, username),
     add_profile_link: (uid, url, title, type) => ipcRenderer.invoke('add-profile-link', uid, url, title, type),
     get_own_badges: () => ipcRenderer.invoke('get-own-badges'),
 

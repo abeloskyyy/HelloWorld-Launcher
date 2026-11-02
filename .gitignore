@@ -11,6 +11,8 @@ secrets.json
 app/secrets.json
 **/secrets.json
 scripts/*.json
+ntfy.config.json
+.ntfy.json
 serviceAccountKey.json
 release/
 version-build-old.md

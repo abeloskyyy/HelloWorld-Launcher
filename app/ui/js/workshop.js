@@ -103,84 +103,55 @@
     function hideWkLoadingScreen() {}
 
     function getWkCardSkeletonHTML(count = 4, context = 'public') {
+        if (window.wkSkeleton && typeof window.wkSkeleton.buildSkeletonHTML === 'function') {
+            return window.wkSkeleton.buildSkeletonHTML(count, context, false);
+        }
+        const bar = function(w, h, r, extra) {
+            return '<div class="wk-sk-bar wk-skeleton-shimmer" style="width:' + w + ';height:' + h + 'px;border-radius:' + (r || 4) + 'px;' + (extra || '') + '"></div>';
+        };
         let html = '';
         const n = Math.max(1, count);
         for (let i = 0; i < n; i++) {
             if (context === 'modrinth') {
-                html += '<div class="mod-card mod-card-skeleton">' +
+                html += '<div class="mod-card mod-card-skeleton" aria-hidden="true">' +
                     '<div class="mod-card-header">' +
-                        '<div class="mod-card-icon wk-skeleton-shimmer" style="border-radius: 8px;"></div>' +
-                        '<div class="mod-card-info" style="display: flex; flex-direction: column; gap: 6px; justify-content: center;">' +
-                            '<div class="wk-skeleton-shimmer" style="height: 16px; width: 75%; border-radius: 6px;"></div>' +
-                            '<div class="wk-skeleton-shimmer" style="height: 12px; width: 45%; border-radius: 4px;"></div>' +
-                        '</div>' +
+                        '<div class="mod-card-icon wk-skeleton-shimmer"></div>' +
+                        '<div class="mod-card-info">' + bar('75%', 16, 6, 'margin-bottom:6px;') + bar('45%', 12) + '</div>' +
                     '</div>' +
-                    '<div class="mod-card-description" style="display: flex; flex-direction: column; gap: 6px; justify-content: center; min-height: 40px;">' +
-                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 100%; border-radius: 4px;"></div>' +
-                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 75%; border-radius: 4px;"></div>' +
-                    '</div>' +
-                    '<div class="mod-card-stats">' +
-                        '<div class="wk-skeleton-shimmer" style="height: 14px; width: 55px; border-radius: 4px;"></div>' +
-                    '</div>' +
-                    '<div class="mod-card-categories" style="display: flex; gap: 6px;">' +
-                        '<div class="wk-skeleton-shimmer" style="height: 20px; width: 50px; border-radius: 12px;"></div>' +
-                        '<div class="wk-skeleton-shimmer" style="height: 20px; width: 60px; border-radius: 12px;"></div>' +
-                    '</div>' +
-                    '<div class="mod-card-actions">' +
-                        '<div class="wk-skeleton-shimmer" style="height: 38px; width: 100%; border-radius: 8px;"></div>' +
-                    '</div>' +
+                    '<div class="mod-card-description wk-skeleton-lines">' + bar('100%', 12) + bar('75%', 12) + '</div>' +
+                    '<div class="mod-card-stats"><div class="mod-card-stat">' + bar('56px', 12) + '</div></div>' +
+                    '<div class="mod-card-categories">' + bar('56px', 22, 12) + bar('64px', 22, 12) + bar('50px', 22, 12) + '</div>' +
+                    '<div class="mod-card-actions"><div class="wk-sk-btn wk-skeleton-shimmer"></div></div>' +
                 '</div>';
             } else if (context === 'mine') {
-                html += '<div class="wk-card wk-card-skeleton">' +
+                html += '<div class="wk-card wk-card-skeleton wk-card-mine" aria-hidden="true">' +
+                    '<div class="wk-sk-pill wk-skeleton-shimmer"></div>' +
                     '<div class="wk-card-header">' +
                         '<div class="wk-card-icon wk-skeleton-shimmer"></div>' +
-                        '<div class="wk-card-title-wrap">' +
-                            '<div class="wk-skeleton-shimmer" style="height: 16px; width: 68%; border-radius: 6px; margin-bottom: 6px;"></div>' +
-                            '<div class="wk-skeleton-shimmer" style="height: 12px; width: 42%; border-radius: 4px;"></div>' +
-                        '</div>' +
+                        '<div class="wk-card-title-wrap">' + bar('68%', 16, 6, 'margin-bottom:6px;') + bar('42%', 12) + '</div>' +
                     '</div>' +
-                    '<div class="wk-card-desc" style="display: flex; flex-direction: column; gap: 8px; justify-content: center; min-height: 58px; max-height: 58px;">' +
-                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 100%; border-radius: 4px;"></div>' +
-                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 85%; border-radius: 4px;"></div>' +
-                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 45%; border-radius: 4px;"></div>' +
-                    '</div>' +
-                    '<div class="wk-card-stats-block" style="border: none; background: rgba(0,0,0,0.15);">' +
-                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 50%; border-radius: 4px;"></div>' +
-                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 40%; border-radius: 4px;"></div>' +
-                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 45%; border-radius: 4px;"></div>' +
+                    '<div class="wk-card-desc wk-skeleton-lines">' + bar('100%', 12) + bar('85%', 12) + bar('45%', 12) + '</div>' +
+                    '<div class="wk-card-stats-block">' +
+                        '<div class="wk-card-stat-line">' + bar('16px', 12) + bar('60%', 12) + '</div>' +
+                        '<div class="wk-card-stat-line">' + bar('16px', 12) + bar('50%', 12) + '</div>' +
+                        '<div class="wk-card-stat-line">' + bar('16px', 12) + bar('40%', 12) + '</div>' +
                     '</div>' +
                     '<div class="wk-card-actions">' +
-                        '<div class="wk-card-actions-row">' +
-                            '<div class="wk-skeleton-shimmer" style="height: 34px; width: 100%; border-radius: 8px;"></div>' +
-                        '</div>' +
-                        '<div class="wk-card-actions-admin-row">' +
-                            '<div class="wk-skeleton-shimmer" style="height: 34px; flex: 1; border-radius: 8px;"></div>' +
-                        '</div>' +
+                        '<div class="wk-card-actions-row"><div class="wk-sk-btn wk-skeleton-shimmer"></div></div>' +
+                        '<div class="wk-card-actions-admin-row"><div class="wk-sk-btn wk-skeleton-shimmer"></div></div>' +
                     '</div>' +
                 '</div>';
             } else {
-                html += '<div class="wk-card wk-card-skeleton">' +
+                html += '<div class="wk-card wk-card-skeleton" aria-hidden="true">' +
                     '<div class="wk-card-header">' +
                         '<div class="wk-card-icon wk-skeleton-shimmer"></div>' +
-                        '<div class="wk-card-title-wrap">' +
-                            '<div class="wk-skeleton-shimmer" style="height: 16px; width: 68%; border-radius: 6px; margin-bottom: 6px;"></div>' +
-                            '<div class="wk-skeleton-shimmer" style="height: 12px; width: 42%; border-radius: 4px;"></div>' +
-                        '</div>' +
-                        '<div class="wk-skeleton-shimmer" style="height: 20px; width: 38px; border-radius: 12px; margin-left: auto;"></div>' +
+                        '<div class="wk-card-title-wrap">' + bar('68%', 16, 6, 'margin-bottom:6px;') + bar('42%', 12) + '</div>' +
+                        bar('52px', 22, 6, 'flex-shrink:0;') +
                     '</div>' +
-                    '<div class="wk-card-desc" style="display: flex; flex-direction: column; gap: 8px; justify-content: center; min-height: 58px; max-height: 58px;">' +
-                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 100%; border-radius: 4px;"></div>' +
-                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 85%; border-radius: 4px;"></div>' +
-                        '<div class="wk-skeleton-shimmer" style="height: 12px; width: 45%; border-radius: 4px;"></div>' +
-                    '</div>' +
+                    '<div class="wk-card-desc wk-skeleton-lines">' + bar('100%', 12) + bar('85%', 12) + bar('45%', 12) + '</div>' +
                     '<div class="wk-card-actions">' +
-                        '<div class="wk-card-actions-row">' +
-                            '<div class="wk-skeleton-shimmer" style="height: 34px; width: 100%; border-radius: 8px;"></div>' +
-                        '</div>' +
-                        '<div class="wk-card-actions-row">' +
-                            '<div class="wk-skeleton-shimmer" style="height: 34px; flex: 1; border-radius: 8px;"></div>' +
-                            '<div class="wk-skeleton-shimmer" style="height: 34px; width: 38px; border-radius: 8px; flex-shrink: 0;"></div>' +
-                        '</div>' +
+                        '<div class="wk-card-actions-row"><div class="wk-sk-btn wk-skeleton-shimmer"></div></div>' +
+                        '<div class="wk-card-actions-row"><div class="wk-sk-btn wk-skeleton-shimmer"></div><div class="wk-sk-btn sq wk-skeleton-shimmer"></div></div>' +
                     '</div>' +
                 '</div>';
             }
@@ -374,7 +345,9 @@
             if (loading) loading.style.display = 'none';
             if (moreLoading) moreLoading.style.display = 'none';
             const cachedModrinth = parseInt(localStorage.getItem('wk_count_modrinth') || '6', 10);
-            grid.innerHTML = getWkCardSkeletonHTML(cachedModrinth > 0 ? cachedModrinth : 6, 'modrinth');
+            if (!grid.children.length || grid.querySelector('.wk-empty')) {
+                grid.innerHTML = getWkCardSkeletonHTML(cachedModrinth > 0 ? cachedModrinth : 6, 'modrinth');
+            }
         } else {
             if (moreLoading) moreLoading.style.display = 'flex';
         }
@@ -393,7 +366,7 @@
 
             if (!result || !result.success) {
                 if (!append) {
-                    grid.innerHTML = '<div class="wk-empty" style="grid-column: 1/-1;"><i class="fas fa-exclamation-triangle"></i><p>' + (window.t('toasts.err_search_modrinth') || 'Error searching Modrinth modpacks.') + '</p></div>';
+                    grid.innerHTML = '<div class="wk-empty wk-card-fade-in" style="grid-column: 1/-1;"><i class="fas fa-exclamation-triangle"></i><p>' + (window.t('toasts.err_search_modrinth') || 'Error searching Modrinth modpacks.') + '</p></div>';
                 }
                 wkModrinthIsLoading = false;
                 return;
@@ -401,7 +374,7 @@
 
             if (result.results.length === 0) {
                 if (!append) {
-                    grid.innerHTML = '<div class="wk-empty" style="grid-column: 1/-1;"><i class="fas fa-search"></i><p>No Modrinth modpacks found.</p></div>';
+                    grid.innerHTML = '<div class="wk-empty wk-card-fade-in" style="grid-column: 1/-1;"><i class="fas fa-search"></i><p>No Modrinth modpacks found.</p></div>';
                 }
                 wkModrinthNoMore = true;
                 wkModrinthIsLoading = false;
@@ -420,6 +393,9 @@
             result.results.forEach(function(mod) {
                 if (typeof window.createModCard === 'function') {
                     const card = window.createModCard(mod, 'modpack');
+                    if (card) {
+                        card.classList.add('wk-card-fade-in');
+                    }
                     grid.appendChild(card);
                 }
             });
@@ -483,6 +459,12 @@
             communityGrid.innerHTML = getWkCardSkeletonHTML(cachedCommunity);
         }
 
+        // Parallel execution: fetch user submissions and Modrinth concurrently with official/community
+        const myItemsPromise = renderMyPendingItems();
+        const modrinthPromise = (typeof window.loadWkModrinthModPacks === 'function')
+            ? window.loadWkModrinthModPacks(1)
+            : Promise.resolve();
+
         const loginState = await getLoginState();
 
         // Single API call — split result into official / community
@@ -500,13 +482,21 @@
         localStorage.setItem('wk_count_official', officialItems.length);
         localStorage.setItem('wk_count_community', allCommunityModPacks.length);
 
+        if (allItems.length > 0) {
+            await Promise.all(allItems.map(async function(item) {
+                try {
+                    item._resolvedIcon = await resolveIcon(item.icon, item.iconB64 || null);
+                } catch(_) {}
+            }));
+        }
+
         renderModPackGrid(officialGrid, officialItems);
 
         if (loginState !== 'online') {
             if (communityLock) communityLock.style.display = 'flex';
             if (communityGrid) communityGrid.innerHTML = '';
-            await renderMyPendingItems();
-            if (typeof window.loadWkModrinthModPacks === 'function') await window.loadWkModrinthModPacks(1);
+            await myItemsPromise;
+            await modrinthPromise;
             return;
         }
 
@@ -514,10 +504,9 @@
         allCommunityModPacks = allItems.filter(function(i) { return !i.isOfficial; });
         filterAndSortCommunityModPacks();
 
-        await renderMyPendingItems();
-        if (typeof window.loadWkModrinthModPacks === 'function') await window.loadWkModrinthModPacks(1);
+        await myItemsPromise;
+        await modrinthPromise;
     }
-
     window.filterAndSortCommunityModPacks = function() {
         const communityGrid = document.getElementById('wkCommunityGrid');
         if (!communityGrid) return;
@@ -610,32 +599,69 @@
         const cachedMy = parseInt(localStorage.getItem('wk_count_my') || '0', 10);
         if (cachedMy > 0) {
             mySection.style.display = 'block';
-            myGrid.innerHTML = getWkCardSkeletonHTML(cachedMy, 'mine');
+            if (!myGrid.children.length || myGrid.querySelector('.wk-loading')) {
+                myGrid.innerHTML = getWkCardSkeletonHTML(cachedMy, 'mine');
+            }
         }
         try {
             const res = await api().workshop_get_my_items();
             const items = (res && res.items) || [];
             localStorage.setItem('wk_count_my', items.length);
-            if (items.length === 0) { mySection.style.display = 'none'; return; }
+            if (items.length === 0) {
+                if (mySection.style.display !== 'none') {
+                    mySection.style.transition = 'opacity 0.25s ease';
+                    mySection.style.opacity = '0';
+                    setTimeout(function() {
+                        mySection.style.display = 'none';
+                        mySection.style.opacity = '';
+                    }, 250);
+                } else {
+                    mySection.style.display = 'none';
+                }
+                return;
+            }
+            const isCurrentlyHidden = (mySection.style.display === 'none' || getComputedStyle(mySection).display === 'none');
             mySection.style.display = 'block';
+            if (isCurrentlyHidden) {
+                mySection.classList.add('wk-section-fade-in');
+            }
+            await Promise.all(items.map(async function(item) {
+                try {
+                    item._resolvedIcon = await resolveIcon(item.icon, item.iconB64 || null);
+                } catch(_) {}
+            }));
             myGrid.innerHTML = items.map(function(item) { return renderModPackCardHTML(item, 'mine'); }).join('');
             loadCardIcons(myGrid);
         } catch (e) {
             mySection.style.display = 'none';
         }
     }
-
     function renderModPackGrid(container, items) {
         if (!container) return;
         if (!items || items.length === 0) {
-            container.innerHTML = '<div class="wk-empty"><i class="fas fa-box-open"></i><p>No mod packs yet.</p></div>';
+            container.innerHTML = '<div class="wk-empty wk-card-fade-in"><i class="fas fa-box-open"></i><p>No mod packs yet.</p></div>';
             return;
+        }
+        // ANTI-FLICKER: If the exact same items are already mounted, do not wipe and reconstruct
+        const existingCards = container.querySelectorAll('.wk-card:not(.wk-card-skeleton)');
+        if (existingCards.length === items.length && items.length > 0) {
+            let isIdentical = true;
+            for (let i = 0; i < items.length; i++) {
+                if (existingCards[i].getAttribute('data-id') !== String(items[i].id)) {
+                    isIdentical = false;
+                    break;
+                }
+            }
+            if (isIdentical) {
+                loadCardIcons(container);
+                return;
+            }
         }
         container.innerHTML = items.map(function(item) { return renderModPackCardHTML(item, 'public'); }).join('');
         loadCardIcons(container);
     }
 
-    function renderModPackCardHTML(item, context) {
+    function renderModPackCardHTML(item, context, index) {
         const statusBadge = (context === 'mine' || context === 'admin') ? '<span class="wk-status-badge wk-status-' + (item.xst || 'pnd') + '">' + getStatusLabel(item.xst) + '</span>' : '';
         const canInstall = (item.xst === 'pub' || context === 'public') && context !== 'admin';
         const deniedNote = ((context === 'mine' || context === 'admin') && item.xst === 'njt' && item.note) ? '<div class="wk-denied-note"><i class="fas fa-ban"></i> ' + escHtml(item.note) + '</div>' : '';
@@ -667,10 +693,13 @@
                 '<i class="' + (isLiked ? 'fas fa-heart' : 'far fa-heart') + '"></i>' +
             '</button>' : '';
 
-        return '<div class="wk-card" data-id="' + escHtml(item.id) + '">' +
+        const cardExtraClass = (context === 'mine' ? ' wk-card-mine' : '') + (context === 'admin' ? ' wk-card-admin' : '');
+        const iconSrc = item._resolvedIcon || 'img/icon.png';
+
+        return '<div class="wk-card wk-card-fade-in' + cardExtraClass + '" data-id="' + escHtml(item.id) + '">' +
             statusBadge +
             '<div class="wk-card-header">' +
-                '<img class="wk-card-icon" src="img/icon.png" data-icon="' + escHtml(item.icon || '') + '" data-iconb64="' + escHtml(item.iconB64 || '') + '">' +
+                '<img class="wk-card-icon" src="' + escHtml(iconSrc) + '" data-icon="' + escHtml(item.icon || '') + '" data-iconb64="' + escHtml(item.iconB64 || '') + '">' +
                 '<div class="wk-card-title-wrap">' +
                     '<div class="wk-card-title">' + escHtml(item.title) + '</div>' +
                     '<div class="wk-card-author">' + escHtml(item.authorName || 'Unknown') + '</div>' +

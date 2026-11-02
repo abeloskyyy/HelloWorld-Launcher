@@ -479,7 +479,8 @@
     "update_badge": "Mise à jour",
     "waiting": "En attente",
     "done": "Terminé",
-    "error": "Erreur"
+    "error": "Erreur",
+    "corrupted_notice": "Des fichiers endommagés ont été détectés et supprimés. Assurez-vous de lancer le jeu avec une connexion stable et sans restriction."
   },
   "toasts": {
     "login_failed": "Échec de la connexion : {err}",
@@ -600,7 +601,8 @@
     "minecraft_running_server_saved": "Minecraft est déjà ouvert. Nous avons ajouté le serveur à votre liste multijoueur.",
     "launch_failed": "Échec du lancement du jeu.",
     "connecting_to_server": "Connexion à {server}...",
-    "copied_to_clipboard": "Copié dans le presse-papiers !"
+    "copied_to_clipboard": "Copié dans le presse-papiers !",
+    "corrupted_files_warning": "Des fichiers Minecraft endommagés ont été détectés et supprimés. Assurez-vous de lancer Minecraft avec une connexion Internet stable et sans restriction."
   },
   "settings": {
     "language": "Language / Langue",
@@ -618,8 +620,8 @@
     "show_snapshots_tooltip": "Affiche les versions de développement (instantanés) dans le sélecteur de version.",
     "show_old": "Afficher les anciennes versions",
     "show_old_tooltip": "Affiche les anciennes versions Alpha et Beta dans le sélecteur de version.",
-    "privacy": "Mode de confidentialité",
-    "privacy_tooltip": "Cache l’adresse IP de votre serveur aux amis dans Rich Presence. Votre statut indiquera toujours que vous jouez sur un serveur, mais l'adresse IP sera masquée.",
+    "privacy": "Masquer l'IP du serveur",
+    "privacy_tooltip": "Masque l'adresse du serveur sur Discord et dans le Launcher. Affiche 'En multijoueur' sans l'IP.",
     "save_btn": "Enregistrer les paramètres",
     "launcher_version": "Version du lanceur :",
     "replay_tutorial": "Tutoriel de relecture",
@@ -631,7 +633,22 @@
     "reopen_on_game_close_tooltip": "Restaure, agrandit et active automatiquement le launcher lorsque Minecraft se ferme.",
     "test_update_title": "Tester la mise à jour en arrière-plan",
     "test_update_desc": "Simule la détection de mise à jour, le badge de progression du téléchargement et le relais vers le setup.",
-    "test_update_btn": "Tester la mise à jour"
+    "test_update_btn": "Tester la mise à jour",
+    "start_on_boot": "Lancer au démarrage",
+    "start_on_boot_tooltip": "Lance automatiquement HelloWorld Launcher au démarrage de votre ordinateur.",
+    "presence_title": "Présence et Activité (RPC)",
+    "discord_rpc": "Discord Rich Presence",
+    "discord_rpc_tooltip": "Affiche votre statut Minecraft et votre activité sur votre profil Discord.",
+    "app_presence": "Présence sociale dans le Launcher",
+    "app_presence_tooltip": "Permet à vos amis sur HelloWorld Launcher de voir votre statut. Désactivez pour apparaître hors ligne (Mode Invisible).",
+    "show_singleplayer_world": "Afficher le nom du monde solo",
+    "show_singleplayer_world_tooltip": "Affiche le nom du monde en solo. Désactivez pour afficher uniquement 'En solo'.",
+    "show_game_version": "Afficher la version et le modloader",
+    "show_game_version_tooltip": "Affiche la version de Minecraft et le chargeur de mods (ex. Fabric 1.21.1) dans votre statut.",
+    "show_profile_name": "Afficher le nom de l'installation",
+    "show_profile_name_tooltip": "Affiche le nom de votre profil ou installation dans les détails de votre statut.",
+    "show_player_ign": "Afficher le pseudo en jeu (IGN)",
+    "show_player_ign_tooltip": "Affiche votre nom de joueur Minecraft dans les détails de votre statut."
   },
   "skins": {
     "create_pack": "Créer un nouveau pack de skins",

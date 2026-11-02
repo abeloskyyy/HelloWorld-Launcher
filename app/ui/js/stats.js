@@ -1,111 +1,142 @@
-document.addEventListener('DOMContentLoaded', async () => {
-    const statsBtn = document.getElementById('statsBtn');
+// --- STREAK & STATS SYSTEM ---
+function applyCachedStreak(username) {
+    try {
+        const cachedUser = localStorage.getItem('hw_cached_streak_user');
+        if (cachedUser && cachedUser === username) {
+            const count = localStorage.getItem('hw_cached_streak_count') || '0';
+            const completed = localStorage.getItem('hw_cached_streak_completed') === '1';
+            const streakCount = document.getElementById('streakCount');
+            const streakBadgeContainer = document.getElementById('streakBadgeContainer');
+            const statsBtn = document.getElementById('statsBtn');
+            if (streakCount) streakCount.innerText = count;
+            if (streakBadgeContainer) {
+                const fireContainer = streakBadgeContainer.querySelector('.css-fire-container');
+                if (fireContainer) fireContainer.style.opacity = completed ? '0.65' : '0';
+                streakBadgeContainer.style.display = 'flex';
+            }
+            if (statsBtn) statsBtn.style.display = 'inline-flex';
+        }
+    } catch (_) {}
+}
+window.applyCachedStreak = applyCachedStreak;
+
+async function loadMyStats() {
     const streakBadgeContainer = document.getElementById('streakBadgeContainer');
     const streakCount = document.getElementById('streakCount');
-    
-    // Check auth and load stats
+    const statsBtn = document.getElementById('statsBtn');
     try {
-        if (!window.hwlAPI) {
-            window.addEventListener('pywebviewready', () => {
-                loadMyStats();
-                setupStatsListener();
-            });
-        } else {
-            loadMyStats();
-            setupStatsListener();
-        }
-    } catch (e) {
-        console.error(e);
-    }
-    
-    function setupStatsListener() {
-        if (window.electronAPI && window.electronAPI.on) {
-            window.electronAPI.on('stats-updated', () => {
-                console.log('[Stats] Received stats-updated event');
-                loadMyStats();
-            });
-        }
-        let lastFocusCheck = 0;
-        window.addEventListener('focus', () => {
-            const now = Date.now();
-            if (now - lastFocusCheck > 5000 && window.hwlAPI && window.hwlAPI.get_user_json) {
-                lastFocusCheck = now;
-                window.hwlAPI.get_user_json().then(u => {
-                    if (u && window.updateProfileCompletion) {
-                        window.updateProfileCompletion(u);
-                    }
-                }).catch(() => {});
+        if (!window.hwlAPI || !window.hwlAPI.get_user_json) return null;
+        const userJson = await window.hwlAPI.get_user_json();
+        if (userJson) {
+            if (userJson.account_type === 'offline' || !userJson.username) {
+                if (streakBadgeContainer) streakBadgeContainer.style.display = 'none';
+                return null;
             }
-        });
-    }
-    
-    function animateValue(obj, start, end, duration) {
-        let startTimestamp = null;
-        const diff = end - start;
-        const actualDuration = diff <= 2 ? 400 : duration;
-        
-        const step = (timestamp) => {
-            if (!startTimestamp) startTimestamp = timestamp;
-            const progress = Math.min((timestamp - startTimestamp) / actualDuration, 1);
-            
-            obj.innerText = Math.round(progress * (end - start) + start);
-            
-            if (progress < 1) {
-                window.requestAnimationFrame(step);
-            } else {
-                obj.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), color 0.3s';
-                obj.style.transform = 'scale(1.4)';
-                obj.style.color = '#ffaa00';
-                setTimeout(() => { 
-                    obj.style.transform = 'scale(1)'; 
-                    obj.style.color = '#fff';
-                }, 400);
-            }
-        };
-        window.requestAnimationFrame(step);
-    }
-    
-    async function loadMyStats() {
-        try {
-            const userJson = await window.hwlAPI.get_user_json();
-            if (userJson) {
-                const res = await window.hwlAPI.stats_get_my_stats();
-                if (res.success && res.stats) {
-                    const targetStreak = res.stats.streak || 0;
-                    const currentStreak = parseInt(streakCount.innerText) || 0;
-                    
-                    if (currentStreak !== targetStreak) {
+
+            // Immediately apply cached streak to ensure zero flicker behind loader
+            applyCachedStreak(userJson.username);
+
+            const res = await window.hwlAPI.stats_get_my_stats();
+            if (res && res.success && res.stats) {
+                const targetStreak = res.stats.streak || 0;
+                const currentStreak = parseInt(streakCount ? streakCount.innerText : '0') || 0;
+
+                try {
+                    localStorage.setItem('hw_cached_streak_user', userJson.username);
+                    localStorage.setItem('hw_cached_streak_count', targetStreak.toString());
+                    localStorage.setItem('hw_cached_streak_completed', res.stats.streakCompletedToday ? '1' : '0');
+                } catch (_) {}
+
+                const loader = document.getElementById('initialLoader');
+                const isLoaderVisible = loader && !loader.classList.contains('hidden') && loader.style.display !== 'none';
+
+                if (streakCount) {
+                    if (currentStreak !== targetStreak && !isLoaderVisible) {
                         animateValue(streakCount, currentStreak, targetStreak, 1000);
                     } else {
                         streakCount.innerText = targetStreak;
                     }
-                    
+                }
+
+                if (streakBadgeContainer) {
                     const fireContainer = streakBadgeContainer.querySelector('.css-fire-container');
                     if (fireContainer) {
-                        if (res.stats.streakCompletedToday) {
-                            fireContainer.style.opacity = '0.65';
-                        } else {
-                            fireContainer.style.opacity = '0';
-                        }
+                        fireContainer.style.opacity = res.stats.streakCompletedToday ? '0.65' : '0';
                     }
-                    
-                    statsBtn.style.display = 'inline-flex';
                     streakBadgeContainer.style.display = 'flex';
-                    
+                }
+
+                if (statsBtn) {
+                    statsBtn.style.display = 'inline-flex';
                     statsBtn.onclick = () => {
                         showStatsModal(userJson.username, res.stats, null);
                     };
-
-                    // Update profile completion bar (non-blocking)
-                    updateProfileCompletion(userJson);
                 }
-            }
-        } catch (e) {
-            console.error('[Stats] Error loading my stats:', e);
-        }
-    }
 
-    async function updateProfileCompletion(userJson) {
+                if (typeof window.updateProfileCompletion === 'function') {
+                    window.updateProfileCompletion(userJson);
+                }
+                return res.stats;
+            }
+        }
+    } catch (e) {
+        console.error('[Stats] Error loading my stats:', e);
+    }
+    return null;
+}
+window.loadMyStats = loadMyStats;
+
+function animateValue(obj, start, end, duration) {
+    let startTimestamp = null;
+    const diff = end - start;
+    const actualDuration = diff <= 2 ? 400 : duration;
+    
+    const step = (timestamp) => {
+        if (!startTimestamp) startTimestamp = timestamp;
+        const progress = Math.min((timestamp - startTimestamp) / actualDuration, 1);
+        
+        obj.innerText = Math.round(progress * (end - start) + start);
+        
+        if (progress < 1) {
+            window.requestAnimationFrame(step);
+        } else {
+            obj.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), color 0.3s';
+            obj.style.transform = 'scale(1.4)';
+            obj.style.color = '#ffaa00';
+            setTimeout(() => { 
+                obj.style.transform = 'scale(1)'; 
+                obj.style.color = '#fff';
+            }, 400);
+        }
+    };
+    window.requestAnimationFrame(step);
+}
+window.animateStreakValue = animateValue;
+
+function setupStatsListener() {
+    if (window.electronAPI && window.electronAPI.on) {
+        window.electronAPI.on('stats-updated', () => {
+            console.log('[Stats] Received stats-updated event');
+            loadMyStats();
+        });
+    }
+    let lastFocusCheck = 0;
+    window.addEventListener('focus', () => {
+        const now = Date.now();
+        if (now - lastFocusCheck > 5000 && window.hwlAPI && window.hwlAPI.get_user_json) {
+            lastFocusCheck = now;
+            window.hwlAPI.get_user_json().then(u => {
+                if (u && window.updateProfileCompletion) {
+                    window.updateProfileCompletion(u);
+                }
+            }).catch(() => {});
+        }
+    });
+}
+
+
+
+async function updateProfileCompletion(userJson) {
         const bar = document.getElementById('profileCompletionBar');
         const fill = document.getElementById('pcbFill');
         const pct = document.getElementById('pcbPercent');
@@ -255,7 +286,34 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (modal) modal.classList.add('show');
     }
     
-    document.getElementById('closeStatsModalBtn').onclick = () => {
-        document.getElementById('statsModal').classList.remove('show');
-    };
-});
+    function setupModalEvents() {
+    const closeBtn = document.getElementById('closeStatsModalBtn');
+    if (closeBtn) {
+        closeBtn.onclick = () => {
+            const modal = document.getElementById('statsModal');
+            if (modal) modal.classList.remove('show');
+        };
+    }
+}
+
+function initStats() {
+    loadMyStats();
+    setupStatsListener();
+    setupModalEvents();
+}
+
+if (!window.hwlAPI) {
+    window.addEventListener('pywebviewready', () => {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initStats);
+        } else {
+            initStats();
+        }
+    });
+} else {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initStats);
+    } else {
+        initStats();
+    }
+}

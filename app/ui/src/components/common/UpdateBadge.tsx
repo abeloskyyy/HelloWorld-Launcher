@@ -16,6 +16,33 @@ export const UpdateBadge: React.FC = () => {
   const [isMandatory, setIsMandatory] = useState(false);
 
   useEffect(() => {
+    // Restore persistent downloaded update state if present
+    const win = window as any;
+    let preVersion = '';
+    let prePath = win._currentUpdateDownloadedPath || null;
+    let preMandatory = false;
+
+    if (!prePath) {
+      try {
+        prePath = localStorage.getItem('hw_downloaded_update_path');
+        preVersion = localStorage.getItem('hw_downloaded_update_version') || '';
+      } catch (_) {}
+    }
+
+    if (win._currentUpdateState) {
+      preVersion = win._currentUpdateState.latestVersion || preVersion;
+      preMandatory = Boolean(win._currentUpdateState.isMandatory);
+    }
+
+    if (prePath) {
+      setVisible(true);
+      setStatus('ready');
+      setProgress(100);
+      if (preVersion) setVersion(preVersion);
+      setFilePath(prePath);
+      setIsMandatory(preMandatory);
+    }
+
     // Listen for custom events dispatched by the update engine
     const handleUpdateAvailable = (e: any) => {
       const data: UpdateEventData = e.detail || {};

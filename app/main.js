@@ -372,6 +372,14 @@ const DEFAULT_USER_DATA = {
   dev_mode: false,
   show_snapshots: false,
   show_old: false,
+  start_on_boot: false,
+  discord_rpc_enabled: true,
+  app_presence_enabled: true,
+  privacy_mode: false,
+  show_singleplayer_world: true,
+  show_game_version: true,
+  show_profile_name: true,
+  show_player_ign: true,
   reopen_on_game_close: true,
   addons_per_page: 20,
   launch_count: 0,
@@ -383,6 +391,23 @@ const DEFAULT_USER_DATA = {
 };
 
 let userDataCache = null;
+
+function applyAutoStartSetting(enable) {
+  try {
+    const isEnabled = Boolean(enable);
+    if (!app.isPackaged) {
+      console.log(`[AutoStart] Dev mode: openAtLogin set to ${isEnabled}`);
+    }
+    app.setLoginItemSettings({
+      openAtLogin: isEnabled,
+      path: process.execPath,
+      args: []
+    });
+  } catch (err) {
+    console.warn('[AutoStart] Error setting login item settings:', err.message);
+  }
+}
+
 
 const loadUserData = () => {
   if (userDataCache) return userDataCache;
@@ -1083,23 +1108,37 @@ class PresenceManager {
       return true;
     }
 
-    // Check privacy mode setting
     const userData = loadUserData();
-    const privacyMode = userData.privacy_mode === true;
+    if (userData.app_presence_enabled === false) {
+      if (this.currentState && this.currentState.status !== 'offline') {
+        await this.setOffline();
+      }
+      return false;
+    }
 
-    // Hide server IP if privacy mode is enabled
+    const privacyMode = userData.privacy_mode === true;
+    const showWorldName = userData.show_singleplayer_world !== false;
+    const showGameVersion = userData.show_game_version !== false;
+    const showProfileName = userData.show_profile_name !== false;
+    const showPlayerIgn = userData.show_player_ign !== false;
+
+    // Filter fields according to privacy and presence settings
     const serverIpToWrite = privacyMode ? '' : (state.serverIp || '');
+    const worldNameToWrite = showWorldName ? (state.worldName || '') : '';
+    const versionToWrite = showGameVersion ? (state.mcVersion || '') : '';
+    const profileNameToWrite = showProfileName ? (state.instanceName || '') : '';
+    const ignToWrite = showPlayerIgn ? (state.ign || '') : '';
 
     const now = new Date().toISOString();
-    const statusText = state.statusText || presenceStatusLabel(state.status, serverIpToWrite, state.worldName);
+    const statusText = state.statusText || presenceStatusLabel(state.status, serverIpToWrite, worldNameToWrite);
     const payload = {
       status: state.status,
       statusText,
-      mcVersion: state.mcVersion || '',
-      instanceName: state.instanceName || '',
+      mcVersion: versionToWrite,
+      instanceName: profileNameToWrite,
       serverIp: serverIpToWrite,
-      worldName: state.worldName || '',
-      playerName: state.ign || '',
+      worldName: worldNameToWrite,
+      playerName: ignToWrite,
       clientVersion: app.getVersion(),
       updatedAt: now
     };
@@ -1218,7 +1257,13 @@ class PresenceManager {
     this.gameContext = null;
     this.lastServerIp = '';
     this.pendingWorldName = null;
+    const userData = loadUserData();
+    rpc.setEnabled(userData.discord_rpc_enabled !== false);
     rpc.setLauncher();
+    if (userData.app_presence_enabled === false) {
+      await this.setOffline();
+      return;
+    }
     if (!this.canUsePresence()) return;
     const wrote = await this.writeState({
       status: 'online',
@@ -1272,7 +1317,16 @@ class PresenceManager {
     this.lastServerIp = '';
     this.pendingWorldName = null;
     this.gameProcessPid = pid;
-    rpc.setMenu({ version: versionLabel, profileName, ign });
+    const userData = loadUserData();
+    rpc.setEnabled(userData.discord_rpc_enabled !== false);
+    rpc.setMenu({
+      version: versionLabel,
+      profileName,
+      ign,
+      showGameVersion: userData.show_game_version !== false,
+      showProfileName: userData.show_profile_name !== false,
+      showPlayerIgn: userData.show_player_ign !== false
+    });
     if (!this.canUsePresence()) return;
     await this.writeState({
       status: 'menu',
@@ -1299,7 +1353,18 @@ class PresenceManager {
     }
     this.gameContext.worldName = sanitizeWorldName(worldName || this.gameContext.worldName || '');
     const { versionLabel, profileName, ign } = this.gameContext;
-    rpc.setPlaying({ version: versionLabel, profileName, ign, worldName: this.gameContext.worldName });
+    const userData = loadUserData();
+    rpc.setEnabled(userData.discord_rpc_enabled !== false);
+    rpc.setPlaying({
+      version: versionLabel,
+      profileName,
+      ign,
+      worldName: this.gameContext.worldName,
+      showWorldName: userData.show_singleplayer_world !== false,
+      showGameVersion: userData.show_game_version !== false,
+      showProfileName: userData.show_profile_name !== false,
+      showPlayerIgn: userData.show_player_ign !== false
+    });
     if (!this.canUsePresence()) return;
     await this.writeState({
       status: 'playing',
@@ -1320,7 +1385,17 @@ class PresenceManager {
     this.gameContext.worldName = null; // Clear singleplayer world when joining server
     const userData = loadUserData();
     const privacyMode = userData.privacy_mode === true;
-    rpc.setServer({ version: versionLabel, profileName, ign, serverIp, privacyMode });
+    rpc.setEnabled(userData.discord_rpc_enabled !== false);
+    rpc.setServer({
+      version: versionLabel,
+      profileName,
+      ign,
+      serverIp,
+      privacyMode,
+      showGameVersion: userData.show_game_version !== false,
+      showProfileName: userData.show_profile_name !== false,
+      showPlayerIgn: userData.show_player_ign !== false
+    });
     if (!this.canUsePresence()) return;
     await this.writeState({
       status: 'server',
@@ -1341,7 +1416,16 @@ class PresenceManager {
     this.stopConnectionCheck();
     // Always go back to menu when leaving a server
     // Singleplayer state is managed separately by singleplayer-specific logs
-    rpc.setMenu({ version: versionLabel, profileName, ign });
+    const userData = loadUserData();
+    rpc.setEnabled(userData.discord_rpc_enabled !== false);
+    rpc.setMenu({
+      version: versionLabel,
+      profileName,
+      ign,
+      showGameVersion: userData.show_game_version !== false,
+      showProfileName: userData.show_profile_name !== false,
+      showPlayerIgn: userData.show_player_ign !== false
+    });
     if (!this.canUsePresence()) return;
     await this.writeState({
       status: 'menu',
@@ -1365,7 +1449,16 @@ class PresenceManager {
     this.gameContext.worldName = null;
     this.pendingWorldName = null;
     this.isLeavingSingleplayer = true;
-    rpc.setMenu({ version: versionLabel, profileName, ign });
+    const userData = loadUserData();
+    rpc.setEnabled(userData.discord_rpc_enabled !== false);
+    rpc.setMenu({
+      version: versionLabel,
+      profileName,
+      ign,
+      showGameVersion: userData.show_game_version !== false,
+      showProfileName: userData.show_profile_name !== false,
+      showPlayerIgn: userData.show_player_ign !== false
+    });
     if (!this.canUsePresence()) return;
     await this.writeState({
       status: 'menu',
@@ -1531,6 +1624,78 @@ class PresenceManager {
         console.warn('[Presence]', err.message);
       }
     });
+  }
+
+  async refreshCurrentPresence() {
+    const userData = loadUserData();
+    rpc.setEnabled(userData.discord_rpc_enabled !== false);
+    if (userData.app_presence_enabled === false) {
+      await this.setOffline();
+      return;
+    }
+    if (this.gameContext) {
+      const { versionLabel, profileName, ign } = this.gameContext;
+      const privacyMode = userData.privacy_mode === true;
+      if (this.lastServerIp) {
+        rpc.setServer({
+          version: versionLabel,
+          profileName,
+          ign,
+          serverIp: this.lastServerIp,
+          privacyMode,
+          showGameVersion: userData.show_game_version !== false,
+          showProfileName: userData.show_profile_name !== false,
+          showPlayerIgn: userData.show_player_ign !== false
+        });
+        await this.writeState({
+          status: 'server',
+          mcVersion: versionLabel,
+          instanceName: profileName || '',
+          serverIp: this.lastServerIp,
+          worldName: '',
+          ign: ign || this.getPlayerName()
+        });
+      } else if (this.gameContext.worldName) {
+        rpc.setPlaying({
+          version: versionLabel,
+          profileName,
+          ign,
+          worldName: this.gameContext.worldName,
+          showWorldName: userData.show_singleplayer_world !== false,
+          showGameVersion: userData.show_game_version !== false,
+          showProfileName: userData.show_profile_name !== false,
+          showPlayerIgn: userData.show_player_ign !== false
+        });
+        await this.writeState({
+          status: 'playing',
+          mcVersion: versionLabel,
+          instanceName: profileName || '',
+          serverIp: '',
+          worldName: this.gameContext.worldName || '',
+          ign: ign || this.getPlayerName()
+        });
+      } else {
+        rpc.setMenu({
+          version: versionLabel,
+          profileName,
+          ign,
+          showGameVersion: userData.show_game_version !== false,
+          showProfileName: userData.show_profile_name !== false,
+          showPlayerIgn: userData.show_player_ign !== false
+        });
+        await this.writeState({
+          status: 'menu',
+          mcVersion: versionLabel,
+          instanceName: profileName || '',
+          serverIp: '',
+          worldName: '',
+          ign: ign || this.getPlayerName()
+        });
+      }
+    } else {
+      rpc.setLauncher();
+      await this.setLauncherOnline();
+    }
   }
 }
 
@@ -3746,6 +3911,12 @@ ipcMain.handle('save-user-json', async (e, data) => {
     console.warn('[save-user-json] username was an object, sanitized to:', newData.username);
   }
   saveUserData(newData);
+  if (newData.start_on_boot !== undefined) {
+    applyAutoStartSetting(newData.start_on_boot);
+  }
+  try {
+    presenceManager.refreshCurrentPresence();
+  } catch (_) {}
   // Persist offline account into saved accounts list when a username is set
   if (newData.username && newData.account_type === 'offline') {
     try { addOrUpdateSavedAccount(newData); } catch (_) {}
@@ -5521,6 +5692,226 @@ ipcMain.handle('quit-and-install', () => {
 })
 
 // --- Direct Setup Updater Handlers ---
+
+// Función auxiliar para limpiar archivos temporales huérfanos de descargas anteriores
+function cleanOrphanedTmpFiles(dir) {
+  try {
+    if (!dir || !fs.existsSync(dir)) return;
+    const files = fs.readdirSync(dir);
+    for (const f of files) {
+      if (f.includes('.tmp_') || f.startsWith('setup.exe.tmp') || f.startsWith('HelloWorld-Launcher-Setup.exe.tmp')) {
+        try { fs.unlinkSync(path.join(dir, f)); } catch (_) {}
+      }
+    }
+  } catch (_) {}
+}
+
+// Verifica el hash sha512 o sha256 (en hex o base64) de un archivo contra el hash esperado
+function verifyFileHash(filePath, expectedHash) {
+  if (!expectedHash || typeof expectedHash !== 'string') return true;
+  try {
+    const cleanExpected = expectedHash.trim();
+    if (!cleanExpected) return true;
+    if (!fs.existsSync(filePath)) return false;
+    const fileBuf = fs.readFileSync(filePath);
+    const sha512_b64 = crypto.createHash('sha512').update(fileBuf).digest('base64');
+    const sha512_hex = crypto.createHash('sha512').update(fileBuf).digest('hex');
+    const sha256_hex = crypto.createHash('sha256').update(fileBuf).digest('hex');
+    const sha256_b64 = crypto.createHash('sha256').update(fileBuf).digest('base64');
+
+    return (
+      sha512_b64 === cleanExpected ||
+      sha512_hex.toLowerCase() === cleanExpected.toLowerCase() ||
+      sha256_hex.toLowerCase() === cleanExpected.toLowerCase() ||
+      sha256_b64 === cleanExpected
+    );
+  } catch (err) {
+    console.warn('[verifyFileHash] Error verifying file hash:', err.message);
+    return false;
+  }
+}
+
+// Descarga un archivo directamente con soporte de streams, timeouts, reintentos y validación de integridad
+async function downloadFileDirectly(downloadUrl, destPath, options = {}) {
+  const {
+    expectedHash = null,
+    minSizeBytes = 1024 * 1024,
+    onProgress = null,
+    maxAttempts = 5
+  } = options;
+
+  let targetUrl = downloadUrl;
+  try {
+    const urlObj = new URL(downloadUrl);
+    if (urlObj.hostname.includes('drive.google.com') || urlObj.hostname.includes('drive.usercontent.google.com')) {
+      let fileId = null;
+      const matchPath = urlObj.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (matchPath) {
+        fileId = matchPath[1];
+      } else if (urlObj.searchParams.has('id')) {
+        fileId = urlObj.searchParams.get('id');
+      }
+      if (fileId) {
+        targetUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`;
+      }
+    }
+  } catch (_) {}
+
+  let lastError = null;
+  const destDir = path.dirname(destPath);
+  if (!fs.existsSync(destDir)) {
+    fs.mkdirSync(destDir, { recursive: true });
+  }
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let tempPath = null;
+    let writer = null;
+    let inactivityTimer = null;
+
+    try {
+      tempPath = destPath + '.tmp_' + Date.now();
+      writer = fs.createWriteStream(tempPath);
+
+      console.log(`[downloadFileDirectly] Attempt ${attempt}/${maxAttempts} downloading from:`, targetUrl, 'to:', destPath);
+
+      if (onProgress) {
+        onProgress({ transferred: 0, total: 0, percent: 0, speed: 0, attempt, maxAttempts });
+      }
+
+      const res = await axios({
+        method: 'get',
+        url: targetUrl,
+        responseType: 'stream',
+        timeout: 25000,
+        maxRedirects: 15,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': '*/*',
+          'Accept-Encoding': 'identity',
+          'Connection': 'keep-alive'
+        }
+      });
+
+      const contentType = (res.headers['content-type'] || '').toLowerCase();
+      if (contentType.includes('text/html')) {
+        throw new Error('El enlace devolvió HTML en vez del binario ejecutable.');
+      }
+
+      const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
+      let downloadedBytes = 0;
+      let lastTime = Date.now();
+      let lastBytes = 0;
+
+      const resetInactivityTimer = () => {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(() => {
+          console.warn(`[downloadFileDirectly] Stream stalled (no data for 15s) on attempt ${attempt}`);
+          if (res.data) {
+            res.data.destroy(new Error('Descarga estancada: el servidor no envió datos durante 15 segundos'));
+          }
+        }, 15000);
+      };
+      resetInactivityTimer();
+
+      res.data.on('data', (chunk) => {
+        resetInactivityTimer();
+        downloadedBytes += chunk.length;
+        const now = Date.now();
+        if (now - lastTime >= 250) {
+          const speed = (downloadedBytes - lastBytes) / ((now - lastTime) / 1000);
+          lastTime = now;
+          lastBytes = downloadedBytes;
+          let percent = 0;
+          if (totalBytes > 0) {
+            percent = Math.min(99, Math.round((downloadedBytes / totalBytes) * 100));
+          } else {
+            const estimatedTotal = 60 * 1024 * 1024;
+            percent = Math.min(95, Math.round((downloadedBytes / estimatedTotal) * 100));
+          }
+          if (onProgress) {
+            onProgress({
+              transferred: downloadedBytes,
+              total: totalBytes,
+              percent: percent,
+              speed: Math.round(speed),
+              attempt: attempt,
+              maxAttempts: maxAttempts
+            });
+          }
+        }
+      });
+
+      await pipeline(res.data, writer);
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+
+      if (totalBytes > 0 && downloadedBytes < totalBytes) {
+        throw new Error(`Descarga incompleta: se recibieron ${downloadedBytes} de ${totalBytes} bytes`);
+      }
+      if (minSizeBytes > 0 && downloadedBytes < minSizeBytes) {
+        throw new Error(`El archivo descargado es demasiado pequeño (${(downloadedBytes / (1024 * 1024)).toFixed(1)} MB), descarga incompleta`);
+      }
+
+      // Comprobación de hash si se especificó
+      if (expectedHash && typeof expectedHash === 'string') {
+        const isValid = verifyFileHash(tempPath, expectedHash);
+        if (!isValid) {
+          throw new Error(`El hash del archivo descargado no coincide con el esperado (${expectedHash})`);
+        }
+      }
+
+      if (fs.existsSync(destPath)) {
+        try { fs.unlinkSync(destPath); } catch (_) {}
+      }
+      fs.renameSync(tempPath, destPath);
+
+      if (onProgress) {
+        onProgress({
+          transferred: totalBytes || downloadedBytes,
+          total: totalBytes || downloadedBytes,
+          percent: 100,
+          speed: 0,
+          attempt: attempt,
+          maxAttempts: maxAttempts
+        });
+      }
+
+      console.log('[downloadFileDirectly] Download complete and verified:', destPath, `(${downloadedBytes} bytes)`);
+      return { success: true, filePath: destPath, size: downloadedBytes };
+
+    } catch (attemptErr) {
+      lastError = attemptErr;
+      console.warn(`[downloadFileDirectly] Attempt ${attempt}/${maxAttempts} failed:`, attemptErr.message);
+
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+
+      if (writer && !writer.destroyed) {
+        try {
+          await new Promise((resolve) => {
+            writer.on('close', resolve);
+            writer.destroy();
+            setTimeout(resolve, 300);
+          });
+        } catch (_) {}
+      }
+
+      try {
+        if (tempPath && fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath);
+        }
+      } catch (cleanErr) {
+        console.warn('[downloadFileDirectly] Could not remove temp file:', cleanErr.message);
+      }
+
+      if (attempt < maxAttempts) {
+        await new Promise(r => setTimeout(r, 1200));
+      }
+    }
+  }
+
+  cleanOrphanedTmpFiles(destDir);
+  throw lastError || new Error('Failed to download file after multiple attempts');
+}
+
 async function findLocalInstallerPath(expectedHash = null) {
   try {
     const execDir = path.dirname(process.execPath);
@@ -5562,19 +5953,11 @@ async function findLocalInstallerPath(expectedHash = null) {
       if (fs.existsSync(c)) {
         const stat = fs.statSync(c);
         if (stat.size > 1024 * 1024) {
-          // Si se especificó un hash esperado, comparar para evitar usar un setup desactualizado
+          // Si se especificó un hash esperado, verificar para evitar usar un setup desactualizado
           if (expectedHash && typeof expectedHash === 'string') {
-            try {
-              const fileBuf = fs.readFileSync(c);
-              const sha512 = crypto.createHash('sha512').update(fileBuf).digest('base64');
-              const sha256 = crypto.createHash('sha256').update(fileBuf).digest('hex');
-              const cleanExpected = expectedHash.trim();
-              if (sha512 !== cleanExpected && sha256.toLowerCase() !== cleanExpected.toLowerCase()) {
-                console.log(`[findLocalInstallerPath] Local candidate ${c} hash differs from remote expected hash. Skipping to fetch newest setup.`);
-                continue;
-              }
-            } catch (hErr) {
-              console.warn('[findLocalInstallerPath] Error hashing local installer:', hErr.message);
+            if (!verifyFileHash(c, expectedHash)) {
+              console.log(`[findLocalInstallerPath] Local candidate ${c} hash differs from remote expected hash. Skipping to fetch newest setup.`);
+              continue;
             }
           }
           return c;
@@ -5587,9 +5970,127 @@ async function findLocalInstallerPath(expectedHash = null) {
   return null;
 }
 
+// Garantiza que exista un setup.exe local con el hash esperado; si no existe o el hash difiere, lo descarga como setup.exe
+async function ensureLocalInstaller({ expectedHash = null, setupUrl = null, tag = null } = {}) {
+  try {
+    if (process.platform !== 'win32') {
+      const existing = await findLocalInstallerPath(expectedHash);
+      return { exists: Boolean(existing), path: existing, downloaded: false };
+    }
+
+    // 1. Verificar si ya existe un candidato local cuyo hash coincida con el esperado
+    const existing = await findLocalInstallerPath(expectedHash);
+    if (existing) {
+      console.log('[ensureLocalInstaller] Matching setup candidate already present locally:', existing);
+      return { exists: true, path: existing, downloaded: false };
+    }
+
+    console.log(`[ensureLocalInstaller] Setup candidate missing or hash differs from remote (${expectedHash || 'unknown'}). Downloading newest setup.exe...`);
+
+    const updatesDir = path.join(app.getPath('userData'), 'updates');
+    if (!fs.existsSync(updatesDir)) {
+      fs.mkdirSync(updatesDir, { recursive: true });
+    }
+
+    let downloadUrl = setupUrl;
+    if (!downloadUrl) {
+      const releaseTag = tag || ('v' + app.getVersion());
+      downloadUrl = `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${releaseTag}/HelloWorld-Launcher-Setup.exe`;
+    }
+
+    const targetSetupExe = path.join(updatesDir, 'setup.exe');
+    const targetSetupNamed = path.join(updatesDir, 'HelloWorld-Launcher-Setup.exe');
+
+    // Descargar el nuevo setup.exe directamente y validar su hash
+    const dlResult = await downloadFileDirectly(downloadUrl, targetSetupExe, {
+      expectedHash: expectedHash,
+      minSizeBytes: 1024 * 1024,
+      maxAttempts: 3
+    });
+
+    if (dlResult && dlResult.success && fs.existsSync(targetSetupExe)) {
+      try { fs.copyFileSync(targetSetupExe, targetSetupNamed); } catch (_) {}
+
+      // Si el directorio de instalación de la aplicación es escribible, sincronizar setup.exe allí también
+      try {
+        const execDir = path.dirname(process.execPath);
+        const appSetup = path.join(execDir, 'setup.exe');
+        fs.copyFileSync(targetSetupExe, appSetup);
+        console.log('[ensureLocalInstaller] Successfully synchronized new setup.exe into application directory:', appSetup);
+      } catch (_) {}
+
+      console.log('[ensureLocalInstaller] Successfully downloaded new setup.exe at:', targetSetupExe);
+      return { exists: true, path: targetSetupExe, downloaded: true };
+    }
+
+    return { exists: false, error: (dlResult && dlResult.error) || 'Failed to download setup.exe' };
+  } catch (err) {
+    console.error('[ensureLocalInstaller] Error:', err);
+    return { exists: false, error: err.message };
+  }
+}
+
+ipcMain.handle('ensure-local-installer', async (event, params = {}) => {
+  return await ensureLocalInstaller(params);
+});
+
 ipcMain.handle('check-local-installer', async (event, expectedHash) => {
   const p = await findLocalInstallerPath(expectedHash);
   return { exists: Boolean(p), path: p };
+});
+
+ipcMain.handle('check-downloaded-update', async (event, params = {}) => {
+  try {
+    const updatesDir = path.join(app.getPath('userData'), 'updates');
+    if (!fs.existsSync(updatesDir)) return { exists: false };
+
+    let filename = process.platform === 'win32' ? 'helloworld-launcher-win.zip' : 'helloworld-launcher-update';
+    const downloadUrl = params.downloadUrl;
+    if (downloadUrl) {
+      try {
+        const urlObj = new URL(downloadUrl);
+        const parsedBase = path.basename(urlObj.pathname);
+        if (parsedBase && (parsedBase.includes('.deb') || parsedBase.includes('.dmg') || parsedBase.includes('.AppImage') || parsedBase.includes('.zip') || parsedBase.includes('.exe'))) {
+          filename = parsedBase;
+        } else if (process.platform === 'darwin') {
+          filename = 'HelloWorld-Launcher.dmg';
+        } else if (process.platform === 'linux') {
+          filename = 'helloworld-launcher-linux-amd64.AppImage';
+        }
+      } catch (_) {}
+    }
+
+    const targetPath = path.join(updatesDir, filename);
+    if (!fs.existsSync(targetPath)) return { exists: false };
+
+    const stat = fs.statSync(targetPath);
+    if (stat.size < 1024) {
+      return { exists: false };
+    }
+
+    if (params.expectedHash && typeof params.expectedHash === 'string') {
+      const crypto = require('crypto');
+      const fileBuf = fs.readFileSync(targetPath);
+      const sha512 = crypto.createHash('sha512').update(fileBuf).digest('base64');
+      const sha256 = crypto.createHash('sha256').update(fileBuf).digest('hex');
+      const cleanExpected = params.expectedHash.trim();
+      if (sha512 !== cleanExpected && sha256.toLowerCase() !== cleanExpected.toLowerCase()) {
+        console.log('[check-downloaded-update] Existing file hash differs. Redownload required.');
+        return { exists: false };
+      }
+    }
+
+    const allFiles = fs.readdirSync(updatesDir);
+    const isCurrentlyDownloading = allFiles.some(f => f.startsWith(filename + '.tmp_'));
+    if (isCurrentlyDownloading) {
+      return { exists: false };
+    }
+
+    return { exists: true, filePath: targetPath, size: stat.size };
+  } catch (err) {
+    console.warn('[check-downloaded-update] Error:', err);
+    return { exists: false };
+  }
 });
 
 ipcMain.handle('prepare-test-update-file', async () => {
@@ -5611,7 +6112,15 @@ ipcMain.handle('prepare-test-update-file', async () => {
 });
 
 ipcMain.handle('get-platform-info', () => {
-  return { platform: process.platform, arch: process.arch };
+  const isAppImage = Boolean(process.env.APPIMAGE);
+  const isDeb = process.platform === 'linux' && !isAppImage;
+  return {
+    platform: process.platform,
+    arch: process.arch,
+    isAppImage,
+    isDeb,
+    appImagePath: process.env.APPIMAGE || null
+  };
 });
 
 ipcMain.handle('get-system-memory', () => {
@@ -5632,12 +6141,16 @@ ipcMain.handle('launch-installer-and-quit', async (event, optionsOrPath) => {
     let updateFile = null;
     let customInstallPath = null;
     let expectedSetupHash = null;
+    let setupUrl = null;
+    let tag = null;
 
     if (typeof optionsOrPath === 'object' && optionsOrPath !== null) {
       targetExe = optionsOrPath.installerPath || null;
       updateFile = optionsOrPath.updateFile || null;
       customInstallPath = optionsOrPath.installPath || null;
       expectedSetupHash = optionsOrPath.expectedSetupHash || null;
+      setupUrl = optionsOrPath.setupUrl || null;
+      tag = optionsOrPath.tag || null;
     } else if (typeof optionsOrPath === 'string') {
       const lower = optionsOrPath.toLowerCase();
       if (lower.endsWith('.zip')) {
@@ -5886,6 +6399,15 @@ rm -rf "$TMP_DIR" "$0"
       targetExe = await findLocalInstallerPath(expectedSetupHash);
     }
 
+    // Si aún no se encontró setup válido (no existe o hash difiere), asegurar descarga del setup.exe actualizado
+    if (!targetExe || !fs.existsSync(targetExe)) {
+      console.log('[launch-installer-and-quit] No valid local setup found. Calling ensureLocalInstaller...');
+      const ensureRes = await ensureLocalInstaller({ expectedHash: expectedSetupHash, setupUrl, tag });
+      if (ensureRes && ensureRes.exists && ensureRes.path) {
+        targetExe = ensureRes.path;
+      }
+    }
+
     if (targetExe && fs.existsSync(targetExe)) {
       console.log('[launch-installer-and-quit] Executing Windows Setup:', targetExe, 'with installPath:', execDir, 'updateFile:', updateFile);
 
@@ -5949,28 +6471,13 @@ Remove-Item -Path $PSCommandPath -Force
   }
 });
 
-// Función auxiliar para limpiar archivos temporales huérfanos de descargas anteriores
-function cleanOrphanedTmpFiles(dir) {
-  try {
-    if (!dir || !fs.existsSync(dir)) return;
-    const files = fs.readdirSync(dir);
-    for (const f of files) {
-      if (f.includes('.tmp_') || f.startsWith('setup.exe.tmp') || f.startsWith('HelloWorld-Launcher-Setup.exe.tmp')) {
-        try { fs.unlinkSync(path.join(dir, f)); } catch (_) {}
-      }
-    }
-  } catch (_) {}
-}
-
 ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
   try {
     if (!downloadUrl) throw new Error('No download URL provided');
-    // Carpeta protegida para descargas de actualizaciones dentro de userData (no se borra por limpiadores de temp del SO)
     const updatesDir = path.join(app.getPath('userData'), 'updates');
     if (!fs.existsSync(updatesDir)) {
       fs.mkdirSync(updatesDir, { recursive: true });
     }
-
     cleanOrphanedTmpFiles(updatesDir);
 
     let filename = process.platform === 'win32' ? 'helloworld-launcher-win.zip' : 'helloworld-launcher-update';
@@ -5987,182 +6494,15 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
     } catch (_) {}
 
     const destPath = path.join(updatesDir, filename);
+    const minSize = (process.platform === 'win32' && filename.endsWith('.zip')) ? (30 * 1024 * 1024) : (1024 * 1024);
 
-    // Soporte para enlaces de Google Drive automáticos
-    let targetUrl = downloadUrl;
-    try {
-      const urlObj = new URL(downloadUrl);
-      if (urlObj.hostname.includes('drive.google.com') || urlObj.hostname.includes('drive.usercontent.google.com')) {
-        let fileId = null;
-        const matchPath = urlObj.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-        if (matchPath) {
-          fileId = matchPath[1];
-        } else if (urlObj.searchParams.has('id')) {
-          fileId = urlObj.searchParams.get('id');
-        }
-        if (fileId) {
-          targetUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`;
-        }
+    const onProgress = (pData) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('installer-download-progress', pData);
       }
-    } catch (_) {}
+    };
 
-    let lastError = null;
-    const maxAttempts = 5;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      let tempPath = null;
-      let writer = null;
-      let inactivityTimer = null;
-
-      try {
-        tempPath = destPath + '.tmp_' + Date.now();
-        writer = fs.createWriteStream(tempPath);
-
-        console.log(`[download-installer-file] Attempt ${attempt}/${maxAttempts} downloading from:`, targetUrl, 'to:', destPath);
-
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('installer-download-progress', {
-            transferred: 0,
-            total: 0,
-            percent: 0,
-            speed: 0,
-            attempt: attempt,
-            maxAttempts: maxAttempts
-          });
-        }
-
-        const res = await axios({
-          method: 'get',
-          url: targetUrl,
-          responseType: 'stream',
-          timeout: 25000, // Timeout de conexión inicial
-          maxRedirects: 15,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': '*/*',
-            'Accept-Encoding': 'identity',
-            'Connection': 'keep-alive'
-          }
-        });
-
-        const contentType = (res.headers['content-type'] || '').toLowerCase();
-        if (contentType.includes('text/html')) {
-          throw new Error('El enlace devolvió HTML en vez del ejecutable. Verifica permisos de Google Drive.');
-        }
-
-        const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
-        let downloadedBytes = 0;
-        let lastTime = Date.now();
-        let lastBytes = 0;
-
-        // Monitor de inactividad de datos: si pasan 15s sin recibir ningún chunk, abortar intento para reintentar
-        const resetInactivityTimer = () => {
-          if (inactivityTimer) clearTimeout(inactivityTimer);
-          inactivityTimer = setTimeout(() => {
-            console.warn(`[download-installer-file] Stream stalled (no data for 15s) on attempt ${attempt}`);
-            if (res.data) {
-              res.data.destroy(new Error('Descarga estancada: el servidor no envió datos durante 15 segundos'));
-            }
-          }, 15000);
-        };
-        resetInactivityTimer();
-
-        res.data.on('data', (chunk) => {
-          resetInactivityTimer();
-          downloadedBytes += chunk.length;
-          const now = Date.now();
-          if (now - lastTime >= 250) {
-            const speed = (downloadedBytes - lastBytes) / ((now - lastTime) / 1000);
-            lastTime = now;
-            lastBytes = downloadedBytes;
-            let percent = 0;
-            if (totalBytes > 0) {
-              percent = Math.min(99, Math.round((downloadedBytes / totalBytes) * 100));
-            } else {
-              const estimatedTotal = 95 * 1024 * 1024;
-              percent = Math.min(95, Math.round((downloadedBytes / estimatedTotal) * 100));
-            }
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('installer-download-progress', {
-                transferred: downloadedBytes,
-                total: totalBytes,
-                percent: percent,
-                speed: Math.round(speed),
-                attempt: attempt,
-                maxAttempts: maxAttempts
-              });
-            }
-          }
-        });
-
-        // Pipeline garantiza propagación de errores de red y cierre automático de streams
-        await pipeline(res.data, writer);
-        if (inactivityTimer) clearTimeout(inactivityTimer);
-
-        // Validación estricta de integridad de la descarga para evitar ejecutar ejecutables truncados
-        if (totalBytes > 0 && downloadedBytes < totalBytes) {
-          throw new Error(`Descarga incompleta: se recibieron ${downloadedBytes} de ${totalBytes} bytes`);
-        }
-        if (process.platform === 'win32' && downloadedBytes < 30 * 1024 * 1024) {
-          throw new Error(`El archivo descargado es demasiado pequeño (${(downloadedBytes / (1024 * 1024)).toFixed(1)} MB), descarga incompleta`);
-        }
-
-        // Reemplazar destino de forma segura
-        if (fs.existsSync(destPath)) {
-          try { fs.unlinkSync(destPath); } catch (_) {}
-        }
-        fs.renameSync(tempPath, destPath);
-
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('installer-download-progress', {
-            transferred: totalBytes || downloadedBytes,
-            total: totalBytes || downloadedBytes,
-            percent: 100,
-            speed: 0,
-            attempt: attempt,
-            maxAttempts: maxAttempts
-          });
-        }
-
-        console.log('[download-installer-file] Download complete and verified:', destPath, `(${downloadedBytes} bytes)`);
-        return { success: true, filePath: destPath };
-
-      } catch (attemptErr) {
-        lastError = attemptErr;
-        console.warn(`[download-installer-file] Attempt ${attempt}/${maxAttempts} failed:`, attemptErr.message);
-
-        if (inactivityTimer) clearTimeout(inactivityTimer);
-
-        // Cerrar y destruir writer antes de intentar borrar el temporal para evitar bloqueo EBUSY en Windows
-        if (writer && !writer.destroyed) {
-          try {
-            await new Promise((resolve) => {
-              writer.on('close', resolve);
-              writer.destroy();
-              setTimeout(resolve, 300);
-            });
-          } catch (_) {}
-        }
-
-        try {
-          if (tempPath && fs.existsSync(tempPath)) {
-            fs.unlinkSync(tempPath);
-          }
-        } catch (cleanErr) {
-          console.warn('[download-installer-file] Could not remove temp file:', cleanErr.message);
-        }
-
-        if (attempt < maxAttempts) {
-          await new Promise(r => setTimeout(r, 1200));
-        }
-      }
-    }
-
-    // Limpieza final de temporales huérfanos
-    cleanOrphanedTmpFiles(execDir);
-    cleanOrphanedTmpFiles(tempDir);
-
-    throw lastError || new Error('Failed to download installer after multiple attempts');
+    return await downloadFileDirectly(downloadUrl, destPath, { minSizeBytes: minSize, onProgress });
   } catch (err) {
     console.error('[download-installer-file] Final error:', err);
     return { success: false, error: err.message };
@@ -7602,6 +7942,16 @@ ipcMain.handle('ms-write-verified', async (e, emailKey, email, username, uuid, f
       updatedAt: new Date().toISOString()
     }, refreshed.idToken);
 
+    // Also write into usernames index for instant lowercase lookup
+    try {
+      await fsSet(`usernames/${username.toLowerCase()}`, {
+        uid: firebaseUid,
+        username,
+        accountType: 'microsoft',
+        updatedAt: new Date().toISOString()
+      }, refreshed.idToken);
+    } catch (_) {}
+
     console.log('[MS Verify] users doc + microsoftVerified + premium badge written for:', email);
     return { success: true };
   } catch (err) {
@@ -7810,6 +8160,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
     console.log(`[Launch] Checking for version at: ${versionPath}`);
     console.log(`[Launch] Expected dir name: ${expectedVersionDirName}, Profile version: ${profile.version}`);
 
+    let corruptedFilesCount = 0;
     if (!fs.existsSync(versionPath)) {
       isMissingVersion = true;
       console.log(`[Launch] Version directory not found, marking as missing`);
@@ -7820,6 +8171,50 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       console.log(`[Launch] Version JAR corrupted (invalid header or 0 bytes), deleting and marking for re-sync`);
       try { fs.unlinkSync(versionJarFile); } catch (_) {}
       isMissingVersion = true;
+      corruptedFilesCount++;
+    }
+
+    // Inspect libraries from version JSON for corruption (0-byte, truncated, or HTML blocked files)
+    try {
+      if (fs.existsSync(versionJsonFile)) {
+        const vJson = fs.readJsonSync(versionJsonFile);
+        if (vJson && Array.isArray(vJson.libraries)) {
+          const librariesDir = path.join(actualMcDir, 'libraries');
+          for (const lib of vJson.libraries) {
+            let relPath = null;
+            let expectedSize = null;
+            if (lib.downloads && lib.downloads.artifact && lib.downloads.artifact.path) {
+              relPath = lib.downloads.artifact.path;
+              expectedSize = lib.downloads.artifact.size;
+            } else if (lib.name) {
+              const parts = lib.name.split(':');
+              if (parts.length >= 3) {
+                const groupPath = parts[0].replace(/\./g, path.sep);
+                const artifact = parts[1];
+                const version = parts[2];
+                const classifier = parts[3] ? '-' + parts[3] : '';
+                relPath = path.join(groupPath, artifact, version, `${artifact}-${version}${classifier}.jar`);
+              }
+            }
+            if (relPath) {
+              const fullLibPath = path.join(librariesDir, relPath);
+              if (fs.existsSync(fullLibPath) && fullLibPath.endsWith('.jar') && !isJarValid(fullLibPath, expectedSize)) {
+                console.log(`[Launch] Corrupted library detected: ${path.basename(fullLibPath)}, deleting...`);
+                try {
+                  fs.unlinkSync(fullLibPath);
+                  corruptedFilesCount++;
+                } catch (_) {}
+              }
+            }
+          }
+        }
+      }
+    } catch (checkLibErr) {
+      console.warn('[Launch] Error checking library integrity:', checkLibErr.message);
+    }
+
+    if (corruptedFilesCount > 0 && mainWindow) {
+      mainWindow.webContents.send('corrupted-files-detected', { count: corruptedFilesCount });
     }
 
     let missingAddons = [];
@@ -7904,7 +8299,8 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
         version_id: updatedLoader ? updatedLoader.new_version : profile.version,
         updated_loader: updatedLoader,
         missing_addons: missingAddons,
-        updated_addons: updatedAddons || []
+        updated_addons: updatedAddons || [],
+        corrupted_detected: corruptedFilesCount > 0
       };
     }
 
@@ -8840,12 +9236,14 @@ ipcMain.handle('social-search-user', async (e, query) => {
     const processUserDoc = (u, uid) => {
       if (!u || seenUids.has(uid)) return;
       seenUids.add(uid);
+      const isMs = u.accountType === 'microsoft' || u.microsoftVerified;
       results.push({
         uid: uid,
         username: u.username || q,
-        mcUuid: u.mcUuid || u.uuid || '',
-        accountType: u.accountType || 'helloworld',
-        avatarBase64: u.avatarBase64 || ''
+        mcUuid: u.mcUuid || u.uuid || (isMs ? u.username : ''),
+        accountType: isMs ? 'microsoft' : (u.accountType || 'helloworld'),
+        avatarBase64: u.avatarBase64 || '',
+        badges: Array.isArray(u.badges) ? u.badges : (isMs ? ['premium'] : [])
       });
       // Self-heal usernameLower if missing
       if (!u.usernameLower && u.username) {
@@ -8891,6 +9289,18 @@ ipcMain.handle('social-search-user', async (e, query) => {
         }
       } catch (_) {}
     }
+
+    // 4. Substring search: scan users collection to find partial matches anywhere in username (e.g. 'chispita' in '14ChispitaCode_')
+    try {
+      const scanUsers = await fsQuery('users', [], auth.idToken, null, 250);
+      for (const u of scanUsers) {
+        const uName = (u.username || '').toLowerCase();
+        const uLower = (u.usernameLower || uName);
+        if (uLower.includes(token) || uName.includes(token)) {
+          processUserDoc(u, u.id);
+        }
+      }
+    } catch (_) {}
 
     return { success: true, results };
   } catch (e) {
@@ -9768,39 +10178,138 @@ ipcMain.handle('social-inbox-mark-read', async (e, msgId) => {
   }
 });
 
-ipcMain.handle('get-user-profile', async (e, uid) => {
+ipcMain.handle('get-user-profile', async (e, uid, username) => {
   try {
-    const auth = await getSocialAuth();
-    // Fetch user data from Firestore users collection
-    const userDoc = await fsGet(`users/${uid}`, auth.idToken);
-    const presence = await fetchPresenceForUser(uid, auth);
+    const auth = await getSocialAuth().catch(() => null);
+    const token = auth ? auth.idToken : null;
+    let userDoc = null;
+    let resolvedUid = uid;
 
-    // Determine mod/admin status by checking admins/ collection
+    // 1. Try direct fetch by uid if provided
+    if (uid) {
+      try {
+        userDoc = await fsGet(`users/${uid}`, token);
+      } catch (_) {}
+    }
+
+    // 2. If not found by uid, try lookup by username
+    const targetName = username || (typeof uid === 'string' && !uid.includes('-') && uid.length < 30 ? uid : null);
+    if (!userDoc && targetName) {
+      const lower = targetName.toLowerCase();
+      try {
+        const uDoc = await fsGet(`usernames/${lower}`, token);
+        if (uDoc && uDoc.uid) {
+          resolvedUid = uDoc.uid;
+          try { userDoc = await fsGet(`users/${resolvedUid}`, token); } catch (_) {}
+        }
+      } catch (_) {}
+
+      // 3. Fallback: query users collection by usernameLower or username
+      if (!userDoc) {
+        try {
+          const byLower = await fsQuery('users', [
+            { field: 'usernameLower', op: 'EQUAL', value: { stringValue: lower } }
+          ], token, null, 1);
+          if (byLower && byLower.length > 0) {
+            userDoc = byLower[0];
+            resolvedUid = userDoc.id || userDoc.uid || resolvedUid;
+          }
+        } catch (_) {}
+      }
+
+      if (!userDoc) {
+        try {
+          const byExact = await fsQuery('users', [
+            { field: 'username', op: 'EQUAL', value: { stringValue: targetName } }
+          ], token, null, 1);
+          if (byExact && byExact.length > 0) {
+            userDoc = byExact[0];
+            resolvedUid = userDoc.id || userDoc.uid || resolvedUid;
+          }
+        } catch (_) {}
+      }
+
+      // 4. Substring / in-memory scan fallback
+      if (!userDoc) {
+        try {
+          const scan = await fsQuery('users', [], token, null, 250);
+          for (const u of scan) {
+            if ((u.username && u.username.toLowerCase() === lower) || (u.usernameLower && u.usernameLower === lower)) {
+              userDoc = u;
+              resolvedUid = u.id || u.uid || resolvedUid;
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Self-heal index in usernames/ if missing
+      if (userDoc && resolvedUid && token) {
+        fsSet(`usernames/${lower}`, { uid: resolvedUid }, token).catch(() => {});
+      }
+    }
+
+    // Presence
+    let presence = { state: 'offline' };
+    if (resolvedUid) {
+      presence = await fetchPresenceForUser(resolvedUid, auth).catch(() => ({ state: 'offline' }));
+    }
+
+    // Moderator / Admin check
     let isModerator = false;
     let isAdmin = false;
-    try {
-      const adminDoc = await fsGet(`admins/${uid}`, auth.idToken);
-      if (adminDoc) {
-        const role = (adminDoc.role || 'admin').toLowerCase();
-        if (role === 'admin' || role === 'owner') { isAdmin = true; isModerator = true; }
-        else if (role === 'moderator' || role === 'mod') { isModerator = true; }
-      }
-    } catch (_) {}
+    if (resolvedUid) {
+      try {
+        const adminDoc = await fsGet(`admins/${resolvedUid}`, token);
+        if (adminDoc) {
+          const role = (adminDoc.role || 'admin').toLowerCase();
+          if (role === 'admin' || role === 'owner') { isAdmin = true; isModerator = true; }
+          else if (role === 'moderator' || role === 'mod') { isModerator = true; }
+        }
+      } catch (_) {}
+    }
 
-    // Build badges array, merging Firestore badges with role-based ones
+    // Badges
     const badges = Array.isArray(userDoc && userDoc.badges) ? [...userDoc.badges] : [];
-
-    // AUTO-MIGRATION (read-only): legacy verified MS users who don't have the badges field yet
-    if (userDoc && userDoc.microsoftVerified === true && !badges.includes('premium')) {
+    if (userDoc && (userDoc.microsoftVerified === true || userDoc.accountType === 'microsoft') && !badges.includes('premium')) {
       badges.push('premium');
     }
-    // Merge moderator badge from admin doc (no Firestore write here)
     if (isModerator && !badges.includes('moderator')) badges.push('moderator');
 
-    return { success: true, data: { ...(userDoc || {}), badges }, isModerator, isAdmin, presence };
+    // Graceful fallback user doc if still null
+    if (!userDoc) {
+      userDoc = {
+        username: username || uid || 'Unknown',
+        displayName: username || uid || 'Unknown',
+        accountType: 'microsoft',
+        badges: ['premium'],
+        biography: '',
+        createdAt: new Date().toISOString()
+      };
+    }
+
+    return {
+      success: true,
+      data: { ...(userDoc || {}), uid: resolvedUid || userDoc.id || uid, badges },
+      isModerator,
+      isAdmin,
+      presence
+    };
   } catch (e) {
     console.error('[get-user-profile] Error:', e);
-    return { success: false, error: e.message };
+    return {
+      success: true,
+      data: {
+        username: username || uid || 'Unknown',
+        displayName: username || uid || 'Unknown',
+        accountType: 'microsoft',
+        badges: ['premium'],
+        biography: ''
+      },
+      isModerator: false,
+      isAdmin: false,
+      presence: { state: 'offline' }
+    };
   }
 });
 
@@ -10746,6 +11255,13 @@ function ensureWindowsShortcut() {
 
 // --- App Events ---
 app.whenReady().then(() => {
+  try {
+    const initUserData = loadUserData();
+    if (initUserData.start_on_boot !== undefined) {
+      applyAutoStartSetting(initUserData.start_on_boot);
+    }
+    rpc.setEnabled(initUserData.discord_rpc_enabled !== false);
+  } catch (_) {}
   ensureWindowsShortcut();
   getNotificationIconPath();
   // Ensure default profile images exist in user data

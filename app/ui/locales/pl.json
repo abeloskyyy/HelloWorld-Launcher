@@ -479,7 +479,8 @@
     "update_badge": "Aktualizacja",
     "waiting": "Oczekiwanie",
     "done": "Gotowe",
-    "error": "Błąd"
+    "error": "Błąd",
+    "corrupted_notice": "Wykryto i usunięto uszkodzone pliki. Upewnij się, że uruchamiasz grę przy użyciu stabilnego połączenia bez ograniczeń."
   },
   "toasts": {
     "login_failed": "Logowanie nie powiodło się: {err}",
@@ -600,7 +601,8 @@
     "minecraft_running_server_saved": "Minecraft jest już uruchomiony. Dodaliśmy serwer do Twojej listy serwerów.",
     "launch_failed": "Nie udało się uruchomić gry.",
     "connecting_to_server": "Łączenie z {server}...",
-    "copied_to_clipboard": "Skopiowano do schowka!"
+    "copied_to_clipboard": "Skopiowano do schowka!",
+    "corrupted_files_warning": "Wykryto i usunięto uszkodzone pliki gry Minecraft. Upewnij się, że uruchamiasz Minecrafta przy użyciu stabilnego połączenia internetowego bez ograniczeń."
   },
   "settings": {
     "language": "Language / Język",
@@ -618,8 +620,8 @@
     "show_snapshots_tooltip": "Pokazuje wersje rozwojowe (migawki) w selektorze wersji.",
     "show_old": "Pokaż stare wersje",
     "show_old_tooltip": "Pokazuje stare wersje Alpha i Beta w selektorze wersji.",
-    "privacy": "Tryb prywatności",
-    "privacy_tooltip": "Ukrywa adres IP Twojego serwera przed znajomymi w Rich Presence. Twój status będzie nadal wskazywał, że grasz na serwerze, ale adres IP będzie ukryty.",
+    "privacy": "Ukryj IP serwera",
+    "privacy_tooltip": "Ukrywa adres serwera na Discordzie i w Launcherze. Pokazuje 'Gra w trybie wieloosobowym' bez IP.",
     "save_btn": "Zapisz ustawienia",
     "launcher_version": "Wersja programu uruchamiającego:",
     "replay_tutorial": "Powtórka samouczka",
@@ -631,7 +633,22 @@
     "reopen_on_game_close_tooltip": "Automatycznie przywraca, maksymalizuje i aktywuje launcher po zamknięciu Minecrafta.",
     "test_update_title": "Testuj aktualizację w tle",
     "test_update_desc": "Symuluje wykrywanie aktualizacji, wskaźnik postępu pobierania i przekazanie do instalatora.",
-    "test_update_btn": "Testuj aktualizację"
+    "test_update_btn": "Testuj aktualizację",
+    "start_on_boot": "Uruchamiaj z systemem",
+    "start_on_boot_tooltip": "Automatycznie uruchamia HelloWorld Launcher przy starcie komputera.",
+    "presence_title": "Status i Aktywność (RPC)",
+    "discord_rpc": "Discord Rich Presence",
+    "discord_rpc_tooltip": "Wyświetla Twój aktualny status i aktywność w Minecraft na profilu Discord.",
+    "app_presence": "Obecność społecznościowa w Launcherze",
+    "app_presence_tooltip": "Pozwala znajomym w HelloWorld Launcher widzieć Twój status. Wyłącz, aby być niewidocznym.",
+    "show_singleplayer_world": "Pokaż nazwę świata jednoosobowego",
+    "show_singleplayer_world_tooltip": "Wyświetla nazwę świata w trybie jednoosobowym. Wyłącz, aby pokazywać tylko 'W trybie jednoosobowym'.",
+    "show_game_version": "Pokaż wersję gry i modloader",
+    "show_game_version_tooltip": "Wyświetla wersję Minecrafta i modloader (np. Fabric 1.21.1) w Twoim statusie.",
+    "show_profile_name": "Pokaż nazwę profilu / instalacji",
+    "show_profile_name_tooltip": "Wyświetla nazwę instalacji w szczegółach statusu.",
+    "show_player_ign": "Pokaż pseudonim w grze (IGN)",
+    "show_player_ign_tooltip": "Wyświetla Twój nick z Minecrafta w szczegółach statusu."
   },
   "skins": {
     "create_pack": "Utwórz nowy pakiet skórek",

@@ -479,7 +479,8 @@
     "update_badge": "Güncelleme",
     "waiting": "Bekleniyor",
     "done": "Tamamlandı",
-    "error": "Hata"
+    "error": "Hata",
+    "corrupted_notice": "Hasarlı dosyalar tespit edildi ve silindi. Oyunu kararlı ve kısıtlamasız bir bağlantıyla başlattığınızdan emin olun."
   },
   "toasts": {
     "login_failed": "Giriş başarısız oldu: {err}",
@@ -600,7 +601,8 @@
     "minecraft_running_server_saved": "Minecraft zaten açık. Sunucuyu çok oyunculu listenize ekledik.",
     "launch_failed": "Oyun başlatılamadı.",
     "connecting_to_server": "{server} sunucusuna bağlanılıyor...",
-    "copied_to_clipboard": "Panoya kopyalandı!"
+    "copied_to_clipboard": "Panoya kopyalandı!",
+    "corrupted_files_warning": "Hasarlı Minecraft dosyaları tespit edildi ve silindi. Minecraft'ı kararlı ve kısıtlamasız bir internet bağlantısıyla başlattığınızdan emin olun."
   },
   "settings": {
     "language": "Language / Dil",
@@ -618,8 +620,8 @@
     "show_snapshots_tooltip": "Sürüm seçicide geliştirme sürümlerini (anlık görüntüler) gösterir.",
     "show_old": "Eski Sürümleri Göster",
     "show_old_tooltip": "Sürüm seçicide eski Alfa ve Beta sürümlerini gösterir.",
-    "privacy": "Gizlilik Modu",
-    "privacy_tooltip": "Rich Presence'da sunucunuzun IP adresini arkadaşlarınızdan gizler. Durumunuz hala bir sunucuda oynadığınızı gösterecek ancak IP gizlenecektir.",
+    "privacy": "Sunucu IP'sini Gizle",
+    "privacy_tooltip": "Discord ve Başlatıcı durumunda sunucu adresini gizler. IP olmadan 'Çok Oyunculu Oynuyor' gösterir.",
     "save_btn": "Ayarları Kaydet",
     "launcher_version": "Başlatıcı Sürümü:",
     "replay_tutorial": "Eğitimi Tekrar Oynat",
@@ -631,7 +633,22 @@
     "reopen_on_game_close_tooltip": "Minecraft kapandığında başlatıcıyı otomatik olarak geri yükler, büyütür ve odaklar.",
     "test_update_title": "Arka Plan Güncellemesini Test Et",
     "test_update_desc": "Güncelleme algılamasını, indirme ilerleme rozetini ve kurulum aktarımını simüle edin.",
-    "test_update_btn": "Güncelleme Akışını Test Et"
+    "test_update_btn": "Güncelleme Akışını Test Et",
+    "start_on_boot": "Sistemle birlikte başlat",
+    "start_on_boot_tooltip": "Bilgisayarınızı açtığınızda HelloWorld Launcher'ı otomatik olarak başlatır.",
+    "presence_title": "Durum ve Etkinlik (RPC)",
+    "discord_rpc": "Discord Rich Presence",
+    "discord_rpc_tooltip": "Discord profilinizde mevcut Minecraft durumunuzu ve etkinliğinizi gösterir.",
+    "app_presence": "Başlatıcıda Sosyal Durum",
+    "app_presence_tooltip": "HelloWorld Launcher'daki arkadaşlarınızın durumunuzu görmesini sağlar. Çevrimdışı görünmek için kapatın (Görünmez mod).",
+    "show_singleplayer_world": "Tek Oyunculu Dünya Adını Göster",
+    "show_singleplayer_world_tooltip": "Tek oyunculu oynarken dünyanın adını gösterir. Sadece 'Tek Oyunculu Oynuyor' göstermek için kapatın.",
+    "show_game_version": "Oyun Sürümünü ve Yükleyiciyi Göster",
+    "show_game_version_tooltip": "Durumunuzda Minecraft sürümünü ve mod yükleyicisini (örn. Fabric 1.21.1) gösterir.",
+    "show_profile_name": "Profil / Kurulum Adını Göster",
+    "show_profile_name_tooltip": "Durum ayrıntılarınızda kurulumunuzun adını gösterir.",
+    "show_player_ign": "Oyuncu Adını (IGN) Göster",
+    "show_player_ign_tooltip": "Durum ayrıntılarınızda Minecraft oyuncu adınızı gösterir."
   },
   "skins": {
     "create_pack": "Yeni Görünüm Paketi Oluştur",

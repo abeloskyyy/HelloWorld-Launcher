@@ -88,6 +88,23 @@ Guía de desarrollo y contexto operativo para **HelloWorld Launcher**, el launch
       - **Frecuencia**: Actualizaciones rápidas y enfocadas.
       - **Criterio**: Reservado casi exclusivamente para parcheo de bugs, hotfixes de emergencia, ajustes cosméticos mínimos o correcciones de dependencias sin añadir funciones de gran calado.
       - **Ejemplos**: Solución a un error de Content Security Policy (CSP), fallo de carga de iconos en un listado, corrección de tipografías/márgenes en CSS o resolución de un timeout en una descarga.
+11. **Actualizaciones Silenciosas y Empaquetado Dual en Linux (AppImage + DEB)**:
+    - **Descarga Silenciosa**: Toda actualización se descarga en segundo plano a la carpeta protegida del usuario (`userData/updates/`) mientras el jugador usa el launcher.
+    - **Badge Dock Centrado**: Se notifica mediante un badge flotante centrado abajo con aro SVG de progreso en tiempo real y atención pulsante al estar listo.
+    - **Persistencia Obligatoria**: Si un paquete ya fue descargado previamente y sigue íntegro en disco (`check-downloaded-update`), el launcher **nunca** debe volver a descargarlo, sino montar de inmediato el badge en estado verde (`ready`).
+    - **Relevo sin Descargas Duplicadas**:
+      * *Windows*: Se invoca `setup.exe` local con `--update-file` para descomprimir el `.zip` directamente. El setup se cierra por sí solo al abrir el launcher.
+      * *Linux AppImage*: Reemplazo atómico en caliente (`mv -f`) sin pedir contraseñas ni permisos de root.
+      * *Linux DEB*: Instalación desatendida con `pkexec` en `/opt/`.
+      * *macOS*: Montaje silencioso de `.dmg`, sobrescritura en `/Applications` y limpieza de Gatekeeper (`xattr -cr`).
+    - **Detección Automática de Formato en Linux**: Mediante `process.env.APPIMAGE`, el launcher detecta si corre como AppImage o paquete DEB de sistema y descarga automáticamente el mismo formato del usuario.
+12. **Notificación de Progreso vía NTFY al Completar Cambios**:
+    - **Cuándo**: Al finalizar cualquier tarea, nueva función, corrección o cambio completo solicitado por el usuario, antes de concluir la respuesta.
+    - **Ejecución**: Ejecutar `node scripts/notify-ntfy.js "<Título>" "<Mensaje>"` (o `npm run notify -- "<Título>" "<Mensaje>"`).
+    - **Pautas de Redacción**:
+      * Explicar de forma clara, natural y concisa qué se ha realizado y qué novedades o soluciones aporta.
+      * **ESTRICTAMENTE PROHIBIDO**: Citar nombres de archivos, rutas de código (`app/...`), funciones internas ni tecnicismos de bajo nivel.
+    - **Configuración**: El canal y tags se leen automáticamente de `ntfy.config.json` en la raíz del proyecto.
 
 ---
 
@@ -162,9 +179,17 @@ Sigue rigurosamente el flujo en dos fases:
 2. Escribe las notas de versión en `RELEASE_NOTES.md` siguiendo la **Regla de Oro #9** (`## Added`, `## Changed`, `## Fixed`).
 3. Sincroniza el encabezado `User-Agent: HelloWorld-Launcher/<version>` si procede.
 4. `git add package.json RELEASE_NOTES.md` ➔ `git commit` ➔ `git push origin main`.
-5. En GitHub Actions, ejecuta **Build Application (Artifacts)**.
+5. En GitHub Actions, ejecuta **Build Application (Artifacts)**. Si se modificó el instalador, activa `build_setup: true`.
 6. Descarga y prueba los instaladores locales.
 7. En GitHub Actions, ejecuta **Publish Official Release** para publicar en GitHub, actualizar el Gist y notificar a Discord.
+
+### Runbook 5: Probar y Simular el Sistema de Actualizaciones en Desarrollo
+1. Inicia el launcher en entorno de desarrollo con `npm start`.
+2. Abre la pestaña **Ajustes** y marca la casilla **Modo Desarrollador**.
+3. Haz clic en el botón **"Probar flujo de actualización"** (`testUpdateFlowBtn`).
+4. Comprueba visualmente que el badge inferior aparece centrado en el dock, llena el aro SVG del 0% al 100% y conmuta al checkmark verde con pulso de atención.
+5. Reinicia la aplicación o navega entre secciones: verifica que el badge permanece montado en estado "Listo" sin volver a descargar nada gracias a `check-downloaded-update`.
+6. Haz clic en el badge para comprobar la ejecución de `launch-installer-and-quit`.
 
 ---
 
@@ -172,7 +197,7 @@ Sigue rigurosamente el flujo en dos fases:
 
 Para consultas profundas y especificaciones de bajo nivel, consulta los documentos de referencia especializados:
 
-* [Arquitectura e IPCs](references/architecture.md): Especificación del ciclo de arranque, sistema de archivos, variables de `user.json` y catálogo completo de canales IPC.
+* [Arquitectura e IPCs](references/architecture.md): Especificación del ciclo de arranque, sistema de archivos, variables de `user.json` y catálogo completo de canales IPC (incluyendo auto-updater).
 * [Motor de Lanzamiento](references/launch_engine.md): Detalles técnicos de `mclcPatch.js`, `javaRuntime.js`, normalización de versiones, inyección de JVM y conexión directa a servidores.
 * [Mods, Workshop y Skins](references/mods_and_workshop.md): Reglas de la API de Modrinth, algoritmo de dependencias, empaquetado de modpacks en la Workshop y visores 3D con Three.js.
-* [Guía de Compilación y CI/CD](references/build_and_release.md): Flujo de trabajo en dos fases, reputación SmartScreen, scripts de build y checklist de releases.
+* [Guía de Compilación y CI/CD](references/build_and_release.md): Formatos de distribución (`.zip`, `.AppImage`, `.deb`, `.dmg`), arquitectura del Background Updater, reputación SmartScreen y checklist de releases.

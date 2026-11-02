@@ -479,7 +479,8 @@
     "update_badge": "تحديث",
     "waiting": "في الانتظار",
     "done": "تم",
-    "error": "خطأ"
+    "error": "خطأ",
+    "corrupted_notice": "تم اكتشاف ملفات تالفة وتمت إزالتها. تأكد من تشغيل اللعبة باستخدام اتصال مستقر ودون قيود."
   },
   "toasts": {
     "login_failed": "فشل تسجيل الدخول: {err}",
@@ -600,7 +601,8 @@
     "minecraft_running_server_saved": "Minecraft قيد التشغيل بالفعل. أضفنا الخادم إلى قائمة اللاعبين المتعددين الخاصة بك.",
     "launch_failed": "فشل بدء اللعبة.",
     "connecting_to_server": "جارٍ الاتصال بـ {server}...",
-    "copied_to_clipboard": "تم النسخ إلى الحافظة!"
+    "copied_to_clipboard": "تم النسخ إلى الحافظة!",
+    "corrupted_files_warning": "تم اكتشاف ملفات ماينكرافت تالفة وتمت إزالتها. تأكد من تشغيل ماينكرافت باستخدام اتصال إنترنت مستقر ودون قيود."
   },
   "settings": {
     "language": "Language / اللغة",
@@ -618,8 +620,8 @@
     "show_snapshots_tooltip": "يعرض إصدارات التطوير (لقطات) في محدد الإصدار.",
     "show_old": "إظهار الإصدارات القديمة",
     "show_old_tooltip": "يعرض إصدارات ألفا وبيتا القديمة في محدد الإصدار.",
-    "privacy": "وضع الخصوصية",
-    "privacy_tooltip": "يخفي عنوان IP لخادمك عن الأصدقاء في حالة الحضور الغني. ستظل حالتك تظهر أنك تلعب على خادم، ولكن سيتم إخفاء عنوان IP.",
+    "privacy": "إخفاء عنوان IP للخادم",
+    "privacy_tooltip": "إخفاء عنوان الخادم في Discord والمشغل. يظهر 'يلعب متعدد اللاعبين' بدون IP.",
     "save_btn": "حفظ الإعدادات",
     "launcher_version": "نسخة المشغل:",
     "replay_tutorial": "إعادة تشغيل البرنامج التعليمي",
@@ -631,7 +633,22 @@
     "reopen_on_game_close_tooltip": "يستعيد المشغل ويكبره ويركز عليه تلقائيًا عند إغلاق ماينكرافت.",
     "test_update_title": "اختبار التحديث في الخلفية",
     "test_update_desc": "محاكاة اكتشاف التحديث وشارة تقدم التنزيل وتمرير التثبيت.",
-    "test_update_btn": "اختبار مسار التحديث"
+    "test_update_btn": "اختبار مسار التحديث",
+    "start_on_boot": "التشغيل مع بدء النظام",
+    "start_on_boot_tooltip": "تشغيل HelloWorld Launcher تلقائياً عند بدء تشغيل الكمبيوتر.",
+    "presence_title": "الحالة والنشاط (RPC)",
+    "discord_rpc": "Discord Rich Presence",
+    "discord_rpc_tooltip": "يعرض نشاطك وحالتك الحالية في Minecraft على ملفك الشخصي في Discord.",
+    "app_presence": "الحالة الاجتماعية في المشغل",
+    "app_presence_tooltip": "يسمح لأصدقائك في HelloWorld Launcher برؤية حالتك. عطل للظهور كغير متصل (الوضع المتخفي).",
+    "show_singleplayer_world": "إظهار اسم العالم الفردي",
+    "show_singleplayer_world_tooltip": "يعرض اسم العالم في اللعب الفردي. عطل لإظهار 'يلعب لعبة فردية' فقط.",
+    "show_game_version": "إظهار إصدار اللعبة ومحمل المودات",
+    "show_game_version_tooltip": "يعرض إصدار Minecraft ومحمل المودات (مثل Fabric 1.21.1) في حالتك.",
+    "show_profile_name": "إظهار اسم التثبيت / الملف الشخصي",
+    "show_profile_name_tooltip": "يعرض اسم التثبيت في تفاصيل الحالة.",
+    "show_player_ign": "إظهار اسم اللاعب (IGN)",
+    "show_player_ign_tooltip": "يعرض اسم لاعب Minecraft في تفاصيل الحالة."
   },
   "skins": {
     "create_pack": "إنشاء حزمة الجلد الجديدة",

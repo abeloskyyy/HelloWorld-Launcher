@@ -479,7 +479,8 @@
     "update_badge": "Uppdatering",
     "waiting": "Väntar",
     "done": "Klar",
-    "error": "Fel"
+    "error": "Fel",
+    "corrupted_notice": "Skadade filer upptäcktes och togs bort. Se till att starta spelet med en stabil anslutning utan begränsningar."
   },
   "toasts": {
     "login_failed": "Inloggning misslyckades: {err}",
@@ -600,7 +601,8 @@
     "minecraft_running_server_saved": "Minecraft körs redan. Vi har lagt till servern i din flerspelarlista.",
     "launch_failed": "Det gick inte att starta spelet.",
     "connecting_to_server": "Ansluter till {server}...",
-    "copied_to_clipboard": "Kopierat till urklipp!"
+    "copied_to_clipboard": "Kopierat till urklipp!",
+    "corrupted_files_warning": "Skadade Minecraft-filer upptäcktes och togs bort. Se till att starta Minecraft med en stabil internetanslutning utan begränsningar."
   },
   "settings": {
     "language": "Language / Språk",
@@ -618,8 +620,8 @@
     "show_snapshots_tooltip": "Visar utvecklingsversioner (ögonblicksbilder) i versionsväljaren.",
     "show_old": "Visa gamla versioner",
     "show_old_tooltip": "Visar gamla alfa- och betaversioner i versionsväljaren.",
-    "privacy": "Sekretessläge",
-    "privacy_tooltip": "Döljer din server IP-adress från vänner i Rich Presence. Din status kommer fortfarande att visa att du spelar på en server, men IP:n kommer att döljas.",
+    "privacy": "Dölj server-IP",
+    "privacy_tooltip": "Döljer serveradressen på Discord och i launchern. Visar 'Spelar flerspelarläge' utan IP.",
     "save_btn": "Spara inställningar",
     "launcher_version": "Launcher-version:",
     "replay_tutorial": "Spela om handledning",
@@ -631,7 +633,22 @@
     "reopen_on_game_close_tooltip": "Återställer, maximerar och fokuserar launchern automatiskt när Minecraft stängs.",
     "test_update_title": "Testa bakgrundsuppdatering",
     "test_update_desc": "Simulerar uppdateringsidentifiering, nedladdningsförloppsbricka och överlämning till installationsprogrammet.",
-    "test_update_btn": "Testa uppdatering"
+    "test_update_btn": "Testa uppdatering",
+    "start_on_boot": "Starta med systemet",
+    "start_on_boot_tooltip": "Startar automatiskt HelloWorld Launcher när datorn startar.",
+    "presence_title": "Närvaro & Aktivitet (RPC)",
+    "discord_rpc": "Discord Rich Presence",
+    "discord_rpc_tooltip": "Visar din aktuella Minecraft-status och aktivitet på din Discord-profil.",
+    "app_presence": "Social närvaro i launchern",
+    "app_presence_tooltip": "Låter vänner i HelloWorld Launcher se din status. Inaktivera för att visas som offline (Osynligt läge).",
+    "show_singleplayer_world": "Visa världens namn i enspelarläge",
+    "show_singleplayer_world_tooltip": "Visar världens namn i enspelarläge. Inaktivera för att bara visa 'Spelar enspelarläge'.",
+    "show_game_version": "Visa spelversion & modloader",
+    "show_game_version_tooltip": "Visar Minecraft-versionen och modloadern (t.ex. Fabric 1.21.1) i din status.",
+    "show_profile_name": "Visa profil-/installationsnamn",
+    "show_profile_name_tooltip": "Visar ditt installationsnamn i statusdetaljerna.",
+    "show_player_ign": "Visa spelarnamn (IGN)",
+    "show_player_ign_tooltip": "Visar ditt Minecraft-namn i statusdetaljerna."
   },
   "skins": {
     "create_pack": "Skapa nytt hudpaket",

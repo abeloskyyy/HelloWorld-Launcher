@@ -10,6 +10,13 @@ export interface UserData {
   hw_accel?: boolean;
   privacy_mode?: boolean;
   reopen_on_game_close?: boolean;
+  start_on_boot?: boolean;
+  discord_rpc_enabled?: boolean;
+  app_presence_enabled?: boolean;
+  show_singleplayer_world?: boolean;
+  show_game_version?: boolean;
+  show_profile_name?: boolean;
+  show_player_ign?: boolean;
   last_skin_url?: string;
   last_skin_variant?: string;
   last_cape_url?: string;
@@ -139,6 +146,7 @@ export interface HwlAPI {
   onLoginUpdate: (callback: (data: any) => void) => void;
   onStatsUpdated: (callback: () => void) => void;
   onServicesDown429: (callback: () => void) => void;
+  onCorruptedFilesDetected?: (callback: (data: { count: number }) => void) => void;
 
   // Auto-Updater
   checkForUpdates: () => Promise<any>;
@@ -146,8 +154,10 @@ export interface HwlAPI {
   quitAndInstall: () => Promise<void>;
   onUpdaterStatus: (callback: (data: any) => void) => void;
   checkLocalInstaller: (expectedHash?: string | null) => Promise<{ exists: boolean; path?: string | null }>;
+  ensureLocalInstaller?: (params?: { expectedHash?: string | null; setupUrl?: string | null; tag?: string | null }) => Promise<{ exists: boolean; path?: string | null; downloaded?: boolean; error?: string }>;
+  checkDownloadedUpdate?: (params: { downloadUrl?: string; expectedHash?: string | null; minSizeMb?: number }) => Promise<{ exists: boolean; filePath?: string; size?: number }>;
   prepareTestUpdateFile?: () => Promise<{ success: boolean; filePath?: string; error?: string }>;
-  launchInstallerAndQuit: (optionsOrPath: string | { installerPath?: string; updateFile?: string; installPath?: string; expectedSetupHash?: string | null }) => Promise<any>;
+  launchInstallerAndQuit: (optionsOrPath: string | { installerPath?: string; updateFile?: string; installPath?: string; expectedSetupHash?: string | null; setupUrl?: string | null; tag?: string | null }) => Promise<any>;
   downloadInstallerFile: (url: string) => Promise<any>;
   onInstallerDownloadProgress: (callback: (data: any) => void) => void;
   getPlatformInfo: () => Promise<any>;

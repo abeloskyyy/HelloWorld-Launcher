@@ -479,7 +479,8 @@
     "update_badge": "Actualización",
     "waiting": "Agardando",
     "done": "Feito",
-    "error": "Erro"
+    "error": "Erro",
+    "corrupted_notice": "Detectáronse ficheiros danados e foron eliminados. Asegúrate de iniciar o xogo cunha conexión estable e sen restricións."
   },
   "toasts": {
     "login_failed": "Fallo ao iniciar sesión: {err}",
@@ -600,7 +601,8 @@
     "minecraft_running_server_saved": "Minecraft xa está aberto. Engadimos o servidor á túa lista multixogador.",
     "launch_failed": "Erro ao iniciar o xogo.",
     "connecting_to_server": "Iniciando conexión a {server}...",
-    "copied_to_clipboard": "Copiado ao portapapeis!"
+    "copied_to_clipboard": "Copiado ao portapapeis!",
+    "corrupted_files_warning": "Detectáronse ficheiros de Minecraft danados e foron eliminados. Asegúrate de iniciar Minecraft cunha conexión a Internet estable e sen restricións."
   },
   "settings": {
     "language": "Language / Idioma",
@@ -618,8 +620,8 @@
     "show_snapshots_tooltip": "Amosa versións de desenvolvemento (snapshots) no selector de versións.",
     "show_old": "Amosar Versións Antigas",
     "show_old_tooltip": "Amosa versións antigas Alpha e Beta no selector de versións.",
-    "privacy": "Modo Privacidade",
-    "privacy_tooltip": "Oculta a túa dirección IP do servidor aos teus amigos en Rich Presence. O teu estado aínda amosará que estás xogando nun servidor, pero a IP estará oculta.",
+    "privacy": "Ocultar IP do servidor",
+    "privacy_tooltip": "Oculta o enderezo do servidor en Discord e no Launcher. Amosará 'Xogando Multixogador' sen a IP.",
     "save_btn": "Gardar Axustes",
     "launcher_version": "Versión do Launcher:",
     "replay_tutorial": "Repetir Titorial",
@@ -631,7 +633,22 @@
     "reopen_on_game_close_tooltip": "Restaura, maximiza e enfoca o iniciador automaticamente cando se detecta que Minecraft se pechou.",
     "test_update_title": "Probar actualización en segundo plano",
     "test_update_desc": "Simula a detección de actualización, a insignia con progreso de descarga e o relevo ao setup.",
-    "test_update_btn": "Probar actualización"
+    "test_update_btn": "Probar actualización",
+    "start_on_boot": "Arrincar co sistema",
+    "start_on_boot_tooltip": "Inicia HelloWorld Launcher automaticamente ao acender o ordenador.",
+    "presence_title": "Presenza e Actividade (RPC)",
+    "discord_rpc": "Discord Rich Presence",
+    "discord_rpc_tooltip": "Mostra a túa actividade e estado de Minecraft no teu perfil de Discord.",
+    "app_presence": "Presenza Social no Launcher",
+    "app_presence_tooltip": "Permite que os teus amigos en HelloWorld Launcher vexan o teu estado. Desactívao para aparecer desconectado (Modo Invisible).",
+    "show_singleplayer_world": "Mostrar nome do mundo en Un Xogador",
+    "show_singleplayer_world_tooltip": "Amosa o nome do mundo en partidas individuais. Desactívao para amosar só 'Xogando Un Xogador'.",
+    "show_game_version": "Mostrar versión e modloader",
+    "show_game_version_tooltip": "Amosa a versión de Minecraft e o modloader (ex. Fabric 1.21.1) no teu estado.",
+    "show_profile_name": "Mostrar nome da instalación",
+    "show_profile_name_tooltip": "Amosa o nome da túa instalación ou perfil nos detalles do estado.",
+    "show_player_ign": "Mostrar nome de xogador (IGN)",
+    "show_player_ign_tooltip": "Amosa o teu nome de xogador de Minecraft nos detalles do estado."
   },
   "skins": {
     "create_pack": "Crear Novo Paquete de Skins",

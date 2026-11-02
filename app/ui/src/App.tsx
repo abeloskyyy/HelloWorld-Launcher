@@ -25,8 +25,8 @@ export const App: React.FC = () => {
     // List of client scripts to execute after authentic DOM is mounted
     const scripts = [
       'js/i18n.js',
-      'js/scripts.js',
       'js/stats.js',
+      'js/scripts.js',
       'js/download-listeners.js',
       'js/skinviewer3d.js',
       'js/skinpacks.js',

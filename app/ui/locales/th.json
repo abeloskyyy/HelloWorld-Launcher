@@ -479,7 +479,8 @@
     "update_badge": "อัปเดต",
     "waiting": "กำลังรอ",
     "done": "เสร็จสิ้น",
-    "error": "ข้อผิดพลาด"
+    "error": "ข้อผิดพลาด",
+    "corrupted_notice": "ตรวจพบและลบไฟล์ที่เสียหายแล้ว โปรดตรวจสอบให้แน่ใจว่าได้เริ่มเกมผ่านการเชื่อมต่อที่เสถียรและไม่มีข้อจำกัด"
   },
   "toasts": {
     "login_failed": "การเข้าสู่ระบบล้มเหลว: {err}",
@@ -600,7 +601,8 @@
     "minecraft_running_server_saved": "Minecraft กำลังทำงานอยู่แล้ว เราได้เพิ่มเซิร์ฟเวอร์ลงในรายการผู้เล่นหลายคนของคุณแล้ว",
     "launch_failed": "เปิดเกมไม่สำเร็จ",
     "connecting_to_server": "กำลังเชื่อมต่อไปยัง {server}...",
-    "copied_to_clipboard": "คัดลอกไปยังคลิปบอร์ดแล้ว!"
+    "copied_to_clipboard": "คัดลอกไปยังคลิปบอร์ดแล้ว!",
+    "corrupted_files_warning": "ตรวจพบและลบไฟล์ Minecraft ที่เสียหายแล้ว โปรดตรวจสอบให้แน่ใจว่าได้เปิดใช้งาน Minecraft ผ่านการเชื่อมต่ออินเทอร์เน็ตที่เสถียรและไม่มีข้อจำกัด"
   },
   "settings": {
     "language": "Language / ภาษา",
@@ -618,8 +620,8 @@
     "show_snapshots_tooltip": "แสดงเวอร์ชันการพัฒนา (สแนปชอต) ในตัวเลือกเวอร์ชัน",
     "show_old": "แสดงเวอร์ชันเก่า",
     "show_old_tooltip": "แสดงเวอร์ชันอัลฟ่าและเบต้าเก่าในตัวเลือกเวอร์ชัน",
-    "privacy": "โหมดความเป็นส่วนตัว",
-    "privacy_tooltip": "ซ่อนที่อยู่ IP เซิร์ฟเวอร์ของคุณจากเพื่อนใน Rich Presence สถานะของคุณจะยังคงแสดงว่าคุณกำลังเล่นบนเซิร์ฟเวอร์ แต่ IP จะถูกซ่อนไว้",
+    "privacy": "ซ่อน IP เซิร์ฟเวอร์",
+    "privacy_tooltip": "ซ่อนที่อยู่เซิร์ฟเวอร์ใน Discord และสถานะ Launcher โดยแสดง 'กำลังเล่นผู้เล่นหลายคน' โดยไม่มี IP",
     "save_btn": "บันทึกการตั้งค่า",
     "launcher_version": "เวอร์ชันตัวเรียกใช้งาน:",
     "replay_tutorial": "เล่นซ้ำบทช่วยสอน",
@@ -631,7 +633,22 @@
     "reopen_on_game_close_tooltip": "กู้คืน ขยายขนาด และโฟกัสตัวเปิดเกมโดยอัตโนมัติเมื่อตรวจพบว่า Minecraft ถูกปิดลง",
     "test_update_title": "ทดสอบการอัปเดตในเบื้องหลัง",
     "test_update_desc": "จำลองการตรวจจับอัปเดต ป้ายบอกความคืบหน้าการดาวน์โหลด และการส่งต่อไปยังตัวติดตั้ง",
-    "test_update_btn": "ทดสอบขั้นตอนอัปเดต"
+    "test_update_btn": "ทดสอบขั้นตอนอัปเดต",
+    "start_on_boot": "เริ่มพร้อมระบบ",
+    "start_on_boot_tooltip": "เปิด HelloWorld Launcher โดยอัตโนมัติเมื่อเปิดเครื่องคอมพิวเตอร์",
+    "presence_title": "สถานะและกิจกรรม (RPC)",
+    "discord_rpc": "Discord Rich Presence",
+    "discord_rpc_tooltip": "แสดงสถานะและกิจกรรม Minecraft ในโปรไฟล์ Discord ของคุณ",
+    "app_presence": "สถานะออนไลน์ใน Launcher",
+    "app_presence_tooltip": "อนุญาตให้เพื่อนใน HelloWorld Launcher เห็นสถานะของคุณ ปิดเพื่อแสดงสถานะออฟไลน์ (โหมดล่องหน)",
+    "show_singleplayer_world": "แสดงชื่อโลกในโหมดเล่นคนเดียว",
+    "show_singleplayer_world_tooltip": "แสดงชื่อโลกเมื่อเล่นคนเดียว ปิดเพื่อแสดงเพียง 'กำลังเล่นคนเดียว'",
+    "show_game_version": "แสดงเวอร์ชันเกมและ Mod Loader",
+    "show_game_version_tooltip": "แสดงเวอร์ชัน Minecraft และ Mod Loader (เช่น Fabric 1.21.1) ในสถานะของคุณ",
+    "show_profile_name": "แสดงชื่อการติดตั้ง/โปรไฟล์",
+    "show_profile_name_tooltip": "แสดงชื่อการติดตั้งในรายละเอียดสถานะ",
+    "show_player_ign": "แสดงชื่อในเกม (IGN)",
+    "show_player_ign_tooltip": "แสดงชื่อผู้เล่น Minecraft ในรายละเอียดสถานะ"
   },
   "skins": {
     "create_pack": "สร้างแพ็คสกินใหม่",

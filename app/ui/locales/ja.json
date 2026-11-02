@@ -479,7 +479,8 @@
     "update_badge": "更新",
     "waiting": "待機中",
     "done": "完了",
-    "error": "エラー"
+    "error": "エラー",
+    "corrupted_notice": "破損したファイルが検出され、削除されました。制限のない安定した接続でゲームを起動してください。"
   },
   "toasts": {
     "login_failed": "ログインに失敗しました: {err}",
@@ -600,7 +601,8 @@
     "minecraft_running_server_saved": "Minecraft は既に起動しています。マルチプレイヤーリストにサーバーを追加しました。",
     "launch_failed": "ゲームの起動に失敗しました。",
     "connecting_to_server": "{server} に接続中...",
-    "copied_to_clipboard": "クリップボードにコピーしました！"
+    "copied_to_clipboard": "クリップボードにコピーしました！",
+    "corrupted_files_warning": "破損したMinecraftファイルが検出され、削除されました。制限のない安定したインターネット接続でMinecraftを起動してください。"
   },
   "settings": {
     "language": "Language / 言語",
@@ -618,8 +620,8 @@
     "show_snapshots_tooltip": "バージョン セレクターに開発バージョン (スナップショット) が表示されます。",
     "show_old": "古いバージョンを表示",
     "show_old_tooltip": "バージョン セレクターに古いアルファ バージョンとベータ バージョンが表示されます。",
-    "privacy": "プライバシーモード",
-    "privacy_tooltip": "リッチ プレゼンスの友人からサーバーの IP アドレスを隠します。ステータスにはサーバー上でプレイしていることが表示されますが、IP は非表示になります。",
+    "privacy": "サーバーIPを非表示",
+    "privacy_tooltip": "Discordおよびランチャーでサーバーアドレスを非表示にし、IPなしで「マルチプレイ中」と表示します。",
     "save_btn": "設定の保存",
     "launcher_version": "ランチャーのバージョン:",
     "replay_tutorial": "チュートリアルを再生する",
@@ -631,7 +633,22 @@
     "reopen_on_game_close_tooltip": "Minecraftが終了したときに、ランチャーを自動的に復元、最大化、フォーカスします。",
     "test_update_title": "バックグラウンド更新をテスト",
     "test_update_desc": "更新の検出、ダウンロード進行状況バッジ、およびセットアップのリレーをシミュレートします。",
-    "test_update_btn": "更新フローをテスト"
+    "test_update_btn": "更新フローをテスト",
+    "start_on_boot": "システム起動時に起動",
+    "start_on_boot_tooltip": "PC起動時にHelloWorld Launcherを自動的に起動します。",
+    "presence_title": "プレゼンスとアクティビティ (RPC)",
+    "discord_rpc": "Discord Rich Presence",
+    "discord_rpc_tooltip": "Discordプロフィールに現在のMinecraftステータスとアクティビティを表示します。",
+    "app_presence": "ランチャー内ソーシャルプレゼンス",
+    "app_presence_tooltip": "HelloWorld Launcherのフレンドにステータスを表示します。オフライン表示にするには無効化（インビジブルモード）。",
+    "show_singleplayer_world": "シングルプレイのワールド名を表示",
+    "show_singleplayer_world_tooltip": "シングルプレイ時にワールド名を表示します。無効にすると「シングルプレイ中」とだけ表示されます。",
+    "show_game_version": "ゲームバージョンとLoaderを表示",
+    "show_game_version_tooltip": "ステータスにMinecraftバージョンとModローダー（例: Fabric 1.21.1）を表示します。",
+    "show_profile_name": "プロファイル／起動構成名を表示",
+    "show_profile_name_tooltip": "ステータスの詳細に起動構成の名前を表示します。",
+    "show_player_ign": "プレイヤー名 (IGN) を表示",
+    "show_player_ign_tooltip": "ステータスの詳細にMinecraftのプレイヤー名を表示します。"
   },
   "skins": {
     "create_pack": "新しいスキン パックの作成",
