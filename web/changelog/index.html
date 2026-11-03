@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="changelog.doc_title">Changelog - HelloWorld Launcher</title>
+    <meta name="description" content="View the full changelog and release history for HelloWorld Launcher. Discover new features, performance updates, and bug fixes.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="../styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+    <link rel="icon" href="../favicon.png">
+</head>
+
+<body class="changelog-page">
+    <!-- Initial Auth / Service Loader Overlay -->
+    <div id="authLoaderOverlay" style="position: fixed; inset: 0; background: #0f0c29; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white;">
+        <i class="fas fa-spinner fa-spin" style="font-size: 3rem; margin-bottom: 20px; color: var(--primary);"></i>
+        <h2 style="font-family: 'Clash Display', sans-serif;">HelloWorld Launcher</h2>
+        <p style="opacity: 0.7;" data-i18n="global.loading">Loading services...</p>
+    </div>
+
+    <!-- Ambient Floating Background Blobs -->
+    <div class="blob-cont">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <!-- Global Navigation Bar -->
+    <nav class="navbar">
+        <div class="container nav-container">
+            <a href="../" class="logo">
+                <img src="../title.png" onerror="this.src='https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/app/ui/img/icon/title.png'"
+                    alt="HelloWorld Launcher" class="nav-logo-img">
+            </a>
+            <div class="nav-right-group">
+                <a href="https://github.com/abeloskyyy/HelloWorld-Launcher" target="_blank" class="github-link" aria-label="GitHub Repository"><i class="bi bi-github"></i> <span class="github-link-text">GitHub</span></a>
+                <a href="./" class="github-link active" aria-label="Changelog" title="Changelog" data-i18n-title="nav.changelog" style="color: #ffffff; background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.35);"><i class="bi bi-journal-text" style="color: var(--secondary);"></i> <span class="github-link-text" data-i18n="nav.changelog">Changelog</span></a>
+                <a href="../" id="navDownloadBtn" class="btn btn-primary sm-hidden" data-i18n="nav.download">Download Now</a>
+                <a href="#" id="navLoginBtn" class="btn btn-secondary nav-login-btn" style="display: none;" data-i18n-title="nav.login" title="Log In"><i class="fas fa-user"></i> <span class="nav-login-text" data-i18n="nav.login">Log In</span></a>
+                
+                <!-- User badge - dropdown trigger -->
+                <div id="navUserBadge" class="nav-user-badge-wrapper" style="display:none;">
+                    <div class="nav-user-inner" id="navUserInner">
+                        <div class="nav-user-avatar">
+                            <img id="navUserAvatarImg" src="https://mc-heads.net/avatar/Steve" alt="User avatar" />
+                        </div>
+                        <span id="navUsername" class="nav-username"></span>
+                        <span id="navBadgesRow" class="hw-badges-row"></span>
+                        <i class="fas fa-chevron-down nav-user-chevron" id="navUserChevron"></i>
+                    </div>
+                    <!-- Dropdown -->
+                    <div class="nav-user-dropdown" id="navUserDropdown">
+                        <a href="../settings/" class="nav-dropdown-item" id="navEditProfileBtn">
+                            <i class="fas fa-user-edit"></i>
+                            <span data-i18n="nav.edit_profile">Edit Profile</span>
+                        </a>
+                        <a href="./" class="nav-dropdown-item">
+                            <i class="fas fa-history"></i>
+                            <span data-i18n="nav.changelog">Changelog</span>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Settings Gear Button -->
+                <a href="../settings/" class="nav-settings-btn" id="navSettingsBtn" title="Settings" aria-label="Settings" data-i18n-title="settings.main_title">
+                    <i class="fas fa-cog"></i>
+                </a>
+
+                <!-- Language Selector with flags -->
+                <div class="lang-select-wrapper" id="langSelectorWrapper">
+                    <button class="lang-btn" id="langBtn" aria-label="Select Language">
+                        <img class="lang-flag" id="langFlagImg" src="https://flagcdn.com/gb.svg" alt="EN" width="20" height="15">
+                        <span class="lang-code" id="langCode">EN</span>
+                        <i class="fas fa-chevron-down lang-chevron" id="langChevron"></i>
+                    </button>
+                    <div class="lang-dropdown" id="langDropdown">
+                        <button class="lang-option" data-lang="en"><img src="https://flagcdn.com/gb.svg" width="20" height="15" alt=""> EN</button>
+                        <button class="lang-option" data-lang="es"><img src="https://flagcdn.com/es.svg" width="20" height="15" alt=""> ES</button>
+                        <button class="lang-option" data-lang="fr"><img src="https://flagcdn.com/fr.svg" width="20" height="15" alt=""> FR</button>
+                        <button class="lang-option" data-lang="de"><img src="https://flagcdn.com/de.svg" width="20" height="15" alt=""> DE</button>
+                        <button class="lang-option" data-lang="pt"><img src="https://flagcdn.com/br.svg" width="20" height="15" alt=""> PT</button>
+                        <button class="lang-option" data-lang="it"><img src="https://flagcdn.com/it.svg" width="20" height="15" alt=""> IT</button>
+                        <button class="lang-option" data-lang="ru"><img src="https://flagcdn.com/ru.svg" width="20" height="15" alt=""> RU</button>
+                        <button class="lang-option" data-lang="ja"><img src="https://flagcdn.com/jp.svg" width="20" height="15" alt=""> JA</button>
+                        <button class="lang-option" data-lang="zh"><img src="https://flagcdn.com/cn.svg" width="20" height="15" alt=""> ZH</button>
+                        <button class="lang-option" data-lang="ko"><img src="https://flagcdn.com/kr.svg" width="20" height="15" alt=""> KO</button>
+                        <button class="lang-option" data-lang="pl"><img src="https://flagcdn.com/pl.svg" width="20" height="15" alt=""> PL</button>
+                        <button class="lang-option" data-lang="nl"><img src="https://flagcdn.com/nl.svg" width="20" height="15" alt=""> NL</button>
+                        <button class="lang-option" data-lang="tr"><img src="https://flagcdn.com/tr.svg" width="20" height="15" alt=""> TR</button>
+                        <button class="lang-option" data-lang="ar"><img src="https://flagcdn.com/sa.svg" width="20" height="15" alt=""> AR</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Screen -->
+    <main class="changelog-page-screen">
+        <div class="changelog-container">
+            
+            <!-- Header Navigation -->
+            <div class="settings-header-nav">
+                <a href="../" class="settings-back-btn">
+                    <i class="fas fa-arrow-left"></i> <span data-i18n="changelog.back_home">Back to Home</span>
+                </a>
+                <div class="settings-title-group">
+                    <h1 data-i18n="changelog.main_title">Changelog</h1>
+                </div>
+            </div>
+
+            <!-- Hero Banner -->
+            <header class="cl-hero-banner">
+                <h2 class="cl-hero-title">
+                    <span data-i18n="changelog.heading">Version History</span> <span class="gradient-text" data-i18n="changelog.heading_gradient">&amp; Updates</span>
+                </h2>
+                <p class="cl-hero-subtitle" data-i18n="changelog.subtitle">
+                    Explore all updates, improvements, and fixes in HelloWorld Launcher.
+                </p>
+            </header>
+
+            <!-- Search & Filters Toolbar -->
+            <div class="cl-toolbar">
+                <div class="cl-search-box">
+                    <i class="bi bi-search cl-search-icon"></i>
+                    <input type="text" id="clSearchInput" class="cl-search-input" placeholder="Search changes, versions, features..." data-i18n-placeholder="changelog.search_placeholder" autocomplete="off" spellcheck="false">
+                    <button type="button" id="clSearchClearBtn" class="cl-search-clear" style="display:none;" title="Clear search">&times;</button>
+                </div>
+                <div class="cl-filter-group">
+                    <button type="button" class="cl-filter-btn active" data-filter="all">
+                        <i class="bi bi-collection"></i> <span data-i18n="changelog.filter_all">All</span>
+                    </button>
+                    <button type="button" class="cl-filter-btn" data-filter="added">
+                        <i class="bi bi-plus-circle-fill" style="color: #10b981;"></i> <span data-i18n="changelog.filter_added">Added</span>
+                    </button>
+                    <button type="button" class="cl-filter-btn" data-filter="changed">
+                        <i class="bi bi-arrow-repeat" style="color: #818cf8;"></i> <span data-i18n="changelog.filter_changed">Changed</span>
+                    </button>
+                    <button type="button" class="cl-filter-btn" data-filter="fixed">
+                        <i class="bi bi-tools" style="color: #f59e0b;"></i> <span data-i18n="changelog.filter_fixed">Fixed</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Two-Column Layout: Sidebar + Release Feed -->
+            <div class="cl-layout">
+                
+                <!-- Sidebar -->
+                <aside class="cl-sidebar">
+                    <div class="cl-sidebar-card">
+                        <h3 class="cl-sidebar-title">
+                            <i class="bi bi-signpost-split"></i>
+                            <span data-i18n="changelog.toc_title">Versions</span>
+                        </h3>
+                        <nav id="clTocNav" class="cl-toc-list">
+                            <!-- Populated dynamically -->
+                        </nav>
+                    </div>
+
+                    <div class="cl-sidebar-card">
+                        <h4 class="cl-sidebar-sub">
+                            <i class="bi bi-link-45deg"></i>
+                            <span data-i18n="changelog.resources">Resources</span>
+                        </h4>
+                        <a href="https://github.com/abeloskyyy/HelloWorld-Launcher" target="_blank" rel="noopener noreferrer" class="cl-sidebar-link">
+                            <span><i class="bi bi-github" style="margin-right: 6px;"></i> <span data-i18n="footer.repo">Repository</span></span>
+                            <i class="fas fa-external-link-alt cl-ext-icon"></i>
+                        </a>
+                        <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/issues" target="_blank" rel="noopener noreferrer" class="cl-sidebar-link">
+                            <span><i class="bi bi-bug" style="margin-right: 6px;"></i> <span data-i18n="footer.report">Report Issue</span></span>
+                            <i class="fas fa-external-link-alt cl-ext-icon"></i>
+                        </a>
+                        <a href="https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json" target="_blank" rel="noopener noreferrer" class="cl-sidebar-link">
+                            <span><i class="bi bi-filetype-json" style="margin-right: 6px;"></i> <span data-i18n="changelog.view_raw">Raw Gist JSON</span></span>
+                            <i class="fas fa-external-link-alt cl-ext-icon"></i>
+                        </a>
+                    </div>
+                </aside>
+
+                <!-- Release Cards Main Feed -->
+                <section class="cl-content-panel">
+                    
+                    <!-- Loading Skeleton State -->
+                    <div id="clLoadingState" class="cl-loading-state">
+                        <div class="cl-skeleton-card">
+                            <div class="cl-skeleton-line" style="height: 28px; width: 35%; margin-bottom: 16px;"></div>
+                            <div class="cl-skeleton-line" style="height: 14px; width: 60%; margin-bottom: 24px;"></div>
+                            <div class="cl-skeleton-line" style="height: 16px; width: 90%; margin-bottom: 10px;"></div>
+                            <div class="cl-skeleton-line" style="height: 16px; width: 80%; margin-bottom: 10px;"></div>
+                            <div class="cl-skeleton-line" style="height: 16px; width: 70%;"></div>
+                        </div>
+                        <div class="cl-skeleton-card">
+                            <div class="cl-skeleton-line" style="height: 28px; width: 30%; margin-bottom: 16px;"></div>
+                            <div class="cl-skeleton-line" style="height: 14px; width: 50%; margin-bottom: 24px;"></div>
+                            <div class="cl-skeleton-line" style="height: 16px; width: 85%; margin-bottom: 10px;"></div>
+                            <div class="cl-skeleton-line" style="height: 16px; width: 75%;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Error State (Hidden initially) -->
+                    <div id="clErrorState" class="cl-error-state" style="display: none;">
+                        <i class="bi bi-exclamation-triangle cl-error-icon"></i>
+                        <h3 class="cl-error-title" data-i18n="changelog.error_title">Could not load changelog</h3>
+                        <p class="cl-error-desc" data-i18n="changelog.error_desc">Unable to retrieve release history. Please check your internet connection.</p>
+                        <button type="button" class="btn btn-primary" id="clRetryBtn">
+                            <i class="fas fa-redo"></i> <span data-i18n="changelog.retry">Try Again</span>
+                        </button>
+                    </div>
+
+                    <!-- Empty Search State (Hidden initially) -->
+                    <div id="clEmptyState" class="cl-empty-state" style="display: none;">
+                        <i class="bi bi-search cl-empty-icon"></i>
+                        <h3 class="cl-empty-title" data-i18n="changelog.no_results">No releases found matching your search.</h3>
+                        <p class="cl-empty-desc" data-i18n="changelog.empty_desc">Try searching with a different keyword or clear your filter.</p>
+                        <button type="button" class="btn btn-secondary" id="clEmptyClearBtn">
+                            <i class="fas fa-times"></i> <span data-i18n="changelog.clear_search">Clear Search</span>
+                        </button>
+                    </div>
+
+                    <!-- Rendered Cards Feed -->
+                    <div id="clFeedContainer" class="cl-feed-container">
+                        <!-- Populated dynamically by changelog.js -->
+                    </div>
+
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <h3>HelloWorld<span class="accent">Launcher</span></h3>
+                    <p data-i18n="footer.desc">The Minecraft launcher made by the community, for the community.</p>
+                </div>
+                <div class="footer-links">
+                    <h4 data-i18n="footer.links">Links</h4>
+                    <a href="../" data-i18n="settings.back_home">Home</a>
+                    <a href="https://github.com/abeloskyyy/HelloWorld-Launcher" target="_blank" data-i18n="footer.repo">Repository</a>
+                    <a href="./" data-i18n="footer.changelog">Changelog</a>
+                    <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/issues" target="_blank" data-i18n="footer.report">Report Error</a>
+                    <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases" target="_blank" data-i18n="footer.prev">Previous Versions</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p data-i18n="footer.copy">&copy; 2026 HelloWorld Launcher. Not affiliated with Mojang or Microsoft.</p>
+                <p style="margin-top: 5px; font-size: 0.9em; opacity: 0.8;" data-i18n="footer.signpath">
+                    This project uses the <a href="https://signpath.org/" target="_blank" rel="noopener noreferrer">SignPath Foundation</a> for code signing. 
+                    | <a href="https://github.com/Abeloskyyy/HelloWorld-Launcher/blob/main/PRIVACY.md" target="_blank">Privacy Policy</a>
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Auth Modal (for logging in or registering from this page) -->
+    <div id="authModal" class="review-modal">
+        <div class="review-modal-content" style="max-width: 400px;">
+            <button class="close-modal" id="closeAuthModal">&times;</button>
+            <div class="auth-tabs" style="display: flex; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                <button id="tabLogin" data-i18n="auth.tab_login" style="flex: 1; padding: 10px; text-align: center; background: none; border: none; color: white; cursor: pointer; border-bottom: 2px solid var(--primary); font-weight: bold;">Log In</button>
+                <button id="tabRegister" data-i18n="auth.tab_register" style="flex: 1; padding: 10px; text-align: center; background: none; border: none; color: rgba(255,255,255,0.6); cursor: pointer; border-bottom: 2px solid transparent;">Register</button>
+            </div>
+            <!-- Login Form -->
+            <form id="loginForm">
+                <div class="form-group">
+                    <label data-i18n="auth.email_label">Email</label>
+                    <input type="email" id="loginEmail" placeholder="Your email address" data-i18n-placeholder="auth.login_user_placeholder" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="auth.password_label">Password</label>
+                    <div style="position: relative;">
+                        <input type="password" id="loginPassword" placeholder="Your password" class="form-control" style="width: 100%; padding-right: 40px;" required>
+                        <i class="fa-regular fa-eye toggle-password" data-target="loginPassword" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #a3a3a3;"></i>
+                    </div>
+                </div>
+                <div id="loginError" style="color: #ff8c82; font-size: 0.9em; margin-bottom: 10px; text-align: center; display: none;"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;" id="loginSubmitBtn" data-i18n="auth.btn_login">Log In</button>
+            </form>
+            <!-- Register Form -->
+            <form id="registerForm" style="display: none;">
+                <div class="form-group">
+                    <label data-i18n="auth.username_label">Minecraft Username</label>
+                    <input type="text" id="registerUsername" placeholder="e.g. Notch" class="form-control" required minlength="3" maxlength="16">
+                </div>
+                <div class="form-group">
+                    <label data-i18n="auth.email_label">Email</label>
+                    <input type="email" id="registerEmail" placeholder="Your email address" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="auth.password_label">Password</label>
+                    <div style="position: relative;">
+                        <input type="password" id="registerPassword" placeholder="Choose a strong password" class="form-control" style="width: 100%; padding-right: 40px;" required minlength="6">
+                        <i class="fa-regular fa-eye toggle-password" data-target="registerPassword" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #a3a3a3;"></i>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="auth.confirm_password_label">Confirm Password</label>
+                    <div style="position: relative;">
+                        <input type="password" id="registerConfirmPassword" placeholder="Repeat your password" class="form-control" style="width: 100%; padding-right: 40px;" required minlength="6">
+                        <i class="fa-regular fa-eye toggle-password" data-target="registerConfirmPassword" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #a3a3a3;"></i>
+                    </div>
+                </div>
+                <div id="registerError" style="color: #ff8c82; font-size: 0.9em; margin-bottom: 10px; text-align: center; display: none;"></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;" id="registerSubmitBtn" data-i18n="auth.btn_register">Register</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Firebase SDK Modules -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, push, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut, OAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, deleteField, serverTimestamp as firestoreTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        window.firebaseModules = {
+            initializeApp, getDatabase, ref, push, onValue, serverTimestamp,
+            getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut, OAuthProvider, signInWithPopup,
+            getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, deleteField, firestoreTimestamp
+        };
+    </script>
+    <script src="../script.js?v=2.2.0" type="module"></script>
+    <script src="changelog.js" type="module"></script>
+</body>
+</html>
+

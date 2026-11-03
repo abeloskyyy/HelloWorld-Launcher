@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Account Settings - HelloWorld Launcher</title>
+    <title data-i18n="settings.doc_title">Account Settings - HelloWorld Launcher</title>
     <meta name="description" content="Manage your HelloWorld Launcher account settings and player profile.">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -38,11 +38,12 @@
     <nav class="navbar">
         <div class="container nav-container">
             <a href="../" class="logo">
-                <img src="https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/ui/img/icon/title.png"
+                <img src="../title.png" onerror="this.src='https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/app/ui/img/icon/title.png'"
                     alt="HelloWorld Launcher" class="nav-logo-img">
             </a>
             <div class="nav-right-group">
                 <a href="https://github.com/abeloskyyy/HelloWorld-Launcher" target="_blank" class="github-link" aria-label="GitHub Repository"><i class="bi bi-github"></i> <span class="github-link-text">GitHub</span></a>
+                <a href="../changelog/" class="github-link" aria-label="Changelog" title="Changelog" data-i18n-title="nav.changelog"><i class="bi bi-journal-text"></i> <span class="github-link-text" data-i18n="nav.changelog">Changelog</span></a>
                 <a href="../" id="navDownloadBtn" class="btn btn-primary sm-hidden" data-i18n="nav.download">Download Now</a>
                 <a href="#" id="navLoginBtn" class="btn btn-secondary nav-login-btn" style="display: none;" data-i18n-title="nav.login" title="Log In"><i class="fas fa-user"></i> <span class="nav-login-text" data-i18n="nav.login">Log In</span></a>
                 
@@ -61,6 +62,10 @@
                         <a href="../settings/" class="nav-dropdown-item" id="navEditProfileBtn">
                             <i class="fas fa-user-edit"></i>
                             <span data-i18n="nav.edit_profile">Edit Profile</span>
+                        </a>
+                        <a href="../changelog/" class="nav-dropdown-item">
+                            <i class="fas fa-history"></i>
+                            <span data-i18n="nav.changelog">Changelog</span>
                         </a>
                     </div>
                 </div>

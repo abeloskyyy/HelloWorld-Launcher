@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HelloWorld Launcher</title>
+    <title data-i18n="hero.page_title">HelloWorld Launcher</title>
     <meta name="description"
         content="The ultimate Minecraft launcher. Lightweight, open source and without bloatware. Download now.">
     <!-- Google Fonts -->
@@ -49,12 +49,13 @@
     <nav class="navbar">
         <div class="container nav-container">
             <a href="#" class="logo">
-                <img src="https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/app/ui/img/icon/title.png"
+                <img src="title.png" onerror="this.src='https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/app/ui/img/icon/title.png'"
                     alt="HelloWorld Launcher" class="nav-logo-img">
             </a>
             <div class="nav-right-group">
                 <a href="https://github.com/abeloskyyy/HelloWorld-Launcher" target="_blank" class="github-link" aria-label="GitHub Repository"><i
                         class="bi bi-github"></i> <span class="github-link-text">GitHub</span></a>
+                <a href="changelog/" class="github-link" aria-label="Changelog" title="Changelog" data-i18n-title="nav.changelog"><i class="bi bi-journal-text"></i> <span class="github-link-text" data-i18n="nav.changelog">Changelog</span></a>
                 <a href="#" id="navDownloadBtn" class="btn btn-primary sm-hidden" data-i18n="nav.download">Download Now</a>
                 <a href="#" id="navLoginBtn" class="btn btn-secondary nav-login-btn" style="display: none;" data-i18n-title="nav.login" title="Log In"><i class="fas fa-user"></i> <span class="nav-login-text" data-i18n="nav.login">Log In</span></a>
                 
@@ -73,6 +74,10 @@
                         <a href="settings/" class="nav-dropdown-item" id="navEditProfileBtn">
                             <i class="fas fa-user-edit"></i>
                             <span data-i18n="nav.edit_profile">Edit Profile</span>
+                        </a>
+                        <a href="changelog/" class="nav-dropdown-item">
+                            <i class="fas fa-history"></i>
+                            <span data-i18n="nav.changelog">Changelog</span>
                         </a>
                     </div>
                 </div>
@@ -151,7 +156,7 @@
         <div class="container hero-content">
             <div class="hero-text">
                 <span class="badge" data-i18n="hero.badge">Download Now Available</span>
-                <img src="https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/app/ui/img/icon/title.png"
+                <img src="title.png" onerror="this.src='https://raw.githubusercontent.com/abeloskyyy/HelloWorld-Launcher/main/app/ui/img/icon/title.png'"
                     alt="HelloWorld Launcher Title" class="hero-title-img">
                 <h1 data-i18n="hero.title">Your Minecraft, <br><span class="gradient-text">Without Limits.</span></h1>
                 <p class="lead" data-i18n="hero.subtitle">The open source launcher designed to be lightweight, secure and completely
@@ -505,6 +510,7 @@
                 <div class="footer-links">
                     <h4 data-i18n="footer.links">Links</h4>
                     <a href="https://github.com/abeloskyyy/HelloWorld-Launcher" target="_blank" data-i18n="footer.repo">Repository</a>
+                    <a href="changelog/" data-i18n="footer.changelog">Changelog</a>
                     <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/issues" target="_blank" data-i18n="footer.report">Report
                         Error</a>
                     <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases" target="_blank" data-i18n="footer.prev">Previous
@@ -572,20 +578,20 @@
             <button class="close-modal" id="closeAuthModal">&times;</button>
             
             <div class="auth-tabs" style="display: flex; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                <button id="tabLogin" style="flex: 1; padding: 10px; text-align: center; background: none; border: none; color: white; cursor: pointer; border-bottom: 2px solid var(--primary-color); font-weight: bold;">Log In</button>
-                <button id="tabRegister" style="flex: 1; padding: 10px; text-align: center; background: none; border: none; color: rgba(255,255,255,0.6); cursor: pointer; border-bottom: 2px solid transparent;">Register</button>
+                <button id="tabLogin" data-i18n="auth.tab_login" style="flex: 1; padding: 10px; text-align: center; background: none; border: none; color: white; cursor: pointer; border-bottom: 2px solid var(--primary-color); font-weight: bold;">Log In</button>
+                <button id="tabRegister" data-i18n="auth.tab_register" style="flex: 1; padding: 10px; text-align: center; background: none; border: none; color: rgba(255,255,255,0.6); cursor: pointer; border-bottom: 2px solid transparent;">Register</button>
             </div>
 
             <!-- Login Form -->
             <form id="loginForm">
                 <div class="form-group">
-                    <label>Email or Username</label>
-                    <input type="text" id="loginEmail" placeholder="example@mail.com or Notch" class="form-control" required>
+                    <label data-i18n="auth.login_user_label">Email or Username</label>
+                    <input type="text" id="loginEmail" placeholder="example@mail.com or Notch" data-i18n-placeholder="auth.login_user_placeholder" class="form-control" required>
                 </div>
                 <div class="form-group">
                     <label style="display: flex; justify-content: space-between; align-items: center;">
-                        Password
-                        <a href="#" id="linkToForgotPassword" style="font-size: 0.85em; color: var(--primary-color); text-decoration: none;">Forgot password?</a>
+                        <span data-i18n="auth.password_label">Password</span>
+                        <a href="#" id="linkToForgotPassword" data-i18n="auth.forgot_password" style="font-size: 0.85em; color: var(--primary-color); text-decoration: none;">Forgot password?</a>
                     </label>
                     <div style="position: relative;">
                         <input type="password" id="loginPassword" placeholder="Your password" class="form-control" style="width: 100%; padding-right: 40px;" required>
@@ -593,11 +599,11 @@
                     </div>
                 </div>
                 <div id="loginError" style="color: #ff8c82; font-size: 0.9em; margin-bottom: 10px; text-align: center; display: none;"></div>
-                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;" id="loginSubmitBtn">Log In</button>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;" id="loginSubmitBtn" data-i18n="auth.btn_login">Log In</button>
                 
                 <div style="display: flex; align-items: center; margin: 20px 0;">
                     <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.1);"></div>
-                    <span style="padding: 0 15px; font-size: 0.85em; opacity: 0.6;">OR</span>
+                    <span style="padding: 0 15px; font-size: 0.85em; opacity: 0.6;" data-i18n="auth.or_divider">OR</span>
                     <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.1);"></div>
                 </div>
                 
@@ -608,26 +614,26 @@
                         <path d="M11.5 23H0V11.5H11.5V23Z" fill="#00A4EF"/>
                         <path d="M23 23H11.5V11.5H23V23Z" fill="#FFB900"/>
                     </svg>
-                    Sign in with Microsoft
+                    <span data-i18n="auth.ms_login">Sign in with Microsoft</span>
                 </button>
                 
                 <p style="text-align: center; margin-top: 15px; font-size: 0.9em; opacity: 0.8;">
-                    Don't have an account yet? <a href="#" id="linkToRegister" style="color: var(--primary-color);">Create an account</a>
+                    <span data-i18n="auth.no_account">Don't have an account yet?</span> <a href="#" id="linkToRegister" style="color: var(--primary-color);" data-i18n="auth.create_account">Create an account</a>
                 </p>
             </form>
 
             <!-- Forgot Password Form (Hidden initially) -->
             <form id="forgotPasswordForm" style="display: none;">
                 <div class="form-group">
-                    <p style="font-size: 0.9em; color: #a3a3a3; margin-bottom: 15px;">Enter your email address and we'll send you a link to reset your password.</p>
+                    <p style="font-size: 0.9em; color: #a3a3a3; margin-bottom: 15px;" data-i18n="auth.forgot_desc">Enter your email address and we'll send you a link to reset your password.</p>
                     <label>Email</label>
                     <input type="email" id="forgotPasswordEmail" placeholder="Your email address" class="form-control" required>
                 </div>
                 <div id="forgotPasswordError" style="color: #ff8c82; font-size: 0.9em; margin-bottom: 10px; text-align: center; display: none;"></div>
                 <div id="forgotPasswordSuccess" style="color: #4CAF50; font-size: 0.9em; margin-bottom: 10px; text-align: center; display: none;"></div>
-                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;" id="forgotPasswordSubmitBtn">Send Reset Link</button>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;" id="forgotPasswordSubmitBtn" data-i18n="auth.btn_send_reset">Send Reset Link</button>
                 <p style="text-align: center; margin-top: 15px; font-size: 0.9em; opacity: 0.8;">
-                    Remembered it? <a href="#" id="linkToLoginFromForgot" style="color: var(--primary-color);">Back to login</a>
+                    <span data-i18n="auth.remembered">Remembered it?</span> <a href="#" id="linkToLoginFromForgot" style="color: var(--primary-color);" data-i18n="auth.back_to_login">Back to login</a>
                 </p>
             </form>
 
@@ -637,7 +643,7 @@
                     <label>Minecraft Username</label>
                     <input type="text" id="registerUsername" placeholder="e.g. Notch" class="form-control" required minlength="3" maxlength="16">
                     <p style="font-size: 0.8em; color: #ff8c82; margin-top: 5px; line-height: 1.3;">
-                        <i class="bi bi-exclamation-triangle"></i> Cannot contain spaces or symbols. Max 16 characters.
+                        <i class="bi bi-exclamation-triangle"></i> <span data-i18n="auth.username_rules">Cannot contain spaces or symbols. Max 16 characters.</span>
                     </p>
                 </div>
                 <div class="form-group">
@@ -659,9 +665,9 @@
                     </div>
                 </div>
                 <div id="registerError" style="color: #ff8c82; font-size: 0.9em; margin-bottom: 10px; text-align: center; display: none;"></div>
-                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;" id="registerSubmitBtn">Register</button>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;" id="registerSubmitBtn" data-i18n="auth.btn_register">Register</button>
                 <p style="text-align: center; margin-top: 15px; font-size: 0.9em; opacity: 0.8;">
-                    Already have an account? <a href="#" id="linkToLogin" style="color: var(--primary-color);">Log in</a>
+                    <span data-i18n="auth.already_account">Already have an account?</span> <a href="#" id="linkToLogin" style="color: var(--primary-color);" data-i18n="auth.btn_login">Log in</a>
                 </p>
             </form>
         </div>
