@@ -1167,9 +1167,6 @@ async function handleMaintenanceState(maintenance) {
     if (modal) {
         modal.classList.add('show');
 
-    if (corruptedNotice) {
-        corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
-    }
         modal.style.display = 'flex';
     }
 }
@@ -2508,9 +2505,6 @@ async function showUpdateModal(updateData) {
     // Display modal
     modal.classList.add('show');
 
-    if (corruptedNotice) {
-        corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
-    }
     modal.style.display = 'flex';
 }
 
@@ -4573,15 +4567,11 @@ async function startSynchronizationQueue(syncData, profileId) {
 
     modal.classList.add('show');
 
-    if (corruptedNotice) {
-        corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
-    }
 
     const corruptedNotice = document.getElementById('syncCorruptedNotice');
     if (corruptedNotice) {
         corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
     }
-
     // Build queue with filenames as placeholder
 
     let queue = [];
@@ -5575,9 +5565,6 @@ window.showLaunchError = function (type, message, log) {
 
     modal.classList.add('show');
 
-    if (corruptedNotice) {
-        corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
-    }
 
 };
 
@@ -8977,9 +8964,6 @@ window.openAccountSwitcher = async function () {
 
     modal.classList.add('show');
 
-    if (corruptedNotice) {
-        corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
-    }
     await renderAccountSwitcherList();
 };
 
@@ -11712,10 +11696,6 @@ window.openModDetails = async function (projectId) {
 
     modal.classList.add('show');
 
-    if (corruptedNotice) {
-        corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
-    }
-
 
 
     try {
@@ -13976,10 +13956,6 @@ if (window.hwlAPI && window.hwlAPI.onServicesDown429) {
         }
 
         modal.classList.add('show');
-
-    if (corruptedNotice) {
-        corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
-    }
 
         // Apply i18n translation to newly rendered elements
         if (window.applyI18n) window.applyI18n(modal);
