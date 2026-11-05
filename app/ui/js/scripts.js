@@ -1167,7 +1167,6 @@ async function handleMaintenanceState(maintenance) {
     if (modal) {
         modal.classList.add('show');
 
-    const corruptedNotice = document.getElementById('syncCorruptedNotice');
     if (corruptedNotice) {
         corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
     }
@@ -2509,7 +2508,6 @@ async function showUpdateModal(updateData) {
     // Display modal
     modal.classList.add('show');
 
-    const corruptedNotice = document.getElementById('syncCorruptedNotice');
     if (corruptedNotice) {
         corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
     }
@@ -4575,7 +4573,6 @@ async function startSynchronizationQueue(syncData, profileId) {
 
     modal.classList.add('show');
 
-    const corruptedNotice = document.getElementById('syncCorruptedNotice');
     if (corruptedNotice) {
         corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
     }
@@ -5578,7 +5575,6 @@ window.showLaunchError = function (type, message, log) {
 
     modal.classList.add('show');
 
-    const corruptedNotice = document.getElementById('syncCorruptedNotice');
     if (corruptedNotice) {
         corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
     }
@@ -8981,7 +8977,6 @@ window.openAccountSwitcher = async function () {
 
     modal.classList.add('show');
 
-    const corruptedNotice = document.getElementById('syncCorruptedNotice');
     if (corruptedNotice) {
         corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
     }
@@ -11717,7 +11712,6 @@ window.openModDetails = async function (projectId) {
 
     modal.classList.add('show');
 
-    const corruptedNotice = document.getElementById('syncCorruptedNotice');
     if (corruptedNotice) {
         corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
     }
@@ -13983,7 +13977,6 @@ if (window.hwlAPI && window.hwlAPI.onServicesDown429) {
 
         modal.classList.add('show');
 
-    const corruptedNotice = document.getElementById('syncCorruptedNotice');
     if (corruptedNotice) {
         corruptedNotice.style.display = syncData.corrupted_detected ? 'flex' : 'none';
     }
