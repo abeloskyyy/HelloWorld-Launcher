@@ -21,3 +21,5 @@ version-build-old.md
 .wrangler/
 **/.wrangler/
 tmp/
+*.bin
+*.AppImage
