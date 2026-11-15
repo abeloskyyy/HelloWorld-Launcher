@@ -20,3 +20,4 @@ version-build-old.md
 *.psd
 .wrangler/
 **/.wrangler/
+tmp/
