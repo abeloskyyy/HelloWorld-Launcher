@@ -5947,6 +5947,12 @@ async function findLocalInstallerPath(expectedHash = null) {
       ];
     } else {
       candidates = [
+        path.join(execDir, 'setup.bin'),
+        path.join(execDir, 'HelloWorld-Launcher-Setup-Linux.bin'),
+        path.join(execDir, 'setup.AppImage'),
+        path.join(execDir, 'HelloWorld-Launcher-Setup-Linux.AppImage'),
+        path.join(app.getPath('userData'), 'updates', 'setup.bin'),
+        path.join(app.getPath('userData'), 'updates', 'HelloWorld-Launcher-Setup-Linux.bin'),
         path.join(execDir, 'HelloWorld-Launcher.AppImage'),
         path.join(execDir, 'helloworld-launcher.AppImage'),
         path.join(execDir, 'helloworld-launcher.deb'),
@@ -5954,6 +5960,7 @@ async function findLocalInstallerPath(expectedHash = null) {
         path.join(app.getPath('userData'), 'updates', 'helloworld-launcher-linux-amd64.deb'),
         path.join(app.getPath('userData'), 'updates', 'helloworld-launcher-linux-x86_64.rpm'),
         path.join(app.getPath('userData'), 'updates', 'helloworld-launcher-linux-x64.zip'),
+        path.join(__dirname, '..', 'dist', 'setup', 'HelloWorld-Launcher-Setup-Linux.bin'),
         path.join(__dirname, '..', 'dist', 'helloworld-launcher.deb'),
         path.join(__dirname, 'dist', 'helloworld-launcher.deb')
       ];
@@ -6213,7 +6220,7 @@ ipcMain.handle('launch-installer-and-quit', async (event, optionsOrPath) => {
     const currentDir = customInstallPath || path.dirname(currentExec);
 
     // ── 1. Linux: AppImage ──────────────────────────────────────────────────
-    if (targetExe && targetExe.toLowerCase().endsWith('.appimage')) {
+    if (targetExe && !targetExe.toLowerCase().includes('setup') && targetExe.toLowerCase().endsWith('.appimage')) {
       console.log('[launch-installer-and-quit] Launching Linux AppImage update:', targetExe);
       try { fs.chmodSync(targetExe, 0o755); } catch (_) {}
 
@@ -6545,7 +6552,10 @@ rm -rf "$TMP_DIR" "$0"
     }
 
     if (targetExe && fs.existsSync(targetExe)) {
-      console.log('[launch-installer-and-quit] Executing Windows Setup:', targetExe, 'with installPath:', execDir, 'updateFile:', updateFile);
+      console.log('[launch-installer-and-quit] Executing Setup:', targetExe, 'with installPath:', execDir, 'updateFile:', updateFile);
+      if (process.platform !== 'win32') {
+        try { fs.chmodSync(targetExe, 0o755); } catch (_) {}
+      }
 
       const args = [
         'update',
