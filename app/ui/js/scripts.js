@@ -2816,6 +2816,9 @@ async function startBackgroundUpdate(updateData) {
     } catch (err) {
         _isBackgroundDownloading = false;
         console.error('[BackgroundUpdater] Download error:', err);
+        if (window.hwlUpdateBadge && typeof window.hwlUpdateBadge.hide === 'function') {
+            window.hwlUpdateBadge.hide();
+        }
     }
 }
 window.startBackgroundUpdate = startBackgroundUpdate;
@@ -2846,9 +2849,8 @@ async function hwlApplyDownloadedUpdate() {
 window.hwlApplyDownloadedUpdate = hwlApplyDownloadedUpdate;
 
 function openUpdateModalIfAvailable() {
-    if (_currentUpdateState) {
-        showUpdateModal(_currentUpdateState);
-    }
+    // Modal disabled on dock click as requested
+    return;
 }
 window.openUpdateModalIfAvailable = openUpdateModalIfAvailable;
 

@@ -125,13 +125,8 @@ export const UpdateBadge: React.FC = () => {
       if (typeof win.hwlApplyDownloadedUpdate === 'function') {
         win.hwlApplyDownloadedUpdate();
       }
-    } else {
-      // Si aún está descargando, abrir el modal de detalles o información
-      const win = window as any;
-      if (typeof win.openUpdateModalIfAvailable === 'function') {
-        win.openUpdateModalIfAvailable();
-      }
     }
+    // No modal al hacer clic durante la descarga
   };
 
   if (!visible) return null;
