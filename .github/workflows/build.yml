@@ -119,22 +119,7 @@ jobs:
           # Resolver compatibilidad con rpmbuild moderno (RPM 4.19+/4.20/6.x) en fpm
           if [ -f /usr/bin/rpmbuild ] && [ ! -f /usr/bin/rpmbuild.real ]; then
             sudo mv /usr/bin/rpmbuild /usr/bin/rpmbuild.real
-            sudo bash -c 'cat << "EOF" > /usr/bin/rpmbuild
-#!/bin/bash
-EXTRA_ARGS=()
-for ((i=1; i<=$#; i++)); do
-  curr="${!i}"
-  if [ "$curr" = "--define" ]; then
-    next_i=$((i+1))
-    next_val="${!next_i}"
-    if [[ "$next_val" == buildroot* ]]; then
-      b_val="${next_val#buildroot }"
-      EXTRA_ARGS+=("--buildroot=$b_val")
-    fi
-  fi
-done
-exec /usr/bin/rpmbuild.real "${EXTRA_ARGS[@]}" "$@"
-EOF'
+            sudo cp scripts/rpmbuild-wrapper.sh /usr/bin/rpmbuild
             sudo chmod +x /usr/bin/rpmbuild
           fi
 
