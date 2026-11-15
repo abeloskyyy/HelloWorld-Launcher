@@ -2,6 +2,10 @@
   "name": "helloworld-launcher-setup",
   "version": "1.0.0",
   "description": "Universal installer for HelloWorld Launcher",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Abeloskyyy/HelloWorld-Launcher.git"
+  },
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -54,8 +58,7 @@
         {
           "target": "AppImage",
           "arch": [
-            "x64",
-            "arm64"
+            "x64"
           ]
         }
       ],
@@ -63,6 +66,13 @@
       "category": "Utility",
       "artifactName": "HelloWorld-Launcher-Setup-Linux.${ext}"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Abeloskyyy",
+        "repo": "HelloWorld-Launcher"
+      }
+    ],
     "npmRebuild": false
   },
   "author": {
