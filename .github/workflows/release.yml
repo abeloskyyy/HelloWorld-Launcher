@@ -112,8 +112,19 @@ jobs:
             fi
           fi
 
-          if [ ! -f "release-assets/HelloWorld-Launcher-Setup-Linux.bin" ] && [ -f "release-assets/HelloWorld-Launcher-Setup-Linux.AppImage" ]; then
-            cp release-assets/HelloWorld-Launcher-Setup-Linux.AppImage release-assets/HelloWorld-Launcher-Setup-Linux.bin
+          if [ ! -f "release-assets/HelloWorld-Launcher-Setup-Linux.bin" ]; then
+            if [ -f "release-assets/HelloWorld-Launcher-Setup-Linux.AppImage" ]; then
+              cp release-assets/HelloWorld-Launcher-Setup-Linux.AppImage release-assets/HelloWorld-Launcher-Setup-Linux.bin
+            else
+              echo "HelloWorld-Launcher-Setup-Linux.bin not found in build artifacts. Pulling from previous release..."
+              mkdir -p prev-setup-linux
+              if gh release download "$TAG" --pattern "HelloWorld-Launcher-Setup-Linux.bin" --dir prev-setup-linux 2>/dev/null || gh release download --pattern "HelloWorld-Launcher-Setup-Linux.bin" --dir prev-setup-linux 2>/dev/null; then
+                if [ -f "prev-setup-linux/HelloWorld-Launcher-Setup-Linux.bin" ]; then
+                  cp prev-setup-linux/HelloWorld-Launcher-Setup-Linux.bin release-assets/HelloWorld-Launcher-Setup-Linux.bin
+                  echo "Successfully copied HelloWorld-Launcher-Setup-Linux.bin from previous release."
+                fi
+              fi
+            fi
           fi
 
           echo "Staged release assets:"

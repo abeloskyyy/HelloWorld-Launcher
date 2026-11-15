@@ -74,53 +74,10 @@ jobs:
       - name: Build Launcher ZIP (dist/helloworld-launcher-win.zip)
         run: npm run build:win
 
-      - name: Fetch Existing Setup.exe (SmartScreen Reputation)
-        if: ${{ github.event.inputs.build_setup_windows != true && github.event.inputs.build_setup_windows != 'true' }}
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p dist
-          echo "Attempting to download existing HelloWorld-Launcher-Setup.exe from previous release..."
-          mkdir -p ./tmp-setup
-          if gh release download --pattern "HelloWorld-Launcher-Setup.exe" --dir ./tmp-setup 2>/dev/null; then
-            if [ -f "./tmp-setup/HelloWorld-Launcher-Setup.exe" ]; then
-              cp ./tmp-setup/HelloWorld-Launcher-Setup.exe dist/HelloWorld-Launcher-Setup.exe
-              echo "Preserved existing HelloWorld-Launcher-Setup.exe (SmartScreen reputation retained)."
-            fi
-          fi
-
-          # Si no existe ninguna release previa todavía en el repo, compilar el instalador inicial
-          if [ ! -f "dist/HelloWorld-Launcher-Setup.exe" ]; then
-            echo "No existing setup found on releases. Building initial bootstrapper..."
-            cd installer
-            npm ci || npm install
-            npm run build:win
-            cd ..
-            if [ -f "dist/setup/HelloWorld-Launcher-Setup.exe" ]; then
-              cp dist/setup/HelloWorld-Launcher-Setup.exe dist/HelloWorld-Launcher-Setup.exe
-            fi
-          fi
-
-      - name: Build Windows Setup.exe (Fresh Bootstrapper)
-        if: ${{ github.event.inputs.build_setup_windows == true || github.event.inputs.build_setup_windows == 'true' }}
-        shell: bash
-        run: |
-          echo "Building fresh Windows Setup bootstrapper..."
-          cd installer
-          npm ci || npm install
-          npm run build:win
-          cd ..
-          if [ -f "dist/setup/HelloWorld-Launcher-Setup.exe" ]; then
-            cp dist/setup/HelloWorld-Launcher-Setup.exe dist/HelloWorld-Launcher-Setup.exe
-          fi
-
       - name: Stage Windows Binaries
         shell: bash
         run: |
           mkdir -p dist-windows
-          [ -f "dist/HelloWorld-Launcher-Setup.exe" ] && cp dist/HelloWorld-Launcher-Setup.exe dist-windows/
-          [ -f "dist/HelloWorld-Launcher-Setup.exe" ] && cp dist/HelloWorld-Launcher-Setup.exe dist-windows/HelloWorld-Launcher-Setup-Windows.exe
           [ -f "dist/helloworld-launcher-win.zip" ] && cp dist/helloworld-launcher-win.zip dist-windows/
           echo "Windows staging contents:"
           ls -lh dist-windows
@@ -179,39 +136,6 @@ jobs:
       - name: Build Linux (.deb, .rpm and .zip packages)
         run: npm run build:linux
         continue-on-error: true
-
-      - name: Fetch or Build Linux Universal Setup (.bin)
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p dist
-          NEED_BUILD="true"
-          if [ "${{ github.event.inputs.build_setup_linux }}" != "true" ]; then
-            echo "Attempting to download existing HelloWorld-Launcher-Setup-Linux.bin from previous release..."
-            mkdir -p ./tmp-setup-linux
-            if gh release download --pattern "HelloWorld-Launcher-Setup-Linux.bin" --dir ./tmp-setup-linux 2>/dev/null; then
-              if [ -f "./tmp-setup-linux/HelloWorld-Launcher-Setup-Linux.bin" ]; then
-                cp ./tmp-setup-linux/HelloWorld-Launcher-Setup-Linux.bin dist/HelloWorld-Launcher-Setup-Linux.bin
-                echo "Preserved existing HelloWorld-Launcher-Setup-Linux.bin."
-                NEED_BUILD="false"
-              fi
-            fi
-          fi
-
-          if [ "$NEED_BUILD" = "true" ]; then
-            echo "Building universal Linux Setup bootstrapper (.bin)..."
-            cd installer
-            npm ci || npm install
-            npm run build:linux
-            cd ..
-            if [ -d "dist/setup" ]; then
-              find dist/setup -maxdepth 1 -type f \( -name "HelloWorld-Launcher-Setup-Linux.bin" -o -name "HelloWorld-Launcher-Setup-Linux.AppImage" \) -exec cp {} dist/ \;
-              if [ -f "dist/HelloWorld-Launcher-Setup-Linux.AppImage" ] && [ ! -f "dist/HelloWorld-Launcher-Setup-Linux.bin" ]; then
-                cp dist/HelloWorld-Launcher-Setup-Linux.AppImage dist/HelloWorld-Launcher-Setup-Linux.bin
-              fi
-            fi
-          fi
 
       - name: Setup Canonical Linux Names
         run: |
@@ -316,11 +240,11 @@ jobs:
           retention-days: 14
 
   # ─────────────────────────────────────────────────────────────
-  # 4. STANDALONE SETUP BUILDERS (If main platforms skipped)
+  # 4. SETUP BOOTSTRAPPERS (Windows Setup.exe & Linux Setup.bin)
   # ─────────────────────────────────────────────────────────────
   build-setup-windows:
     name: Build Setup Windows (.exe)
-    if: ${{ (github.event.inputs.build_setup_windows == true || github.event.inputs.build_setup_windows == 'true') && github.event.inputs.build_windows == 'false' }}
+    if: ${{ github.event.inputs.build_setup_windows == true || github.event.inputs.build_setup_windows == 'true' }}
     runs-on: windows-latest
     steps:
       - name: Checkout repository
@@ -365,7 +289,7 @@ jobs:
 
   build-setup-linux:
     name: Build Setup Linux (.bin)
-    if: ${{ (github.event.inputs.build_setup_linux == true || github.event.inputs.build_setup_linux == 'true') && github.event.inputs.build_linux == 'false' }}
+    if: ${{ github.event.inputs.build_setup_linux == true || github.event.inputs.build_setup_linux == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
