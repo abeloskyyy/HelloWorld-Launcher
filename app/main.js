@@ -5944,6 +5944,8 @@ async function findLocalInstallerPath(expectedHash = null) {
         path.join(execDir, 'helloworld-launcher.deb'),
         path.join(app.getPath('userData'), 'updates', 'helloworld-launcher-linux-amd64.AppImage'),
         path.join(app.getPath('userData'), 'updates', 'helloworld-launcher-linux-amd64.deb'),
+        path.join(app.getPath('userData'), 'updates', 'helloworld-launcher-linux-x86_64.rpm'),
+        path.join(app.getPath('userData'), 'updates', 'helloworld-launcher-linux-x64.zip'),
         path.join(__dirname, '..', 'dist', 'helloworld-launcher.deb'),
         path.join(__dirname, 'dist', 'helloworld-launcher.deb')
       ];

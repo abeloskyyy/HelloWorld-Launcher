@@ -71,8 +71,7 @@
         {
           "target": "rpm",
           "arch": [
-            "x64",
-            "arm64"
+            "x64"
           ]
         },
         {
@@ -86,6 +85,11 @@
       "icon": "app/build/icons",
       "category": "Game",
       "artifactName": "helloworld-launcher-linux-${arch}.${ext}"
+    },
+    "rpm": {
+      "fpm": [
+        "--rpm-rpmbuild-define=_build_id_links none"
+      ]
     },
     "mac": {
       "target": [

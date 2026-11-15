@@ -116,6 +116,28 @@ jobs:
             rpm \
             dpkg
 
+          # Resolver compatibilidad con rpmbuild moderno (RPM 4.19+/4.20/6.x) en fpm
+          if [ -f /usr/bin/rpmbuild ] && [ ! -f /usr/bin/rpmbuild.real ]; then
+            sudo mv /usr/bin/rpmbuild /usr/bin/rpmbuild.real
+            sudo bash -c 'cat << "EOF" > /usr/bin/rpmbuild
+#!/bin/bash
+EXTRA_ARGS=()
+for ((i=1; i<=$#; i++)); do
+  curr="${!i}"
+  if [ "$curr" = "--define" ]; then
+    next_i=$((i+1))
+    next_val="${!next_i}"
+    if [[ "$next_val" == buildroot* ]]; then
+      b_val="${next_val#buildroot }"
+      EXTRA_ARGS+=("--buildroot=$b_val")
+    fi
+  fi
+done
+exec /usr/bin/rpmbuild.real "${EXTRA_ARGS[@]}" "$@"
+EOF'
+            sudo chmod +x /usr/bin/rpmbuild
+          fi
+
       - name: Install dependencies
         run: npm ci || npm install
 
@@ -135,41 +157,11 @@ jobs:
 
       - name: Build Linux (.deb, .rpm and .zip packages)
         run: npm run build:linux
-        continue-on-error: true
-
-      - name: Setup Canonical Linux Names
-        run: |
-          # DEB: Soportar tanto amd64 como x64
-          if [ -f "dist/helloworld-launcher-linux-x64.deb" ] && [ ! -f "dist/helloworld-launcher-linux-amd64.deb" ]; then
-            cp dist/helloworld-launcher-linux-x64.deb dist/helloworld-launcher-linux-amd64.deb
-          fi
-          if [ -f "dist/helloworld-launcher-linux-amd64.deb" ] && [ ! -f "dist/helloworld-launcher-linux-x64.deb" ]; then
-            cp dist/helloworld-launcher-linux-amd64.deb dist/helloworld-launcher-linux-x64.deb
-          fi
-
-          # RPM: Soportar x86_64, amd64 y x64
-          if [ -f "dist/helloworld-launcher-linux-x86_64.rpm" ] && [ ! -f "dist/helloworld-launcher-linux-amd64.rpm" ]; then
-            cp dist/helloworld-launcher-linux-x86_64.rpm dist/helloworld-launcher-linux-amd64.rpm
-          fi
-          if [ -f "dist/helloworld-launcher-linux-x64.rpm" ] && [ ! -f "dist/helloworld-launcher-linux-amd64.rpm" ]; then
-            cp dist/helloworld-launcher-linux-x64.rpm dist/helloworld-launcher-linux-amd64.rpm
-          fi
-          if [ -f "dist/helloworld-launcher-linux-amd64.rpm" ] && [ ! -f "dist/helloworld-launcher-linux-x64.rpm" ]; then
-            cp dist/helloworld-launcher-linux-amd64.rpm dist/helloworld-launcher-linux-x64.rpm
-          fi
-
-          # ZIP: Soportar amd64 y x64
-          if [ -f "dist/helloworld-launcher-linux-x64.zip" ] && [ ! -f "dist/helloworld-launcher-linux-amd64.zip" ]; then
-            cp dist/helloworld-launcher-linux-x64.zip dist/helloworld-launcher-linux-amd64.zip
-          fi
-          if [ -f "dist/helloworld-launcher-linux-amd64.zip" ] && [ ! -f "dist/helloworld-launcher-linux-x64.zip" ]; then
-            cp dist/helloworld-launcher-linux-amd64.zip dist/helloworld-launcher-linux-x64.zip
-          fi
 
       - name: Stage Linux Binaries
         run: |
           mkdir -p dist-linux
-          find dist -maxdepth 1 -type f \( -name "*.deb" -o -name "*.rpm" -o -name "*.zip" -o -name "*.bin" \) -exec cp {} dist-linux/ \; 2>/dev/null || true
+          find dist -maxdepth 1 -type f \( -name "*.deb" -o -name "*.rpm" -o -name "*.zip" \) -exec cp {} dist-linux/ \; 2>/dev/null || true
           echo "Linux staging contents:"
           ls -lh dist-linux
 
