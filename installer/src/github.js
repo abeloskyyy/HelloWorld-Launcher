@@ -165,11 +165,11 @@ async function fetchGistReleaseInfo(version = null) {
         setupUrl = downloads.windows_setup || downloads.setup || downloads.windows_zip
       }
     } else {
-      // Linux setup targets (.zip / .bin / .deb / .rpm)
+      // Linux setup targets (.zip / .AppImage)
       if (downloads.linux && typeof downloads.linux === 'object') {
         const archObj = downloads.linux[arch] || downloads.linux.amd64 || downloads.linux.x64 || {}
         if (typeof archObj === 'object') {
-          launcherUrl = archObj.zip || archObj.deb || archObj.rpm || archObj.setup
+          launcherUrl = archObj.zip || archObj.appimage || archObj.setup
           setupUrl = archObj.setup || archObj.bin || downloads.linux.setup || downloads.linux.bin
         } else if (typeof archObj === 'string') {
           launcherUrl = archObj
@@ -179,7 +179,7 @@ async function fetchGistReleaseInfo(version = null) {
         }
       }
       if (!launcherUrl) {
-        launcherUrl = downloads.linux_zip || downloads.zip || downloads.linux_deb || downloads.linux_rpm
+        launcherUrl = downloads.linux_zip || downloads.zip || downloads.linux_appimage || downloads.appimage
       }
       if (!setupUrl) {
         setupUrl = downloads.linux_setup || downloads.setup
@@ -191,13 +191,22 @@ async function fetchGistReleaseInfo(version = null) {
     const effectiveVersion = targetVersionObj.version || latestVersion
     const names = getExpectedAssetNames()
 
+    let launcherName = names.launcher
+    try {
+      const parsedPath = new URL(launcherUrl).pathname
+      const parsedBase = path.basename(parsedPath)
+      if (parsedBase && (parsedBase.endsWith('.zip') || parsedBase.endsWith('.AppImage') || parsedBase.endsWith('.appimage') || parsedBase.endsWith('.tar.gz') || parsedBase.endsWith('.tgz'))) {
+        launcherName = parsedBase
+      }
+    } catch (_) {}
+
     return {
       version: effectiveVersion,
       tagName: 'v' + effectiveVersion,
       releaseNotes: targetVersionObj.markdown || targetVersionObj.title || '',
       publishedAt: targetVersionObj.releaseDate || new Date().toISOString(),
       launcher: {
-        name: names.launcher,
+        name: launcherName,
         url: launcherUrl,
         size: 0,
       },
@@ -421,7 +430,13 @@ function downloadFile(url, destPath, onProgress) {
 
       res.data.pipe(writeStream)
 
-      writeStream.on('finish', () => resolve())
+      writeStream.on('finish', () => {
+        if (total > 0 && transferred < total) {
+          try { fs.unlinkSync(destPath) } catch (_) {}
+          return reject(new Error(`Descarga incompleta: se recibieron ${transferred} bytes de ${total}`))
+        }
+        resolve()
+      })
       writeStream.on('error', (err) => {
         try { fs.unlinkSync(destPath) } catch (_) {}
         reject(err)
