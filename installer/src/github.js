@@ -13,7 +13,23 @@ const axios = require('axios')
 const REPO_OWNER = 'Abeloskyyy'
 const REPO_NAME = 'HelloWorld-Launcher'
 const API_BASE = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`
-const REMOTE_CONFIG_GIST_URL = 'https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json'
+
+const cliConfigUrl = (() => {
+  const arg = process.argv.find(a => a.startsWith('--config-url=') || a.startsWith('--gist-url='))
+  return arg ? arg.split('=')[1].replace(/^"(.*)"$/, '$1') : null
+})()
+
+const cliLauncherFile = (() => {
+  const a64 = process.argv.find(a => a.startsWith('--launcher-file-b64='))
+  if (a64) return Buffer.from(a64.slice('--launcher-file-b64='.length), 'base64').toString('utf-8')
+
+  const a = process.argv.find(a => a.startsWith('--launcher-file=') || a.startsWith('--local-zip='))
+  return a ? a.split('=')[1].replace(/^"(.*)"$/, '$1') : null
+})()
+
+function getRemoteConfigUrl() {
+  return cliConfigUrl || process.env.REMOTE_CONFIG_GIST_URL || process.env.REMOTE_CONFIG_URL || 'https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json'
+}
 
 // ── Platform / arch helpers (Windows & Linux) ─────────────────────────────────
 
@@ -112,7 +128,9 @@ function httpGet(url, opts = {}) {
 
 async function fetchGistReleaseInfo(version = null) {
   try {
-    const raw = await httpGet(`${REMOTE_CONFIG_GIST_URL}?t=${Date.now()}`)
+    const configUrl = getRemoteConfigUrl()
+    const sep = configUrl.includes('?') ? '&' : '?'
+    const raw = await httpGet(`${configUrl}${sep}t=${Date.now()}`)
     const data = safeParseJson(raw)
     if (!data || !data.changelog) return null
 
@@ -212,6 +230,19 @@ async function fetchRelease(version) {
 async function getLatestReleaseInfo(version = null) {
   const names = getExpectedAssetNames()
   const { app } = require('electron')
+
+  // ── CLI Local File Override ──
+  if (cliLauncherFile && fs.existsSync(cliLauncherFile)) {
+    return {
+      version: version || 'local-test',
+      tagName: 'v' + (version || 'local-test'),
+      releaseNotes: '# Instalación Local\nInstalando desde archivo local especificado en argumentos.',
+      publishedAt: new Date().toISOString(),
+      launcher: { name: path.basename(cliLauncherFile), url: cliLauncherFile, size: fs.statSync(cliLauncherFile).size },
+      setup: null,
+      manifest: null,
+    }
+  }
 
   // ── DEV TEST-ENV (Only in development if test-env folder exists) ──
   if (app && !app.isPackaged) {

@@ -698,12 +698,17 @@ function addOrUpdateSavedAccount(userData) {
 
 
 // --- Secrets & External Configuration Loader ---
+const cliConfigUrl = (() => {
+  const arg = process.argv.find(a => a.startsWith('--config-url=') || a.startsWith('--gist-url='));
+  return arg ? arg.split('=')[1].replace(/^"(.*)"$/, '$1') : null;
+})();
+
 function loadSecrets() {
   const defaults = {
     FIREBASE_API_KEY: "", // Loaded from secrets.json
     FIREBASE_PROJECT_ID: "helloworld-launcher",
     WORKSHOP_DISCORD_WEBHOOK: "",
-    REMOTE_CONFIG_GIST_URL: "https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json"
+    REMOTE_CONFIG_GIST_URL: cliConfigUrl || process.env.REMOTE_CONFIG_GIST_URL || process.env.REMOTE_CONFIG_URL || "https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json"
   };
   const candidates = [
     path.join(__dirname, 'secrets.json'),
@@ -724,6 +729,9 @@ function loadSecrets() {
 }
 
 const APP_SECRETS = loadSecrets();
+if (cliConfigUrl || process.env.REMOTE_CONFIG_GIST_URL || process.env.REMOTE_CONFIG_URL) {
+  APP_SECRETS.REMOTE_CONFIG_GIST_URL = cliConfigUrl || process.env.REMOTE_CONFIG_GIST_URL || process.env.REMOTE_CONFIG_URL;
+}
 const FIREBASE_API_KEY = APP_SECRETS.FIREBASE_API_KEY;
 const FIREBASE_PROJECT_ID = APP_SECRETS.FIREBASE_PROJECT_ID || "helloworld-launcher";
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
