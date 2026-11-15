@@ -54,22 +54,52 @@ function getTempDir() {
 
 /** Find the main launcher executable in an install directory */
 function findLauncherExecutable(installPath) {
-  const files = fs.readdirSync(installPath).filter(f =>
-    f.endsWith('.exe') && !f.toLowerCase().startsWith('unins') && !f.toLowerCase().includes('setup')
-  )
-  if (files.length > 0) return path.join(installPath, files[0])
+  if (process.platform === 'win32') {
+    const files = fs.readdirSync(installPath).filter(f =>
+      f.endsWith('.exe') && !f.toLowerCase().startsWith('unins') && !f.toLowerCase().includes('setup')
+    )
+    if (files.length > 0) return path.join(installPath, files[0])
+    return null
+  }
+  // Linux
+  try {
+    const directExec = path.join(installPath, 'helloworld-launcher')
+    if (fs.existsSync(directExec)) {
+      try { fs.chmodSync(directExec, 0o755) } catch (_) {}
+      return directExec
+    }
+    const unpackedExec = path.join(installPath, 'linux-unpacked', 'helloworld-launcher')
+    if (fs.existsSync(unpackedExec)) {
+      const items = fs.readdirSync(path.join(installPath, 'linux-unpacked'))
+      for (const item of items) {
+        fs.moveSync(path.join(installPath, 'linux-unpacked', item), path.join(installPath, item), { overwrite: true })
+      }
+      fs.removeSync(path.join(installPath, 'linux-unpacked'))
+      try { fs.chmodSync(directExec, 0o755) } catch (_) {}
+      return directExec
+    }
+    const files = fs.readdirSync(installPath).filter(f =>
+      (f.toLowerCase().endsWith('.appimage') || f === 'helloworld-launcher') && !f.toLowerCase().includes('setup')
+    )
+    if (files.length > 0) {
+      const p = path.join(installPath, files[0])
+      try { fs.chmodSync(p, 0o755) } catch (_) {}
+      return p
+    }
+  } catch (_) {}
   return null
 }
 
 /** Copy the running setup executable to the install directory */
 async function copySetupToInstallDir(installPath) {
   try {
-    if (process.defaultApp || process.execPath.toLowerCase().endsWith('electron.exe')) {
+    if (process.defaultApp || process.execPath.toLowerCase().endsWith('electron.exe') || process.execPath.toLowerCase().endsWith('/electron')) {
       return null
     }
 
-    const setupSrc = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath
-    const setupDest = path.join(installPath, 'setup.exe')
+    const isWin = process.platform === 'win32'
+    const setupSrc = isWin ? (process.env.PORTABLE_EXECUTABLE_FILE || process.execPath) : (process.env.APPIMAGE || process.execPath)
+    const setupDest = path.join(installPath, isWin ? 'setup.exe' : 'setup.bin')
 
     const srcResolved = path.resolve(setupSrc).toLowerCase()
     const destResolved = path.resolve(setupDest).toLowerCase()
@@ -78,10 +108,16 @@ async function copySetupToInstallDir(installPath) {
 
     // Si el setup ya se encuentra dentro de la misma carpeta de instalación, NO volver a copiarse
     if (srcResolved === destResolved || srcDir === targetDir) {
+      if (!isWin) {
+        await fs.chmod(setupDest, 0o755).catch(() => {})
+      }
       return setupDest
     }
 
     await fs.copy(setupSrc, setupDest, { overwrite: true })
+    if (!isWin) {
+      await fs.chmod(setupDest, 0o755).catch(() => {})
+    }
     return setupDest
   } catch (err) {
     console.error('Failed to copy setup to install dir:', err)
@@ -92,7 +128,11 @@ async function copySetupToInstallDir(installPath) {
 /** Kill the launcher if it's running */
 async function killLauncher() {
   try {
-    await execPromise('taskkill /f /im "HelloWorld-Launcher.exe" 2>nul').catch(() => {})
+    if (process.platform === 'win32') {
+      await execPromise('taskkill /f /im "HelloWorld-Launcher.exe" 2>nul').catch(() => {})
+    } else {
+      await execPromise('pkill -f "helloworld-launcher" 2>/dev/null').catch(() => {})
+    }
     await new Promise(r => setTimeout(r, 1500))
   } catch { }
 }
@@ -101,15 +141,23 @@ async function killLauncher() {
 async function extractZip(zipPath, destPath, onProgress) {
   await fs.ensureDir(destPath)
 
-  // Fast path: use native tar (available in modern Windows 10/11 & Linux)
+  // Fast path: use native tools (tar on Windows 10/11, unzip on Linux)
   // Non-blocking child process, extracts 250MB in ~2 seconds without UI freeze
   try {
     if (onProgress) onProgress(30)
-    await execPromise(`tar -xf "${zipPath}" -C "${destPath}"`)
+    if (process.platform === 'win32') {
+      await execPromise(`tar -xf "${zipPath}" -C "${destPath}"`)
+    } else {
+      if (zipPath.endsWith('.tar.gz') || zipPath.endsWith('.tgz')) {
+        await execPromise(`tar -xzf "${zipPath}" -C "${destPath}"`)
+      } else {
+        await execPromise(`unzip -q -o "${zipPath}" -d "${destPath}"`)
+      }
+    }
     if (onProgress) onProgress(100)
     return
-  } catch (tarErr) {
-    console.warn('Native tar extraction unavailable, falling back to AdmZip:', tarErr.message)
+  } catch (extractErr) {
+    console.warn('Native extraction unavailable, falling back to AdmZip:', extractErr.message)
   }
 
   // Fallback: AdmZip with regular yielding
@@ -168,10 +216,27 @@ async function install({ installPath, createDesktop, createStartMenu, launchAfte
     })
 
     emit('Preparing installation directory...', 72)
-    emit('Extracting files...', 75)
-    await extractZip(assetPath, installPath, (pct) => {
-      emit('Extracting files...', 75 + Math.round(pct * 0.12)) // 75-87%
-    })
+    await fs.ensureDir(installPath)
+
+    if (release.launcher.name.toLowerCase().endsWith('.appimage')) {
+      emit('Installing AppImage...', 75)
+      const targetAppImagePath = path.join(installPath, 'helloworld-launcher.AppImage')
+      await fs.copy(assetPath, targetAppImagePath, { overwrite: true })
+      await fs.chmod(targetAppImagePath, 0o755)
+      emit('AppImage installed!', 85)
+    } else {
+      emit('Extracting files...', 75)
+      await extractZip(assetPath, installPath, (pct) => {
+        emit('Extracting files...', 75 + Math.round(pct * 0.12)) // 75-87%
+      })
+    }
+
+    // Copiar icono de la aplicación para los accesos directos
+    const localIconPng = path.join(__dirname, '..', 'build', 'icon.png')
+    const targetIconPng = path.join(installPath, 'icon.png')
+    if (await fs.pathExists(localIconPng)) {
+      await fs.copy(localIconPng, targetIconPng, { overwrite: true }).catch(() => {})
+    }
 
     emit('Copying setup to installation folder...', 88)
     const installerPath = await copySetupToInstallDir(installPath)
@@ -179,12 +244,13 @@ async function install({ installPath, createDesktop, createStartMenu, launchAfte
     emit('Creating shortcuts...', 90)
     const executablePath = findLauncherExecutable(installPath)
     if (executablePath) {
+      const iconPath = process.platform === 'win32' ? executablePath : (await fs.pathExists(targetIconPng) ? targetIconPng : executablePath)
       await createShortcuts({
         installPath,
         executablePath,
         createDesktop,
         createStartMenu,
-        iconPath: executablePath,
+        iconPath,
       })
     }
 
@@ -247,9 +313,16 @@ async function update({ installPath, updateFile, launchAfter }, onProgress) {
     await killLauncher()
 
     emit('Applying update...', 75)
-    await extractZip(assetPath, installPath, (pct) => {
-      emit('Applying update...', 75 + Math.round(pct * 0.15))
-    })
+    if (assetPath.toLowerCase().endsWith('.appimage')) {
+      const targetAppImagePath = path.join(installPath, 'helloworld-launcher.AppImage')
+      await fs.copy(assetPath, targetAppImagePath, { overwrite: true })
+      await fs.chmod(targetAppImagePath, 0o755)
+      emit('AppImage update applied!', 85)
+    } else {
+      await extractZip(assetPath, installPath, (pct) => {
+        emit('Applying update...', 75 + Math.round(pct * 0.15))
+      })
+    }
 
     // Resolver versión actualizada
     if (!targetVersion) {

@@ -89,9 +89,11 @@ graph TD
      - `HelloWorld-Launcher-Setup.exe` (instalador bootstrapper con reputación SmartScreen)
      - `helloworld-launcher-win.zip` (nueva versión de la app)
    * 📦 **`linux-artifacts`**:
-     - `helloworld-launcher-linux-amd64.deb` y alias `helloworld-launcher-linux-x64.deb`
-     - `helloworld-launcher-linux-amd64.AppImage` y alias `helloworld-launcher-linux-x86_64.AppImage`
-     - `helloworld-launcher-linux-arm64.deb` / `arm64.AppImage` (si se compiló)
+     - `HelloWorld-Launcher-Setup-Linux.bin` (instalador universal bootstrapper compatible con Fedora, Ubuntu, Arch, etc.)
+     - `helloworld-launcher-linux-amd64.deb` y alias `helloworld-launcher-linux-x64.deb` (Ubuntu / Debian / Mint)
+     - `helloworld-launcher-linux-amd64.rpm` y alias `helloworld-launcher-linux-x64.rpm` (Fedora / RHEL / openSUSE)
+     - `helloworld-launcher-linux-amd64.zip` y alias `helloworld-launcher-linux-x64.zip` (Universal portable sin FUSE ni root)
+     - `helloworld-launcher-linux-arm64.deb`, `arm64.rpm`, `arm64.zip` (ARM64)
    * 📦 **`macos-artifacts`**:
      - `helloworld-launcher-mac-x64.dmg` y `helloworld-launcher-mac-arm64.dmg`
      - `helloworld-launcher-mac-x64.zip` y `helloworld-launcher-mac-arm64.zip`

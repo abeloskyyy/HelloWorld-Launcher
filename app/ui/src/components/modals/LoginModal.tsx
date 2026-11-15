@@ -295,39 +295,76 @@ export const LoginModal: React.FC = () => {
       <div className="modal" id="featureLockedHWModal">
         <div
           className="modal-content"
-          style={{ maxWidth: '480px', textAlign: 'center', padding: '35px 30px', borderColor: '#ffaa00' }}
+          style={{ maxWidth: '480px', textAlign: 'center', padding: '36px 30px', borderColor: 'rgba(255, 170, 0, 0.45)', borderRadius: '20px' }}
         >
-          <div style={{ fontSize: '48px', color: '#ffaa00', marginBottom: '15px' }}>
+          <div
+            style={{
+              width: '72px',
+              height: '72px',
+              borderRadius: '50%',
+              background: 'rgba(255, 170, 0, 0.12)',
+              border: '1.5px solid rgba(255, 170, 0, 0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 18px',
+              color: '#ffaa00',
+              fontSize: '30px',
+              boxShadow: '0 0 20px rgba(255, 170, 0, 0.2)'
+            }}
+          >
             <i className="fas fa-lock"></i>
           </div>
-          <span className="modal-title" style={{ display: 'block', fontSize: '24px', marginBottom: '15px' }} data-i18n="login.account_required">
+          <span className="modal-title" style={{ display: 'block', fontSize: '22px', fontWeight: 700, marginBottom: '12px' }} data-i18n="login.account_required">
             Account Required
           </span>
-          <p style={{ color: '#ccc', fontSize: '15px', lineHeight: 1.6, marginBottom: '25px' }} data-i18n="login.account_required_desc">
+          <p style={{ color: '#94a3b8', fontSize: '14.5px', lineHeight: 1.6, marginBottom: '24px' }} data-i18n="login.account_required_desc">
             You need a HelloWorld or Microsoft account to use this feature.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <button
               id="openRegisterWebBtn"
-              className="btn-primary"
+              className="btn-modal-primary"
               style={{
                 width: '100%',
                 justifyContent: 'center',
-                background: 'linear-gradient(135deg, #ffaa00, #ff7700)',
-                border: 'none',
-                padding: '12px'
+                background: 'rgba(255, 170, 0, 0.18)',
+                border: '1.5px solid rgba(255, 170, 0, 0.55)',
+                color: '#ffaa00',
+                padding: '12px 20px',
+                borderRadius: '12px',
+                fontWeight: 600,
+                fontSize: '14px',
+                boxShadow: '0 4px 16px rgba(255, 170, 0, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
               }}
               data-i18n="login.create_hw_account"
             >
-              <i className="fas fa-user-plus" style={{ marginRight: '8px' }}></i> Create a HelloWorld Account
+              <i className="fas fa-user-plus"></i> Create a HelloWorld Account
             </button>
             <button
               onClick={() => {
                 const el = document.getElementById('featureLockedHWModal');
                 if (el) el.classList.remove('show');
               }}
-              className="btn-secondary"
-              style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
+              className="btn-modal-secondary"
+              style={{
+                width: '100%',
+                justifyContent: 'center',
+                padding: '12px 20px',
+                borderRadius: '12px',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.18)',
+                color: '#cbd5e1',
+                fontWeight: 600,
+                fontSize: '14px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
               data-i18n="global.close"
             >
               Close
@@ -340,21 +377,36 @@ export const LoginModal: React.FC = () => {
       <div className="modal" id="featureLockedSkinsModal">
         <div
           className="modal-content"
-          style={{ maxWidth: '480px', textAlign: 'center', padding: '35px 30px', borderColor: '#4facfe' }}
+          style={{ maxWidth: '480px', textAlign: 'center', padding: '36px 30px', borderColor: 'rgba(79, 172, 254, 0.45)', borderRadius: '20px' }}
         >
-          <div style={{ fontSize: '48px', color: '#4facfe', marginBottom: '15px' }}>
+          <div
+            style={{
+              width: '72px',
+              height: '72px',
+              borderRadius: '50%',
+              background: 'rgba(79, 172, 254, 0.12)',
+              border: '1.5px solid rgba(79, 172, 254, 0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 18px',
+              color: '#4facfe',
+              fontSize: '30px',
+              boxShadow: '0 0 20px rgba(79, 172, 254, 0.2)'
+            }}
+          >
             <i className="fas fa-tshirt"></i>
           </div>
-          <span className="modal-title" style={{ display: 'block', fontSize: '24px', marginBottom: '15px' }} data-i18n="login.ms_account_required">
+          <span className="modal-title" style={{ display: 'block', fontSize: '22px', fontWeight: 700, marginBottom: '12px' }} data-i18n="login.ms_account_required">
             Microsoft Account Required
           </span>
-          <p style={{ color: '#ccc', fontSize: '15px', lineHeight: 1.6, marginBottom: '25px' }}>
+          <p style={{ color: '#94a3b8', fontSize: '14.5px', lineHeight: 1.6, marginBottom: '24px' }}>
             <span data-i18n="skins.locked_desc">
               You need to buy Minecraft and log in with a <strong>Microsoft account</strong> to use custom skins and capes in the launcher.
             </span>
             <br />
             <br />
-            <span style={{ color: '#ffaa00' }}>
+            <span style={{ color: '#ffaa00', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <i className="fas fa-info-circle"></i>{' '}
               <span data-i18n="skins.locked_planned">Support for skins with HelloWorld accounts is planned for the future!</span>
             </span>
@@ -365,8 +417,21 @@ export const LoginModal: React.FC = () => {
                 const el = document.getElementById('featureLockedSkinsModal');
                 if (el) el.classList.remove('show');
               }}
-              className="btn-primary"
-              style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
+              className="btn-modal-primary"
+              style={{
+                width: '100%',
+                justifyContent: 'center',
+                padding: '12px 20px',
+                borderRadius: '12px',
+                background: 'rgba(79, 172, 254, 0.18)',
+                border: '1.5px solid rgba(79, 172, 254, 0.55)',
+                color: '#4facfe',
+                fontWeight: 600,
+                fontSize: '14px',
+                boxShadow: '0 4px 16px rgba(79, 172, 254, 0.2)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
               data-i18n="skins.locked_btn"
             >
               Got it!

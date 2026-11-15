@@ -1092,5 +1092,10 @@
     "bypass_success": "Bypass Admin activé. Accès complet accordé.",
     "bypass_denied": "Accès refusé : votre compte n'a pas les autorisations d'administrateur.",
     "bypass_error": "Échec de l'activation du Bypass Admin : {err}"
+  },
+  "cropper": {
+    "title": "Recadrer l'image",
+    "hint": "Faites glisser pour cadrer • Molette pour zoomer",
+    "apply_btn": "Appliquer et enregistrer"
   }
 }

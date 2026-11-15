@@ -1,3 +1,34 @@
+const fs = require('fs');
+const path = require('path');
+
+// Auto-bridge Linux sandboxed Discord sockets (Flatpak, Snap, etc.) to standard XDG_RUNTIME_DIR
+if (process.platform === 'linux') {
+    try {
+        const uid = process.getuid ? process.getuid() : 1000;
+        const xdgDir = process.env.XDG_RUNTIME_DIR || `/run/user/${uid}`;
+        for (let i = 0; i <= 9; i++) {
+            const targetSock = path.join(xdgDir, `discord-ipc-${i}`);
+            if (!fs.existsSync(targetSock)) {
+                const candidates = [
+                    path.join(xdgDir, 'app', 'com.discordapp.Discord', `discord-ipc-${i}`),
+                    path.join(xdgDir, '.flatpak', 'com.discordapp.Discord', 'xdg-run', `discord-ipc-${i}`),
+                    path.join(xdgDir, 'app', 'com.discordapp.DiscordCanary', `discord-ipc-${i}`),
+                    path.join(xdgDir, 'snap.discord', `discord-ipc-${i}`)
+                ];
+                for (const candidate of candidates) {
+                    if (fs.existsSync(candidate)) {
+                        try {
+                            fs.symlinkSync(candidate, targetSock);
+                            console.log(`[Discord RPC] Bridged sandboxed socket: ${candidate} -> ${targetSock}`);
+                            break;
+                        } catch (_) {}
+                    }
+                }
+            }
+        }
+    } catch (_) {}
+}
+
 const client = require('discord-rich-presence')('1464624951578595368');
 // Avoid uncaught exception when Discord is not running
 client.on('error', (err) => {

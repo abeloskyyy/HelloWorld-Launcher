@@ -1092,5 +1092,10 @@
     "bypass_success": "Admin-Bypass aktiviert. Vollzugriff gewährt.",
     "bypass_denied": "Zugriff verweigert: Dein Konto hat keine Administratorrechte.",
     "bypass_error": "Aktivierung des Admin-Bypass fehlgeschlagen: {err}"
+  },
+  "cropper": {
+    "title": "Bild zuschneiden",
+    "hint": "Ziehen zum Ausrichten • Mausrad zum Zoomen",
+    "apply_btn": "Anwenden & Speichern"
   }
 }

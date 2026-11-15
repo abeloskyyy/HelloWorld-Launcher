@@ -1092,5 +1092,10 @@
     "bypass_success": "Admin Bypass ingeschakeld. Volledige toegang verleend.",
     "bypass_denied": "Toegang geweigerd: je account heeft geen beheerdersrechten.",
     "bypass_error": "Kan Admin Bypass niet activeren: {err}"
+  },
+  "cropper": {
+    "title": "Afbeelding bijsnijden",
+    "hint": "Sleep om te kadreren • Muiswiel om in te zoomen",
+    "apply_btn": "Toepassen en opslaan"
   }
 }

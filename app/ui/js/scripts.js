@@ -666,7 +666,6 @@ const initLauncher = async () => {
             loadOptions(),
             loadProfiles(),
             loadVersions(),
-            checkReviewReminder(),
             loadMinecraftNews().catch(err => console.error("Failed to load Minecraft News:", err)),
             loadVersionManifestInfo().catch(err => console.error("Failed to load Version Manifest:", err)),
             loadMinecraftPatchNotes().catch(err => console.error("Failed to load Patch Notes:", err))
@@ -715,6 +714,11 @@ const initLauncher = async () => {
             loader.classList.add('hidden');
             setTimeout(() => { loader.style.display = 'none'; }, 500);
         }
+
+        // Trigger review reminder after initial loader disappears
+        setTimeout(() => {
+            checkReviewReminder();
+        }, 600);
 
         // --- BACKGROUND NON-BLOCKING TASKS ---
         const refreshUserSession = async () => {
@@ -2342,28 +2346,45 @@ function initUpdateModalListeners() {
                     }
                 } else {
                     // Soporte Linux: downloads.linux.amd64 / arm64
+                    const isRpm = pInfo?.isRpm;
+                    const isDeb = pInfo?.isDeb;
                     const linObj = downloads.linux;
                     if (linObj && typeof linObj === 'object') {
                         const archObj = (arch === 'arm64') ? (linObj.arm64 || linObj.arm) : (linObj.amd64 || linObj.x64);
                         if (archObj && typeof archObj === 'object') {
-                            downloadUrl = archObj.deb || archObj.appimage || archObj.zip;
+                            if (isRpm) {
+                                downloadUrl = archObj.rpm || archObj.zip || archObj.deb;
+                            } else if (isDeb) {
+                                downloadUrl = archObj.deb || archObj.zip || archObj.rpm;
+                            } else {
+                                downloadUrl = archObj.zip || archObj.deb || archObj.rpm;
+                            }
                         } else if (typeof archObj === 'string') {
                             downloadUrl = archObj;
                         }
                         if (!downloadUrl) {
-                            downloadUrl = linObj.deb || linObj.appimage;
+                            downloadUrl = isRpm ? (linObj.rpm || linObj.zip || linObj.deb) : isDeb ? (linObj.deb || linObj.zip || linObj.rpm) : (linObj.zip || linObj.deb || linObj.rpm);
                         }
                     }
                     if (!downloadUrl) {
                         if (arch === 'arm64') {
-                            downloadUrl = downloads.linux_arm64_deb || downloads.linux_deb || downloads.linux_arm64_appimage || downloads.linux_appimage;
+                            downloadUrl = isRpm
+                                ? (downloads.linux_arm64_rpm || downloads.linux_rpm || downloads.linux_arm64_zip || downloads.linux_zip)
+                                : isDeb
+                                ? (downloads.linux_arm64_deb || downloads.linux_deb || downloads.linux_arm64_zip || downloads.linux_zip)
+                                : (downloads.linux_arm64_zip || downloads.linux_zip || downloads.linux_arm64_deb || downloads.linux_deb);
                         } else {
-                            downloadUrl = downloads.linux_amd64_deb || downloads.linux_deb || downloads.linux_amd64_appimage || downloads.linux_appimage;
+                            downloadUrl = isRpm
+                                ? (downloads.linux_amd64_rpm || downloads.linux_rpm || downloads.linux_amd64_zip || downloads.linux_zip)
+                                : isDeb
+                                ? (downloads.linux_amd64_deb || downloads.linux_deb || downloads.linux_amd64_zip || downloads.linux_zip)
+                                : (downloads.linux_amd64_zip || downloads.linux_zip || downloads.linux_amd64_deb || downloads.linux_deb);
                         }
                     }
                     if (!downloadUrl) {
                         const linArch = (arch === 'arm64') ? 'arm64' : 'amd64';
-                        downloadUrl = `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/helloworld-launcher-linux-${linArch}.deb`;
+                        const ext = isRpm ? 'rpm' : isDeb ? 'deb' : 'zip';
+                        downloadUrl = `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/helloworld-launcher-linux-${linArch}.${ext}`;
                     }
                 }
 
@@ -2590,6 +2611,7 @@ async function resolvePlatformDownloadUrl(releaseInfo, latestVersion) {
     let arch = 'x64';
     let isAppImage = false;
     let isDeb = false;
+    let isRpm = false;
     try {
         const api = window.hwlAPI || window.api;
         if (api && typeof api.getPlatformInfo === 'function') {
@@ -2599,6 +2621,7 @@ async function resolvePlatformDownloadUrl(releaseInfo, latestVersion) {
                 arch = pInfo.arch || 'x64';
                 isAppImage = Boolean(pInfo.isAppImage);
                 isDeb = Boolean(pInfo.isDeb);
+                isRpm = Boolean(pInfo.isRpm);
             }
         }
     } catch (_) {}
@@ -2635,34 +2658,39 @@ async function resolvePlatformDownloadUrl(releaseInfo, latestVersion) {
         if (linObj && typeof linObj === 'object') {
             const archObj = (arch === 'arm64') ? (linObj.arm64 || linObj.arm) : (linObj.amd64 || linObj.x64);
             if (archObj && typeof archObj === 'object') {
-                if (isDeb) {
-                    downloadUrl = archObj.deb || archObj.appimage || archObj.zip;
+                if (isRpm) {
+                    downloadUrl = archObj.rpm || archObj.zip || archObj.deb;
+                } else if (isDeb) {
+                    downloadUrl = archObj.deb || archObj.zip || archObj.rpm;
                 } else {
-                    downloadUrl = archObj.appimage || archObj.deb || archObj.zip;
+                    downloadUrl = archObj.zip || archObj.deb || archObj.rpm;
                 }
             } else if (typeof archObj === 'string') {
                 downloadUrl = archObj;
             }
             if (!downloadUrl) {
-                downloadUrl = isDeb ? (linObj.deb || linObj.appimage) : (linObj.appimage || linObj.deb);
+                downloadUrl = isRpm ? (linObj.rpm || linObj.zip || linObj.deb) : isDeb ? (linObj.deb || linObj.zip || linObj.rpm) : (linObj.zip || linObj.deb || linObj.rpm);
             }
         }
         if (!downloadUrl) {
             if (arch === 'arm64') {
-                downloadUrl = isDeb
-                    ? (downloads.linux_arm64_deb || downloads.linux_deb || downloads.linux_arm64_appimage)
-                    : (downloads.linux_arm64_appimage || downloads.linux_arm64_deb || downloads.linux_appimage || downloads.linux_deb);
+                downloadUrl = isRpm
+                    ? (downloads.linux_arm64_rpm || downloads.linux_rpm || downloads.linux_arm64_zip || downloads.linux_zip)
+                    : isDeb
+                    ? (downloads.linux_arm64_deb || downloads.linux_deb || downloads.linux_arm64_zip || downloads.linux_zip)
+                    : (downloads.linux_arm64_zip || downloads.linux_zip || downloads.linux_arm64_deb || downloads.linux_deb);
             } else {
-                downloadUrl = isDeb
-                    ? (downloads.linux_amd64_deb || downloads.linux_deb || downloads.linux_amd64_appimage)
-                    : (downloads.linux_amd64_appimage || downloads.linux_amd64_deb || downloads.linux_appimage || downloads.linux_deb);
+                downloadUrl = isRpm
+                    ? (downloads.linux_amd64_rpm || downloads.linux_rpm || downloads.linux_amd64_zip || downloads.linux_zip)
+                    : isDeb
+                    ? (downloads.linux_amd64_deb || downloads.linux_deb || downloads.linux_amd64_zip || downloads.linux_zip)
+                    : (downloads.linux_amd64_zip || downloads.linux_zip || downloads.linux_amd64_deb || downloads.linux_deb);
             }
         }
         if (!downloadUrl) {
             const linArch = (arch === 'arm64') ? 'arm64' : 'amd64';
-            downloadUrl = isDeb
-                ? `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/helloworld-launcher-linux-${linArch}.deb`
-                : `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/helloworld-launcher-linux-${linArch}.AppImage`;
+            const ext = isRpm ? 'rpm' : isDeb ? 'deb' : 'zip';
+            downloadUrl = `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/helloworld-launcher-linux-${linArch}.${ext}`;
         }
     }
     return downloadUrl;
@@ -5845,6 +5873,21 @@ async function loadProfiles() {
         return dateB - dateA;
 
     });
+
+
+
+    if (profilesArray.length === 0) {
+        list.innerHTML = `
+            <div class="profiles-empty-state">
+                <div class="profiles-empty-icon">
+                    <i class="fas fa-cube"></i>
+                </div>
+                <h3>${(window.t && window.t('installations.empty_title')) || 'No installations yet'}</h3>
+                <p>${(window.t && window.t('installations.empty_desc')) || 'Create your first Minecraft profile to start playing.'}</p>
+            </div>
+        `;
+        return;
+    }
 
 
 
@@ -12885,13 +12928,13 @@ async function checkReviewReminder() {
 
     try {
 
+        const modal = document.getElementById('reviewReminderModal');
+
         const shouldShow = await window.hwlAPI.check_review_reminder();
 
-        if (shouldShow && reviewReminderModal) {
+        if (shouldShow && modal) {
 
-            // Show modal immediately
-
-            reviewReminderModal.classList.add('show');
+            modal.classList.add('show');
 
         }
 
@@ -12902,6 +12945,30 @@ async function checkReviewReminder() {
     }
 
 }
+
+document.addEventListener('click', async (e) => {
+    const doBtn = e.target.closest('#doReviewBtn');
+    if (doBtn) {
+        openReviewUrl();
+        await window.hwlAPI.mark_review_action('reviewed');
+        const m = document.getElementById('reviewReminderModal');
+        if (m) m.classList.remove('show');
+        return;
+    }
+
+    const laterBtn = e.target.closest('#remindLaterBtn');
+    if (laterBtn) {
+        const cb = document.getElementById('neverShowAgainCheckbox');
+        if (cb && cb.checked) {
+            await window.hwlAPI.mark_review_action('never');
+        } else {
+            await window.hwlAPI.mark_review_action('later');
+        }
+        const m = document.getElementById('reviewReminderModal');
+        if (m) m.classList.remove('show');
+        return;
+    }
+});
 
 
 

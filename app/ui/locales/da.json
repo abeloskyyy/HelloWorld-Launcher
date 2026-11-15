@@ -1092,5 +1092,10 @@
     "bypass_success": "Admin-bypass aktiveret. Fuld adgang tildelt.",
     "bypass_denied": "Adgang nægtet: din konto har ikke administratorrettigheder.",
     "bypass_error": "Kunne ikke aktivere Admin-bypass: {err}"
+  },
+  "cropper": {
+    "title": "Beskær billede",
+    "hint": "Træk for at beskære • Musehjul til zoom",
+    "apply_btn": "Anvend og gem"
   }
 }

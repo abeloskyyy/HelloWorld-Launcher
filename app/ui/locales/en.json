@@ -712,6 +712,7 @@
     "official_badge": "By HelloWorld",
     "loading": "Loading...",
     "community_modpacks": "Community Mod Packs",
+    "community_lock_title": "Community Mod Packs",
     "community_lock": "Sign in with a HelloWorld or Microsoft account to browse & install community mod packs",
     "community_search": "Search community modpacks, versions, addons...",
     "sort": {

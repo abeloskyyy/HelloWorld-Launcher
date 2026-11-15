@@ -6113,12 +6113,42 @@ ipcMain.handle('prepare-test-update-file', async () => {
 
 ipcMain.handle('get-platform-info', () => {
   const isAppImage = Boolean(process.env.APPIMAGE);
-  const isDeb = process.platform === 'linux' && !isAppImage;
+  let isRpm = false;
+  let isDeb = false;
+  if (process.platform === 'linux' && !isAppImage) {
+    try {
+      if (fs.existsSync('/etc/fedora-release') || fs.existsSync('/etc/redhat-release')) {
+        isRpm = true;
+      } else if (fs.existsSync('/etc/debian_version')) {
+        isDeb = true;
+      } else if (fs.existsSync('/etc/os-release')) {
+        const osRelease = fs.readFileSync('/etc/os-release', 'utf8');
+        if (/ID_LIKE=.*(?:fedora|rhel|centos|suse)/i.test(osRelease) || /^ID=.*(?:fedora|rhel|centos|rocky|almalinux|opensuse)/m.test(osRelease)) {
+          isRpm = true;
+        } else if (/ID_LIKE=.*(?:debian|ubuntu)/i.test(osRelease) || /^ID=.*(?:debian|ubuntu|mint|pop)/m.test(osRelease)) {
+          isDeb = true;
+        }
+      }
+    } catch (_) {}
+    if (!isRpm && !isDeb) {
+      const { execSync } = require('child_process');
+      try {
+        execSync('command -v dpkg', { stdio: 'ignore' });
+        isDeb = true;
+      } catch (_) {
+        try {
+          execSync('command -v rpm', { stdio: 'ignore' });
+          isRpm = true;
+        } catch (_) {}
+      }
+    }
+  }
   return {
     platform: process.platform,
     arch: process.arch,
     isAppImage,
     isDeb,
+    isRpm,
     appImagePath: process.env.APPIMAGE || null
   };
 });
@@ -6313,6 +6343,102 @@ rm -f "$0"
       return { success: true };
     }
 
+    // ── 2b. Linux: paquete RPM (.rpm) ────────────────────────────────────────
+    if (targetExe && targetExe.toLowerCase().endsWith('.rpm')) {
+      console.log('[launch-installer-and-quit] Preparing Linux rpm relay update script for:', targetExe);
+
+      const isUserLevel = currentDir.startsWith(os.homedir()) && (() => {
+        try {
+          fs.accessSync(currentDir, fs.constants.W_OK);
+          return true;
+        } catch (_) {
+          return false;
+        }
+      })();
+
+      const scriptPath = path.join(app.getPath('temp'), `hwl-update-rpm-${Date.now()}.sh`);
+      const scriptContent = `#!/usr/bin/env bash
+OLD_PID=${currentPid}
+RPM_PATH="${targetExe}"
+LOG="/tmp/hwl_rpm_update.log"
+
+echo "Waiting for PID $OLD_PID to exit..." > "$LOG"
+while kill -0 $OLD_PID 2>/dev/null; do
+  sleep 0.2
+done
+
+SUCCESS=0
+
+# A) Si está instalado en espacio de usuario (sin sudo / root):
+if [ "${isUserLevel ? '1' : '0'}" = "1" ]; then
+  echo "Extracting at user level (no root required)..." >> "$LOG"
+  TMP_DIR="/tmp/hwl_rpm_user_$$"
+  mkdir -p "$TMP_DIR"
+  if command -v rpm2cpio >/dev/null 2>&1 && command -v cpio >/dev/null 2>&1; then
+    (cd "$TMP_DIR" && rpm2cpio "$RPM_PATH" | cpio -idmv >> "$LOG" 2>&1)
+    SRC_DIR="$TMP_DIR/opt/HelloWorld-Launcher"
+    if [ ! -d "$SRC_DIR" ]; then
+      SRC_DIR="$TMP_DIR/opt/helloworld-launcher"
+    fi
+    if [ -d "$SRC_DIR" ]; then
+      cp -af "$SRC_DIR/." "${currentDir}/"
+      chmod +x "${currentExec}" 2>/dev/null || true
+      SUCCESS=1
+      echo "User-level files successfully updated in ${currentDir}" >> "$LOG"
+    fi
+  fi
+  rm -rf "$TMP_DIR"
+fi
+
+# B) Si es instalación de sistema (/opt), usar elevación nativa pkexec:
+if [ "$SUCCESS" -eq 0 ]; then
+  echo "Installing system-wide package via pkexec..." >> "$LOG"
+  if command -v pkexec >/dev/null 2>&1; then
+    if pkexec rpm -Uvh --replacepkgs "$RPM_PATH" >> "$LOG" 2>&1; then
+      SUCCESS=1
+      command -v notify-send >/dev/null 2>&1 && notify-send -a "HelloWorld Launcher" "Actualización completada" "HelloWorld Launcher se ha actualizado con éxito."
+    else
+      echo "pkexec failed or was cancelled." >> "$LOG"
+      command -v notify-send >/dev/null 2>&1 && notify-send -u critical -a "HelloWorld Launcher" "Actualización no completada" "No se pudo instalar el paquete RPM."
+    fi
+  elif command -v gksudo >/dev/null 2>&1; then
+    gksudo -- rpm -Uvh --replacepkgs "$RPM_PATH" && SUCCESS=1
+  elif command -v kdesudo >/dev/null 2>&1; then
+    kdesudo -- rpm -Uvh --replacepkgs "$RPM_PATH" && SUCCESS=1
+  else
+    echo "Fallback to sudo in terminal/direct..." >> "$LOG"
+    sudo rpm -Uvh --replacepkgs "$RPM_PATH" >> "$LOG" 2>&1 && SUCCESS=1
+  fi
+fi
+
+# C) Reabrir el launcher automáticamente
+echo "Relaunching HelloWorld Launcher..." >> "$LOG"
+if [ -x "${currentExec}" ]; then
+  nohup "${currentExec}" >/dev/null 2>&1 &
+elif command -v helloworld-launcher >/dev/null 2>&1; then
+  nohup helloworld-launcher >/dev/null 2>&1 &
+elif [ -f "/opt/HelloWorld-Launcher/helloworld-launcher" ]; then
+  nohup "/opt/HelloWorld-Launcher/helloworld-launcher" >/dev/null 2>&1 &
+fi
+
+rm -f "$0"
+`;
+
+      fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
+      const { spawn } = require('child_process');
+      const child = spawn('bash', [scriptPath], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+
+      setTimeout(() => {
+        isQuitting = true;
+        app.quit();
+      }, 500);
+      return { success: true };
+    }
+
     // ── 3. macOS: imagen de disco (.dmg) o comprimido (.zip) ────────────────
     if (targetExe && (targetExe.toLowerCase().endsWith('.dmg') || targetExe.toLowerCase().endsWith('.zip'))) {
       console.log('[launch-installer-and-quit] Preparing macOS relay update script for:', targetExe);
@@ -6436,6 +6562,52 @@ rm -rf "$TMP_DIR" "$0"
       return { success: true };
     }
 
+    // Fallback Linux: Si no hay Setup ejecutable pero tenemos el .zip descargado, extraer via script bash
+    if (process.platform === 'linux' && updateFile && fs.existsSync(updateFile) && (updateFile.toLowerCase().endsWith('.zip') || updateFile.toLowerCase().endsWith('.tar.gz'))) {
+      console.log('[launch-installer-and-quit] Fallback Linux: updating directly from zip/tar via bash...');
+      const scriptPath = path.join(app.getPath('temp'), `hwl-update-linux-${Date.now()}.sh`);
+      const scriptContent = `#!/usr/bin/env bash
+OLD_PID=${currentPid}
+ARCHIVE="${updateFile}"
+DEST_DIR="${execDir}"
+LOG="/tmp/hwl_linux_zip_update.log"
+
+echo "Waiting for PID $OLD_PID to exit..." > "$LOG"
+while kill -0 $OLD_PID 2>/dev/null; do
+  sleep 0.2
+done
+
+echo "Extracting archive $ARCHIVE into $DEST_DIR..." >> "$LOG"
+if [[ "$ARCHIVE" == *.zip ]]; then
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -q -o "$ARCHIVE" -d "$DEST_DIR" >> "$LOG" 2>&1
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -m zipfile -e "$ARCHIVE" "$DEST_DIR" >> "$LOG" 2>&1
+  else
+    echo "No unzip or python3 found to extract zip!" >> "$LOG"
+  fi
+elif [[ "$ARCHIVE" == *.tar.gz ]] || [[ "$ARCHIVE" == *.tgz ]]; then
+  tar -xzf "$ARCHIVE" -C "$DEST_DIR" >> "$LOG" 2>&1
+fi
+
+chmod +x "${currentExec}" 2>/dev/null || true
+echo "Relaunching ${currentExec}..." >> "$LOG"
+nohup "${currentExec}" >/dev/null 2>&1 &
+
+rm -f "$0"
+`;
+      fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
+      const child = spawn('bash', [scriptPath], { detached: true, stdio: 'ignore' });
+      child.unref();
+
+      setTimeout(() => {
+        isQuitting = true;
+        app.quit();
+      }, 500);
+
+      return { success: true };
+    }
+
     // Fallback: Si no hay Setup ejecutable pero tenemos el .zip descargado, extraer via script PowerShell
     if (updateFile && fs.existsSync(updateFile) && updateFile.toLowerCase().endsWith('.zip')) {
       console.log('[launch-installer-and-quit] Fallback: updating directly from zip via PowerShell...');
@@ -6484,12 +6656,12 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
     try {
       const urlObj = new URL(downloadUrl);
       const parsedBase = path.basename(urlObj.pathname);
-      if (parsedBase && (parsedBase.includes('.deb') || parsedBase.includes('.dmg') || parsedBase.includes('.AppImage') || parsedBase.includes('.zip') || parsedBase.includes('.exe'))) {
+      if (parsedBase && (parsedBase.includes('.deb') || parsedBase.includes('.rpm') || parsedBase.includes('.bin') || parsedBase.includes('.dmg') || parsedBase.includes('.AppImage') || parsedBase.includes('.zip') || parsedBase.includes('.exe'))) {
         filename = parsedBase;
       } else if (process.platform === 'darwin') {
         filename = 'HelloWorld-Launcher.dmg';
       } else if (process.platform === 'linux') {
-        filename = 'helloworld-launcher-linux-amd64.AppImage';
+        filename = 'helloworld-launcher-linux-x64.zip';
       }
     } catch (_) {}
 
@@ -7863,8 +8035,13 @@ ipcMain.handle('check-review-reminder', async () => {
 
   saveUserData(data);
 
-  // Show reminder on 5th launch if not already reviewed
-  if (data.launch_count === 5 && !data.has_reviewed) {
+  if (data.has_reviewed || data.never_review) {
+    return false;
+  }
+
+  // Show reminder on 5th launch, and if dismissed with 'later', remind every 5 launches
+  const lastRemind = data.last_review_remind_launch || 0;
+  if (data.launch_count >= 5 && (lastRemind === 0 || (data.launch_count - lastRemind >= 5))) {
     return true;
   }
 
@@ -7886,10 +8063,15 @@ ipcMain.handle('complete-onboarding', async () => {
 
 ipcMain.handle('mark-review-action', async (e, action) => {
   const data = loadUserData();
-  if (action === 'reviewed' || action === 'dismissed') {
+  if (action === 'reviewed') {
     data.has_reviewed = true;
-    saveUserData(data);
+  } else if (action === 'never' || action === 'dismissed') {
+    data.never_review = true;
+    data.has_reviewed = true;
+  } else if (action === 'later') {
+    data.last_review_remind_launch = data.launch_count || 5;
   }
+  saveUserData(data);
   return { success: true };
 })
 

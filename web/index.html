@@ -270,21 +270,30 @@
                                     </div>
                                 </div>
                             </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="linux-appimage-x64">
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="linux-rpm-x64">
                                 <div class="dropdown-item-content">
-                                    <i class="bi bi-box"></i>
+                                    <i class="fa-brands fa-redhat"></i>
                                     <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title" data-i18n="hero.lin_app_title">AppImage x64</span>
-                                        <span class="dropdown-item-subtitle" data-i18n="hero.lin_app_sub">Universal Linux</span>
+                                        <span class="dropdown-item-title">RPM x64</span>
+                                        <span class="dropdown-item-subtitle">Fedora / RHEL / openSUSE</span>
                                     </div>
                                 </div>
                             </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="linux-appimage-arm64">
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="linux-zip-x64">
                                 <div class="dropdown-item-content">
-                                    <i class="bi bi-box"></i>
+                                    <i class="bi bi-file-earmark-zip"></i>
                                     <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title" data-i18n="hero.lin_app_arm_title">AppImage ARM64</span>
-                                        <span class="dropdown-item-subtitle" data-i18n="hero.lin_app_arm_sub">Universal Linux for ARM</span>
+                                        <span class="dropdown-item-title">Portable ZIP x64</span>
+                                        <span class="dropdown-item-subtitle">Arch / Manjaro / Universal (No root)</span>
+                                    </div>
+                                </div>
+                            </a>
+                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="linux-setup-bin">
+                                <div class="dropdown-item-content">
+                                    <i class="bi bi-gear-wide-connected"></i>
+                                    <div class="dropdown-item-text">
+                                        <span class="dropdown-item-title">Setup GUI Installer (.bin)</span>
+                                        <span class="dropdown-item-subtitle">Universal Installer with Auto-Update</span>
                                     </div>
                                 </div>
                             </a>
@@ -693,13 +702,12 @@
     <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, push, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut, OAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+                import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut, OAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, deleteField, serverTimestamp as firestoreTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         // Export to global scope so script.js can use them (Simple approach for non-bundled apps)
         window.firebaseModules = {
-            initializeApp, getDatabase, ref, push, onValue, serverTimestamp,
+            initializeApp,
             getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut, OAuthProvider, signInWithPopup,
             getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, deleteField, firestoreTimestamp
         };

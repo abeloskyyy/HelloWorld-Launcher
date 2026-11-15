@@ -313,6 +313,7 @@ const pywebviewAPI = {
     open_url: (url) => ipcRenderer.invoke('open-url', url),
     openUrl: (url) => ipcRenderer.invoke('open-url', url),
     openExternal: (url) => ipcRenderer.invoke('open-url', url),
+        check_microsoft_verified: (username, uuid) => ipcRenderer.invoke('check-microsoft-verified', username, uuid),
     ms_write_verified: (emailKey, email, username, uuid, firebaseUid, firebaseRefreshToken) => ipcRenderer.invoke('ms-write-verified', emailKey, email, username, uuid, firebaseUid, firebaseRefreshToken),
     check_local_installer: () => ipcRenderer.invoke('check-local-installer'),
     ensure_local_installer: (params) => ipcRenderer.invoke('ensure-local-installer', params),

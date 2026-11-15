@@ -18,6 +18,7 @@ import { AddonsModals } from './components/modals/AddonsModals';
 import { SkinsModals } from './components/modals/SkinsModals';
 import { SocialModals } from './components/modals/SocialModals';
 import { MiscModals } from './components/modals/MiscModals';
+import { ImageCropperModal } from './components/modals/ImageCropperModal';
 import { UpdateBadge } from './components/common/UpdateBadge';
 
 export const App: React.FC = () => {
@@ -25,6 +26,7 @@ export const App: React.FC = () => {
     // List of client scripts to execute after authentic DOM is mounted
     const scripts = [
       'js/i18n.js',
+      'js/imageCropper.js',
       'js/stats.js',
       'js/scripts.js',
       'js/download-listeners.js',
@@ -46,7 +48,7 @@ export const App: React.FC = () => {
           return;
         }
         const s = document.createElement('script');
-        s.src = src;
+        s.src = `${src}?v=${Date.now()}`;
         s.setAttribute('data-hwl-src', src);
         s.onload = () => resolve();
         s.onerror = (err) => {
@@ -123,6 +125,7 @@ export const App: React.FC = () => {
       <SkinsModals />
       <SocialModals />
       <MiscModals />
+      <ImageCropperModal />
       <UpdateBadge />
     </>
   );

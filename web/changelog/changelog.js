@@ -144,6 +144,24 @@ function extractDownloadsFromAssets(assets = []) {
                 if (!downloads.linux.amd64) downloads.linux.amd64 = {};
                 downloads.linux.amd64.deb = url;
             }
+        } else if (name.endsWith('.rpm')) {
+            if (isArm(name)) {
+                if (!downloads.linux.arm64) downloads.linux.arm64 = {};
+                downloads.linux.arm64.rpm = url;
+            } else {
+                if (!downloads.linux.amd64) downloads.linux.amd64 = {};
+                downloads.linux.amd64.rpm = url;
+            }
+        } else if (name.endsWith('.zip') && (name.includes('linux') || (!name.includes('mac') && !name.includes('win')))) {
+            if (isArm(name)) {
+                if (!downloads.linux.arm64) downloads.linux.arm64 = {};
+                downloads.linux.arm64.zip = url;
+            } else {
+                if (!downloads.linux.amd64) downloads.linux.amd64 = {};
+                downloads.linux.amd64.zip = url;
+            }
+        } else if (name.endsWith('.bin') && name.includes('setup')) {
+            downloads.linux.setup = url;
         } else if (name.endsWith('.appimage')) {
             if (isArm(name)) {
                 if (!downloads.linux.arm64) downloads.linux.arm64 = {};
@@ -236,16 +254,32 @@ function buildDownloadDropdown(downloads, version) {
             items += `<a href="${amd.deb}" class="cl-dl-item" download><span class="cl-dl-badge">DEB</span> <span>Ubuntu/Debian (x64)</span> <i class="bi bi-download"></i></a>`;
             hasAnyLink = true;
         }
-        if (amd.appimage) {
-            items += `<a href="${amd.appimage}" class="cl-dl-item" download><span class="cl-dl-badge">AppImage</span> <span>Universal (x64)</span> <i class="bi bi-download"></i></a>`;
+        if (amd.rpm) {
+            items += `<a href="${amd.rpm}" class="cl-dl-item" download><span class="cl-dl-badge">RPM</span> <span>Fedora/RHEL (x64)</span> <i class="bi bi-download"></i></a>`;
+            hasAnyLink = true;
+        }
+        if (amd.zip) {
+            items += `<a href="${amd.zip}" class="cl-dl-item" download><span class="cl-dl-badge">ZIP</span> <span>Portable Universal (x64)</span> <i class="bi bi-download"></i></a>`;
+            hasAnyLink = true;
+        }
+        if (d.linux.setup) {
+            items += `<a href="${d.linux.setup}" class="cl-dl-item" download><span class="cl-dl-badge">Setup</span> <span>Instalador Universal (.bin)</span> <i class="bi bi-download"></i></a>`;
             hasAnyLink = true;
         }
         if (arm.deb) {
             items += `<a href="${arm.deb}" class="cl-dl-item" download><span class="cl-dl-badge">DEB</span> <span>Ubuntu/Debian (ARM64)</span> <i class="bi bi-download"></i></a>`;
             hasAnyLink = true;
         }
-        if (arm.appimage) {
-            items += `<a href="${arm.appimage}" class="cl-dl-item" download><span class="cl-dl-badge">AppImage</span> <span>Universal (ARM64)</span> <i class="bi bi-download"></i></a>`;
+        if (arm.rpm) {
+            items += `<a href="${arm.rpm}" class="cl-dl-item" download><span class="cl-dl-badge">RPM</span> <span>Fedora/RHEL (ARM64)</span> <i class="bi bi-download"></i></a>`;
+            hasAnyLink = true;
+        }
+        if (arm.zip) {
+            items += `<a href="${arm.zip}" class="cl-dl-item" download><span class="cl-dl-badge">ZIP</span> <span>Portable Universal (ARM64)</span> <i class="bi bi-download"></i></a>`;
+            hasAnyLink = true;
+        }
+        if (amd.appimage) {
+            items += `<a href="${amd.appimage}" class="cl-dl-item" download><span class="cl-dl-badge">AppImage</span> <span>Legacy (x64)</span> <i class="bi bi-download"></i></a>`;
             hasAnyLink = true;
         }
         if (items) {

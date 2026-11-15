@@ -1,0 +1,33 @@
+name = "hwlauncher-api"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+FIREBASE_PROJECT_ID = "helloworld-launcher"
+CORS_ORIGIN = "*"
+BASE_URL = "https://api.hwlauncher.abelosky.com"
+NTFY_SERVER = "https://ntfy.sh"
+NTFY_TOPIC = "helloworld_launcher_ai_notify_29373"
+
+# Comprobación programada de monitorización de almacenamiento R2 (diaria)
+[triggers]
+crons = ["0 12 * * *"]
+
+# Base de datos relacional Cloudflare D1
+[[d1_databases]]
+binding = "DB"
+database_name = "hwl-db"
+database_id = "97eae20b-0d21-413b-a9d2-6a2add309fbb"
+
+# Cloudflare KV para presencia de alta velocidad y latidos
+[[kv_namespaces]]
+binding = "PRESENCE_KV"
+id = "df3d683e16f94b23aef7fc6c4e4979f4"
+
+# Almacenamiento de objetos R2 para avatares e iconos de taller
+[[r2_buckets]]
+binding = "STORAGE_BUCKET"
+bucket_name = "hwl-storage"
+preview_bucket_name = "hwl-storage-preview"
+

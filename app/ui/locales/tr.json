@@ -1092,5 +1092,10 @@
     "bypass_success": "Yönetici Geçişi etkinleştirildi. Tam erişim sağlandı.",
     "bypass_denied": "Erişim reddedildi: hesabınız yönetici izinlerine sahip değil.",
     "bypass_error": "Yönetici Geçişi etkinleştirilemedi: {err}"
+  },
+  "cropper": {
+    "title": "Resmi Kırp",
+    "hint": "Kareye sığdırmak için sürükleyin • Yakınlaştırmak için fare tekerleği",
+    "apply_btn": "Uygula ve Kaydet"
   }
 }

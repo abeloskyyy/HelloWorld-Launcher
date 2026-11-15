@@ -142,28 +142,6 @@ export const Sidebar: React.FC = () => {
           >
             <i className="fas fa-sun"></i> Shaders
           </button>
-          <div
-            style={{
-              padding: '10px 14px',
-              marginTop: '6px',
-              borderTop: '1px solid rgba(255,255,255,0.08)',
-              fontSize: '0.8em',
-              color: 'rgba(255,255,255,0.6)',
-              lineHeight: 1.4
-            }}
-          >
-            <span data-i18n="sidebar.modpacks_tip1">Looking for modpacks? You can find them in the</span>{' '}
-            <span
-              onClick={() => {
-                handleShowSection('workshop');
-                handleSwitchWorkshopTab('modpacks');
-              }}
-              style={{ color: '#4facfe', textDecoration: 'underline', fontWeight: 500, cursor: 'pointer' }}
-              data-i18n="sidebar.modpacks_tip2"
-            >
-              Workshop
-            </span>.
-          </div>
         </div>
       </div>
 

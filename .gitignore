@@ -14,6 +14,9 @@ scripts/*.json
 ntfy.config.json
 .ntfy.json
 serviceAccountKey.json
+firebase_dump/
 release/
 version-build-old.md
 *.psd
+.wrangler/
+**/.wrangler/

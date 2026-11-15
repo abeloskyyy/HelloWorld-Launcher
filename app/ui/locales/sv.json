@@ -1092,5 +1092,10 @@
     "bypass_success": "Admin-bypass aktiverad. Full åtkomst beviljad.",
     "bypass_denied": "Åtkomst nekad: ditt konto saknar administratörsbehörighet.",
     "bypass_error": "Kunde inte aktivera Admin-bypass: {err}"
+  },
+  "cropper": {
+    "title": "Beskär bild",
+    "hint": "Dra för att placera • Mushjul för zoom",
+    "apply_btn": "Verkställ och spara"
   }
 }

@@ -1092,5 +1092,10 @@
     "bypass_success": "Admin Bypass povolen. Plný přístup udělen.",
     "bypass_denied": "Přístup odepřen: váš účet nemá oprávnění správce.",
     "bypass_error": "Nepodařilo se aktivovat Admin Bypass: {err}"
+  },
+  "cropper": {
+    "title": "Oříznout obrázek",
+    "hint": "Přetáhněte pro zarovnání • Kolečko myši pro zoom",
+    "apply_btn": "Použít a uložit"
   }
 }

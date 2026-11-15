@@ -96,7 +96,7 @@ export const SystemModals: React.FC = () => {
             <li data-i18n="loader.feat_versions">Downloading new Minecraft versions</li>
           </ul>
 
-          <button className="btn-primary btn-large" id="closeAppBtn" data-i18n="global.close_app">
+          <button className="btn-modal-primary btn-large" id="closeAppBtn" data-i18n="global.close_app">
             ✕ Close Application
           </button>
 

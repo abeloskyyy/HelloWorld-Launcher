@@ -39,10 +39,10 @@ export const MiscModals: React.FC = () => {
           </p>
 
           <div className="overlay-actions">
-            <button id="doReviewBtn" className="btn-primary btn-overlay-action">
-              <i className="fas fa-star"></i> <span data-i18n="review.leave_review">Leave a Review</span>
+            <button id="doReviewBtn" className="btn-modal-primary btn-overlay-action">
+              <i className="fas fa-star" style={{ marginRight: '6px' }}></i> <span data-i18n="review.leave_review">Leave a Review</span>
             </button>
-            <button id="remindLaterBtn" className="btn-secondary btn-overlay-action">
+            <button id="remindLaterBtn" className="btn-modal-secondary btn-overlay-action">
               <span data-i18n="review.remind_later">Not now, maybe later</span>
             </button>
           </div>
@@ -1074,37 +1074,41 @@ export const MiscModals: React.FC = () => {
           <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
             <button
               id="closeDonationModalBtn"
-              className="btn-secondary"
+              className="btn-modal-secondary"
               style={{
                 flex: 1,
-                padding: '14px',
-                borderRadius: '10px',
-                background: 'rgba(255,255,255,0.1)',
-                border: 'none',
-                color: '#fff',
+                padding: '12px 18px',
+                borderRadius: '12px',
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.18)',
+                color: '#cbd5e1',
                 fontWeight: 600,
-                cursor: 'pointer'
+                fontSize: '14px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
               }}
             >
               <span data-i18n="donations.maybe_later">Maybe Later</span>
             </button>
             <button
               id="openKofiBtn"
-              className="btn-primary"
+              className="btn-modal-primary"
               style={{
                 flex: 1.5,
-                padding: '14px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #ff5e62 0%, #ff9966 100%)',
-                border: 'none',
-                color: '#fff',
-                fontWeight: 700,
+                padding: '12px 18px',
+                borderRadius: '12px',
+                background: 'rgba(255, 117, 140, 0.18)',
+                border: '1.5px solid rgba(255, 117, 140, 0.55)',
+                color: '#ff758c',
+                fontWeight: 600,
+                fontSize: '14px',
                 cursor: 'pointer',
-                boxShadow: '0 5px 15px rgba(255, 94, 98, 0.4)',
+                boxShadow: '0 4px 16px rgba(255, 117, 140, 0.25)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '8px'
+                gap: '8px',
+                transition: 'all 0.2s ease'
               }}
             >
               <i className="fas fa-external-link-alt"></i> <span data-i18n="donations.open_kofi">Open Ko-fi</span>

@@ -1092,5 +1092,10 @@
     "bypass_success": "Bypass de Admin ativado. Acesso total concedido.",
     "bypass_denied": "Acesso negado: sua conta não tem permissões de administrador.",
     "bypass_error": "Falha ao ativar o Bypass de Admin: {err}"
+  },
+  "cropper": {
+    "title": "Recortar imagem",
+    "hint": "Arraste para enquadrar • Roda do mouse para zoom",
+    "apply_btn": "Aplicar e salvar"
   }
 }

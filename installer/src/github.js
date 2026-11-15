@@ -15,17 +15,29 @@ const REPO_NAME = 'HelloWorld-Launcher'
 const API_BASE = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`
 const REMOTE_CONFIG_GIST_URL = 'https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json'
 
-// ── Platform / arch helpers (Windows only) ───────────────────────────────────
+// ── Platform / arch helpers (Windows & Linux) ─────────────────────────────────
 
 function getPlatformArch() {
-  return { platform: 'win', arch: 'x64' }
+  if (process.platform === 'win32') {
+    return { platform: 'win', arch: 'x64' }
+  }
+  const arch = (process.arch === 'arm64' || process.arch === 'aarch64') ? 'arm64' : 'x64'
+  return { platform: 'linux', arch }
 }
 
-/** Expected asset names for Windows Setup */
+/** Expected asset names for Setup */
 function getExpectedAssetNames() {
+  const { platform, arch } = getPlatformArch()
+  if (platform === 'win') {
+    return {
+      launcher: 'helloworld-launcher-win.zip',
+      setup: 'HelloWorld-Launcher-Setup.exe',
+      manifest: 'manifest.json',
+    }
+  }
   return {
-    launcher: 'helloworld-launcher-win.zip',
-    setup: 'HelloWorld-Launcher-Setup.exe',
+    launcher: `helloworld-launcher-linux-${arch}.zip`,
+    setup: 'HelloWorld-Launcher-Setup-Linux.bin',
     manifest: 'manifest.json',
   }
 }
@@ -120,17 +132,40 @@ async function fetchGistReleaseInfo(version = null) {
     const downloads = targetVersionObj.downloads || {}
     let launcherUrl = null
     let setupUrl = null
+    const { platform, arch } = getPlatformArch()
 
-    // Windows setup targets
-    if (downloads.windows && typeof downloads.windows === 'object') {
-      launcherUrl = downloads.windows.zip || downloads.windows.setup
-      setupUrl = downloads.windows.setup || downloads.windows.zip
-    }
-    if (!launcherUrl) {
-      launcherUrl = downloads.windows_zip || downloads.windows_setup || downloads.setup
-    }
-    if (!setupUrl) {
-      setupUrl = downloads.windows_setup || downloads.setup || downloads.windows_zip
+    if (platform === 'win') {
+      // Windows setup targets
+      if (downloads.windows && typeof downloads.windows === 'object') {
+        launcherUrl = downloads.windows.zip || downloads.windows.setup
+        setupUrl = downloads.windows.setup || downloads.windows.zip
+      }
+      if (!launcherUrl) {
+        launcherUrl = downloads.windows_zip || downloads.windows_setup || downloads.setup
+      }
+      if (!setupUrl) {
+        setupUrl = downloads.windows_setup || downloads.setup || downloads.windows_zip
+      }
+    } else {
+      // Linux setup targets (.zip / .bin / .deb / .rpm)
+      if (downloads.linux && typeof downloads.linux === 'object') {
+        const archObj = downloads.linux[arch] || downloads.linux.amd64 || downloads.linux.x64 || {}
+        if (typeof archObj === 'object') {
+          launcherUrl = archObj.zip || archObj.deb || archObj.rpm || archObj.setup
+          setupUrl = archObj.setup || archObj.bin || downloads.linux.setup || downloads.linux.bin
+        } else if (typeof archObj === 'string') {
+          launcherUrl = archObj
+        }
+        if (!setupUrl) {
+          setupUrl = downloads.linux.setup || downloads.linux.bin || downloads.setup
+        }
+      }
+      if (!launcherUrl) {
+        launcherUrl = downloads.linux_zip || downloads.zip || downloads.linux_deb || downloads.linux_rpm
+      }
+      if (!setupUrl) {
+        setupUrl = downloads.linux_setup || downloads.setup
+      }
     }
 
     if (!launcherUrl) return null
@@ -209,11 +244,30 @@ async function getLatestReleaseInfo(version = null) {
 
   // ── 2. FALLBACK: FETCH FROM GITHUB RELEASES ──
   try {
-    const find = (name) => release.assets.find(a => a.name === name)
+    const release = await fetchRelease(version)
+    if (!release || !Array.isArray(release.assets)) {
+      throw new Error('Invalid release object from GitHub')
+    }
 
-    const launcherAsset = find(names.launcher)
-    const setupAsset = find(names.setup)
-    const manifestAsset = find(names.manifest)
+    const { platform, arch } = getPlatformArch()
+    const findExact = (name) => release.assets.find(a => a.name === name)
+
+    let launcherAsset = findExact(names.launcher)
+    if (!launcherAsset && platform === 'linux') {
+      launcherAsset = release.assets.find(a => {
+        const n = a.name.toLowerCase()
+        return n.includes('helloworld-launcher') && (n.endsWith('.zip') || n.endsWith('.deb') || n.endsWith('.rpm')) && (n.includes(arch) || (arch === 'x64' && (n.includes('x86_64') || n.includes('amd64'))))
+      }) || release.assets.find(a => a.name.toLowerCase().endsWith('.zip'))
+    }
+
+    let setupAsset = findExact(names.setup)
+    if (!setupAsset && platform === 'linux') {
+      setupAsset = release.assets.find(a => {
+        const n = a.name.toLowerCase()
+        return n.includes('setup') && n.includes('linux') && (n.endsWith('.bin') || n.endsWith('.appimage'))
+      })
+    }
+    const manifestAsset = findExact(names.manifest)
 
     return {
       version: release.tag_name.replace(/^v/, ''),

@@ -1092,5 +1092,10 @@
     "bypass_success": "Bypass Administratora włączony. Przyznano pełny dostęp.",
     "bypass_denied": "Dostęp zabroniony: Twoje konto nie posiada uprawnień administratora.",
     "bypass_error": "Nie udało się włączyć Bypassu Administratora: {err}"
+  },
+  "cropper": {
+    "title": "Przytnij obraz",
+    "hint": "Przeciągnij, aby wykadrować • Kółko myszy do powiększania",
+    "apply_btn": "Zastosuj i zapisz"
   }
 }

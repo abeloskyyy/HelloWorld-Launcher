@@ -1092,5 +1092,10 @@
     "bypass_success": "管理员绕过已启用。已授予完全访问权限。",
     "bypass_denied": "访问被拒绝: 您的账户没有管理员权限。",
     "bypass_error": "启用管理员绕过失败: {err}"
+  },
+  "cropper": {
+    "title": "裁剪图片",
+    "hint": "拖动调整位置 • 滚轮缩放",
+    "apply_btn": "应用并保存"
   }
 }

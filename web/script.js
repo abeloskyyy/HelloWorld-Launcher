@@ -5902,8 +5902,11 @@ async function init() {
                             if (d.linux) {
                                 if (d.linux.amd64 && d.linux.amd64.deb) targetMap['linux-deb-x64'] = d.linux.amd64.deb;
                                 if (d.linux.arm64 && d.linux.arm64.deb) targetMap['linux-deb-arm64'] = d.linux.arm64.deb;
-                                if (d.linux.amd64 && d.linux.amd64.appimage) targetMap['linux-appimage-x64'] = d.linux.amd64.appimage;
-                                if (d.linux.arm64 && d.linux.arm64.appimage) targetMap['linux-appimage-arm64'] = d.linux.arm64.appimage;
+                                if (d.linux.amd64 && d.linux.amd64.rpm) targetMap['linux-rpm-x64'] = d.linux.amd64.rpm;
+                                if (d.linux.arm64 && d.linux.arm64.rpm) targetMap['linux-rpm-arm64'] = d.linux.arm64.rpm;
+                                if (d.linux.amd64 && d.linux.amd64.zip) targetMap['linux-zip-x64'] = d.linux.amd64.zip;
+                                if (d.linux.arm64 && d.linux.arm64.zip) targetMap['linux-zip-arm64'] = d.linux.arm64.zip;
+                                if (d.linux.setup) targetMap['linux-setup-bin'] = d.linux.setup;
                             }
                             const mac = d.macos || d.mac;
                             if (mac) {
@@ -5946,6 +5949,16 @@ async function init() {
                                 return n.endsWith('.deb') && !isArm(n);
                             case 'linux-deb-arm64':
                                 return n.endsWith('.deb') && isArm(n);
+                            case 'linux-rpm-x64':
+                                return n.endsWith('.rpm') && !isArm(n);
+                            case 'linux-rpm-arm64':
+                                return n.endsWith('.rpm') && isArm(n);
+                            case 'linux-zip-x64':
+                                return n.endsWith('.zip') && !isArm(n) && (n.includes('linux') || (!n.includes('win') && !n.includes('mac')));
+                            case 'linux-zip-arm64':
+                                return n.endsWith('.zip') && isArm(n) && (n.includes('linux') || (!n.includes('win') && !n.includes('mac')));
+                            case 'linux-setup-bin':
+                                return n.includes('setup') && n.includes('linux') && (n.endsWith('.bin') || n.endsWith('.appimage'));
                             case 'linux-appimage-x64':
                                 return n.endsWith('.appimage') && !isArm(n);
                             case 'linux-appimage-arm64':
@@ -5965,7 +5978,7 @@ async function init() {
                 }
 
                 ['win-setup-x64', 'win-setup-arm64', 'win-portable-x64', 'win-portable-arm64',
-                 'linux-deb-x64', 'linux-deb-arm64', 'linux-appimage-x64', 'linux-appimage-arm64',
+                 'linux-deb-x64', 'linux-deb-arm64', 'linux-rpm-x64', 'linux-rpm-arm64', 'linux-zip-x64', 'linux-zip-arm64', 'linux-setup-bin', 'linux-appimage-x64', 'linux-appimage-arm64',
                  'mac-dmg-arm64', 'mac-dmg-x64', 'mac-zip-arm64', 'mac-zip-x64'].forEach(target => {
                     const m = findAssetForTarget(target);
                     if (m && m.browser_download_url) targetMap[target] = m.browser_download_url;
@@ -6062,20 +6075,28 @@ async function init() {
 
 
     // === Fetch Statistics (Downloads & Stars) ===
+    async function fetchBackendApi(path, options = {}) {
+        const primary = 'https://api.hwlauncher.abelosky.com/api/v1' + path;
+        const fallback = 'https://hwlauncher-api.abeloskysb.workers.dev/api/v1' + path;
+        try {
+            const res = await fetch(primary, options);
+            if (res.ok) return res;
+        } catch (_) {}
+        return fetch(fallback, options);
+    }
+
     async function getRepoStats() {
         try {
-            // 1. Get Stars & Reviews from Firebase (Realtime)
-            if (db && window.firebaseModules) {
-                const { ref, onValue } = window.firebaseModules;
-                const reviewsRef = ref(db, 'reviews');
-
-                onValue(reviewsRef, (snapshot) => {
-                    const data = snapshot.val();
-                    if (data) {
-                        const reviews = Object.values(data);
+            // 1. Get Stars & Reviews from Backend API
+            try {
+                const reviewsRes = await fetchBackendApi('/reviews');
+                if (reviewsRes.ok) {
+                    const revData = await reviewsRes.json();
+                    if (revData && revData.success && Array.isArray(revData.reviews)) {
+                        const reviews = revData.reviews;
                         const count = reviews.length;
-                        const totalStars = reviews.reduce((acc, curr) => acc + parseInt(curr.rating), 0);
-                        const average = (totalStars / count).toFixed(1);
+                        const totalStars = reviews.reduce((acc, curr) => acc + parseInt(curr.rating || 5), 0);
+                        const average = count > 0 ? (totalStars / count).toFixed(1) : '5.0';
 
                         // Update UI
                         const starCountEl = document.getElementById('starCount');
@@ -6084,18 +6105,20 @@ async function init() {
                         if (starCountEl) starCountEl.textContent = average;
                         if (reviewCountEl) reviewCountEl.textContent = `(${count})`;
                     }
-                });
-            } else {
-                // Fallback to GitHub Stars if Firebase not configured
-                const repoResponse = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}`);
-                if (repoResponse.ok) {
-                    const repoData = await repoResponse.json();
-                    const starCount = repoData.stargazers_count;
-                    if (starCount > 0) {
-                        const reviewCountEl = document.getElementById('reviewCount');
-                        if (reviewCountEl) reviewCountEl.textContent = `(${starCount})`;
-                    }
                 }
+            } catch (_) {
+                // Fallback to GitHub Stars if Backend not reachable
+                try {
+                    const repoResponse = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}`);
+                    if (repoResponse.ok) {
+                        const repoData = await repoResponse.json();
+                        const starCount = repoData.stargazers_count;
+                        if (starCount > 0) {
+                            const reviewCountEl = document.getElementById('reviewCount');
+                            if (reviewCountEl) reviewCountEl.textContent = `(${starCount})`;
+                        }
+                    }
+                } catch (_) {}
             }
 
             // 2. Get Total Downloads (GitHub Releases)
@@ -6429,16 +6452,15 @@ async function init() {
 
         console.log('Review Submitted:', reviewData);
 
-        // --- SAVE TO FIREBASE ---
-        if (db && window.firebaseModules) {
-            const { ref, push, serverTimestamp } = window.firebaseModules;
-            const reviewsRef = ref(db, 'reviews');
-
-            // Push new review
-            push(reviewsRef, {
-                ...reviewData,
-                timestamp: serverTimestamp() // Use server timestamp
-            }).then(() => {
+        // --- SAVE TO BACKEND API ---
+        fetchBackendApi('/reviews', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(reviewData)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.success) {
                 alert(t('review.alert_thanks', 'Thanks for your review!'));
                 closeModalFunc();
                 reviewForm.reset();
@@ -6446,11 +6468,14 @@ async function init() {
                 currentRating = 0;
                 highlightStars(0);
                 if (reviewCharCount) reviewCharCount.textContent = '0';
-            }).catch(error => {
-                console.error('Firebase Error:', error);
-                alert(t('review.alert_error', 'Error saving review to database. Check console.'));
-            });
-        }
+            } else {
+                throw new Error(data?.error || 'Failed to submit review');
+            }
+        })
+        .catch(error => {
+            console.error('Review Error:', error);
+            alert(t('review.alert_error', 'Error saving review to database. Check console.'));
+        });
 
         // --- SEND TO DISCORD (Keep as backup/notification) ---
         const discordWebhookUrl = atob('aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTQ1MjY1MDE3MjYwODgwNzA2NS81Nm13SzFiVnVCQWloOUN5a3ZZQ3F5NHRNdTdLWE8wQzE4OUhuVDVoNmJkQVQ0SlU4bGQ4VG1YUHRYUGtWYkw5Y2xnVQ==');

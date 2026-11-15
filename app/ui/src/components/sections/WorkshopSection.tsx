@@ -201,13 +201,35 @@ export const WorkshopSection: React.FC = () => {
             <i className="fas fa-chevron-down wk-accordion-arrow" style={{ transform: accStates.wkCommunityBody ? 'rotate(180deg)' : 'rotate(0deg)' }}></i>
           </div>
           <div className={`wk-accordion-body ${accStates.wkCommunityBody ? 'open' : ''}`} id="wkCommunityBody" style={{ position: 'relative' }}>
-            <div>
+            <div style={{ position: 'relative', minHeight: '320px' }}>
               {/* Lock overlay for non-online users */}
               <div id="wkCommunityLock" className="wk-community-lock" style={{ display: 'none' }}>
-                <i className="fas fa-lock"></i>
-                <p data-i18n="workshop.community_lock">
+                <div className="wk-lock-badge-icon">
+                  <i className="fas fa-lock"></i>
+                </div>
+                <h3 className="wk-lock-title" data-i18n="workshop.community_lock_title">
+                  Community Mod Packs
+                </h3>
+                <p className="wk-lock-desc" data-i18n="workshop.community_lock">
                   Sign in with a HelloWorld or Microsoft account to browse &amp; install community mod packs
                 </p>
+                <button
+                  id="wkCommunityLoginBtn"
+                  className="wk-lock-login-btn"
+                  type="button"
+                  onClick={() => {
+                    const loginBtn = document.getElementById('loginButton');
+                    if (loginBtn) {
+                      loginBtn.click();
+                    } else {
+                      const m = document.getElementById('loginModal');
+                      if (m) m.classList.add('show');
+                    }
+                  }}
+                >
+                  <i className="fas fa-sign-in-alt"></i>
+                  <span data-i18n="login.signin">Sign In</span>
+                </button>
               </div>
               <div
                 className="wk-community-controls"

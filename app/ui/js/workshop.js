@@ -1585,40 +1585,43 @@
         // Hook custom upload in imageModal for workshop
         const customImageInput = document.getElementById('customImageInput');
         if (customImageInput) {
-            customImageInput.addEventListener('change', function(e) {
+            customImageInput.addEventListener('change', async function(e) {
                 if (!window._wkIconMode) return;
                 const file = e.target.files && e.target.files[0];
                 if (!file) return;
                 e.stopPropagation();
                 window._wkIconMode = false;
-                const reader = new FileReader();
-                reader.onload = function(ev) {
-                    const dataUrl = ev.target.result;
-                    const img = new Image();
-                    img.onload = function() {
-                        const canvas = document.createElement('canvas');
-                        const maxSize = 128;
-                        let w = img.width, h = img.height;
-                        if (w > maxSize || h > maxSize) {
-                            if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
-                            else { w = Math.round(w * maxSize / h); h = maxSize; }
-                        }
-                        canvas.width = w; canvas.height = h;
-                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                        const resized = canvas.toDataURL('image/png');
-                        wkCustomIconBase64 = resized;
+
+                try {
+                    if (typeof window.hwlOpenCropper === 'function') {
+                        const result = await window.hwlOpenCropper(file);
+                        wkCustomIconBase64 = result.dataUrl;
                         wkCustomIconName = '';
                         const placeholder = document.getElementById('wkCreateIconPlaceholder');
                         const preview = document.getElementById('wkCreateIconPreview');
                         if (placeholder) placeholder.style.display = 'none';
-                        if (preview) { preview.style.display = 'block'; preview.src = resized; }
+                        if (preview) { preview.style.display = 'block'; preview.src = result.dataUrl; }
                         const imageModal = document.getElementById('imageModal');
                         if (imageModal) imageModal.classList.remove('show');
-                        try { customImageInput.value = ''; } catch(_) {}
-                    };
-                    img.src = dataUrl;
-                };
-                reader.readAsDataURL(file);
+                    } else {
+                        const reader = new FileReader();
+                        reader.onload = function(ev) {
+                            wkCustomIconBase64 = ev.target.result;
+                            wkCustomIconName = '';
+                            const placeholder = document.getElementById('wkCreateIconPlaceholder');
+                            const preview = document.getElementById('wkCreateIconPreview');
+                            if (placeholder) placeholder.style.display = 'none';
+                            if (preview) { preview.style.display = 'block'; preview.src = ev.target.result; }
+                            const imageModal = document.getElementById('imageModal');
+                            if (imageModal) imageModal.classList.remove('show');
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                } catch(err) {
+                    console.log('[Workshop Cropper]', err.message);
+                } finally {
+                    try { customImageInput.value = ''; } catch(_) {}
+                }
             }, true);
         }
 

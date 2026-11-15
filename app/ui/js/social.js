@@ -516,30 +516,38 @@
         let html = '';
         for (let i = 0; i < count; i++) {
             const nameWidth = 45 + (i % 3) * 15;
-            let subHtml = '';
+            let infoInnerHtml = '';
+            let infoGap = '2px';
             let actionsHtml = '';
 
             if (type === 'received') {
-                subHtml = '<div class="wk-skeleton-shimmer" style="height: 12px; width: 110px; border-radius: 4px; margin-top: 3px;"></div>';
+                infoInnerHtml = '<div class="wk-skeleton-shimmer" style="height: 14px; width: ' + nameWidth + '%; border-radius: 4px;"></div>' +
+                                '<div class="wk-skeleton-shimmer" style="height: 12px; width: 110px; border-radius: 4px; margin-top: 3px;"></div>';
                 actionsHtml = '<div class="wk-skeleton-shimmer" style="width: 30px; height: 30px; border-radius: 6px;"></div>' +
                               '<div class="wk-skeleton-shimmer" style="width: 30px; height: 30px; border-radius: 6px;"></div>' +
                               '<div class="wk-skeleton-shimmer" style="width: 30px; height: 30px; border-radius: 6px;"></div>';
             } else if (type === 'sent') {
-                subHtml = '<div class="wk-skeleton-shimmer" style="height: 12px; width: 95px; border-radius: 4px; margin-top: 3px;"></div>';
+                infoInnerHtml = '<div class="wk-skeleton-shimmer" style="height: 14px; width: ' + nameWidth + '%; border-radius: 4px;"></div>' +
+                                '<div class="wk-skeleton-shimmer" style="height: 12px; width: 95px; border-radius: 4px; margin-top: 3px;"></div>';
                 actionsHtml = '<div class="wk-skeleton-shimmer" style="width: 30px; height: 30px; border-radius: 6px;"></div>';
             } else {
-                // 'friends'
+                // 'friends' - exact 100% height match with real .social-user-item rows (18px name row + 4px margin + 22px presence badge = 44px content + 8px padding = 52px + 2px border = 54px)
+                infoGap = '0px';
                 const presenceWidth = 80 + (i % 2) * 20;
-                subHtml = '<div style="margin-top: 6px;"><div class="wk-skeleton-shimmer" style="height: 22px; width: ' + presenceWidth + 'px; border-radius: 999px;"></div></div>';
+                infoInnerHtml = '<div style="height: 18px; display: flex; align-items: center;">' +
+                                    '<div class="wk-skeleton-shimmer" style="height: 14px; width: ' + nameWidth + '%; border-radius: 4px;"></div>' +
+                                '</div>' +
+                                '<div style="margin-top: 4px; height: 22px; display: flex; align-items: center;">' +
+                                    '<div class="wk-skeleton-shimmer" style="height: 22px; width: ' + presenceWidth + 'px; border-radius: 999px;"></div>' +
+                                '</div>';
                 actionsHtml = '<div class="wk-skeleton-shimmer" style="width: 30px; height: 30px; border-radius: 6px;"></div>' +
                               '<div class="wk-skeleton-shimmer" style="width: 30px; height: 30px; border-radius: 6px;"></div>';
             }
 
             html += '<div class="social-user-item social-user-skeleton">' +
                 '<div class="social-item-avatar wk-skeleton-shimmer" style="width: 38px; height: 38px; border-radius: 8px; border: 1px solid rgba(79,172,254,0.15); flex-shrink: 0;"></div>' +
-                '<div class="social-item-info" style="gap: 2px;">' +
-                    '<div class="wk-skeleton-shimmer" style="height: 14px; width: ' + nameWidth + '%; border-radius: 4px;"></div>' +
-                    subHtml +
+                '<div class="social-item-info" style="gap: ' + infoGap + ';">' +
+                    infoInnerHtml +
                 '</div>' +
                 '<div class="social-item-actions" style="display: flex; gap: 4px;">' +
                     actionsHtml +
@@ -682,7 +690,7 @@
                         ${joinButtonHtml}
                     </div>
                 `;
-                nameHtml = `${escapeHtml(p.username)} ${pb}<div style="margin-top:6px;">${presenceInline}</div>`;
+                nameHtml = `<div style="height: 18px; display: flex; align-items: center; gap: 4px; line-height: 18px;">${escapeHtml(p.username)} ${pb}</div><div style="margin-top: 4px; height: 22px; display: flex; align-items: center;">${presenceInline}</div>`;
                 const pWithVer = Object.assign({}, p, { clientVersion: p.clientVersion || (presence && presence.clientVersion) || '' });
                 profileJson = escapeHtml(JSON.stringify(pWithVer));
 
@@ -977,8 +985,9 @@
             const res = await api().social_search_user(q);
             if (loading) loading.style.display = 'none';
             if (!res || !res.success) { showSearchStatus('Search failed: ' + (res && res.error || 'Unknown error'), 'error'); return; }
-            if (!res.results || res.results.length === 0) { showSearchStatus('No users found with that username.', 'error'); return; }
-            renderSearchResults(res.results);
+            const list = res.results || res.users || [];
+            if (list.length === 0) { showSearchStatus('No users found with that username.', 'error'); return; }
+            renderSearchResults(list);
         } catch (e) {
             if (loading) loading.style.display = 'none';
             showSearchStatus('Search failed: ' + e.message, 'error');
@@ -989,8 +998,9 @@
         const list = document.getElementById('searchUserResults');
         if (!list) return;
         list.innerHTML = users.map(u => {
-            const pb = renderBadgesHtml(Array.isArray(u.badges) ? u.badges : (u.accountType === 'microsoft' ? ['premium'] : []));
-            const sub = u.accountType === 'microsoft' ? 'Premium' : 'HelloWorld';
+            const accType = u.accountType || u.account_type;
+            const pb = renderBadgesHtml(Array.isArray(u.badges) ? u.badges : (accType === 'microsoft' ? ['premium'] : []));
+            const sub = accType === 'microsoft' ? 'Premium' : 'HelloWorld';
             const uidSafe = escapeHtml(u.uid);
             const usernameSafe = escapeHtml(u.username);
             return `<div class="social-user-item" id="search-item-${uidSafe}">
@@ -1278,8 +1288,8 @@
                 
                 // Update avatar if available
                 if (data.avatarBase64 && avatarPreview) {
-                    // Check if avatarBase64 already has the prefix
-                    const avatarSrc = data.avatarBase64.startsWith('data:') ? data.avatarBase64 : `data:image/png;base64,${data.avatarBase64}`;
+                    // Check if avatarBase64 already has data: or http(s): prefix
+                    const avatarSrc = (data.avatarBase64.startsWith('data:') || data.avatarBase64.startsWith('http')) ? data.avatarBase64 : `data:image/png;base64,${data.avatarBase64}`;
                     avatarPreview.src = avatarSrc;
                 } else if (avatarPreview) {
                     const id = data.mcUuid || data.uuid || (data.accountType === 'microsoft' ? data.username : null) || username;

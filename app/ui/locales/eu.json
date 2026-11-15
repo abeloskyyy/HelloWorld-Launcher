@@ -1092,5 +1092,10 @@
     "bypass_success": "Admin saihesbidea gaituta. Sarbide osoa emanda.",
     "bypass_denied": "Sarbidea ukatu da: zure kontuak ez du administratzaile baimenik.",
     "bypass_error": "Errorea Admin saihesbidea aktibatzean: {err}"
+  },
+  "cropper": {
+    "title": "Moztu irudia",
+    "hint": "Arrastatu koadratzeko • Saguaren gurpila zooma egiteko",
+    "apply_btn": "Aplikatu eta gorde"
   }
 }

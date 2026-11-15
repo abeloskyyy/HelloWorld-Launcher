@@ -67,6 +67,9 @@ async function createLinuxDesktopEntry({ execPath, name, comment, iconPath, cate
 async function removeLinuxDesktopEntry() {
   const desktopFile = path.join(os.homedir(), '.local', 'share', 'applications', 'helloworld-launcher.desktop')
   await fs.remove(desktopFile).catch(() => {})
+  for (const dir of ['Desktop', 'Escritorio']) {
+    await fs.remove(path.join(os.homedir(), dir, 'helloworld-launcher.desktop')).catch(() => {})
+  }
   await execPromise('update-desktop-database ~/.local/share/applications').catch(() => {})
 }
 
@@ -103,16 +106,32 @@ async function createShortcuts({ installPath, executablePath, createDesktop, cre
       }).catch(() => {})
     }
   } else if (process.platform === 'linux') {
-    // On Linux, createDesktop = create .desktop file (shows in app menu + desktop)
-    if (createDesktop || createStartMenu) {
-      const icon = iconPath || path.join(installPath, 'icon.png')
-      await createLinuxDesktopEntry({
-        execPath: executablePath,
-        name: 'HelloWorld Launcher',
-        comment: 'Play Minecraft for free',
-        iconPath: icon,
-        categories: 'Game;',
-      }).catch(() => {})
+    const icon = iconPath || path.join(installPath, 'icon.png')
+    // App menu launcher (.desktop)
+    await createLinuxDesktopEntry({
+      execPath: executablePath,
+      name: 'HelloWorld Launcher',
+      comment: 'Play Minecraft for free',
+      iconPath: icon,
+      categories: 'Game;ActionGame;AdventureGame;',
+    }).catch(() => {})
+
+    // Optional desktop icon on ~/Desktop or ~/Escritorio
+    if (createDesktop) {
+      const desktopDir = [
+        path.join(os.homedir(), 'Desktop'),
+        path.join(os.homedir(), 'Escritorio'),
+      ].find(d => fs.existsSync(d))
+
+      if (desktopDir) {
+        const destDesktopFile = path.join(desktopDir, 'helloworld-launcher.desktop')
+        const srcDesktopFile = path.join(os.homedir(), '.local', 'share', 'applications', 'helloworld-launcher.desktop')
+        if (await fs.pathExists(srcDesktopFile)) {
+          await fs.copy(srcDesktopFile, destDesktopFile).catch(() => {})
+          await execPromise(`chmod +x "${destDesktopFile}"`).catch(() => {})
+          await execPromise(`gio set "${destDesktopFile}" metadata::trusted true 2>/dev/null`).catch(() => {})
+        }
+      }
     }
   }
 }

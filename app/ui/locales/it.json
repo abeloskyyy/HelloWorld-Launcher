@@ -1092,5 +1092,10 @@
     "bypass_success": "Bypass Amministratore abilitato. Accesso completo accordato.",
     "bypass_denied": "Accesso negato: il tuo account non dispone dei permessi di amministratore.",
     "bypass_error": "Impossibile attivare il Bypass Amministratore: {err}"
+  },
+  "cropper": {
+    "title": "Ritaglia immagine",
+    "hint": "Trascina per inquadrare • Rotellina del mouse per zoomare",
+    "apply_btn": "Applica e salva"
   }
 }

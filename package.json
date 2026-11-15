@@ -1,6 +1,6 @@
 {
   "name": "helloworld-launcher",
-  "version": "2.3.0",
+  "version": "3.0.0",
   "description": "The official custom Minecraft launcher for the HelloWorld community, featuring fast updates, rich presence, and smooth performance.",
   "repository": {
     "type": "git",
@@ -9,6 +9,7 @@
   "main": "app/main.js",
   "scripts": {
     "test": "node scripts/start.js",
+    "prestart": "npm run build:ui",
     "start": "node scripts/start.js",
     "notify": "node scripts/notify-ntfy.js",
     "dev:ui": "vite",
@@ -19,6 +20,8 @@
     "build:win": "electron-builder --win -p never --config.win.target=zip",
     "prebuild:linux": "npm run build:ui",
     "build:linux": "electron-builder --linux -p never",
+    "build:setup:win": "cd installer && npm run build:win",
+    "build:setup:linux": "cd installer && npm run build:linux",
     "prebuild:mac": "npm run build:ui",
     "build:mac": "electron-builder --mac -p never"
   },
@@ -66,7 +69,14 @@
           ]
         },
         {
-          "target": "AppImage",
+          "target": "rpm",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "x64",
             "arm64"

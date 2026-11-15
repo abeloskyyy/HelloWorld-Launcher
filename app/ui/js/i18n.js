@@ -35,6 +35,8 @@ async function loadLocale(lang) {
 window.loadLocale = loadLocale;
 
 function getNestedValue(obj, path) {
+    if (!obj || !path) return null;
+    if (obj[path] !== undefined) return obj[path];
     return path.split('.').reduce((acc, part) => acc && acc[part], obj);
 }
 

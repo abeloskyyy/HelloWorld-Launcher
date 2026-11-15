@@ -14,8 +14,8 @@ export const UserAreaControls: React.FC = () => {
           <span id="socialBadge" className="social-badge-count"></span>
           <span className="lock-badge"><i className="fas fa-lock"></i></span>
         </button>
-        <div id="userBadgeWrapper" style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
-          <div id="userBadge" className="user-badge" style={{ display: 'none', minWidth: '260px', maxWidth: '360px', width: 'auto' }}>
+        <div id="userBadgeWrapper" style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end', pointerEvents: 'none' }}>
+          <div id="userBadge" className="user-badge" style={{ display: 'none', minWidth: '260px', maxWidth: '360px', width: 'auto', pointerEvents: 'auto' }}>
             <div className="user-avatar" id="userAvatarHead">
               <i className="fas fa-user"></i>
             </div>

@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "build:win": "electron-builder --win -p never",
-    "build:linux": "electron-builder --linux -p never"
+    "build:linux": "electron-builder --linux -p never && node -e \"const fs=require('fs'),path=require('path');const dir=path.resolve('../dist/setup');if(fs.existsSync(dir)){fs.readdirSync(dir).filter(f=>f.endsWith('.AppImage')).forEach(f=>{fs.copyFileSync(path.join(dir,f),path.join(dir,f.replace(/\\.AppImage$/,'.bin')));console.log('Created .bin alias:', f.replace(/\\.AppImage$/,'.bin'))});}\""
   },
   "build": {
     "appId": "com.abelosky.helloworldlauncher.setup",
@@ -61,7 +61,7 @@
       ],
       "icon": "build/icon.png",
       "category": "Utility",
-      "artifactName": "helloworld-launcher-setup-linux-${arch}.${ext}"
+      "artifactName": "HelloWorld-Launcher-Setup-Linux.${ext}"
     },
     "npmRebuild": false
   },

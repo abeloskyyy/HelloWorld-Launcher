@@ -50,9 +50,10 @@ Guía de desarrollo y contexto operativo para **HelloWorld Launcher**, el launch
      - Integraciones con el sistema operativo (ej: Jump Lists de Windows en barra de tareas y menú de inicio).
      - Correcciones de errores críticos o bloqueantes (ej: resolver bloqueo CSP en login con Microsoft / Firebase Auth).
      - Motores internos clave o compatibilidad (ej: algoritmo de dependencias en Modrinth, renderizado de iconos comunitarios).
-   * **Estilo de Redacción Requerido**:
-     - Idioma: **Inglés**.
-     - Tono: Claro, conciso y centrado en el beneficio práctico del usuario, evitando detalles técnicos internos o sobrecargados (ej: *"Visual RAM slider in installation settings to easily adjust allocated memory with smart recommendations"* en lugar de describir variables CSS, parsing de regex o gradients).
+   * **Estilo de Redacción y Directivas de Idioma**:
+     - **Todo lo oficial del launcher en Inglés**: `RELEASE_NOTES.md`, documentación oficial pública y logs de cara al usuario deben redactarse **estrictamente en inglés** (excepto los diccionarios y archivos de traducción/localización i18n como `web/script.js` o `i18n.js`).
+     - **Borrar Contenido de la Release Anterior**: Al preparar una nueva versión, se debe **borrar por completo el contenido de las releases anteriores** en `RELEASE_NOTES.md`. Solo deben quedar las notas de la versión actual (`# RELEASE X.Y.Z`).
+     - **Tono**: Claro, conciso y centrado en el beneficio práctico del usuario, evitando detalles técnicos internos o sobrecargados (ej: *"Visual RAM slider in installation settings to easily adjust allocated memory with smart recommendations"* en lugar de describir variables CSS, parsing de regex o gradients).
    * **Modelo y Subcategorías a Seguir**:
      Se organiza en las subcategorías `## Added`, `## Changed` y `## Fixed` (incluyendo solo las que apliquen):
      ```markdown

@@ -1,0 +1,29 @@
+{
+  "name": "hwlauncher-backend",
+  "version": "1.0.0",
+  "description": "Backend API para HelloWorld-Launcher en Cloudflare Workers (Hono + D1 + R2 + KV)",
+  "private": true,
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --minify",
+    "d1:init": "wrangler d1 execute DB --local --file=./migrations/0001_initial_schema.sql",
+    "d1:init:prod": "wrangler d1 execute DB --remote --file=./migrations/0001_initial_schema.sql",
+    "dump:live": "node ../scripts/dump-firebase.js",
+    "seed:generate": "node scripts/seed-from-dump.js",
+    "migrate:data:local": "wrangler d1 execute DB --local --file=./migrations/0002_migrated_data.sql",
+    "migrate:data:prod": "wrangler d1 execute DB --remote --file=./migrations/0002_migrated_data.sql",
+    "sync:full:prod": "node ../scripts/dump-firebase.js && node scripts/seed-from-dump.js && wrangler d1 execute DB --remote --file=./migrations/0002_migrated_data.sql",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.6.12",
+    "jose": "^5.9.6"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241106.0",
+    "typescript": "^5.6.3",
+    "wrangler": "^3.86.0"
+  }
+}
+

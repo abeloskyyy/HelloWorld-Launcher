@@ -1092,5 +1092,10 @@
     "bypass_success": "Bypass de Administrador habilitado. Acceso completo concedido.",
     "bypass_denied": "Acceso denegado: a túa conta non ten permisos de administrador.",
     "bypass_error": "Erro ao activar o Bypass de Administrador: {err}"
+  },
+  "cropper": {
+    "title": "Recortar imaxe",
+    "hint": "Arrastra para encadrar • Roda do rato para zoom",
+    "apply_btn": "Aplicar e gardar"
   }
 }

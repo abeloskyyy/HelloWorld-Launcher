@@ -9,7 +9,7 @@ on:
         type: boolean
         default: true
       build_linux:
-        description: 'Build Linux (DEB amd64/arm64)'
+        description: 'Build Linux (DEB, RPM, ZIP x64/arm64)'
         required: false
         type: boolean
         default: true
@@ -19,7 +19,7 @@ on:
         type: boolean
         default: true
       build_setup:
-        description: 'Build Setup Bootstrapper (Windows Setup.exe)'
+        description: 'Build Setup Bootstrapper (Windows Setup.exe & Linux Setup.bin)'
         required: false
         type: boolean
         default: false
@@ -102,6 +102,7 @@ jobs:
         run: |
           mkdir -p dist-windows
           [ -f "dist/HelloWorld-Launcher-Setup.exe" ] && cp dist/HelloWorld-Launcher-Setup.exe dist-windows/
+          [ -f "dist/HelloWorld-Launcher-Setup.exe" ] && cp dist/HelloWorld-Launcher-Setup.exe dist-windows/HelloWorld-Launcher-Setup-Windows.exe
           [ -f "dist/helloworld-launcher-win.zip" ] && cp dist/helloworld-launcher-win.zip dist-windows/
           echo "Windows staging contents:"
           ls -lh dist-windows
@@ -157,9 +158,42 @@ jobs:
       - name: Build UI (Vite)
         run: npm run build:ui
 
-      - name: Build Linux (.deb and .AppImage packages)
+      - name: Build Linux (.deb, .rpm and .zip packages)
         run: npm run build:linux
         continue-on-error: true
+
+      - name: Fetch or Build Linux Universal Setup (.bin)
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          NEED_BUILD="true"
+          if [ "${{ github.event.inputs.build_setup }}" != "true" ]; then
+            echo "Attempting to download existing HelloWorld-Launcher-Setup-Linux.bin from previous release..."
+            mkdir -p ./tmp-setup-linux
+            if gh release download --pattern "HelloWorld-Launcher-Setup-Linux.bin" --dir ./tmp-setup-linux 2>/dev/null; then
+              if [ -f "./tmp-setup-linux/HelloWorld-Launcher-Setup-Linux.bin" ]; then
+                cp ./tmp-setup-linux/HelloWorld-Launcher-Setup-Linux.bin dist/HelloWorld-Launcher-Setup-Linux.bin
+                echo "Preserved existing HelloWorld-Launcher-Setup-Linux.bin."
+                NEED_BUILD="false"
+              fi
+            fi
+          fi
+
+          if [ "$NEED_BUILD" = "true" ]; then
+            echo "Building universal Linux Setup bootstrapper (.bin)..."
+            cd installer
+            npm ci || npm install
+            npm run build:linux
+            cd ..
+            if [ -d "dist/setup" ]; then
+              find dist/setup -maxdepth 1 -type f \( -name "HelloWorld-Launcher-Setup-Linux.bin" -o -name "HelloWorld-Launcher-Setup-Linux.AppImage" \) -exec cp {} dist/ \;
+              if [ -f "dist/HelloWorld-Launcher-Setup-Linux.AppImage" ] && [ ! -f "dist/HelloWorld-Launcher-Setup-Linux.bin" ]; then
+                cp dist/HelloWorld-Launcher-Setup-Linux.AppImage dist/HelloWorld-Launcher-Setup-Linux.bin
+              fi
+            fi
+          fi
 
       - name: Setup Canonical Linux Names
         run: |
@@ -171,21 +205,29 @@ jobs:
             cp dist/helloworld-launcher-linux-amd64.deb dist/helloworld-launcher-linux-x64.deb
           fi
 
-          # AppImage: electron-builder genera x86_64 por defecto; asegurar alias amd64 para total consistencia
-          if [ -f "dist/helloworld-launcher-linux-x86_64.AppImage" ] && [ ! -f "dist/helloworld-launcher-linux-amd64.AppImage" ]; then
-            cp dist/helloworld-launcher-linux-x86_64.AppImage dist/helloworld-launcher-linux-amd64.AppImage
+          # RPM: Soportar x86_64, amd64 y x64
+          if [ -f "dist/helloworld-launcher-linux-x86_64.rpm" ] && [ ! -f "dist/helloworld-launcher-linux-amd64.rpm" ]; then
+            cp dist/helloworld-launcher-linux-x86_64.rpm dist/helloworld-launcher-linux-amd64.rpm
           fi
-          if [ -f "dist/helloworld-launcher-linux-x64.AppImage" ] && [ ! -f "dist/helloworld-launcher-linux-amd64.AppImage" ]; then
-            cp dist/helloworld-launcher-linux-x64.AppImage dist/helloworld-launcher-linux-amd64.AppImage
+          if [ -f "dist/helloworld-launcher-linux-x64.rpm" ] && [ ! -f "dist/helloworld-launcher-linux-amd64.rpm" ]; then
+            cp dist/helloworld-launcher-linux-x64.rpm dist/helloworld-launcher-linux-amd64.rpm
           fi
-          if [ -f "dist/helloworld-launcher-linux-amd64.AppImage" ] && [ ! -f "dist/helloworld-launcher-linux-x86_64.AppImage" ]; then
-            cp dist/helloworld-launcher-linux-amd64.AppImage dist/helloworld-launcher-linux-x86_64.AppImage
+          if [ -f "dist/helloworld-launcher-linux-amd64.rpm" ] && [ ! -f "dist/helloworld-launcher-linux-x64.rpm" ]; then
+            cp dist/helloworld-launcher-linux-amd64.rpm dist/helloworld-launcher-linux-x64.rpm
+          fi
+
+          # ZIP: Soportar amd64 y x64
+          if [ -f "dist/helloworld-launcher-linux-x64.zip" ] && [ ! -f "dist/helloworld-launcher-linux-amd64.zip" ]; then
+            cp dist/helloworld-launcher-linux-x64.zip dist/helloworld-launcher-linux-amd64.zip
+          fi
+          if [ -f "dist/helloworld-launcher-linux-amd64.zip" ] && [ ! -f "dist/helloworld-launcher-linux-x64.zip" ]; then
+            cp dist/helloworld-launcher-linux-amd64.zip dist/helloworld-launcher-linux-x64.zip
           fi
 
       - name: Stage Linux Binaries
         run: |
           mkdir -p dist-linux
-          find dist -maxdepth 1 -type f \( -name "*.deb" -o -name "*.AppImage" \) -exec cp {} dist-linux/ \; 2>/dev/null || true
+          find dist -maxdepth 1 -type f \( -name "*.deb" -o -name "*.rpm" -o -name "*.zip" -o -name "*.bin" \) -exec cp {} dist-linux/ \; 2>/dev/null || true
           echo "Linux staging contents:"
           ls -lh dist-linux
 
