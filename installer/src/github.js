@@ -16,7 +16,7 @@ const API_BASE = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`
 
 const cliConfigUrl = (() => {
   const arg = process.argv.find(a => a.startsWith('--config-url=') || a.startsWith('--gist-url='))
-  return arg ? arg.split('=')[1].replace(/^"(.*)"$/, '$1') : null
+  return arg ? arg.slice(arg.indexOf('=') + 1).replace(/^"(.*)"$/, '$1') : null
 })()
 
 const cliLauncherFile = (() => {
@@ -24,11 +24,32 @@ const cliLauncherFile = (() => {
   if (a64) return Buffer.from(a64.slice('--launcher-file-b64='.length), 'base64').toString('utf-8')
 
   const a = process.argv.find(a => a.startsWith('--launcher-file=') || a.startsWith('--local-zip='))
-  return a ? a.split('=')[1].replace(/^"(.*)"$/, '$1') : null
+  return a ? a.slice(a.indexOf('=') + 1).replace(/^"(.*)"$/, '$1') : null
 })()
 
+function getCliLauncherFile() {
+  if (cliLauncherFile) return cliLauncherFile
+  try {
+    const { app } = require('electron')
+    if (app && app.commandLine) {
+      const val = app.commandLine.getSwitchValue('launcher-file') || app.commandLine.getSwitchValue('local-zip')
+      if (val) return val
+    }
+  } catch (_) {}
+  return null
+}
+
 function getRemoteConfigUrl() {
-  return cliConfigUrl || process.env.REMOTE_CONFIG_GIST_URL || process.env.REMOTE_CONFIG_URL || 'https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json'
+  let url = cliConfigUrl
+  if (!url) {
+    try {
+      const { app } = require('electron')
+      if (app && app.commandLine) {
+        url = app.commandLine.getSwitchValue('config-url') || app.commandLine.getSwitchValue('gist-url') || null
+      }
+    } catch (_) {}
+  }
+  return url || process.env.REMOTE_CONFIG_GIST_URL || process.env.REMOTE_CONFIG_URL || 'https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json'
 }
 
 // ── Platform / arch helpers (Windows & Linux) ─────────────────────────────────
@@ -241,13 +262,14 @@ async function getLatestReleaseInfo(version = null) {
   const { app } = require('electron')
 
   // ── CLI Local File Override ──
-  if (cliLauncherFile && fs.existsSync(cliLauncherFile)) {
+  const localTargetFile = getCliLauncherFile()
+  if (localTargetFile && fs.existsSync(localTargetFile)) {
     return {
       version: version || 'local-test',
       tagName: 'v' + (version || 'local-test'),
       releaseNotes: '# Instalación Local\nInstalando desde archivo local especificado en argumentos.',
       publishedAt: new Date().toISOString(),
-      launcher: { name: path.basename(cliLauncherFile), url: cliLauncherFile, size: fs.statSync(cliLauncherFile).size },
+      launcher: { name: path.basename(localTargetFile), url: localTargetFile, size: fs.statSync(localTargetFile).size },
       setup: null,
       manifest: null,
     }
@@ -296,7 +318,7 @@ async function getLatestReleaseInfo(version = null) {
     if (!launcherAsset && platform === 'linux') {
       launcherAsset = release.assets.find(a => {
         const n = a.name.toLowerCase()
-        return n.includes('helloworld-launcher') && (n.endsWith('.zip') || n.endsWith('.deb') || n.endsWith('.rpm')) && (n.includes(arch) || (arch === 'x64' && (n.includes('x86_64') || n.includes('amd64'))))
+        return n.includes('helloworld-launcher') && (n.endsWith('.zip') || n.endsWith('.appimage')) && (n.includes(arch) || (arch === 'x64' && (n.includes('x86_64') || n.includes('amd64'))))
       }) || release.assets.find(a => a.name.toLowerCase().endsWith('.zip'))
     }
 
