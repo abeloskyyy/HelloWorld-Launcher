@@ -18,8 +18,13 @@ on:
         required: false
         type: boolean
         default: true
-      build_setup:
-        description: 'Build Setup Bootstrapper (Windows Setup.exe & Linux Setup.bin)'
+      build_setup_windows:
+        description: 'Build Windows Setup Bootstrapper (Setup.exe)'
+        required: false
+        type: boolean
+        default: false
+      build_setup_linux:
+        description: 'Build Linux Setup Bootstrapper (Setup.bin)'
         required: false
         type: boolean
         default: false
@@ -70,7 +75,7 @@ jobs:
         run: npm run build:win
 
       - name: Fetch Existing Setup.exe (SmartScreen Reputation)
-        if: ${{ github.event.inputs.build_setup != true && github.event.inputs.build_setup != 'true' }}
+        if: ${{ github.event.inputs.build_setup_windows != true && github.event.inputs.build_setup_windows != 'true' }}
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -95,6 +100,19 @@ jobs:
             if [ -f "dist/setup/HelloWorld-Launcher-Setup.exe" ]; then
               cp dist/setup/HelloWorld-Launcher-Setup.exe dist/HelloWorld-Launcher-Setup.exe
             fi
+          fi
+
+      - name: Build Windows Setup.exe (Fresh Bootstrapper)
+        if: ${{ github.event.inputs.build_setup_windows == true || github.event.inputs.build_setup_windows == 'true' }}
+        shell: bash
+        run: |
+          echo "Building fresh Windows Setup bootstrapper..."
+          cd installer
+          npm ci || npm install
+          npm run build:win
+          cd ..
+          if [ -f "dist/setup/HelloWorld-Launcher-Setup.exe" ]; then
+            cp dist/setup/HelloWorld-Launcher-Setup.exe dist/HelloWorld-Launcher-Setup.exe
           fi
 
       - name: Stage Windows Binaries
@@ -169,7 +187,7 @@ jobs:
         run: |
           mkdir -p dist
           NEED_BUILD="true"
-          if [ "${{ github.event.inputs.build_setup }}" != "true" ]; then
+          if [ "${{ github.event.inputs.build_setup_linux }}" != "true" ]; then
             echo "Attempting to download existing HelloWorld-Launcher-Setup-Linux.bin from previous release..."
             mkdir -p ./tmp-setup-linux
             if gh release download --pattern "HelloWorld-Launcher-Setup-Linux.bin" --dir ./tmp-setup-linux 2>/dev/null; then
@@ -298,11 +316,11 @@ jobs:
           retention-days: 14
 
   # ─────────────────────────────────────────────────────────────
-  # 4. SETUP BOOTSTRAPPER (Windows Setup.exe)
+  # 4. STANDALONE SETUP BUILDERS (If main platforms skipped)
   # ─────────────────────────────────────────────────────────────
-  build-setup:
-    name: Build Setup Bootstrapper
-    if: ${{ github.event.inputs.build_setup == true || github.event.inputs.build_setup == 'true' }}
+  build-setup-windows:
+    name: Build Setup Windows (.exe)
+    if: ${{ (github.event.inputs.build_setup_windows == true || github.event.inputs.build_setup_windows == 'true') && github.event.inputs.build_windows == 'false' }}
     runs-on: windows-latest
     steps:
       - name: Checkout repository
@@ -341,6 +359,42 @@ jobs:
       - name: Upload Setup Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: setup-artifact
+          name: windows-setup-artifact
           path: dist-setup/*
+          retention-days: 14
+
+  build-setup-linux:
+    name: Build Setup Linux (.bin)
+    if: ${{ (github.event.inputs.build_setup_linux == true || github.event.inputs.build_setup_linux == 'true') && github.event.inputs.build_linux == 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Build Linux Universal Setup (.bin)
+        run: |
+          cd installer
+          npm ci || npm install
+          npm run build:linux
+          cd ..
+          mkdir -p dist-setup-linux
+          if [ -d "dist/setup" ]; then
+            find dist/setup -maxdepth 1 -type f \( -name "HelloWorld-Launcher-Setup-Linux.bin" -o -name "HelloWorld-Launcher-Setup-Linux.AppImage" \) -exec cp {} dist-setup-linux/ \;
+            if [ -f "dist-setup-linux/HelloWorld-Launcher-Setup-Linux.AppImage" ] && [ ! -f "dist-setup-linux/HelloWorld-Launcher-Setup-Linux.bin" ]; then
+              cp dist-setup-linux/HelloWorld-Launcher-Setup-Linux.AppImage dist-setup-linux/HelloWorld-Launcher-Setup-Linux.bin
+            fi
+          fi
+          ls -lh dist-setup-linux
+
+      - name: Upload Linux Setup Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-setup-artifact
+          path: dist-setup-linux/*
           retention-days: 14
