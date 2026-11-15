@@ -2382,7 +2382,7 @@ function initUpdateModalListeners() {
                         }
                     }
                     if (!downloadUrl) {
-                        const linArch = (arch === 'arm64') ? 'arm64' : (isRpm ? 'x86_64' : (isDeb ? 'amd64' : 'x64'));
+                        const linArch = (arch === 'arm64') ? 'arm64' : (isRpm ? 'x86_64' : 'x64');
                         const ext = isRpm ? 'rpm' : isDeb ? 'deb' : 'zip';
                         downloadUrl = `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/helloworld-launcher-linux-${linArch}.${ext}`;
                     }
@@ -2688,7 +2688,7 @@ async function resolvePlatformDownloadUrl(releaseInfo, latestVersion) {
             }
         }
         if (!downloadUrl) {
-            const linArch = (arch === 'arm64') ? 'arm64' : (isRpm ? 'x86_64' : (isDeb ? 'amd64' : 'x64'));
+            const linArch = (arch === 'arm64') ? 'arm64' : (isRpm ? 'x86_64' : 'x64');
             const ext = isRpm ? 'rpm' : isDeb ? 'deb' : 'zip';
             downloadUrl = `https://github.com/abeloskyyy/HelloWorld-Launcher/releases/download/${tag}/helloworld-launcher-linux-${linArch}.${ext}`;
         }

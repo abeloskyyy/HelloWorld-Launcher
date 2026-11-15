@@ -143,6 +143,13 @@ jobs:
       - name: Build Linux (.deb, .rpm and .zip packages)
         run: npm run build:linux
 
+      - name: Normalize Linux Package Names (x64 uniformity)
+        run: |
+          # Normalizar deb amd64 a x64 para mantener uniformidad (deb x64 y zip x64) sin duplicados
+          if [ -f "dist/helloworld-launcher-linux-amd64.deb" ]; then
+            mv -f dist/helloworld-launcher-linux-amd64.deb dist/helloworld-launcher-linux-x64.deb
+          fi
+
       - name: Stage Linux Binaries
         run: |
           mkdir -p dist-linux

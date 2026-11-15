@@ -160,7 +160,11 @@ jobs:
             }
 
             makeYml("HelloWorld-Launcher-Setup.exe", "latest.yml");
-            makeYml("helloworld-launcher-linux-amd64.deb", "latest-linux.yml");
+            if (fs.existsSync(path.join("release-assets", "helloworld-launcher-linux-x64.deb"))) {
+              makeYml("helloworld-launcher-linux-x64.deb", "latest-linux.yml");
+            } else {
+              makeYml("helloworld-launcher-linux-amd64.deb", "latest-linux.yml");
+            }
             makeYml("helloworld-launcher-linux-arm64.deb", "latest-linux-arm64.yml");
           '
           echo "Release assets including generated metadata:"
