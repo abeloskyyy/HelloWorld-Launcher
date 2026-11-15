@@ -2548,14 +2548,14 @@ async function checkAppUpdates(changelog) {
     const latestVersion = changelog.latestVersion;
     const minVersion = changelog.minVersion || '0.0.0';
 
-    // Si ya estamos en la última o superior, limpiar cualquier estado guardado
+    // Si ya estamos en la última o superior, solo limpiar si no hay una actualización ya descargada lista para aplicar
     if (compareSemver(currentVersion, latestVersion) >= 0) {
-        try {
-            localStorage.removeItem('hw_downloaded_update_version');
-            localStorage.removeItem('hw_downloaded_update_path');
-        } catch (_) {}
-        _currentUpdateDownloadedPath = null;
-        window._currentUpdateDownloadedPath = null;
+        if (!_currentUpdateDownloadedPath && !window._currentUpdateDownloadedPath) {
+            try {
+                localStorage.removeItem('hw_downloaded_update_version');
+                localStorage.removeItem('hw_downloaded_update_path');
+            } catch (_) {}
+        }
         return;
     }
 
@@ -2823,12 +2823,31 @@ async function startBackgroundUpdate(updateData) {
 }
 window.startBackgroundUpdate = startBackgroundUpdate;
 
-async function hwlApplyDownloadedUpdate() {
-    if (!_currentUpdateDownloadedPath) {
+async function hwlApplyDownloadedUpdate(filePathParam) {
+    let updatePath = (typeof filePathParam === 'string' && filePathParam) ? filePathParam : (_currentUpdateDownloadedPath || window._currentUpdateDownloadedPath || localStorage.getItem('hw_downloaded_update_path') || null);
+
+    // Fallback: Si no se tiene en variable, buscar el archivo en la carpeta updates
+    if (!updatePath) {
+        try {
+            const api = window.hwlAPI || window.api;
+            if (api && typeof api.checkDownloadedUpdate === 'function') {
+                const check = await api.checkDownloadedUpdate({
+                    downloadUrl: 'http://localhost/helloworld-launcher-linux-x64.zip'
+                });
+                if (check && check.exists && check.filePath) {
+                    updatePath = check.filePath;
+                }
+            }
+        } catch (_) {}
+    }
+
+    if (!updatePath) {
         console.warn('[hwlApplyDownloadedUpdate] No update file ready.');
         return;
     }
-    console.log('[hwlApplyDownloadedUpdate] Applying update from:', _currentUpdateDownloadedPath);
+    _currentUpdateDownloadedPath = updatePath;
+    window._currentUpdateDownloadedPath = updatePath;
+    console.log('[hwlApplyDownloadedUpdate] Applying update from:', updatePath);
     const api = window.hwlAPI || window.api;
     const releaseInfo = (_currentUpdateState && _currentUpdateState.releaseInfo) || {};
     const downloads = releaseInfo.downloads || {};

@@ -123,7 +123,7 @@ export const UpdateBadge: React.FC = () => {
       setStatus('installing');
       const win = window as any;
       if (typeof win.hwlApplyDownloadedUpdate === 'function') {
-        win.hwlApplyDownloadedUpdate();
+        win.hwlApplyDownloadedUpdate(filePath);
       }
     }
     // No modal al hacer clic durante la descarga
