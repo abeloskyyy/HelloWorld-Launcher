@@ -3250,8 +3250,20 @@ async function loadOwnBadges(userData) {
             }
         }
 
+        if (badges.length === 0 && window.HW_API_URL) {
+            try {
+                const uid = (userData.account_type === 'microsoft' ? (userData.firebase_ms_uid || userData.uuid) : (userData.firebase_uid || userData.uuid)) || userData.username;
+                if (uid) {
+                    const apiRes = await fetch(`${window.HW_API_URL}/api/v1/users/${encodeURIComponent(uid)}`).then(r => r.json()).catch(() => null);
+                    if (apiRes && apiRes.success && apiRes.user && Array.isArray(apiRes.user.badges) && apiRes.user.badges.length > 0) {
+                        badges = apiRes.user.badges;
+                    }
+                }
+            } catch (_) {}
+        }
+
         // Fallback: if badges is empty but user is verified Microsoft, include premium badge
-        if (badges.length === 0 && userData.account_type === 'microsoft' && userData.firebase_ms_uid) {
+        if (badges.length === 0 && userData.account_type === 'microsoft') {
             badges = ['premium'];
         }
 

@@ -219,6 +219,7 @@ const profileManager = require('./src/handlers/profiles')
 const modManager = require('./src/handlers/mods')
 const versionUtils = require('./src/utils/version')
 const { addServerToServersDat, getServerHistory } = require('./src/utils/serversDat')
+const ApiClient = require('./src/utils/apiClient')
 
 // Hardware Acceleration & High-Performance GPU (Max VRAM / Dedicated GPU) Configuration
 const configuredGpuPaths = new Set();
@@ -5462,29 +5463,16 @@ ipcMain.handle('refresh-session', async () => {
     // Use centralized refresh helper (handles rate-limiting and credential clearing safely)
     const refreshResult = await refreshMicrosoftSession(userData);
     if (refreshResult.success) {
-      // Validate microsoftVerified in Firestore — clear local uid if deleted remotely
+      // Validate microsoftVerified in Firestore / Backend safely without destructively wiping local tokens
       if (userData.firebase_ms_uid && userData.firebase_ms_refresh_token) {
         try {
           const refreshed = await refreshFirebaseToken(userData.firebase_ms_refresh_token);
           const userDoc = await fsGet(`users/${userData.firebase_ms_uid}`, refreshed.idToken);
           if (!userDoc || !userDoc.microsoftVerified) {
-            console.log('[Refresh] microsoftVerified not found in Firestore — clearing local verification');
-            const ud = loadUserData();
-            ud.firebase_ms_uid = '';
-            ud.firebase_ms_refresh_token = '';
-            saveUserData(ud);
+            console.log('[Refresh] microsoftVerified status check: not verified in Firestore doc');
           }
         } catch (verifyErr) {
-          const is404 = verifyErr.response && verifyErr.response.status === 404;
-          if (is404) {
-            console.log('[Refresh] users doc not found in Firestore — clearing local verification');
-            const ud = loadUserData();
-            ud.firebase_ms_uid = '';
-            ud.firebase_ms_refresh_token = '';
-            saveUserData(ud);
-          } else {
-            console.warn('[Refresh] Could not check microsoftVerified:', verifyErr.message);
-          }
+          console.warn('[Refresh] Could not check microsoftVerified in Firestore:', verifyErr.message);
         }
       }
       const freshData = loadUserData();
@@ -10387,6 +10375,21 @@ ipcMain.handle('get-user-profile', async (e, uid, username) => {
     let userDoc = null;
     let resolvedUid = uid;
 
+    // 0. Primary: Fetch directly from Cloudflare Backend API
+    const targetLookup = uid || (username || (typeof uid === 'string' && !uid.includes('-') && uid.length < 30 ? uid : null));
+    if (targetLookup) {
+      try {
+        const apiRes = await ApiClient.users.getProfile(encodeURIComponent(targetLookup));
+        if (apiRes && apiRes.success && apiRes.user) {
+          userDoc = {
+            ...apiRes.user,
+            badges: Array.isArray(apiRes.user.badges) ? apiRes.user.badges : []
+          };
+          resolvedUid = apiRes.user.uid || resolvedUid;
+        }
+      } catch (_) {}
+    }
+
     // 1. Try direct fetch by uid if provided
     if (uid) {
       try {
@@ -10518,42 +10521,82 @@ ipcMain.handle('get-user-profile', async (e, uid, username) => {
 // Fetch current user's own badges (for the account button in the launcher header)
 ipcMain.handle('get-own-badges', async () => {
   try {
-    const auth = await getSocialAuth();
-    const userDoc = await fsGet(`users/${auth.uid}`, auth.idToken);
-    const badges = Array.isArray(userDoc && userDoc.badges) ? [...userDoc.badges] : [];
+    const userData = loadUserData();
+    const isMicrosoft = userData.account_type === 'microsoft';
+    const targetUid = isMicrosoft ? (userData.firebase_ms_uid || userData.uuid) : (userData.firebase_uid || userData.uuid);
 
-    // AUTO-MIGRATION: if this is a verified Microsoft user without the premium badge yet, add it now
-    let needsWrite = false;
-    if (userDoc && userDoc.microsoftVerified === true && !badges.includes('premium')) {
-      badges.push('premium');
-      needsWrite = true;
+    // 1. Primary: Fetch directly from Cloudflare D1 Backend
+    if (targetUid) {
+      try {
+        const res = await ApiClient.users.getProfile(targetUid);
+        if (res && res.success && res.user) {
+          const badges = Array.isArray(res.user.badges) ? [...res.user.badges] : [];
+          if ((res.user.isAdmin || res.user.role === 'admin' || res.user.role === 'owner') && !badges.includes('moderator')) {
+            badges.push('moderator');
+          }
+          if ((isMicrosoft || res.user.microsoftVerified) && !badges.includes('premium')) {
+            badges.push('premium');
+          }
+          if (badges.length > 0) {
+            return { success: true, badges };
+          }
+        }
+      } catch (apiErr) {
+        console.warn('[get-own-badges] Backend API by UID lookup failed:', apiErr.message);
+      }
     }
 
-    // Also check admins/ collection for the current user
-    try {
-      const adminDoc = await fsGet(`admins/${auth.uid}`, auth.idToken);
-      if (adminDoc) {
-        const role = (adminDoc.role || 'admin').toLowerCase();
-        if ((role === 'admin' || role === 'owner' || role === 'moderator' || role === 'mod') && !badges.includes('moderator')) {
-          badges.push('moderator');
-          needsWrite = true;
+    // 2. Secondary Backend check: lookup by username
+    if (userData.username) {
+      try {
+        const res = await ApiClient.users.getProfile(encodeURIComponent(userData.username));
+        if (res && res.success && res.user) {
+          const badges = Array.isArray(res.user.badges) ? [...res.user.badges] : [];
+          if ((res.user.isAdmin || res.user.role === 'admin' || res.user.role === 'owner') && !badges.includes('moderator')) {
+            badges.push('moderator');
+          }
+          if ((isMicrosoft || res.user.microsoftVerified) && !badges.includes('premium')) {
+            badges.push('premium');
+          }
+          if (badges.length > 0) {
+            return { success: true, badges };
+          }
         }
+      } catch (apiErr) {
+        console.warn('[get-own-badges] Backend API by username lookup failed:', apiErr.message);
+      }
+    }
+
+    // 3. Fallback: Legacy Firestore lookup
+    try {
+      const auth = await getSocialAuth();
+      const userDoc = await fsGet(`users/${auth.uid}`, auth.idToken);
+      const badges = Array.isArray(userDoc && userDoc.badges) ? [...userDoc.badges] : [];
+
+      if (userDoc && (userDoc.microsoftVerified === true || isMicrosoft) && !badges.includes('premium')) {
+        badges.push('premium');
+      }
+
+      try {
+        const adminDoc = await fsGet(`admins/${auth.uid}`, auth.idToken);
+        if (adminDoc) {
+          const role = (adminDoc.role || 'admin').toLowerCase();
+          if ((role === 'admin' || role === 'owner' || role === 'moderator' || role === 'mod') && !badges.includes('moderator')) {
+            badges.push('moderator');
+          }
+        }
+      } catch (_) {}
+
+      if (badges.length > 0) {
+        return { success: true, badges };
       }
     } catch (_) {}
 
-    // Write badges back to Firestore if a migration happened
-    if (needsWrite) {
-      try {
-        await fsUpdate(`users/${auth.uid}`, { badges }, auth.idToken);
-        console.log(`[Badges] Auto-migrated badges for ${auth.uid}:`, badges);
-      } catch (writeErr) {
-        console.warn('[Badges] Could not write migrated badges:', writeErr.message);
-      }
-    }
-
-    return { success: true, badges };
+    // 4. Default fallback: Microsoft verified accounts always have premium badge
+    const defaultBadges = isMicrosoft ? ['premium'] : [];
+    return { success: true, badges: defaultBadges };
   } catch (e) {
-    return { success: true, badges: [] }; // fail silently, badges are non-critical
+    return { success: true, badges: [] };
   }
 });
 
