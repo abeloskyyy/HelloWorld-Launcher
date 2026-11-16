@@ -425,6 +425,8 @@ document.addEventListener('click', () => {
     State.currentVersion = info.currentVersion
     State.latestVersion = info.latestVersion
     State.releaseNotes = info.releaseNotes
+    State.isSilent = Boolean(info.isSilent)
+    State.updateFile = info.updateFile || null
 
     // Init slideshow with images from main process
     initSlideshow(info.sidebarImages)

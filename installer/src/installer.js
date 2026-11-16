@@ -52,6 +52,55 @@ function getTempDir() {
   return path.join(os.tmpdir(), 'helloworld-setup-tmp')
 }
 
+/** Launch an application cleanly outside the AppImage environment */
+function launchDetached(executablePath) {
+  try {
+    const { spawn } = require('child_process')
+    const childEnv = { ...process.env }
+    delete childEnv.APPDIR
+    delete childEnv.APPIMAGE
+    delete childEnv.OWD
+    if (childEnv.LD_LIBRARY_PATH) {
+      childEnv.LD_LIBRARY_PATH = childEnv.LD_LIBRARY_PATH
+        .split(':')
+        .filter(p => !p.includes('.mount_'))
+        .join(':')
+      if (!childEnv.LD_LIBRARY_PATH) delete childEnv.LD_LIBRARY_PATH
+    }
+    const child = spawn(executablePath, [], {
+      detached: true,
+      stdio: 'ignore',
+      env: childEnv,
+    })
+    child.unref()
+  } catch (err) {
+    console.error('Failed to launch application detached:', err)
+  }
+}
+
+/** Read installed version from package.json or app.asar */
+function readInstalledVersion(installPath) {
+  try {
+    const pkgJson = path.join(installPath, 'resources', 'app', 'package.json')
+    if (fs.existsSync(pkgJson)) {
+      return fs.readJsonSync(pkgJson).version
+    }
+    const asarPath = path.join(installPath, 'resources', 'app.asar')
+    if (fs.existsSync(asarPath)) {
+      const prevNoAsar = process.noAsar
+      process.noAsar = false
+      try {
+        const pkg = fs.readJsonSync(path.join(asarPath, 'package.json'))
+        process.noAsar = prevNoAsar
+        if (pkg?.version) return pkg.version
+      } catch (_) {
+        process.noAsar = prevNoAsar
+      }
+    }
+  } catch (_) {}
+  return null
+}
+
 /** Find the main launcher executable in an install directory */
 function findLauncherExecutable(installPath) {
   if (process.platform === 'win32') {
@@ -130,8 +179,41 @@ async function killLauncher() {
   try {
     if (process.platform === 'win32') {
       await execPromise('taskkill /f /im "HelloWorld-Launcher.exe" 2>nul').catch(() => {})
+      await execPromise('taskkill /f /im "helloworld-launcher.exe" 2>nul').catch(() => {})
     } else {
-      await execPromise('pkill -f "helloworld-launcher" 2>/dev/null').catch(() => {})
+      // En Linux, NUNCA usar 'pkill -f helloworld-launcher' directamente porque el binario del setup
+      // (helloworld-launcher-setup) o su daemon FUSE (setup.bin) contienen la misma subcadena.
+      // Si se mataba el proceso FUSE padre, se desmontaba /tmp/.mount_setup.* mientras Electron
+      // seguía ejecutando código mmap'd, provocando inmediatamente SIGBUS (BUS_ADRERR).
+      const currentPid = process.pid
+      const parentPid = process.ppid
+
+      const { stdout } = await execPromise('ps -eo pid,ppid,args').catch(() => ({ stdout: '' }))
+      const lines = stdout.split('\n')
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed) continue
+        const parts = trimmed.split(/\s+/)
+        if (parts.length < 3) continue
+        const pid = parseInt(parts[0], 10)
+        const ppid = parseInt(parts[1], 10)
+        const cmd = parts.slice(2).join(' ')
+        const lowerCmd = cmd.toLowerCase()
+
+        if (!pid || pid === 1) continue
+        if (pid === currentPid || pid === parentPid || ppid === currentPid) continue
+        if (lowerCmd.includes('setup') || lowerCmd.includes('drkonqi') || lowerCmd.includes('installer')) continue
+
+        // Identificar launcher de forma segura
+        if (lowerCmd.includes('helloworld-launcher') || lowerCmd.includes('helloworld_launcher')) {
+          try {
+            process.kill(pid, 'SIGTERM')
+            setTimeout(() => {
+              try { process.kill(pid, 'SIGKILL') } catch (_) {}
+            }, 1000)
+          } catch (_) {}
+        }
+      }
     }
     await new Promise(r => setTimeout(r, 1500))
   } catch { }
@@ -265,8 +347,7 @@ async function install({ installPath, createDesktop, createStartMenu, launchAfte
 
     if (launchAfter && executablePath) {
       setTimeout(() => {
-        const { spawn } = require('child_process')
-        spawn(executablePath, [], { detached: true, stdio: 'ignore' }).unref()
+        launchDetached(executablePath)
       }, 500)
     }
 
@@ -326,13 +407,7 @@ async function update({ installPath, updateFile, launchAfter }, onProgress) {
 
     // Resolver versión actualizada
     if (!targetVersion) {
-      try {
-        const pkgJson = path.join(installPath, 'resources', 'app', 'package.json')
-        if (await fs.pathExists(pkgJson)) {
-          const pkg = await fs.readJson(pkgJson)
-          targetVersion = pkg.version
-        }
-      } catch (_) {}
+      targetVersion = readInstalledVersion(installPath)
     }
 
     emit('Updating registration...', 92)
@@ -350,8 +425,7 @@ async function update({ installPath, updateFile, launchAfter }, onProgress) {
     const executablePath = findLauncherExecutable(installPath)
     if (launchAfter && executablePath) {
       setTimeout(() => {
-        const { spawn } = require('child_process')
-        spawn(executablePath, [], { detached: true, stdio: 'ignore' }).unref()
+        launchDetached(executablePath)
       }, 800)
     }
 

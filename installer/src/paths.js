@@ -116,7 +116,7 @@ async function checkIsInstalled() {
   const isLauncherExe = (f) => {
     const lower = f.toLowerCase()
     if (process.platform === 'win32') return lower.endsWith('.exe') && !lower.includes('unins') && !lower.includes('setup')
-    return lower.endsWith('.appimage') && !lower.includes('setup')
+    return (lower.endsWith('.appimage') || lower === 'helloworld-launcher') && !lower.includes('setup')
   }
 
   const hasExecutable = async (dir) => {
