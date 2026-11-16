@@ -71,13 +71,34 @@ const translations = {
         "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
-        "hero.lin_deb_sub": "Debian/Ubuntu (Recommended)",
+        "hero.lin_deb_sub": "Debian / Ubuntu / Linux Mint",
         "hero.lin_deb_arm_title": "DEB ARM64",
         "hero.lin_deb_arm_sub": "Debian/Ubuntu for ARM",
         "hero.lin_app_title": "AppImage x64",
         "hero.lin_app_sub": "Universal Linux",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "Universal Linux for ARM",
+        "hero.download_launcher": "Download Launcher",
+        "hero.download_for_win": "Download for Windows",
+        "hero.download_for_linux": "Download for Linux",
+        "hero.download_for_mac": "Download for macOS",
+        "hero.platforms_hint": "Available for Windows, Linux & macOS",
+        "hero.lin_setup_title": "Universal Installer (.bin)",
+        "hero.lin_setup_sub": "Graphical installer with auto-updates (All distros)",
+        "hero.lin_rpm_title": "RPM x64",
+        "hero.lin_rpm_sub": "Fedora / RHEL / openSUSE",
+        "hero.lin_rpm_arm_title": "RPM ARM64",
+        "hero.lin_rpm_arm_sub": "Fedora / RHEL for ARM",
+        "hero.lin_zip_title": "Portable ZIP x64",
+        "hero.lin_zip_sub": "Universal Linux (Arch / Manjaro / No root)",
+        "hero.lin_zip_arm_title": "Portable ZIP ARM64",
+        "hero.lin_zip_arm_sub": "Universal Linux for ARM",
+        "download_modal.title": "Download HelloWorld Launcher",
+        "download_modal.subtitle": "Select your operating system and choose an installer package.",
+        "download_modal.detected": "Your OS",
+        "download_modal.action_prefix": "Download",
+        "download_modal.all_releases": "View all releases on GitHub",
+        "download_modal.bin_hint": "After downloading, run:",
         "hero.mac_dmg_arm_title": "DMG Apple Silicon",
         "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (Recommended)",
         "hero.mac_dmg_title": "DMG Intel",
@@ -366,13 +387,34 @@ const translations = {
         "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
-        "hero.lin_deb_sub": "Debian/Ubuntu (Recomendado)",
+        "hero.lin_deb_sub": "Debian / Ubuntu / Linux Mint",
         "hero.lin_deb_arm_title": "DEB ARM64",
         "hero.lin_deb_arm_sub": "Debian/Ubuntu para ARM",
         "hero.lin_app_title": "AppImage x64",
         "hero.lin_app_sub": "Linux Universal",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "Linux Universal para ARM",
+        "hero.download_launcher": "Descargar Launcher",
+        "hero.download_for_win": "Descargar para Windows",
+        "hero.download_for_linux": "Descargar para Linux",
+        "hero.download_for_mac": "Descargar para macOS",
+        "hero.platforms_hint": "Disponible para Windows, Linux y macOS",
+        "hero.lin_setup_title": "Instalador Universal (.bin)",
+        "hero.lin_setup_sub": "Instalador gráfico con actualizaciones automáticas (Todas las distros)",
+        "hero.lin_rpm_title": "RPM x64",
+        "hero.lin_rpm_sub": "Fedora / RHEL / openSUSE",
+        "hero.lin_rpm_arm_title": "RPM ARM64",
+        "hero.lin_rpm_arm_sub": "Fedora / RHEL para ARM",
+        "hero.lin_zip_title": "ZIP Portable x64",
+        "hero.lin_zip_sub": "Linux Universal (Arch / Manjaro / Sin root)",
+        "hero.lin_zip_arm_title": "ZIP Portable ARM64",
+        "hero.lin_zip_arm_sub": "Linux Universal para ARM",
+        "download_modal.title": "Descargar HelloWorld Launcher",
+        "download_modal.subtitle": "Selecciona tu sistema operativo y elige el paquete de instalación.",
+        "download_modal.detected": "Tu sistema",
+        "download_modal.action_prefix": "Descargar",
+        "download_modal.all_releases": "Ver todas las versiones en GitHub",
+        "download_modal.bin_hint": "Después de descargar, ejecuta:",
         "hero.mac_dmg_arm_title": "DMG Apple Silicon",
         "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (Recomendado)",
         "hero.mac_dmg_title": "DMG Intel",
@@ -661,13 +703,42 @@ const translations = {
         "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
-        "hero.lin_deb_sub": "Debian/Ubuntu (Recommandé)",
+        "hero.lin_deb_sub": "Debian / Ubuntu / Linux Mint",
         "hero.lin_deb_arm_title": "DEB ARM64",
         "hero.lin_deb_arm_sub": "Debian/Ubuntu pour ARM",
         "hero.lin_app_title": "AppImage x64",
         "hero.lin_app_sub": "Linux Universel",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "Linux Universel pour ARM",
+        "hero.download_launcher": "Télécharger le Launcher",
+        "hero.download_for_win": "Télécharger pour Windows",
+        "hero.download_for_linux": "Télécharger pour Linux",
+        "hero.download_for_mac": "Télécharger pour macOS",
+        "hero.platforms_hint": "Disponible pour Windows, Linux et macOS",
+        "hero.lin_setup_title": "Installateur Universel (.bin)",
+        "hero.lin_setup_sub": "Installateur graphique avec mises à jour auto (Toutes distros)",
+        "hero.lin_rpm_title": "RPM x64",
+        "hero.lin_rpm_sub": "Fedora / RHEL / openSUSE",
+        "hero.lin_rpm_arm_title": "RPM ARM64",
+        "hero.lin_rpm_arm_sub": "Fedora / RHEL pour ARM",
+        "hero.lin_zip_title": "ZIP Portable x64",
+        "hero.lin_zip_sub": "Linux Universel (Arch / Manjaro / Sans root)",
+        "hero.lin_zip_arm_title": "ZIP Portable ARM64",
+        "hero.lin_zip_arm_sub": "Linux Universel pour ARM",
+        "download_modal.title": "Télécharger HelloWorld Launcher",
+        "download_modal.subtitle": "Sélectionnez votre système d'exploitation et choisissez un paquet.",
+        "download_modal.detected": "Votre OS",
+        "download_modal.action_prefix": "Télécharger",
+        "download_modal.all_releases": "Voir toutes les versions sur GitHub",
+        "download_modal.bin_hint": "Après le téléchargement, exécutez :",
+        "hero.mac_dmg_arm_title": "DMG Apple Silicon",
+        "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (Recommandé)",
+        "hero.mac_dmg_title": "DMG Intel",
+        "hero.mac_dmg_sub": "Intel x64",
+        "hero.mac_zip_arm_title": "ZIP Apple Silicon",
+        "hero.mac_zip_arm_sub": "Archive pour Apple Silicon",
+        "hero.mac_zip_title": "ZIP Intel",
+        "hero.mac_zip_sub": "Archive pour Intel",
         "hero.os_warning": "<i class=\"bi bi-info-circle\" style=\"margin-right: 5px;\"></i> Vous naviguez depuis <strong><span id=\"detectedOSName\">OS</span></strong>. Les installateurs suivants peuvent être incompatibles.",
         "hero.stats_downloads": "Téléchargements",
         "hero.stats_rating": "<span style=\"font-size: 0.9rem; font-weight: 500; opacity: 0.9;\">/5 Note</span>",
@@ -948,13 +1019,42 @@ const translations = {
         "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
-        "hero.lin_deb_sub": "Debian/Ubuntu (Empfohlen)",
+        "hero.lin_deb_sub": "Debian / Ubuntu / Linux Mint",
         "hero.lin_deb_arm_title": "DEB ARM64",
         "hero.lin_deb_arm_sub": "Debian/Ubuntu für ARM",
         "hero.lin_app_title": "AppImage x64",
         "hero.lin_app_sub": "Universelles Linux",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "Universelles Linux für ARM",
+        "hero.download_launcher": "Launcher Herunterladen",
+        "hero.download_for_win": "Für Windows Herunterladen",
+        "hero.download_for_linux": "Für Linux Herunterladen",
+        "hero.download_for_mac": "Für macOS Herunterladen",
+        "hero.platforms_hint": "Verfügbar für Windows, Linux & macOS",
+        "hero.lin_setup_title": "Universal-Installer (.bin)",
+        "hero.lin_setup_sub": "Grafischer Installer mit Auto-Updates (Alle Distros)",
+        "hero.lin_rpm_title": "RPM x64",
+        "hero.lin_rpm_sub": "Fedora / RHEL / openSUSE",
+        "hero.lin_rpm_arm_title": "RPM ARM64",
+        "hero.lin_rpm_arm_sub": "Fedora / RHEL für ARM",
+        "hero.lin_zip_title": "Portables ZIP x64",
+        "hero.lin_zip_sub": "Universelles Linux (Arch / Manjaro / Ohne Root)",
+        "hero.lin_zip_arm_title": "Portables ZIP ARM64",
+        "hero.lin_zip_arm_sub": "Universelles Linux für ARM",
+        "download_modal.title": "HelloWorld Launcher Herunterladen",
+        "download_modal.subtitle": "Wähle dein Betriebssystem und ein Installationspaket.",
+        "download_modal.detected": "Dein OS",
+        "download_modal.action_prefix": "Herunterladen:",
+        "download_modal.all_releases": "Alle Versionen auf GitHub ansehen",
+        "download_modal.bin_hint": "Nach dem Download ausführen:",
+        "hero.mac_dmg_arm_title": "DMG Apple Silicon",
+        "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (Empfohlen)",
+        "hero.mac_dmg_title": "DMG Intel",
+        "hero.mac_dmg_sub": "Intel x64",
+        "hero.mac_zip_arm_title": "ZIP Apple Silicon",
+        "hero.mac_zip_arm_sub": "Archiv für Apple Silicon",
+        "hero.mac_zip_title": "ZIP Intel",
+        "hero.mac_zip_sub": "Archiv für Intel",
         "hero.os_warning": "<i class=\"bi bi-info-circle\" style=\"margin-right: 5px;\"></i> Du besuchst uns von <strong><span id=\"detectedOSName\">OS</span></strong>. Folgende Installer sind eventuell inkompatibel.",
         "hero.stats_downloads": "Downloads",
         "hero.stats_rating": "<span style=\"font-size: 0.9rem; font-weight: 500; opacity: 0.9;\">/5 Bewertung</span>",
@@ -1235,13 +1335,42 @@ const translations = {
         "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
-        "hero.lin_deb_sub": "Debian/Ubuntu (Recomendado)",
+        "hero.lin_deb_sub": "Debian / Ubuntu / Linux Mint",
         "hero.lin_deb_arm_title": "DEB ARM64",
         "hero.lin_deb_arm_sub": "Debian/Ubuntu para ARM",
         "hero.lin_app_title": "AppImage x64",
         "hero.lin_app_sub": "Linux Universal",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "Linux Universal para ARM",
+        "hero.download_launcher": "Baixar Launcher",
+        "hero.download_for_win": "Baixar para Windows",
+        "hero.download_for_linux": "Baixar para Linux",
+        "hero.download_for_mac": "Baixar para macOS",
+        "hero.platforms_hint": "Disponível para Windows, Linux e macOS",
+        "hero.lin_setup_title": "Instalador Universal (.bin)",
+        "hero.lin_setup_sub": "Instalador gráfico com atualizações automáticas (Todas as distros)",
+        "hero.lin_rpm_title": "RPM x64",
+        "hero.lin_rpm_sub": "Fedora / RHEL / openSUSE",
+        "hero.lin_rpm_arm_title": "RPM ARM64",
+        "hero.lin_rpm_arm_sub": "Fedora / RHEL para ARM",
+        "hero.lin_zip_title": "ZIP Portátil x64",
+        "hero.lin_zip_sub": "Linux Universal (Arch / Manjaro / Sem root)",
+        "hero.lin_zip_arm_title": "ZIP Portátil ARM64",
+        "hero.lin_zip_arm_sub": "Linux Universal para ARM",
+        "download_modal.title": "Baixar HelloWorld Launcher",
+        "download_modal.subtitle": "Selecione seu sistema operacional e escolha um pacote de instalação.",
+        "download_modal.detected": "Seu SO",
+        "download_modal.action_prefix": "Baixar",
+        "download_modal.all_releases": "Ver todas as versões no GitHub",
+        "download_modal.bin_hint": "Após baixar, execute:",
+        "hero.mac_dmg_arm_title": "DMG Apple Silicon",
+        "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (Recomendado)",
+        "hero.mac_dmg_title": "DMG Intel",
+        "hero.mac_dmg_sub": "Intel x64",
+        "hero.mac_zip_arm_title": "ZIP Apple Silicon",
+        "hero.mac_zip_arm_sub": "Arquivo para Apple Silicon",
+        "hero.mac_zip_title": "ZIP Intel",
+        "hero.mac_zip_sub": "Arquivo para Intel",
         "hero.os_warning": "<i class=\"bi bi-info-circle\" style=\"margin-right: 5px;\"></i> Você está navegando de <strong><span id=\"detectedOSName\">OS</span></strong>. Os instaladores podem não ser compatíveis.",
         "hero.stats_downloads": "Downloads",
         "hero.stats_rating": "<span style=\"font-size: 0.9rem; font-weight: 500; opacity: 0.9;\">/5 Avaliação</span>",
@@ -1522,13 +1651,42 @@ const translations = {
         "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
-        "hero.lin_deb_sub": "Debian/Ubuntu (Consigliato)",
+        "hero.lin_deb_sub": "Debian / Ubuntu / Linux Mint",
         "hero.lin_deb_arm_title": "DEB ARM64",
         "hero.lin_deb_arm_sub": "Debian/Ubuntu per ARM",
         "hero.lin_app_title": "AppImage x64",
         "hero.lin_app_sub": "Linux Universale",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "Linux Universale per ARM",
+        "hero.download_launcher": "Scarica Launcher",
+        "hero.download_for_win": "Scarica per Windows",
+        "hero.download_for_linux": "Scarica per Linux",
+        "hero.download_for_mac": "Scarica per macOS",
+        "hero.platforms_hint": "Disponibile per Windows, Linux e macOS",
+        "hero.lin_setup_title": "Installer Universale (.bin)",
+        "hero.lin_setup_sub": "Installer grafico con aggiornamenti automatici (Tutte le distro)",
+        "hero.lin_rpm_title": "RPM x64",
+        "hero.lin_rpm_sub": "Fedora / RHEL / openSUSE",
+        "hero.lin_rpm_arm_title": "RPM ARM64",
+        "hero.lin_rpm_arm_sub": "Fedora / RHEL per ARM",
+        "hero.lin_zip_title": "ZIP Portatile x64",
+        "hero.lin_zip_sub": "Linux Universale (Arch / Manjaro / Senza root)",
+        "hero.lin_zip_arm_title": "ZIP Portatile ARM64",
+        "hero.lin_zip_arm_sub": "Linux Universale per ARM",
+        "download_modal.title": "Scarica HelloWorld Launcher",
+        "download_modal.subtitle": "Seleziona il tuo sistema operativo e scegli un pacchetto di installazione.",
+        "download_modal.detected": "Il tuo OS",
+        "download_modal.action_prefix": "Scarica",
+        "download_modal.all_releases": "Vedi tutte le versioni su GitHub",
+        "download_modal.bin_hint": "Dopo il download, esegui:",
+        "hero.mac_dmg_arm_title": "DMG Apple Silicon",
+        "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (Consigliato)",
+        "hero.mac_dmg_title": "DMG Intel",
+        "hero.mac_dmg_sub": "Intel x64",
+        "hero.mac_zip_arm_title": "ZIP Apple Silicon",
+        "hero.mac_zip_arm_sub": "Archivio per Apple Silicon",
+        "hero.mac_zip_title": "ZIP Intel",
+        "hero.mac_zip_sub": "Archivio per Intel",
         "hero.os_warning": "<i class=\"bi bi-info-circle\" style=\"margin-right: 5px;\"></i> Stai navigando da <strong><span id=\"detectedOSName\">OS</span></strong>. Gli installer potrebbero non essere compatibili.",
         "hero.stats_downloads": "Download",
         "hero.stats_rating": "<span style=\"font-size: 0.9rem; font-weight: 500; opacity: 0.9;\">/5 Valutazione</span>",
@@ -1809,13 +1967,42 @@ const translations = {
         "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
-        "hero.lin_deb_sub": "Debian/Ubuntu (Рекомендуется)",
+        "hero.lin_deb_sub": "Debian / Ubuntu / Linux Mint",
         "hero.lin_deb_arm_title": "DEB ARM64",
         "hero.lin_deb_arm_sub": "Debian/Ubuntu для ARM",
         "hero.lin_app_title": "AppImage x64",
         "hero.lin_app_sub": "Универсальный Linux",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "Универсальный Linux для ARM",
+        "hero.download_launcher": "Скачать лаунчер",
+        "hero.download_for_win": "Скачать для Windows",
+        "hero.download_for_linux": "Скачать для Linux",
+        "hero.download_for_mac": "Скачать для macOS",
+        "hero.platforms_hint": "Доступно для Windows, Linux и macOS",
+        "hero.lin_setup_title": "Универсальный установщик (.bin)",
+        "hero.lin_setup_sub": "Графический установщик с автообновлением (Все дистрибутивы)",
+        "hero.lin_rpm_title": "RPM x64",
+        "hero.lin_rpm_sub": "Fedora / RHEL / openSUSE",
+        "hero.lin_rpm_arm_title": "RPM ARM64",
+        "hero.lin_rpm_arm_sub": "Fedora / RHEL для ARM",
+        "hero.lin_zip_title": "Портативный ZIP x64",
+        "hero.lin_zip_sub": "Универсальный Linux (Arch / Manjaro / Без root)",
+        "hero.lin_zip_arm_title": "Портативный ZIP ARM64",
+        "hero.lin_zip_arm_sub": "Универсальный Linux для ARM",
+        "download_modal.title": "Скачать HelloWorld Launcher",
+        "download_modal.subtitle": "Выберите вашу операционную систему и нужный пакет установки.",
+        "download_modal.detected": "Ваша ОС",
+        "download_modal.action_prefix": "Скачать",
+        "download_modal.all_releases": "Все релизы на GitHub",
+        "download_modal.bin_hint": "После загрузки выполните:",
+        "hero.mac_dmg_arm_title": "DMG Apple Silicon",
+        "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (Рекомендуется)",
+        "hero.mac_dmg_title": "DMG Intel",
+        "hero.mac_dmg_sub": "Intel x64",
+        "hero.mac_zip_arm_title": "ZIP Apple Silicon",
+        "hero.mac_zip_arm_sub": "Архив для Apple Silicon",
+        "hero.mac_zip_title": "ZIP Intel",
+        "hero.mac_zip_sub": "Архив для Intel",
         "hero.os_warning": "<i class=\"bi bi-info-circle\" style=\"margin-right: 5px;\"></i> Вы зашли с <strong><span id=\"detectedOSName\">OS</span></strong>. Установщики могут быть несовместимы.",
         "hero.stats_downloads": "Загрузок",
         "hero.stats_rating": "<span style=\"font-size: 0.9rem; font-weight: 500; opacity: 0.9;\">/5 Оценка</span>",
@@ -2096,13 +2283,42 @@ const translations = {
         "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
-        "hero.lin_deb_sub": "Debian/Ubuntu (推奨)",
+        "hero.lin_deb_sub": "Debian / Ubuntu / Linux Mint",
         "hero.lin_deb_arm_title": "DEB ARM64",
         "hero.lin_deb_arm_sub": "ARM 向け Debian/Ubuntu",
         "hero.lin_app_title": "AppImage x64",
         "hero.lin_app_sub": "汎用 Linux",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "ARM 向け AppImage",
+        "hero.download_launcher": "ランチャーをダウンロード",
+        "hero.download_for_win": "Windows 版をダウンロード",
+        "hero.download_for_linux": "Linux 版をダウンロード",
+        "hero.download_for_mac": "macOS 版をダウンロード",
+        "hero.platforms_hint": "Windows・Linux・macOS 対応",
+        "hero.lin_setup_title": "ユニバーサルインストーラー (.bin)",
+        "hero.lin_setup_sub": "自動更新対応の GUI インストーラー (全ディストリビューション)",
+        "hero.lin_rpm_title": "RPM x64",
+        "hero.lin_rpm_sub": "Fedora / RHEL / openSUSE",
+        "hero.lin_rpm_arm_title": "RPM ARM64",
+        "hero.lin_rpm_arm_sub": "ARM 向け Fedora / RHEL",
+        "hero.lin_zip_title": "ポータブル ZIP x64",
+        "hero.lin_zip_sub": "ユニバーサル Linux (Arch / Manjaro / root 不要)",
+        "hero.lin_zip_arm_title": "ポータブル ZIP ARM64",
+        "hero.lin_zip_arm_sub": "ARM 向けユニバーサル Linux",
+        "download_modal.title": "HelloWorld Launcher をダウンロード",
+        "download_modal.subtitle": "OS とインストーラーパッケージを選択してください。",
+        "download_modal.detected": "現在の OS",
+        "download_modal.action_prefix": "ダウンロード:",
+        "download_modal.all_releases": "GitHub ですべてのリリースを見る",
+        "download_modal.bin_hint": "ダウンロード後に実行:",
+        "hero.mac_dmg_arm_title": "DMG Apple Silicon",
+        "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (推奨)",
+        "hero.mac_dmg_title": "DMG Intel",
+        "hero.mac_dmg_sub": "Intel x64",
+        "hero.mac_zip_arm_title": "ZIP Apple Silicon",
+        "hero.mac_zip_arm_sub": "Apple Silicon 用アーカイブ",
+        "hero.mac_zip_title": "ZIP Intel",
+        "hero.mac_zip_sub": "Intel 用アーカイブ",
         "hero.os_warning": "<i class=\"bi bi-info-circle\" style=\"margin-right: 5px;\"></i> <strong><span id=\"detectedOSName\">OS</span></strong> からアクセスしています。以下のインストーラーは互換性がない場合があります。",
         "hero.stats_downloads": "ダウンロード",
         "hero.stats_rating": "<span style=\"font-size: 0.9rem; font-weight: 500; opacity: 0.9;\">/5 評価</span>",
@@ -2383,13 +2599,42 @@ const translations = {
         "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
-        "hero.lin_deb_sub": "Debian/Ubuntu (推荐)",
+        "hero.lin_deb_sub": "Debian / Ubuntu / Linux Mint",
         "hero.lin_deb_arm_title": "DEB ARM64",
         "hero.lin_deb_arm_sub": "ARM 版 Debian/Ubuntu",
         "hero.lin_app_title": "AppImage x64",
         "hero.lin_app_sub": "通用 Linux",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "ARM 版 AppImage",
+        "hero.download_launcher": "下载启动器",
+        "hero.download_for_win": "下载 Windows 版",
+        "hero.download_for_linux": "下载 Linux 版",
+        "hero.download_for_mac": "下载 macOS 版",
+        "hero.platforms_hint": "支持 Windows、Linux 和 macOS",
+        "hero.lin_setup_title": "通用安装程序 (.bin)",
+        "hero.lin_setup_sub": "支持自动更新的图形安装程序 (全发行版通用)",
+        "hero.lin_rpm_title": "RPM x64",
+        "hero.lin_rpm_sub": "Fedora / RHEL / openSUSE",
+        "hero.lin_rpm_arm_title": "RPM ARM64",
+        "hero.lin_rpm_arm_sub": "ARM 版 Fedora / RHEL",
+        "hero.lin_zip_title": "便携 ZIP x64",
+        "hero.lin_zip_sub": "通用 Linux (Arch / Manjaro / 无需 root)",
+        "hero.lin_zip_arm_title": "便携 ZIP ARM64",
+        "hero.lin_zip_arm_sub": "ARM 版通用 Linux",
+        "download_modal.title": "下载 HelloWorld Launcher",
+        "download_modal.subtitle": "选择你的操作系统和安装包格式。",
+        "download_modal.detected": "当前系统",
+        "download_modal.action_prefix": "下载",
+        "download_modal.all_releases": "在 GitHub 上查看所有版本",
+        "download_modal.bin_hint": "下载后运行:",
+        "hero.mac_dmg_arm_title": "DMG Apple Silicon",
+        "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (推荐)",
+        "hero.mac_dmg_title": "DMG Intel",
+        "hero.mac_dmg_sub": "Intel x64",
+        "hero.mac_zip_arm_title": "ZIP Apple Silicon",
+        "hero.mac_zip_arm_sub": "Apple Silicon 压缩包",
+        "hero.mac_zip_title": "ZIP Intel",
+        "hero.mac_zip_sub": "Intel 压缩包",
         "hero.os_warning": "<i class=\"bi bi-info-circle\" style=\"margin-right: 5px;\"></i> 检测到您正在使用 <strong><span id=\"detectedOSName\">OS</span></strong>。以下安装包可能不兼容。",
         "hero.stats_downloads": "次下载",
         "hero.stats_rating": "<span style=\"font-size: 0.9rem; font-weight: 500; opacity: 0.9;\">/5 评分</span>",
@@ -2670,13 +2915,42 @@ const translations = {
         "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
-        "hero.lin_deb_sub": "Debian/Ubuntu (권장)",
+        "hero.lin_deb_sub": "Debian / Ubuntu / Linux Mint",
         "hero.lin_deb_arm_title": "DEB ARM64",
         "hero.lin_deb_arm_sub": "ARM용 Debian/Ubuntu",
         "hero.lin_app_title": "AppImage x64",
         "hero.lin_app_sub": "범용 Linux",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "ARM용 AppImage",
+        "hero.download_launcher": "런처 다운로드",
+        "hero.download_for_win": "Windows용 다운로드",
+        "hero.download_for_linux": "Linux용 다운로드",
+        "hero.download_for_mac": "macOS용 다운로드",
+        "hero.platforms_hint": "Windows, Linux 및 macOS 지원",
+        "hero.lin_setup_title": "범용 설치 프로그램 (.bin)",
+        "hero.lin_setup_sub": "자동 업데이트 지원 GUI 설치 프로그램 (모든 배포판)",
+        "hero.lin_rpm_title": "RPM x64",
+        "hero.lin_rpm_sub": "Fedora / RHEL / openSUSE",
+        "hero.lin_rpm_arm_title": "RPM ARM64",
+        "hero.lin_rpm_arm_sub": "ARM용 Fedora / RHEL",
+        "hero.lin_zip_title": "포터블 ZIP x64",
+        "hero.lin_zip_sub": "범용 Linux (Arch / Manjaro / 루트 권한 불필요)",
+        "hero.lin_zip_arm_title": "포터블 ZIP ARM64",
+        "hero.lin_zip_arm_sub": "ARM용 범용 Linux",
+        "download_modal.title": "HelloWorld Launcher 다운로드",
+        "download_modal.subtitle": "운영체제와 설치 패키지를 선택하세요.",
+        "download_modal.detected": "내 OS",
+        "download_modal.action_prefix": "다운로드:",
+        "download_modal.all_releases": "GitHub에서 모든 릴리스 보기",
+        "download_modal.bin_hint": "다운로드 후 실행:",
+        "hero.mac_dmg_arm_title": "DMG Apple Silicon",
+        "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (권장)",
+        "hero.mac_dmg_title": "DMG Intel",
+        "hero.mac_dmg_sub": "Intel x64",
+        "hero.mac_zip_arm_title": "ZIP Apple Silicon",
+        "hero.mac_zip_arm_sub": "Apple Silicon용 압축 파일",
+        "hero.mac_zip_title": "ZIP Intel",
+        "hero.mac_zip_sub": "Intel용 압축 파일",
         "hero.os_warning": "<i class=\"bi bi-info-circle\" style=\"margin-right: 5px;\"></i> 현재 <strong><span id=\"detectedOSName\">OS</span></strong>에서 접속 중입니다. 다음 설치 파일과 호환되지 않을 수 있습니다.",
         "hero.stats_downloads": "다운로드",
         "hero.stats_rating": "<span style=\"font-size: 0.9rem; font-weight: 500; opacity: 0.9;\">/5 평점</span>",
@@ -2957,13 +3231,42 @@ const translations = {
         "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
-        "hero.lin_deb_sub": "Debian/Ubuntu (Zalecany)",
+        "hero.lin_deb_sub": "Debian / Ubuntu / Linux Mint",
         "hero.lin_deb_arm_title": "DEB ARM64",
         "hero.lin_deb_arm_sub": "Debian/Ubuntu dla ARM",
         "hero.lin_app_title": "AppImage x64",
         "hero.lin_app_sub": "Uniwersalny Linux",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "Uniwersalny Linux dla ARM",
+        "hero.download_launcher": "Pobierz Launcher",
+        "hero.download_for_win": "Pobierz dla Windows",
+        "hero.download_for_linux": "Pobierz dla Linux",
+        "hero.download_for_mac": "Pobierz dla macOS",
+        "hero.platforms_hint": "Dostępny na Windows, Linux i macOS",
+        "hero.lin_setup_title": "Uniwersalny Instalator (.bin)",
+        "hero.lin_setup_sub": "Instalator graficzny z auto-aktualizacjami (Wszystkie dystrybucje)",
+        "hero.lin_rpm_title": "RPM x64",
+        "hero.lin_rpm_sub": "Fedora / RHEL / openSUSE",
+        "hero.lin_rpm_arm_title": "RPM ARM64",
+        "hero.lin_rpm_arm_sub": "Fedora / RHEL dla ARM",
+        "hero.lin_zip_title": "Przenośny ZIP x64",
+        "hero.lin_zip_sub": "Uniwersalny Linux (Arch / Manjaro / Bez roota)",
+        "hero.lin_zip_arm_title": "Przenośny ZIP ARM64",
+        "hero.lin_zip_arm_sub": "Uniwersalny Linux dla ARM",
+        "download_modal.title": "Pobierz HelloWorld Launcher",
+        "download_modal.subtitle": "Wybierz swój system operacyjny i pakiet instalacyjny.",
+        "download_modal.detected": "Twój OS",
+        "download_modal.action_prefix": "Pobierz",
+        "download_modal.all_releases": "Zobacz wszystkie wydania na GitHubie",
+        "download_modal.bin_hint": "Po pobraniu uruchom:",
+        "hero.mac_dmg_arm_title": "DMG Apple Silicon",
+        "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (Zalecany)",
+        "hero.mac_dmg_title": "DMG Intel",
+        "hero.mac_dmg_sub": "Intel x64",
+        "hero.mac_zip_arm_title": "ZIP Apple Silicon",
+        "hero.mac_zip_arm_sub": "Archiwum dla Apple Silicon",
+        "hero.mac_zip_title": "ZIP Intel",
+        "hero.mac_zip_sub": "Archiwum dla Intel",
         "hero.os_warning": "<i class=\"bi bi-info-circle\" style=\"margin-right: 5px;\"></i> Przeglądasz z systemu <strong><span id=\"detectedOSName\">OS</span></strong>. Następujące instalatory mogą być niezgodne.",
         "hero.stats_downloads": "Pobrań",
         "hero.stats_rating": "<span style=\"font-size: 0.9rem; font-weight: 500; opacity: 0.9;\">/5 Ocena</span>",
@@ -3244,13 +3547,42 @@ const translations = {
         "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
-        "hero.lin_deb_sub": "Debian/Ubuntu (Aanbevolen)",
+        "hero.lin_deb_sub": "Debian / Ubuntu / Linux Mint",
         "hero.lin_deb_arm_title": "DEB ARM64",
         "hero.lin_deb_arm_sub": "Debian/Ubuntu voor ARM",
         "hero.lin_app_title": "AppImage x64",
         "hero.lin_app_sub": "Universeel Linux",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "Universeel Linux voor ARM",
+        "hero.download_launcher": "Launcher Downloaden",
+        "hero.download_for_win": "Downloaden voor Windows",
+        "hero.download_for_linux": "Downloaden voor Linux",
+        "hero.download_for_mac": "Downloaden voor macOS",
+        "hero.platforms_hint": "Beschikbaar voor Windows, Linux & macOS",
+        "hero.lin_setup_title": "Universele Installer (.bin)",
+        "hero.lin_setup_sub": "Grafische installer met auto-updates (Alle distro's)",
+        "hero.lin_rpm_title": "RPM x64",
+        "hero.lin_rpm_sub": "Fedora / RHEL / openSUSE",
+        "hero.lin_rpm_arm_title": "RPM ARM64",
+        "hero.lin_rpm_arm_sub": "Fedora / RHEL voor ARM",
+        "hero.lin_zip_title": "Draagbare ZIP x64",
+        "hero.lin_zip_sub": "Universele Linux (Arch / Manjaro / Zonder root)",
+        "hero.lin_zip_arm_title": "Draagbare ZIP ARM64",
+        "hero.lin_zip_arm_sub": "Universele Linux voor ARM",
+        "download_modal.title": "HelloWorld Launcher Downloaden",
+        "download_modal.subtitle": "Selecteer je besturingssysteem en kies een installatiepakket.",
+        "download_modal.detected": "Jouw OS",
+        "download_modal.action_prefix": "Download",
+        "download_modal.all_releases": "Alle releases bekijken op GitHub",
+        "download_modal.bin_hint": "Voer na het downloaden uit:",
+        "hero.mac_dmg_arm_title": "DMG Apple Silicon",
+        "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (Aanbevolen)",
+        "hero.mac_dmg_title": "DMG Intel",
+        "hero.mac_dmg_sub": "Intel x64",
+        "hero.mac_zip_arm_title": "ZIP Apple Silicon",
+        "hero.mac_zip_arm_sub": "Archief voor Apple Silicon",
+        "hero.mac_zip_title": "ZIP Intel",
+        "hero.mac_zip_sub": "Archief voor Intel",
         "hero.os_warning": "<i class=\"bi bi-info-circle\" style=\"margin-right: 5px;\"></i> Je bezoekt ons vanaf <strong><span id=\"detectedOSName\">OS</span></strong>. De installatiebestanden zijn mogelijk niet compatibel.",
         "hero.stats_downloads": "Downloads",
         "hero.stats_rating": "<span style=\"font-size: 0.9rem; font-weight: 500; opacity: 0.9;\">/5 Beoordeling</span>",
@@ -3531,13 +3863,42 @@ const translations = {
         "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
-        "hero.lin_deb_sub": "Debian/Ubuntu (Önerilen)",
+        "hero.lin_deb_sub": "Debian / Ubuntu / Linux Mint",
         "hero.lin_deb_arm_title": "DEB ARM64",
         "hero.lin_deb_arm_sub": "ARM için Debian/Ubuntu",
         "hero.lin_app_title": "AppImage x64",
         "hero.lin_app_sub": "Evrensel Linux",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "ARM için Evrensel Linux",
+        "hero.download_launcher": "Başlatıcıyı İndir",
+        "hero.download_for_win": "Windows için İndir",
+        "hero.download_for_linux": "Linux için İndir",
+        "hero.download_for_mac": "macOS için İndir",
+        "hero.platforms_hint": "Windows, Linux ve macOS için mevcut",
+        "hero.lin_setup_title": "Evrensel Yükleyici (.bin)",
+        "hero.lin_setup_sub": "Otomatik güncellemeli grafiksel yükleyici (Tüm dağıtımlar)",
+        "hero.lin_rpm_title": "RPM x64",
+        "hero.lin_rpm_sub": "Fedora / RHEL / openSUSE",
+        "hero.lin_rpm_arm_title": "RPM ARM64",
+        "hero.lin_rpm_arm_sub": "ARM için Fedora / RHEL",
+        "hero.lin_zip_title": "Taşınabilir ZIP x64",
+        "hero.lin_zip_sub": "Evrensel Linux (Arch / Manjaro / Root gerekmez)",
+        "hero.lin_zip_arm_title": "Taşınabilir ZIP ARM64",
+        "hero.lin_zip_arm_sub": "ARM için Evrensel Linux",
+        "download_modal.title": "HelloWorld Launcher İndir",
+        "download_modal.subtitle": "İşletim sisteminizi seçin ve bir kurulum paketi belirleyin.",
+        "download_modal.detected": "Sisteminiz",
+        "download_modal.action_prefix": "İndir:",
+        "download_modal.all_releases": "GitHub'da tüm sürümleri gör",
+        "download_modal.bin_hint": "İndirdikten sonra çalıştırın:",
+        "hero.mac_dmg_arm_title": "DMG Apple Silicon",
+        "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (Önerilen)",
+        "hero.mac_dmg_title": "DMG Intel",
+        "hero.mac_dmg_sub": "Intel x64",
+        "hero.mac_zip_arm_title": "ZIP Apple Silicon",
+        "hero.mac_zip_arm_sub": "Apple Silicon için Arşiv",
+        "hero.mac_zip_title": "ZIP Intel",
+        "hero.mac_zip_sub": "Intel için Arşiv",
         "hero.os_warning": "<i class=\"bi bi-info-circle\" style=\"margin-right: 5px;\"></i> <strong><span id=\"detectedOSName\">OS</span></strong> üzerinden bağlanıyorsunuz. Yükleyiciler uyumsuz olabilir.",
         "hero.stats_downloads": "İndirme",
         "hero.stats_rating": "<span style=\"font-size: 0.9rem; font-weight: 500; opacity: 0.9;\">/5 Puan</span>",
@@ -3818,13 +4179,42 @@ const translations = {
         "hero.download_linux_btn": "<i class=\"fa-brands fa-linux\" style=\"font-size: 1.1rem; margin-right: 5px;\"></i> Linux <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.download_mac_btn": "<i class=\"bi bi-apple\"></i> macOS <i class=\"bi bi-chevron-down dropdown-arrow\"></i>",
         "hero.lin_deb_title": "DEB x64",
-        "hero.lin_deb_sub": "Debian/Ubuntu (موصى به)",
+        "hero.lin_deb_sub": "Debian / Ubuntu / Linux Mint",
         "hero.lin_deb_arm_title": "DEB ARM64",
         "hero.lin_deb_arm_sub": "Debian/Ubuntu لأجهزة ARM",
         "hero.lin_app_title": "AppImage x64",
         "hero.lin_app_sub": "لينكس شامل",
         "hero.lin_app_arm_title": "AppImage ARM64",
         "hero.lin_app_arm_sub": "AppImage شامل لأجهزة ARM",
+        "hero.download_launcher": "تحميل المشغّل",
+        "hero.download_for_win": "التحميل لنظام Windows",
+        "hero.download_for_linux": "التحميل لنظام Linux",
+        "hero.download_for_mac": "التحميل لنظام macOS",
+        "hero.platforms_hint": "متوفر لأنظمة Windows و Linux و macOS",
+        "hero.lin_setup_title": "المثبّت الشامل (.bin)",
+        "hero.lin_setup_sub": "مثبّت رسومي مع تحديثات تلقائية (لجميع التوزيعات)",
+        "hero.lin_rpm_title": "RPM x64",
+        "hero.lin_rpm_sub": "Fedora / RHEL / openSUSE",
+        "hero.lin_rpm_arm_title": "RPM ARM64",
+        "hero.lin_rpm_arm_sub": "Fedora / RHEL لأجهزة ARM",
+        "hero.lin_zip_title": "ملف ZIP محمول x64",
+        "hero.lin_zip_sub": "لينكس شامل (Arch / Manjaro / بدون صلاحيات root)",
+        "hero.lin_zip_arm_title": "ملف ZIP محمول ARM64",
+        "hero.lin_zip_arm_sub": "لينكس شامل لأجهزة ARM",
+        "download_modal.title": "تحميل HelloWorld Launcher",
+        "download_modal.subtitle": "اختر نظام التشغيل وحزمة التثبيت المناسبة.",
+        "download_modal.detected": "نظامك",
+        "download_modal.action_prefix": "تحميل",
+        "download_modal.all_releases": "عرض جميع الإصدارات على GitHub",
+        "download_modal.bin_hint": "بعد التحميل، نفّذ الأمر:",
+        "hero.mac_dmg_arm_title": "DMG Apple Silicon",
+        "hero.mac_dmg_arm_sub": "M1/M2/M3/M4 (موصى به)",
+        "hero.mac_dmg_title": "DMG Intel",
+        "hero.mac_dmg_sub": "Intel x64",
+        "hero.mac_zip_arm_title": "ZIP Apple Silicon",
+        "hero.mac_zip_arm_sub": "أرشيف لأجهزة Apple Silicon",
+        "hero.mac_zip_title": "ZIP Intel",
+        "hero.mac_zip_sub": "أرشيف لأجهزة Intel",
         "hero.os_warning": "<i class=\"bi bi-info-circle\" style=\"margin-right: 5px;\"></i> أنت تتصفح من <strong><span id=\"detectedOSName\">OS</span></strong>. قد لا تكون ملفات التثبيت متوافقة.",
         "hero.stats_downloads": "تنزيل",
         "hero.stats_rating": "<span style=\"font-size: 0.9rem; font-weight: 500; opacity: 0.9;\">/5 تقييم</span>",
@@ -4127,6 +4517,7 @@ function changeLanguage(lang) {
     if (typeof window.updateNavDownloadBtn === 'function') window.updateNavDownloadBtn();
     if (typeof window.updateHeroButtons === 'function') window.updateHeroButtons();
     if (typeof window.updateOSWarning === 'function') window.updateOSWarning();
+    if (typeof window.updateDownloadModalUI === 'function') window.updateDownloadModalUI();
     if (typeof window.reRenderPlaystyleTags === 'function') window.reRenderPlaystyleTags();
     const badge = document.querySelector('.badge');
     if (badge && window.currentReleaseTag) {
@@ -4391,6 +4782,51 @@ async function init() {
             removeLoader();
         });
     }
+
+    // Global Modal Background Scroll Lock (prevents page behind any modal from scrolling)
+    function syncModalScrollLock() {
+        const hasActiveModal = Boolean(document.querySelector('.review-modal.active'));
+        const isLocked = document.body.classList.contains('modal-open');
+        if (hasActiveModal && !isLocked) {
+            const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+            if (scrollbarWidth > 0) {
+                document.body.style.paddingRight = `${scrollbarWidth}px`;
+            }
+            document.documentElement.classList.add('modal-open');
+            document.body.classList.add('modal-open');
+        } else if (!hasActiveModal && isLocked) {
+            document.documentElement.classList.remove('modal-open');
+            document.body.classList.remove('modal-open');
+            document.body.style.paddingRight = '';
+        }
+    }
+
+    const modalObserver = new MutationObserver(() => syncModalScrollLock());
+    modalObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['class'],
+        childList: true,
+        subtree: true
+    });
+    syncModalScrollLock();
+
+    // Prevent wheel/touchmove on modal backdrop from scrolling background page on mobile/desktop
+    document.addEventListener('wheel', (e) => {
+        const activeModal = e.target && e.target.closest ? e.target.closest('.review-modal.active') : null;
+        if (!activeModal) return;
+        const scrollable = e.target.closest('.dl-modal-body, .review-modal-content');
+        if (!scrollable) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!document.body.classList.contains('modal-open')) return;
+        const scrollable = e.target && e.target.closest ? e.target.closest('.dl-modal-body, .review-modal-content') : null;
+        if (!scrollable) {
+            e.preventDefault();
+        }
+    }, { passive: false });
 
     // Modal UI Elements
     const authModal = document.getElementById('authModal');
@@ -5692,15 +6128,20 @@ async function init() {
 
     const repoName = 'HelloWorld-Launcher';
     const heroBtn = document.getElementById('heroDownloadBtn');
-    const heroLinuxBtn = document.getElementById('heroDownloadLinuxBtn');
-    const heroMacBtn = document.getElementById('heroDownloadMacBtn');
     const navBtn = document.getElementById('navDownloadBtn');
     const heroButtonsContainer = document.querySelector('.hero-buttons');
-    const osWarningContainer = document.getElementById('osWarningContainer');
-    const detectedOSName = document.getElementById('detectedOSName');
-    const windowsDropdown = document.getElementById('windowsDropdown');
-    const linuxDropdown = document.getElementById('linuxDropdown');
-    const macDropdown = document.getElementById('macDropdown');
+    const downloadModal = document.getElementById('downloadModal');
+    const closeDownloadModalBtn = document.getElementById('closeDownloadModal');
+    const dlOsTabs = document.querySelectorAll('.dl-os-tab');
+    const dlOsPanels = document.querySelectorAll('.dl-os-panel');
+    const dlFileOptions = document.querySelectorAll('.dl-file-option[data-target]');
+    const dlModalActionBtn = document.getElementById('dlModalActionBtn');
+    const dlModalActionText = document.getElementById('dlModalActionText');
+    const dlModalVersionBadge = document.getElementById('dlModalVersionBadge');
+    const dlModalAllReleasesLink = document.getElementById('dlModalAllReleasesLink');
+    const dlBinHint = document.getElementById('dlBinHint');
+    const dlBinCmdCode = document.getElementById('dlBinCmdCode');
+    const copyDlBinCmdBtn = document.getElementById('copyDlBinCmdBtn');
 
     const iconLinux = `<i class="fa-brands fa-linux" style="font-size: 1.1rem; margin-right: 5px;"></i>`;
     const iconMac = `<i class="bi bi-apple" style="font-size: 1.1rem; margin-right: 5px;"></i>`;
@@ -5717,6 +6158,7 @@ async function init() {
 
     const userOS = detectOS();
     const isMobileOS = userOS === "Android" || userOS === "iOS";
+    const detectedTabOs = userOS === "Linux" ? "linux" : (userOS === "MacOS" ? "macos" : "windows");
 
     function updateOSWarning() {
         const container = document.getElementById('osWarningContainer');
@@ -5754,36 +6196,32 @@ async function init() {
 
     let latestTagName = '';
     window.currentReleaseTag = '';
+    let activeModalOs = detectedTabOs;
+    const selectedTargetByOs = {
+        windows: 'win-setup-x64',
+        linux: 'linux-setup-bin',
+        macos: 'mac-dmg-arm64'
+    };
 
     function updateHeroButtons() {
-        if (!heroBtn || !heroLinuxBtn) return;
-        const winTitle = t('hero.download_win', 'Windows');
-        const linuxTitle = t('hero.download_linux', 'Linux');
-        const macTitle = t('hero.download_mac', 'macOS');
+        if (!heroBtn) return;
 
-        // Reset all buttons to secondary style
-        heroBtn.className = "btn btn-secondary btn-lg dropdown-btn";
-        heroBtn.innerHTML = `<i class="bi bi-windows"></i> ${winTitle}<i class="bi bi-chevron-down dropdown-arrow"></i>`;
+        let iconHtml = `<i class="bi bi-download"></i>`;
+        let labelText = t('hero.download_launcher', 'Download Launcher');
 
-        heroLinuxBtn.className = "btn btn-secondary btn-lg dropdown-btn";
-        heroLinuxBtn.innerHTML = `${iconLinux} ${linuxTitle}<i class="bi bi-chevron-down dropdown-arrow"></i>`;
-
-        if (heroMacBtn) {
-            heroMacBtn.className = "btn btn-secondary btn-lg dropdown-btn";
-            heroMacBtn.innerHTML = `${iconMac} ${macTitle}<i class="bi bi-chevron-down dropdown-arrow"></i>`;
-        }
-
-        // Highlight matching OS button with primary style + shine
         if (userOS === "Windows") {
-            heroBtn.className = "btn btn-primary btn-lg dropdown-btn";
-            heroBtn.innerHTML = `<i class="bi bi-windows"></i> ${winTitle}<i class="bi bi-chevron-down dropdown-arrow"></i><div class="btn-shine"></div>`;
+            iconHtml = `<i class="bi bi-windows"></i>`;
+            labelText = t('hero.download_for_win', 'Download for Windows');
         } else if (userOS === "Linux") {
-            heroLinuxBtn.className = "btn btn-primary btn-lg dropdown-btn";
-            heroLinuxBtn.innerHTML = `${iconLinux} ${linuxTitle}<i class="bi bi-chevron-down dropdown-arrow"></i><div class="btn-shine"></div>`;
-        } else if (userOS === "MacOS" && heroMacBtn) {
-            heroMacBtn.className = "btn btn-primary btn-lg dropdown-btn";
-            heroMacBtn.innerHTML = `${iconMac} ${macTitle}<i class="bi bi-chevron-down dropdown-arrow"></i><div class="btn-shine"></div>`;
+            iconHtml = `<i class="fa-brands fa-linux"></i>`;
+            labelText = t('hero.download_for_linux', 'Download for Linux');
+        } else if (userOS === "MacOS") {
+            iconHtml = `<i class="bi bi-apple"></i>`;
+            labelText = t('hero.download_for_mac', 'Download for macOS');
         }
+
+        heroBtn.className = "btn btn-primary btn-lg hero-single-download-btn";
+        heroBtn.innerHTML = `${iconHtml} <span>${labelText}</span><div class="btn-shine"></div>`;
     }
 
     function updateNavDownloadBtn() {
@@ -5806,86 +6244,195 @@ async function init() {
         }
     }
 
+    function getVisibleOptionsForOs(os) {
+        const panel = document.querySelector(`.dl-os-panel[data-os-panel="${os}"]`);
+        if (!panel) return [];
+        return Array.from(panel.querySelectorAll('.dl-file-option[data-target]')).filter(el => el.style.display !== 'none');
+    }
+
+    function ensureSelectedForOs(os) {
+        const visible = getVisibleOptionsForOs(os);
+        if (visible.length === 0) return null;
+
+        const currentTarget = selectedTargetByOs[os];
+        let match = visible.find(el => el.getAttribute('data-target') === currentTarget);
+        if (!match) {
+            match = visible.find(el => el.classList.contains('recommended')) || visible[0];
+        }
+        if (match) {
+            selectedTargetByOs[os] = match.getAttribute('data-target');
+        }
+        return match;
+    }
+
+    function updateDownloadModalUI() {
+        if (!downloadModal) return;
+
+        dlOsTabs.forEach(tab => {
+            const tabOs = tab.getAttribute('data-os');
+            const isActive = tabOs === activeModalOs;
+            tab.classList.toggle('active', isActive);
+            tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+
+        dlOsPanels.forEach(panel => {
+            panel.classList.toggle('active', panel.getAttribute('data-os-panel') === activeModalOs);
+        });
+
+        const selectedEl = ensureSelectedForOs(activeModalOs);
+        const activeTarget = selectedEl ? selectedEl.getAttribute('data-target') : '';
+
+        dlFileOptions.forEach(opt => {
+            const isSel = opt.getAttribute('data-os') === activeModalOs && opt.getAttribute('data-target') === activeTarget;
+            opt.classList.toggle('selected', isSel);
+            opt.setAttribute('aria-pressed', isSel ? 'true' : 'false');
+        });
+
+        // Update primary Download CTA
+        if (dlModalActionBtn && dlModalActionText) {
+            const fallbackUrl = latestTagName
+                ? `https://github.com/${repoOwner}/${repoName}/releases/tag/${latestTagName}`
+                : `https://github.com/${repoOwner}/${repoName}/releases/latest`;
+            const url = (selectedEl && selectedEl.getAttribute('data-url')) || fallbackUrl;
+            const titleEl = selectedEl ? selectedEl.querySelector('.dl-file-title') : null;
+            const selectedTitle = titleEl ? titleEl.textContent.trim() : '';
+            const prefix = t('download_modal.action_prefix', 'Download');
+
+            dlModalActionBtn.href = url;
+            dlModalActionText.textContent = selectedTitle ? `${prefix} ${selectedTitle}` : prefix;
+        }
+
+        // Toggle .bin execution hint when Linux .bin installer is selected
+        if (dlBinHint) {
+            dlBinHint.style.display = (activeModalOs === 'linux' && activeTarget === 'linux-setup-bin') ? 'block' : 'none';
+        }
+    }
+
+    function openDownloadModal(initialOs) {
+        if (!downloadModal) return;
+        activeModalOs = initialOs || detectedTabOs;
+        updateDownloadModalUI();
+        downloadModal.classList.add('active');
+    }
+
+    function closeDownloadModal() {
+        if (!downloadModal) return;
+        downloadModal.classList.remove('active');
+    }
+
     window.updateHeroButtons = updateHeroButtons;
     window.updateNavDownloadBtn = updateNavDownloadBtn;
+    window.updateDownloadModalUI = updateDownloadModalUI;
+    window.openDownloadModal = openDownloadModal;
 
     // Initial render with current active language
     updateHeroButtons();
     updateNavDownloadBtn();
     updateOSWarning();
+    updateDownloadModalUI();
 
-    // Dropdown functionality
-    function toggleDropdown(dropdown) {
-        if (!dropdown) return;
-        const isActive = dropdown.classList.contains('active');
-        // Close all dropdowns first
-        if (windowsDropdown) windowsDropdown.classList.remove('active');
-        if (linuxDropdown) linuxDropdown.classList.remove('active');
-        if (macDropdown) macDropdown.classList.remove('active');
-        if (heroBtn) heroBtn.classList.remove('active');
-        if (heroLinuxBtn) heroLinuxBtn.classList.remove('active');
-        if (heroMacBtn) heroMacBtn.classList.remove('active');
-        
-        // Toggle the clicked dropdown
-        if (!isActive) {
-            dropdown.classList.add('active');
-            if (dropdown === windowsDropdown && heroBtn) heroBtn.classList.add('active');
-            if (dropdown === linuxDropdown && heroLinuxBtn) heroLinuxBtn.classList.add('active');
-            if (dropdown === macDropdown && heroMacBtn) heroMacBtn.classList.add('active');
-        }
-    }
-
-    // Event listeners for dropdowns
-    if (heroBtn && windowsDropdown) {
+    if (heroBtn) {
         heroBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            e.stopPropagation();
-            toggleDropdown(windowsDropdown);
+            openDownloadModal(detectedTabOs);
         });
     }
 
-    if (heroLinuxBtn && linuxDropdown) {
-        heroLinuxBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleDropdown(linuxDropdown);
+    if (navBtn) {
+        navBtn.addEventListener('click', (e) => {
+            if (downloadModal) {
+                e.preventDefault();
+                openDownloadModal(detectedTabOs);
+            }
         });
     }
 
-    if (heroMacBtn && macDropdown) {
-        heroMacBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleDropdown(macDropdown);
+    if (closeDownloadModalBtn) {
+        closeDownloadModalBtn.addEventListener('click', closeDownloadModal);
+    }
+
+    if (downloadModal) {
+        downloadModal.addEventListener('click', (e) => {
+            if (e.target === downloadModal) {
+                closeDownloadModal();
+            }
         });
     }
 
-    // Close dropdowns when clicking outside
-    document.addEventListener('click', (e) => {
-        if (windowsDropdown && !windowsDropdown.contains(e.target) && e.target !== heroBtn) {
-            windowsDropdown.classList.remove('active');
-            if (heroBtn) heroBtn.classList.remove('active');
-        }
-        if (linuxDropdown && !linuxDropdown.contains(e.target) && e.target !== heroLinuxBtn) {
-            linuxDropdown.classList.remove('active');
-            if (heroLinuxBtn) heroLinuxBtn.classList.remove('active');
-        }
-        if (macDropdown && !macDropdown.contains(e.target) && e.target !== heroMacBtn) {
-            macDropdown.classList.remove('active');
-            if (heroMacBtn) heroMacBtn.classList.remove('active');
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && downloadModal && downloadModal.classList.contains('active')) {
+            closeDownloadModal();
         }
     });
 
+    dlOsTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const os = tab.getAttribute('data-os');
+            if (!os) return;
+            activeModalOs = os;
+            updateDownloadModalUI();
+        });
+    });
+
+    dlFileOptions.forEach(opt => {
+        opt.addEventListener('click', () => {
+            const os = opt.getAttribute('data-os');
+            const target = opt.getAttribute('data-target');
+            if (!os || !target) return;
+            activeModalOs = os;
+            selectedTargetByOs[os] = target;
+            updateDownloadModalUI();
+        });
+    });
+
+    if (copyDlBinCmdBtn && dlBinCmdCode) {
+        copyDlBinCmdBtn.addEventListener('click', async () => {
+            const cmd = dlBinCmdCode.getAttribute('data-copy-cmd') || dlBinCmdCode.textContent.replace(/\s+/g, ' ').trim();
+            try {
+                await navigator.clipboard.writeText(cmd);
+            } catch (_) {
+                const ta = document.createElement('textarea');
+                ta.value = cmd;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+            copyDlBinCmdBtn.classList.add('copied');
+            copyDlBinCmdBtn.innerHTML = '<i class="bi bi-check"></i>';
+            setTimeout(() => {
+                copyDlBinCmdBtn.classList.remove('copied');
+                copyDlBinCmdBtn.innerHTML = '<i class="bi bi-clipboard"></i>';
+            }, 2000);
+        });
+    }
+
+    if (urlParams.get('download') === 'true') {
+        openDownloadModal(detectedTabOs);
+    }
+
     const REMOTE_CONFIG_GIST_URL = "https://gist.githubusercontent.com/abeloskyyy/b50089b634ed09f48c921f9c8126a49f/raw/hwlauncher-info.json";
+
+    function compareSemver(a, b) {
+        const pa = String(a || '').replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+        const pb = String(b || '').replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+        for (let i = 0; i < Math.max(pa.length, pb.length, 3); i++) {
+            const va = pa[i] || 0;
+            const vb = pb[i] || 0;
+            if (va > vb) return 1;
+            if (va < vb) return -1;
+        }
+        return 0;
+    }
 
     async function getLatestRelease() {
         try {
-            let tagName = '';
-            let targetMap = {};
+            let gistTagName = '';
+            let gistMap = {};
 
-            // 1. Try to fetch from remote config Gist first
+            // 1. Fetch remote config Gist first
             try {
-                const gistRes = await fetch(REMOTE_CONFIG_GIST_URL, { cache: 'no-cache' });
+                const gistRes = await fetch(`${REMOTE_CONFIG_GIST_URL}?t=${Date.now()}`, { cache: 'no-cache' });
                 if (gistRes.ok) {
                     const gistData = await gistRes.json();
                     if (gistData && gistData.changelog) {
@@ -5893,28 +6440,31 @@ async function init() {
                         const latestVer = cl.latestVersion;
                         const vEntry = (cl.versions && cl.versions.find(v => v.version === latestVer)) || (cl.versions && cl.versions[0]);
                         if (vEntry && vEntry.downloads) {
-                            tagName = vEntry.tag || (latestVer ? `v${latestVer}` : '');
+                            gistTagName = vEntry.tag || (latestVer ? `v${latestVer}` : '');
                             const d = vEntry.downloads;
                             if (d.windows) {
-                                if (d.windows.setup) targetMap['win-setup-x64'] = d.windows.setup;
-                                if (d.windows.zip) targetMap['win-portable-x64'] = d.windows.zip;
+                                if (d.windows.setup) gistMap['win-setup-x64'] = d.windows.setup;
+                                if (d.windows.zip) gistMap['win-portable-x64'] = d.windows.zip;
                             }
                             if (d.linux) {
-                                if (d.linux.amd64 && d.linux.amd64.deb) targetMap['linux-deb-x64'] = d.linux.amd64.deb;
-                                if (d.linux.arm64 && d.linux.arm64.deb) targetMap['linux-deb-arm64'] = d.linux.arm64.deb;
-                                if (d.linux.amd64 && d.linux.amd64.rpm) targetMap['linux-rpm-x64'] = d.linux.amd64.rpm;
-                                if (d.linux.arm64 && d.linux.arm64.rpm) targetMap['linux-rpm-arm64'] = d.linux.arm64.rpm;
-                                if (d.linux.amd64 && d.linux.amd64.zip) targetMap['linux-zip-x64'] = d.linux.amd64.zip;
-                                if (d.linux.arm64 && d.linux.arm64.zip) targetMap['linux-zip-arm64'] = d.linux.arm64.zip;
-                                if (d.linux.setup) targetMap['linux-setup-bin'] = d.linux.setup;
+                                const lx64 = d.linux.amd64 || d.linux.x64;
+                                if (lx64 && lx64.deb) gistMap['linux-deb-x64'] = lx64.deb;
+                                if (d.linux.arm64 && d.linux.arm64.deb) gistMap['linux-deb-arm64'] = d.linux.arm64.deb;
+                                if (lx64 && lx64.rpm) gistMap['linux-rpm-x64'] = lx64.rpm;
+                                if (d.linux.arm64 && d.linux.arm64.rpm) gistMap['linux-rpm-arm64'] = d.linux.arm64.rpm;
+                                if (lx64 && lx64.zip) gistMap['linux-zip-x64'] = lx64.zip;
+                                if (d.linux.arm64 && d.linux.arm64.zip) gistMap['linux-zip-arm64'] = d.linux.arm64.zip;
+                                if (lx64 && lx64.appimage) gistMap['linux-appimage-x64'] = lx64.appimage;
+                                if (d.linux.arm64 && d.linux.arm64.appimage) gistMap['linux-appimage-arm64'] = d.linux.arm64.appimage;
+                                if (d.linux.setup || (lx64 && lx64.setup)) gistMap['linux-setup-bin'] = d.linux.setup || lx64.setup;
                             }
                             const mac = d.macos || d.mac;
                             if (mac) {
-                                if (mac.arm64 && mac.arm64.dmg) targetMap['mac-dmg-arm64'] = mac.arm64.dmg;
-                                if (mac.arm64 && mac.arm64.zip) targetMap['mac-zip-arm64'] = mac.arm64.zip;
+                                if (mac.arm64 && mac.arm64.dmg) gistMap['mac-dmg-arm64'] = mac.arm64.dmg;
+                                if (mac.arm64 && mac.arm64.zip) gistMap['mac-zip-arm64'] = mac.arm64.zip;
                                 const mIntel = mac.amd64 || mac.x64;
-                                if (mIntel && mIntel.dmg) targetMap['mac-dmg-x64'] = mIntel.dmg;
-                                if (mIntel && mIntel.zip) targetMap['mac-zip-x64'] = mIntel.zip;
+                                if (mIntel && mIntel.dmg) gistMap['mac-dmg-x64'] = mIntel.dmg;
+                                if (mIntel && mIntel.zip) gistMap['mac-zip-x64'] = mIntel.zip;
                             }
                         }
                     }
@@ -5923,139 +6473,145 @@ async function init() {
                 console.warn('Gist fetch failed, falling back to GitHub API:', gistErr);
             }
 
-            // 2. Fallback to GitHub API if Gist had no links
-            if (Object.keys(targetMap).length === 0) {
+            let tagName = gistTagName;
+            let targetMap = { ...gistMap };
+
+            // 2. Check GitHub Releases API to detect newer releases or fill missing asset links
+            try {
                 const response = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/releases/latest`);
-                if (!response.ok) throw new Error('GitHub API response was not ok');
-                const data = await response.json();
-                tagName = data.tag_name;
-                const assets = Array.isArray(data.assets) ? data.assets : [];
+                if (response.ok) {
+                    const data = await response.json();
+                    const ghTagName = data.tag_name || '';
+                    const assets = Array.isArray(data.assets) ? data.assets : [];
 
-                function findAssetForTarget(target) {
-                    const isArm = (n) => /arm/i.test(n) || /aarch64/i.test(n);
-                    return assets.find(a => {
-                        const n = (a.name || '').toLowerCase();
-                        if (n.endsWith('.blockmap') || n.endsWith('.yml') || n.endsWith('.sha256')) return false;
-                        switch (target) {
-                            case 'win-setup-x64':
-                                return n.endsWith('.exe') && !isArm(n) && (n.includes('x64') || !assets.some(o => (o.name || '').toLowerCase().includes('installer-x64')));
-                            case 'win-setup-arm64':
-                                return n.endsWith('.exe') && isArm(n);
-                            case 'win-portable-x64':
-                                return n.endsWith('.zip') && !isArm(n) && !n.includes('mac') && (n.includes('portable') || n.includes('win') || !assets.some(o => (o.name || '').toLowerCase().includes('portable')));
-                            case 'win-portable-arm64':
-                                return n.endsWith('.zip') && isArm(n) && !n.includes('mac');
-                            case 'linux-deb-x64':
-                                return n.endsWith('.deb') && !isArm(n);
-                            case 'linux-deb-arm64':
-                                return n.endsWith('.deb') && isArm(n);
-                            case 'linux-rpm-x64':
-                                return n.endsWith('.rpm') && !isArm(n);
-                            case 'linux-rpm-arm64':
-                                return n.endsWith('.rpm') && isArm(n);
-                            case 'linux-zip-x64':
-                                return n.endsWith('.zip') && !isArm(n) && (n.includes('linux') || (!n.includes('win') && !n.includes('mac')));
-                            case 'linux-zip-arm64':
-                                return n.endsWith('.zip') && isArm(n) && (n.includes('linux') || (!n.includes('win') && !n.includes('mac')));
-                            case 'linux-setup-bin':
-                                return n.includes('setup') && n.includes('linux') && (n.endsWith('.bin') || n.endsWith('.appimage'));
-                            case 'linux-appimage-x64':
-                                return n.endsWith('.appimage') && !isArm(n);
-                            case 'linux-appimage-arm64':
-                                return n.endsWith('.appimage') && isArm(n);
-                            case 'mac-dmg-arm64':
-                                return n.endsWith('.dmg') && isArm(n);
-                            case 'mac-dmg-x64':
-                                return n.endsWith('.dmg') && (!isArm(n) || !assets.some(o => (o.name || '').toLowerCase().includes('arm')));
-                            case 'mac-zip-arm64':
-                                return n.endsWith('.zip') && isArm(n) && (n.includes('mac') || n.includes('darwin'));
-                            case 'mac-zip-x64':
-                                return n.endsWith('.zip') && !isArm(n) && (n.includes('mac') || n.includes('darwin'));
-                            default:
-                                return false;
+                    function findAssetForTarget(target) {
+                        const isArm = (n) => /arm/i.test(n) || /aarch64/i.test(n);
+                        if (target === 'linux-setup-bin') {
+                            return assets.find(a => {
+                                const n = (a.name || '').toLowerCase();
+                                return n.includes('setup') && n.includes('linux') && n.endsWith('.bin');
+                            }) || assets.find(a => {
+                                const n = (a.name || '').toLowerCase();
+                                return n.includes('setup') && n.includes('linux') && n.endsWith('.appimage');
+                            });
                         }
-                    });
-                }
+                        return assets.find(a => {
+                            const n = (a.name || '').toLowerCase();
+                            if (n.endsWith('.blockmap') || n.endsWith('.yml') || n.endsWith('.sha256')) return false;
+                            switch (target) {
+                                case 'win-setup-x64':
+                                    return n.endsWith('.exe') && !isArm(n) && (n.includes('x64') || !assets.some(o => (o.name || '').toLowerCase().includes('installer-x64')));
+                                case 'win-setup-arm64':
+                                    return n.endsWith('.exe') && isArm(n);
+                                case 'win-portable-x64':
+                                    return n.endsWith('.zip') && !isArm(n) && !n.includes('mac') && !n.includes('linux') && (n.includes('win') || n.includes('portable') || !assets.some(o => (o.name || '').toLowerCase().includes('win')));
+                                case 'win-portable-arm64':
+                                    return n.endsWith('.zip') && isArm(n) && !n.includes('mac') && !n.includes('linux') && (n.includes('win') || n.includes('portable'));
+                                case 'linux-deb-x64':
+                                    return n.endsWith('.deb') && !isArm(n);
+                                case 'linux-deb-arm64':
+                                    return n.endsWith('.deb') && isArm(n);
+                                case 'linux-rpm-x64':
+                                    return n.endsWith('.rpm') && !isArm(n);
+                                case 'linux-rpm-arm64':
+                                    return n.endsWith('.rpm') && isArm(n);
+                                case 'linux-zip-x64':
+                                    return n.endsWith('.zip') && !isArm(n) && (n.includes('linux') || (!n.includes('win') && !n.includes('mac')));
+                                case 'linux-zip-arm64':
+                                    return n.endsWith('.zip') && isArm(n) && (n.includes('linux') || (!n.includes('win') && !n.includes('mac')));
+                                case 'linux-appimage-x64':
+                                    return n.endsWith('.appimage') && !isArm(n) && !n.includes('setup');
+                                case 'linux-appimage-arm64':
+                                    return n.endsWith('.appimage') && isArm(n) && !n.includes('setup');
+                                case 'mac-dmg-arm64':
+                                    return n.endsWith('.dmg') && isArm(n);
+                                case 'mac-dmg-x64':
+                                    return n.endsWith('.dmg') && (!isArm(n) || !assets.some(o => (o.name || '').toLowerCase().includes('arm')));
+                                case 'mac-zip-arm64':
+                                    return n.endsWith('.zip') && isArm(n) && (n.includes('mac') || n.includes('darwin'));
+                                case 'mac-zip-x64':
+                                    return n.endsWith('.zip') && !isArm(n) && (n.includes('mac') || n.includes('darwin'));
+                                default:
+                                    return false;
+                            }
+                        });
+                    }
 
-                ['win-setup-x64', 'win-setup-arm64', 'win-portable-x64', 'win-portable-arm64',
-                 'linux-deb-x64', 'linux-deb-arm64', 'linux-rpm-x64', 'linux-rpm-arm64', 'linux-zip-x64', 'linux-zip-arm64', 'linux-setup-bin', 'linux-appimage-x64', 'linux-appimage-arm64',
-                 'mac-dmg-arm64', 'mac-dmg-x64', 'mac-zip-arm64', 'mac-zip-x64'].forEach(target => {
-                    const m = findAssetForTarget(target);
-                    if (m && m.browser_download_url) targetMap[target] = m.browser_download_url;
-                });
+                    const ghMap = {};
+                    ['win-setup-x64', 'win-setup-arm64', 'win-portable-x64', 'win-portable-arm64',
+                     'linux-deb-x64', 'linux-deb-arm64', 'linux-rpm-x64', 'linux-rpm-arm64', 'linux-zip-x64', 'linux-zip-arm64', 'linux-setup-bin', 'linux-appimage-x64', 'linux-appimage-arm64',
+                     'mac-dmg-arm64', 'mac-dmg-x64', 'mac-zip-arm64', 'mac-zip-x64'].forEach(target => {
+                        const m = findAssetForTarget(target);
+                        if (m && m.browser_download_url) ghMap[target] = m.browser_download_url;
+                    });
+
+                    const cmp = gistTagName ? compareSemver(ghTagName, gistTagName) : 1;
+                    if (Object.keys(gistMap).length === 0 || cmp > 0) {
+                        // GitHub release is newer or Gist had no links
+                        tagName = ghTagName || tagName;
+                        targetMap = ghMap;
+                    } else if (cmp === 0) {
+                        // Same version: supplement any missing assets in Gist from GitHub
+                        Object.keys(ghMap).forEach(k => {
+                            if (!targetMap[k]) targetMap[k] = ghMap[k];
+                        });
+                    }
+                }
+            } catch (ghErr) {
+                console.warn('GitHub API fetch failed:', ghErr);
             }
 
-            const fallbackWinUrl = tagName ? `https://github.com/${repoOwner}/${repoName}/releases/tag/${tagName}` : `https://github.com/${repoOwner}/${repoName}/releases/latest`;
-            const fallbackLinuxUrl = fallbackWinUrl;
-            const fallbackMacUrl = fallbackWinUrl;
+            const fallbackUrl = tagName ? `https://github.com/${repoOwner}/${repoName}/releases/tag/${tagName}` : `https://github.com/${repoOwner}/${repoName}/releases/latest`;
 
-            // Update dropdown links and dynamically hide items if the target is missing
-            const dropdownItems = document.querySelectorAll('.dropdown-menu .dropdown-item[data-target]');
-            dropdownItems.forEach(item => {
+            // Update download modal file options and hide unavailable ones
+            dlFileOptions.forEach(item => {
                 const target = item.getAttribute('data-target');
                 const url = targetMap[target];
                 if (url) {
-                    item.href = url;
+                    item.setAttribute('data-url', url);
                     item.style.display = '';
-                } else if (target === 'win-portable-x64') {
-                    // Always guarantee Portable x64 is accessible
-                    item.href = fallbackWinUrl;
+                } else if (target === 'win-portable-x64' && !targetMap['win-setup-x64']) {
+                    item.setAttribute('data-url', fallbackUrl);
                     item.style.display = '';
                 } else {
+                    item.removeAttribute('data-url');
                     item.style.display = 'none';
                 }
             });
 
-            // Find primary downloads for Windows, Linux & macOS
-            const winDownloadUrl = targetMap['win-setup-x64'] || targetMap['win-portable-x64'] || fallbackWinUrl;
-            const linuxDownloadUrl = targetMap['linux-deb-x64'] || targetMap['linux-appimage-x64'] || fallbackLinuxUrl;
-            const macDownloadUrl = targetMap['mac-dmg-arm64'] || targetMap['mac-dmg-x64'] || targetMap['mac-zip-arm64'] || targetMap['mac-zip-x64'] || fallbackMacUrl;
+            // If an OS panel has no visible items at all (e.g. both APIs failed), show its primary option with fallback URL
+            ['windows', 'linux', 'macos'].forEach(os => {
+                if (getVisibleOptionsForOs(os).length === 0) {
+                    const panel = document.querySelector(`.dl-os-panel[data-os-panel="${os}"]`);
+                    const firstOpt = panel ? panel.querySelector('.dl-file-option') : null;
+                    if (firstOpt) {
+                        firstOpt.setAttribute('data-url', fallbackUrl);
+                        firstOpt.style.display = '';
+                    }
+                }
+            });
 
             latestTagName = tagName || '';
             window.currentReleaseTag = tagName || '';
 
-            if (heroBtn && heroLinuxBtn && heroButtonsContainer) {
-                const heroBtnContainer = heroBtn.closest('.dropdown-container') || heroBtn;
-                const heroLinuxBtnContainer = heroLinuxBtn.closest('.dropdown-container') || heroLinuxBtn;
-                const heroMacBtnContainer = heroMacBtn ? (heroMacBtn.closest('.dropdown-container') || heroMacBtn) : null;
-
-                // Put current OS container first
-                if (userOS === "Windows") {
-                    if (heroBtnContainer && heroButtonsContainer.contains(heroBtnContainer)) {
-                        heroButtonsContainer.prepend(heroBtnContainer);
-                    }
-                } else if (userOS === "Linux") {
-                    if (heroLinuxBtnContainer && heroButtonsContainer.contains(heroLinuxBtnContainer)) {
-                        heroButtonsContainer.prepend(heroLinuxBtnContainer);
-                    }
-                } else if (userOS === "MacOS") {
-                    if (heroMacBtnContainer && heroButtonsContainer.contains(heroMacBtnContainer)) {
-                        heroButtonsContainer.prepend(heroMacBtnContainer);
-                    }
+            if (dlModalVersionBadge) {
+                if (tagName) {
+                    dlModalVersionBadge.textContent = tagName;
+                    dlModalVersionBadge.style.display = 'inline-flex';
+                } else {
+                    dlModalVersionBadge.style.display = 'none';
                 }
-
-                heroBtn.href = winDownloadUrl;
-                heroBtn.target = '_blank';
-                heroLinuxBtn.href = linuxDownloadUrl;
-                heroLinuxBtn.target = '_blank';
-                if (heroMacBtn) {
-                    heroMacBtn.href = macDownloadUrl;
-                    heroMacBtn.target = '_blank';
-                }
-
-                updateHeroButtons();
             }
 
-            if (navBtn) {
-                if (userOS === "Windows") {
-                    navBtn.href = winDownloadUrl;
-                } else if (userOS === "Linux") {
-                    navBtn.href = linuxDownloadUrl;
-                } else if (userOS === "MacOS") {
-                    navBtn.href = macDownloadUrl;
-                }
-                updateNavDownloadBtn();
+            if (dlModalAllReleasesLink) {
+                dlModalAllReleasesLink.href = tagName
+                    ? `https://github.com/${repoOwner}/${repoName}/releases/tag/${tagName}`
+                    : `https://github.com/${repoOwner}/${repoName}/releases`;
             }
+
+            updateHeroButtons();
+            updateNavDownloadBtn();
+            updateDownloadModalUI();
 
             // Update the badge text as well if it exists
             const badge = document.querySelector('.badge');
@@ -6063,11 +6619,7 @@ async function init() {
 
         } catch (error) {
             console.error('Error fetching release:', error);
-            const fallbackUrl = `https://github.com/${repoOwner}/${repoName}/releases/latest`;
-            if (heroBtn) heroBtn.href = fallbackUrl;
-            if (heroLinuxBtn) heroLinuxBtn.href = fallbackUrl;
-            if (heroMacBtn) heroMacBtn.href = fallbackUrl;
-            if (navBtn) navBtn.href = fallbackUrl;
+            updateDownloadModalUI();
         }
     }
 

@@ -39,9 +39,30 @@ async function removeWindowsShortcut(shortcutPath) {
 
 // ── Linux .desktop file ───────────────────────────────────────────────────────
 
+async function installLinuxHicolorIcons(iconSourcePath) {
+  if (!iconSourcePath || !(await fs.pathExists(iconSourcePath))) return
+  try {
+    const buf = fs.readFileSync(iconSourcePath)
+    if (!buf || !buf.length) return
+    for (const size of ['256x256', '512x512']) {
+      const dir = path.join(os.homedir(), '.local', 'share', 'icons', 'hicolor', size, 'apps')
+      await fs.ensureDir(dir)
+      await fs.writeFile(path.join(dir, 'helloworld-launcher.png'), buf)
+    }
+    await execPromise(`gtk-update-icon-cache -f -t "${path.join(os.homedir(), '.local', 'share', 'icons', 'hicolor')}"`).catch(() => {})
+  } catch (_) {}
+}
+
 async function createLinuxDesktopEntry({ execPath, name, comment, iconPath, categories }) {
   const desktopDir = path.join(os.homedir(), '.local', 'share', 'applications')
   await fs.ensureDir(desktopDir)
+
+  // Ensure iconPath is never an ELF executable on Linux
+  const isImageIcon = iconPath && /\.(png|svg|xpm|ico)$/i.test(iconPath) && (await fs.pathExists(iconPath))
+  if (isImageIcon) {
+    await installLinuxHicolorIcons(iconPath)
+  }
+  const finalIcon = isImageIcon ? iconPath : 'helloworld-launcher'
 
   const desktopFile = path.join(desktopDir, 'helloworld-launcher.desktop')
   const content = [
@@ -52,7 +73,7 @@ async function createLinuxDesktopEntry({ execPath, name, comment, iconPath, cate
     'Terminal=false',
     'Type=Application',
     `Categories=${categories}`,
-    `Icon=${iconPath}`,
+    `Icon=${finalIcon}`,
     'StartupWMClass=HelloWorld-Launcher',
     'StartupNotify=true',
   ].join('\n') + '\n'

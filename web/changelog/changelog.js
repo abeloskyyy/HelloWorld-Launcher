@@ -248,8 +248,9 @@ function buildDownloadDropdown(downloads, version) {
     // Linux
     if (d.linux) {
         let items = '';
-        const amd = d.linux.amd64 || {};
+        const amd = d.linux.amd64 || d.linux.x64 || {};
         const arm = d.linux.arm64 || {};
+        const linuxSetup = d.linux.setup || amd.setup;
         if (amd.deb) {
             items += `<a href="${amd.deb}" class="cl-dl-item" download><span class="cl-dl-badge">DEB</span> <span>Ubuntu/Debian (x64)</span> <i class="bi bi-download"></i></a>`;
             hasAnyLink = true;
@@ -262,8 +263,8 @@ function buildDownloadDropdown(downloads, version) {
             items += `<a href="${amd.zip}" class="cl-dl-item" download><span class="cl-dl-badge">ZIP</span> <span>Portable Universal (x64)</span> <i class="bi bi-download"></i></a>`;
             hasAnyLink = true;
         }
-        if (d.linux.setup) {
-            items += `<a href="${d.linux.setup}" class="cl-dl-item" download><span class="cl-dl-badge">Setup</span> <span>Instalador Universal (.bin)</span> <i class="bi bi-download"></i></a>`;
+        if (linuxSetup) {
+            items += `<a href="${linuxSetup}" class="cl-dl-item" download><span class="cl-dl-badge">Setup</span> <span>Instalador Universal (.bin)</span> <i class="bi bi-download"></i></a>`;
             hasAnyLink = true;
         }
         if (arm.deb) {

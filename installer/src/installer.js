@@ -273,6 +273,33 @@ async function extractZip(zipPath, destPath, onProgress) {
   }
 }
 
+/** Ensure icon.png exists in installPath on Linux/Windows by reading from ASAR or resources */
+async function ensureInstallIcon(installPath) {
+  const targetIconPng = path.join(installPath, 'icon.png')
+  const candidates = [
+    path.join(__dirname, '..', 'build', 'icon.png'),
+    path.join(process.resourcesPath || '', 'icon.png'),
+    path.join(installPath, 'resources', 'app.asar', 'ui', 'icon.png'),
+    path.join(installPath, 'resources', 'app.asar', 'build', 'icon.png'),
+    path.join(installPath, 'resources', 'app', 'ui', 'icon.png'),
+    path.join(installPath, 'resources', 'app', 'build', 'icon.png'),
+  ]
+  for (const cand of candidates) {
+    if (!cand) continue
+    try {
+      if (fs.existsSync(cand)) {
+        const buf = fs.readFileSync(cand)
+        if (buf && buf.length > 0) {
+          await fs.ensureDir(installPath)
+          await fs.writeFile(targetIconPng, buf)
+          return targetIconPng
+        }
+      }
+    } catch (_) {}
+  }
+  return (await fs.pathExists(targetIconPng)) ? targetIconPng : null
+}
+
 // ── INSTALL ───────────────────────────────────────────────────────────────────
 
 async function install({ installPath, createDesktop, createStartMenu, launchAfter }, onProgress) {
@@ -314,11 +341,7 @@ async function install({ installPath, createDesktop, createStartMenu, launchAfte
     }
 
     // Copiar icono de la aplicación para los accesos directos
-    const localIconPng = path.join(__dirname, '..', 'build', 'icon.png')
-    const targetIconPng = path.join(installPath, 'icon.png')
-    if (await fs.pathExists(localIconPng)) {
-      await fs.copy(localIconPng, targetIconPng, { overwrite: true }).catch(() => {})
-    }
+    const targetIconPng = await ensureInstallIcon(installPath)
 
     emit('Copying setup to installation folder...', 88)
     const installerPath = await copySetupToInstallDir(installPath)
@@ -326,7 +349,7 @@ async function install({ installPath, createDesktop, createStartMenu, launchAfte
     emit('Creating shortcuts...', 90)
     const executablePath = findLauncherExecutable(installPath)
     if (executablePath) {
-      const iconPath = process.platform === 'win32' ? executablePath : (await fs.pathExists(targetIconPng) ? targetIconPng : executablePath)
+      const iconPath = process.platform === 'win32' ? executablePath : (targetIconPng || 'helloworld-launcher')
       await createShortcuts({
         installPath,
         executablePath,
@@ -411,6 +434,7 @@ async function update({ installPath, updateFile, launchAfter }, onProgress) {
     }
 
     emit('Updating registration...', 92)
+    await ensureInstallIcon(installPath)
     const installerPath = await copySetupToInstallDir(installPath)
     if (targetVersion) {
       await writeRegistry({ installPath, version: targetVersion, installerPath })

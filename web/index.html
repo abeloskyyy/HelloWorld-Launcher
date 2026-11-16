@@ -16,7 +16,7 @@
     <!-- Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=3.0.0">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
@@ -199,150 +199,16 @@
                 </div>
                 
                 <div class="hero-buttons">
-                    <div class="dropdown-container">
-                        <button id="heroDownloadBtn" class="btn btn-primary btn-lg dropdown-btn" data-i18n="hero.download_win_btn">
-                            <i class="bi bi-windows"></i> Windows
-                            <i class="bi bi-chevron-down dropdown-arrow"></i>
-                            <div class="btn-shine"></div>
-                        </button>
-                        <div class="dropdown-menu" id="windowsDropdown">
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item recommended" data-target="win-setup-x64">
-                                <div class="dropdown-item-content">
-                                    <i class="bi bi-windows"></i>
-                                    <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title" data-i18n="hero.win_setup_title">Setup x64</span>
-                                        <span class="dropdown-item-subtitle" data-i18n="hero.win_setup_sub">Installer (Recommended)</span>
-                                    </div>
-                                    <span class="recommended-badge" data-i18n="hero.best_option">Best Option</span>
-                                </div>
-                            </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="win-setup-arm64">
-                                <div class="dropdown-item-content">
-                                    <i class="bi bi-cpu"></i>
-                                    <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title" data-i18n="hero.win_setup_arm_title">Setup ARM64</span>
-                                        <span class="dropdown-item-subtitle" data-i18n="hero.win_setup_arm_sub">Installer for ARM devices</span>
-                                    </div>
-                                </div>
-                            </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="win-portable-x64">
-                                <div class="dropdown-item-content">
-                                    <i class="bi bi-box-seam"></i>
-                                    <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title" data-i18n="hero.win_port_title">Portable x64</span>
-                                        <span class="dropdown-item-subtitle" data-i18n="hero.win_port_sub">ZIP archive</span>
-                                    </div>
-                                </div>
-                            </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="win-portable-arm64">
-                                <div class="dropdown-item-content">
-                                    <i class="bi bi-box-seam"></i>
-                                    <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title" data-i18n="hero.win_port_arm_title">Portable ARM64</span>
-                                        <span class="dropdown-item-subtitle" data-i18n="hero.win_port_arm_sub">ZIP archive for ARM</span>
-                                    </div>
-                                </div>
-                            </a>
-                        </div>
-                    </div>
-                    <div class="dropdown-container">
-                        <button id="heroDownloadLinuxBtn" class="btn btn-secondary btn-lg dropdown-btn" data-i18n="hero.download_linux_btn">
-                            <i class="fa-brands fa-linux" style="font-size: 1.1rem; margin-right: 5px;"></i> Linux
-                            <i class="bi bi-chevron-down dropdown-arrow"></i>
-                        </button>
-                        <div class="dropdown-menu" id="linuxDropdown">
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item recommended" data-target="linux-deb-x64">
-                                <div class="dropdown-item-content">
-                                    <i class="fa-brands fa-linux"></i>
-                                    <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title" data-i18n="hero.lin_deb_title">DEB x64</span>
-                                        <span class="dropdown-item-subtitle" data-i18n="hero.lin_deb_sub">Debian/Ubuntu (Recommended)</span>
-                                    </div>
-                                    <span class="recommended-badge" data-i18n="hero.best_option">Best Option</span>
-                                </div>
-                            </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="linux-deb-arm64">
-                                <div class="dropdown-item-content">
-                                    <i class="fa-brands fa-linux"></i>
-                                    <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title" data-i18n="hero.lin_deb_arm_title">DEB ARM64</span>
-                                        <span class="dropdown-item-subtitle" data-i18n="hero.lin_deb_arm_sub">Debian/Ubuntu for ARM</span>
-                                    </div>
-                                </div>
-                            </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="linux-rpm-x64">
-                                <div class="dropdown-item-content">
-                                    <i class="fa-brands fa-redhat"></i>
-                                    <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title">RPM x64</span>
-                                        <span class="dropdown-item-subtitle">Fedora / RHEL / openSUSE</span>
-                                    </div>
-                                </div>
-                            </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="linux-zip-x64">
-                                <div class="dropdown-item-content">
-                                    <i class="bi bi-file-earmark-zip"></i>
-                                    <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title">Portable ZIP x64</span>
-                                        <span class="dropdown-item-subtitle">Arch / Manjaro / Universal (No root)</span>
-                                    </div>
-                                </div>
-                            </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="linux-setup-bin">
-                                <div class="dropdown-item-content">
-                                    <i class="bi bi-gear-wide-connected"></i>
-                                    <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title">Setup GUI Installer (.bin)</span>
-                                        <span class="dropdown-item-subtitle">Universal Installer with Auto-Update</span>
-                                    </div>
-                                </div>
-                            </a>
-                        </div>
-                    </div>
-                    <div class="dropdown-container">
-                        <button id="heroDownloadMacBtn" class="btn btn-secondary btn-lg dropdown-btn" data-i18n="hero.download_mac_btn">
-                            <i class="bi bi-apple"></i> macOS
-                            <i class="bi bi-chevron-down dropdown-arrow"></i>
-                        </button>
-                        <div class="dropdown-menu" id="macDropdown">
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item recommended" data-target="mac-dmg-arm64">
-                                <div class="dropdown-item-content">
-                                    <i class="bi bi-apple"></i>
-                                    <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title" data-i18n="hero.mac_dmg_arm_title">DMG Apple Silicon</span>
-                                        <span class="dropdown-item-subtitle" data-i18n="hero.mac_dmg_arm_sub">M1/M2/M3/M4 (Recommended)</span>
-                                    </div>
-                                    <span class="recommended-badge" data-i18n="hero.best_option">Best Option</span>
-                                </div>
-                            </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="mac-dmg-x64">
-                                <div class="dropdown-item-content">
-                                    <i class="bi bi-apple"></i>
-                                    <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title" data-i18n="hero.mac_dmg_title">DMG Intel</span>
-                                        <span class="dropdown-item-subtitle" data-i18n="hero.mac_dmg_sub">Intel x64</span>
-                                    </div>
-                                </div>
-                            </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="mac-zip-arm64">
-                                <div class="dropdown-item-content">
-                                    <i class="bi bi-box-seam"></i>
-                                    <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title" data-i18n="hero.mac_zip_arm_title">ZIP Apple Silicon</span>
-                                        <span class="dropdown-item-subtitle" data-i18n="hero.mac_zip_arm_sub">Archive for Apple Silicon</span>
-                                    </div>
-                                </div>
-                            </a>
-                            <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" target="_blank" class="dropdown-item" data-target="mac-zip-x64">
-                                <div class="dropdown-item-content">
-                                    <i class="bi bi-box-seam"></i>
-                                    <div class="dropdown-item-text">
-                                        <span class="dropdown-item-title" data-i18n="hero.mac_zip_title">ZIP Intel</span>
-                                        <span class="dropdown-item-subtitle" data-i18n="hero.mac_zip_sub">Archive for Intel</span>
-                                    </div>
-                                </div>
-                            </a>
-                        </div>
+                    <button type="button" id="heroDownloadBtn" class="btn btn-primary btn-lg hero-single-download-btn">
+                        <i class="bi bi-download"></i>
+                        <span data-i18n="hero.download_launcher">Download Launcher</span>
+                        <div class="btn-shine"></div>
+                    </button>
+                    <div class="hero-platforms-hint">
+                        <i class="bi bi-windows"></i>
+                        <i class="fa-brands fa-linux"></i>
+                        <i class="bi bi-apple"></i>
+                        <span data-i18n="hero.platforms_hint">Available for Windows, Linux & macOS</span>
                     </div>
                 </div>
                 <div id="osWarningContainer" style="display:none; margin-top: 15px; background: rgba(255, 59, 48, 0.15); border: 1px solid rgba(255, 59, 48, 0.3); border-radius: 8px; padding: 10px 15px; color: #ff8c82; font-weight: 500; font-size: 14px;">
@@ -684,6 +550,343 @@
 
 
 
+    <!-- Download Modal -->
+    <div id="downloadModal" class="review-modal dl-modal" role="dialog" aria-modal="true" aria-labelledby="dlModalTitle">
+        <div class="review-modal-content dl-modal-content">
+            <button type="button" class="close-modal" id="closeDownloadModal" aria-label="Close">&times;</button>
+
+            <div class="dl-modal-header">
+                <div class="dl-title-row">
+                    <h3 id="dlModalTitle" data-i18n="download_modal.title">Download HelloWorld Launcher</h3>
+                    <span id="dlModalVersionBadge" class="dl-version-badge" style="display: none;"></span>
+                </div>
+                <p data-i18n="download_modal.subtitle">Select your operating system and choose an installer package.</p>
+            </div>
+
+            <!-- 3 OS Tabs -->
+            <div class="dl-os-tabs" role="tablist">
+                <button type="button" class="dl-os-tab" data-os="windows" role="tab" aria-selected="false">
+                    <i class="bi bi-windows"></i>
+                    <span>Windows</span>
+                </button>
+                <button type="button" class="dl-os-tab" data-os="linux" role="tab" aria-selected="false">
+                    <i class="fa-brands fa-linux"></i>
+                    <span>Linux</span>
+                </button>
+                <button type="button" class="dl-os-tab" data-os="macos" role="tab" aria-selected="false">
+                    <i class="bi bi-apple"></i>
+                    <span>macOS</span>
+                </button>
+            </div>
+
+            <!-- Scrollable Modal Body -->
+            <div class="dl-modal-body">
+            <!-- Tab Panels -->
+            <div class="dl-os-panels">
+                <!-- Windows Panel -->
+                <div class="dl-os-panel" data-os-panel="windows" role="tabpanel">
+                    <div class="dl-file-list">
+                        <button type="button" class="dl-file-option recommended" data-target="win-setup-x64" data-os="windows">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="bi bi-windows"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.win_setup_title">Setup x64</span>
+                                    <span class="recommended-badge" data-i18n="hero.best_option">Best Option</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.win_setup_sub">Installer (Recommended)</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.exe</span>
+                                <span class="dl-arch-pill">x64</span>
+                            </div>
+                        </button>
+
+                        <button type="button" class="dl-file-option" data-target="win-setup-arm64" data-os="windows">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="bi bi-cpu"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.win_setup_arm_title">Setup ARM64</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.win_setup_arm_sub">Installer for ARM devices</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.exe</span>
+                                <span class="dl-arch-pill">ARM64</span>
+                            </div>
+                        </button>
+
+                        <button type="button" class="dl-file-option" data-target="win-portable-x64" data-os="windows">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="bi bi-file-earmark-zip"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.win_port_title">Portable x64</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.win_port_sub">ZIP archive</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.zip</span>
+                                <span class="dl-arch-pill">x64</span>
+                            </div>
+                        </button>
+
+                        <button type="button" class="dl-file-option" data-target="win-portable-arm64" data-os="windows">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="bi bi-file-earmark-zip"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.win_port_arm_title">Portable ARM64</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.win_port_arm_sub">ZIP archive for ARM</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.zip</span>
+                                <span class="dl-arch-pill">ARM64</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Linux Panel -->
+                <div class="dl-os-panel" data-os-panel="linux" role="tabpanel">
+                    <div class="dl-file-list">
+                        <button type="button" class="dl-file-option recommended" data-target="linux-setup-bin" data-os="linux">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="bi bi-gear-wide-connected"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.lin_setup_title">Universal Installer (.bin)</span>
+                                    <span class="recommended-badge" data-i18n="hero.best_option">Best Option</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.lin_setup_sub">Graphical installer with auto-updates (All distros)</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.bin</span>
+                                <span class="dl-arch-pill">x64</span>
+                            </div>
+                        </button>
+
+                        <button type="button" class="dl-file-option" data-target="linux-deb-x64" data-os="linux">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="fa-brands fa-ubuntu"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.lin_deb_title">DEB x64</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.lin_deb_sub">Debian / Ubuntu / Linux Mint</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.deb</span>
+                                <span class="dl-arch-pill">x64</span>
+                            </div>
+                        </button>
+
+                        <button type="button" class="dl-file-option" data-target="linux-rpm-x64" data-os="linux">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="fa-brands fa-redhat"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.lin_rpm_title">RPM x64</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.lin_rpm_sub">Fedora / RHEL / openSUSE</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.rpm</span>
+                                <span class="dl-arch-pill">x64</span>
+                            </div>
+                        </button>
+
+                        <button type="button" class="dl-file-option" data-target="linux-zip-x64" data-os="linux">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="bi bi-file-earmark-zip"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.lin_zip_title">Portable ZIP x64</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.lin_zip_sub">Universal Linux (Arch / Manjaro / No root)</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.zip</span>
+                                <span class="dl-arch-pill">x64</span>
+                            </div>
+                        </button>
+
+                        <button type="button" class="dl-file-option" data-target="linux-deb-arm64" data-os="linux">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="fa-brands fa-ubuntu"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.lin_deb_arm_title">DEB ARM64</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.lin_deb_arm_sub">Debian/Ubuntu for ARM</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.deb</span>
+                                <span class="dl-arch-pill">ARM64</span>
+                            </div>
+                        </button>
+
+                        <button type="button" class="dl-file-option" data-target="linux-rpm-arm64" data-os="linux">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="fa-brands fa-redhat"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.lin_rpm_arm_title">RPM ARM64</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.lin_rpm_arm_sub">Fedora / RHEL for ARM</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.rpm</span>
+                                <span class="dl-arch-pill">ARM64</span>
+                            </div>
+                        </button>
+
+                        <button type="button" class="dl-file-option" data-target="linux-zip-arm64" data-os="linux">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="bi bi-file-earmark-zip"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.lin_zip_arm_title">Portable ZIP ARM64</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.lin_zip_arm_sub">Universal Linux for ARM</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.zip</span>
+                                <span class="dl-arch-pill">ARM64</span>
+                            </div>
+                        </button>
+
+                        <button type="button" class="dl-file-option" data-target="linux-appimage-x64" data-os="linux">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="fa-brands fa-linux"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.lin_app_title">AppImage x64</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.lin_app_sub">Universal Linux</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.AppImage</span>
+                                <span class="dl-arch-pill">x64</span>
+                            </div>
+                        </button>
+
+                        <button type="button" class="dl-file-option" data-target="linux-appimage-arm64" data-os="linux">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="fa-brands fa-linux"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.lin_app_arm_title">AppImage ARM64</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.lin_app_arm_sub">Universal Linux for ARM</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.AppImage</span>
+                                <span class="dl-arch-pill">ARM64</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- macOS Panel -->
+                <div class="dl-os-panel" data-os-panel="macos" role="tabpanel">
+                    <div class="dl-file-list">
+                        <button type="button" class="dl-file-option recommended" data-target="mac-dmg-arm64" data-os="macos">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="bi bi-apple"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.mac_dmg_arm_title">DMG Apple Silicon</span>
+                                    <span class="recommended-badge" data-i18n="hero.best_option">Best Option</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.mac_dmg_arm_sub">M1/M2/M3/M4 (Recommended)</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.dmg</span>
+                                <span class="dl-arch-pill">ARM64</span>
+                            </div>
+                        </button>
+
+                        <button type="button" class="dl-file-option" data-target="mac-dmg-x64" data-os="macos">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="bi bi-apple"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.mac_dmg_title">DMG Intel</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.mac_dmg_sub">Intel x64</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.dmg</span>
+                                <span class="dl-arch-pill">x64</span>
+                            </div>
+                        </button>
+
+                        <button type="button" class="dl-file-option" data-target="mac-zip-arm64" data-os="macos">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="bi bi-file-earmark-zip"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.mac_zip_arm_title">ZIP Apple Silicon</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.mac_zip_arm_sub">Archive for Apple Silicon</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.zip</span>
+                                <span class="dl-arch-pill">ARM64</span>
+                            </div>
+                        </button>
+
+                        <button type="button" class="dl-file-option" data-target="mac-zip-x64" data-os="macos">
+                            <div class="dl-file-radio"><span class="dl-radio-dot"></span></div>
+                            <div class="dl-file-icon"><i class="bi bi-file-earmark-zip"></i></div>
+                            <div class="dl-file-info">
+                                <div class="dl-file-title-row">
+                                    <span class="dl-file-title" data-i18n="hero.mac_zip_title">ZIP Intel</span>
+                                </div>
+                                <span class="dl-file-subtitle" data-i18n="hero.mac_zip_sub">Archive for Intel</span>
+                            </div>
+                            <div class="dl-file-meta">
+                                <span class="dl-format-pill">.zip</span>
+                                <span class="dl-arch-pill">x64</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Linux .bin execution hint -->
+            <div id="dlBinHint" class="dl-bin-hint" style="display: none;">
+                <div class="dl-bin-hint-header">
+                    <span class="dl-bin-hint-label">
+                        <i class="bi bi-terminal"></i>
+                        <span data-i18n="download_modal.bin_hint">After downloading, run:</span>
+                    </span>
+                    <button type="button" id="copyDlBinCmdBtn" class="copy-btn dl-bin-copy-btn" title="Copy to clipboard" data-i18n-title="common.copy_clipboard">
+                        <i class="bi bi-clipboard"></i>
+                    </button>
+                </div>
+                <code id="dlBinCmdCode" class="dl-bin-cmd-code" data-copy-cmd="chmod +x HelloWorld-Launcher-Setup-Linux.bin && ./HelloWorld-Launcher-Setup-Linux.bin">chmod +x HelloWorld-Launcher-Setup-Linux.bin &amp;&amp;<br>./HelloWorld-Launcher-Setup-Linux.bin</code>
+            </div>
+            </div>
+
+            <!-- Footer CTA -->
+            <div class="dl-modal-footer">
+                <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases/latest" id="dlModalActionBtn" class="btn btn-primary btn-lg dl-action-btn" target="_blank" rel="noopener noreferrer">
+                    <i class="bi bi-download"></i>
+                    <span id="dlModalActionText">Download</span>
+                    <div class="btn-shine"></div>
+                </a>
+                <a href="https://github.com/abeloskyyy/HelloWorld-Launcher/releases" id="dlModalAllReleasesLink" class="dl-all-releases-link" target="_blank" rel="noopener noreferrer">
+                    <span data-i18n="download_modal.all_releases">View all releases on GitHub</span>
+                    <i class="bi bi-box-arrow-up-right"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
     <!-- Avatar Cropper Modal -->
     <div id="cropperModal" class="review-modal" style="z-index: 2000;">
         <div class="review-modal-content" style="max-width: 500px; text-align: center; border-radius: 12px; background: rgba(20, 20, 25, 0.95); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px);">
@@ -712,7 +915,7 @@
             getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, deleteField, firestoreTimestamp
         };
     </script>
-    <script src="script.js?v=2.2.0" type="module"></script>
+    <script src="script.js?v=3.0.0" type="module"></script>
 </body>
 
 </html>

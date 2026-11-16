@@ -100,6 +100,8 @@ if (!app.isPackaged && process.platform === 'win32' && process.stdin && process.
 
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.abelosky.helloworldlauncher');
+} else if (process.platform === 'linux' && typeof app.setDesktopName === 'function') {
+  app.setDesktopName('helloworld-launcher.desktop');
 }
 
 const activeNotifications = new Set();
@@ -11498,6 +11500,81 @@ function ensureWindowsShortcut() {
   }
 }
 
+function ensureLinuxDesktopShortcut() {
+  if (process.platform !== 'linux') return;
+  try {
+    const execDir = path.dirname(process.execPath);
+    const installIconPath = path.join(execDir, 'icon.png');
+    const iconCandidates = [
+      path.join(__dirname, 'ui', 'icon.png'),
+      path.join(__dirname, 'build', 'icon.png'),
+      path.join(process.resourcesPath || '', 'icon.png')
+    ];
+
+    let iconBuf = null;
+    for (const cand of iconCandidates) {
+      try {
+        if (cand && fs.existsSync(cand)) {
+          iconBuf = fs.readFileSync(cand);
+          if (iconBuf && iconBuf.length > 0) break;
+        }
+      } catch (_) {}
+    }
+
+    if (iconBuf) {
+      if (app.isPackaged && !fs.existsSync(installIconPath)) {
+        try { fs.writeFileSync(installIconPath, iconBuf); } catch (_) {}
+      }
+      for (const size of ['256x256', '512x512']) {
+        try {
+          const iconDir = path.join(os.homedir(), '.local', 'share', 'icons', 'hicolor', size, 'apps');
+          fs.mkdirSync(iconDir, { recursive: true });
+          const themeIcon = path.join(iconDir, 'helloworld-launcher.png');
+          if (!fs.existsSync(themeIcon)) {
+            fs.writeFileSync(themeIcon, iconBuf);
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (!app.isPackaged) return;
+
+    const validIconPath = fs.existsSync(installIconPath) ? installIconPath : 'helloworld-launcher';
+    const desktopDirs = [
+      path.join(os.homedir(), '.local', 'share', 'applications'),
+      path.join(os.homedir(), 'Desktop'),
+      path.join(os.homedir(), 'Escritorio')
+    ];
+
+    let repaired = false;
+    for (const dir of desktopDirs) {
+      const desktopFile = path.join(dir, 'helloworld-launcher.desktop');
+      if (!fs.existsSync(desktopFile)) continue;
+      try {
+        const raw = fs.readFileSync(desktopFile, 'utf8');
+        const iconMatch = raw.match(/^Icon=(.*)$/m);
+        const currentIcon = iconMatch ? iconMatch[1].trim() : '';
+        const isValidImage = currentIcon && /\.(png|svg|xpm|ico)$/i.test(currentIcon) && fs.existsSync(currentIcon);
+        if (!isValidImage && currentIcon !== 'helloworld-launcher') {
+          const updated = iconMatch
+            ? raw.replace(/^Icon=.*$/m, `Icon=${validIconPath}`)
+            : `${raw.trimEnd()}\nIcon=${validIconPath}\n`;
+          fs.writeFileSync(desktopFile, updated, 'utf8');
+          repaired = true;
+          console.log('[LinuxDesktop] Repaired desktop entry Icon:', desktopFile, '->', validIconPath);
+        }
+      } catch (_) {}
+    }
+
+    if (repaired) {
+      exec('update-desktop-database ~/.local/share/applications', () => {});
+      exec(`gtk-update-icon-cache -f -t "${path.join(os.homedir(), '.local', 'share', 'icons', 'hicolor')}"`, () => {});
+    }
+  } catch (e) {
+    console.error('[LinuxDesktop] Error checking desktop entry:', e.message);
+  }
+}
+
 // --- App Events ---
 app.whenReady().then(() => {
   try {
@@ -11508,6 +11585,7 @@ app.whenReady().then(() => {
     rpc.setEnabled(initUserData.discord_rpc_enabled !== false);
   } catch (_) {}
   ensureWindowsShortcut();
+  ensureLinuxDesktopShortcut();
   getNotificationIconPath();
   // Ensure default profile images exist in user data
   try {
