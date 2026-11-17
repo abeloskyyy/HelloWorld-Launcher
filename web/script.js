@@ -4593,16 +4593,33 @@ const firebaseConfig = {
     appId: "1:1088760222656:web:13aefa81bdecdfdf832e25"
 };
 
-// Global Firebase DB Reference
-let db;
+// Global Cloudflare Backend API helpers (with Workers.dev fallback)
+async function fetchBackendApi(path, options = {}) {
+    const primary = 'https://api.hwlauncher.abelosky.com/api/v1' + path;
+    const fallback = 'https://hwlauncher-api.abeloskysb.workers.dev/api/v1' + path;
+    try {
+        const res = await fetch(primary, options);
+        if (res.ok || (res.status >= 400 && res.status < 500)) return res;
+    } catch (_) {}
+    return fetch(fallback, options);
+}
 
+function dataUrlToBlob(dataUrl) {
+    const parts = dataUrl.split(',');
+    const mimeMatch = parts[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+    const bstr = atob(parts[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) u8arr[n] = bstr.charCodeAt(n);
+    return new Blob([u8arr], { type: mime });
+}
 
 async function init() {
-    // === Initialize Firebase ===
+    // === Initialize Firebase Auth ===
     if (window.firebaseModules) {
         try {
-            const app = window.firebaseModules.initializeApp(firebaseConfig);
-            db = window.firebaseModules.getDatabase(app);
+            window.firebaseModules.initializeApp(firebaseConfig);
         } catch (e) {
             console.error('Firebase Init Error:', e);
         }
@@ -4689,25 +4706,83 @@ async function init() {
     window.renderBadgesHtml = renderBadgesHtml;
     window.updateAvatarHalo = updateAvatarHalo;
 
-    // === Authentication Logic ===
-    let auth, firestore, currentUser;
+    // === Authentication Logic (Firebase Auth + Cloudflare D1/R2) ===
+    let auth, currentUser;
+    let isAuthFlowBusy = false;
+
+    async function authFetchBackendApi(path, options = {}, userOverride = null) {
+        const targetUser = userOverride || (auth && auth.currentUser) || currentUser;
+        const headers = { ...(options.headers || {}) };
+        if (targetUser && typeof targetUser.getIdToken === 'function') {
+            const token = await targetUser.getIdToken();
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+        }
+        return fetchBackendApi(path, { ...options, headers });
+    }
+
+    async function fetchCurrentUserProfile(userOverride = null) {
+        const res = await authFetchBackendApi('/users/me', { cache: 'no-cache' }, userOverride);
+        if (!res.ok) {
+            const errJson = await res.json().catch(() => ({}));
+            throw new Error(errJson.error || `HTTP ${res.status}`);
+        }
+        const json = await res.json();
+        return json && json.user ? json.user : null;
+    }
+
+    async function syncUserNavUI(user) {
+        const navLoginBtn = document.getElementById('navLoginBtn');
+        const navUserBadge = document.getElementById('navUserBadge');
+        const navUsername = document.getElementById('navUsername');
+        if (!user || !navLoginBtn || !navUserBadge) return;
+
+        navLoginBtn.style.display = 'none';
+        navUserBadge.style.display = 'flex';
+
+        try {
+            const data = await fetchCurrentUserProfile(user);
+            const navBadgesRow = document.getElementById('navBadgesRow');
+            const navPremiumBadge = document.getElementById('navPremiumBadge');
+            if (data) {
+                const username = data.username || (user.email ? user.email.split('@')[0] : 'Player');
+                if (navUsername) navUsername.textContent = username;
+                const badges = extractUserBadges(data);
+                if (navBadgesRow) navBadgesRow.innerHTML = renderBadgesHtml(badges, false);
+                if (navPremiumBadge) navPremiumBadge.style.display = badges.includes('premium') ? 'inline-flex' : 'none';
+                const isMs = data.accountType === 'microsoft' || data.account_type === 'microsoft' || badges.includes('premium');
+                const avatar = data.avatarUrl || data.avatar_url || data.avatarBase64;
+                const uuid = data.mcUuid || data.mc_uuid || data.uuid;
+                const avatarSrc = avatar || (isMs && uuid ? `https://mc-heads.net/avatar/${uuid}` : null);
+                await setNavAvatarFromSource(avatarSrc, username);
+            } else {
+                const fallbackName = user.email ? user.email.split('@')[0] : 'Player';
+                if (navUsername) navUsername.textContent = fallbackName;
+                if (navBadgesRow) navBadgesRow.innerHTML = '';
+                if (navPremiumBadge) navPremiumBadge.style.display = 'none';
+                await setNavAvatarFromSource(null, fallbackName);
+            }
+        } catch (e) {
+            const fallbackName = user && user.email ? user.email.split('@')[0] : 'Player';
+            if (navUsername) navUsername.textContent = fallbackName;
+            await setNavAvatarFromSource(null, fallbackName);
+        }
+    }
+
     if (window.firebaseModules) {
         auth = window.firebaseModules.getAuth();
-        firestore = window.firebaseModules.getFirestore();
 
         // Auto-trigger Microsoft verification if launched from the desktop app
         if (launcherVerifyToken) {
-            setTimeout(() => autoVerifyFromLauncher(auth, firestore, launcherVerifyToken), 800);
+            setTimeout(() => autoVerifyFromLauncher(auth, launcherVerifyToken), 800);
         }
-        
+
         // Listen for auth state
         window.firebaseModules.onAuthStateChanged(auth, async (user) => {
             currentUser = user;
             const navLoginBtn = document.getElementById('navLoginBtn');
             const navUserBadge = document.getElementById('navUserBadge');
-            const navUsername = document.getElementById('navUsername');
             const authLoader = document.getElementById('authLoaderOverlay');
-            
+
             // Function to fade out loader when everything is done
             const removeLoader = () => {
                 if (authLoader) {
@@ -4720,34 +4795,8 @@ async function init() {
             };
 
             if (user && navLoginBtn && navUserBadge) {
-                navLoginBtn.style.display = 'none';
-                navUserBadge.style.display = 'flex';
-                
-                try {
-                    const userDoc = await window.firebaseModules.getDoc(window.firebaseModules.doc(firestore, "users", user.uid));
-                    const navBadgesRow = document.getElementById('navBadgesRow');
-                    const navPremiumBadge = document.getElementById('navPremiumBadge');
-                    if (userDoc.exists()) {
-                        const data = userDoc.data();
-                        const username = data.username || (user.email ? user.email.split('@')[0] : 'Player');
-                        navUsername.textContent = username;
-                        const badges = extractUserBadges(data);
-                        if (navBadgesRow) navBadgesRow.innerHTML = renderBadgesHtml(badges, false);
-                        if (navPremiumBadge) navPremiumBadge.style.display = badges.includes('premium') ? 'inline-flex' : 'none';
-                        const isMs = data.accountType === 'microsoft' || badges.includes('premium');
-                        const avatarSrc = data.avatarBase64 || (isMs && data.uuid ? `https://mc-heads.net/avatar/${data.uuid}` : null);
-                        await setNavAvatarFromSource(avatarSrc, username);
-                    } else {
-                        const fallbackName = user.email ? user.email.split('@')[0] : 'Player';
-                        navUsername.textContent = fallbackName;
-                        if (navBadgesRow) navBadgesRow.innerHTML = '';
-                        if (navPremiumBadge) navPremiumBadge.style.display = 'none';
-                        await setNavAvatarFromSource(null, fallbackName);
-                    }
-                } catch(e) {
-                    const fallbackName = user && user.email ? user.email.split('@')[0] : 'Player';
-                    navUsername.textContent = fallbackName;
-                    await setNavAvatarFromSource(null, fallbackName);
+                if (!isAuthFlowBusy) {
+                    await syncUserNavUI(user);
                 }
 
                 const urlParams = new URLSearchParams(window.location.search);
@@ -4758,7 +4807,7 @@ async function init() {
                     }
                 }
 
-                if (window.location.pathname.includes('/settings') && window.loadAccountSettings) {
+                if (window.location.pathname.includes('/settings') && window.loadAccountSettings && !isAuthFlowBusy) {
                     window.loadAccountSettings();
                 }
 
@@ -4778,7 +4827,7 @@ async function init() {
                     window.history.replaceState({}, document.title, window.location.pathname);
                 }
             }
-            
+
             removeLoader();
         });
     }
@@ -4984,6 +5033,7 @@ async function init() {
             loginError.style.display = 'none';
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in with Microsoft...';
+            isAuthFlowBusy = true;
 
             try {
                 const { OAuthProvider, signInWithPopup } = window.firebaseModules;
@@ -4994,17 +5044,22 @@ async function init() {
                 const msUser = result.user;
                 console.log('[Microsoft Login] Firebase UID:', msUser.uid);
 
-                // Check if already linked (returning user)
-                const existingDoc = await window.firebaseModules.getDoc(
-                    window.firebaseModules.doc(firestore, "users", msUser.uid)
-                );
-                if (existingDoc.exists() && existingDoc.data().accountType === 'microsoft' && existingDoc.data().uuid) {
-                    // Already verified and linked — just close and proceed
-                    closeAuthModalFunc();
-                    return;
+                // Check if already linked in Cloudflare D1 (returning user)
+                const existingRes = await fetchBackendApi(`/users/${encodeURIComponent(msUser.uid)}`, { cache: 'no-cache' });
+                if (existingRes.ok) {
+                    const existingJson = await existingRes.json().catch(() => null);
+                    const existingUser = existingJson && existingJson.user;
+                    if (existingUser && (existingUser.accountType === 'microsoft' || existingUser.microsoftVerified) && existingUser.uuid) {
+                        await syncUserNavUI(msUser);
+                        if (window.location.pathname.includes('/settings') && window.loadAccountSettings) {
+                            window.loadAccountSettings();
+                        }
+                        closeAuthModalFunc();
+                        return;
+                    }
                 }
 
-                // New user: check microsoftVerified using their MS email (written by launcher)
+                // New user: check microsoft_verified in Cloudflare D1 using their MS email (written by launcher)
                 const msEmail = (msUser.email || msUser.providerData?.[0]?.email || '').toLowerCase();
                 console.log('[Microsoft Login] email:', msEmail);
 
@@ -5013,12 +5068,10 @@ async function init() {
                     throw new Error("Could not read your Microsoft account email. Please try again.");
                 }
 
-                const emailKey = msEmail.replace(/\./g, '_DOT_').replace(/@/g, '_AT_');
-                const verifiedDoc = await window.firebaseModules.getDoc(
-                    window.firebaseModules.doc(firestore, "microsoftVerified", emailKey)
-                );
+                const statusRes = await fetchBackendApi(`/users/microsoft/status?email=${encodeURIComponent(msEmail)}`, { cache: 'no-cache' });
+                const statusData = statusRes.ok ? await statusRes.json().catch(() => null) : null;
 
-                if (!verifiedDoc.exists() || !verifiedDoc.data().verified) {
+                if (!statusData || !statusData.verified) {
                     await window.firebaseModules.signOut(auth);
                     throw new Error(
                         "Your Microsoft account hasn't been verified yet. " +
@@ -5026,19 +5079,25 @@ async function init() {
                     );
                 }
 
-                const verifiedData = verifiedDoc.data();
-                await window.firebaseModules.setDoc(
-                    window.firebaseModules.doc(firestore, "users", msUser.uid),
-                    {
-                        username: verifiedData.username,
-                        uuid: verifiedData.uuid,
-                        accountType: 'microsoft',
-                        minecraftUuid: verifiedData.uuid,
+                const verifyRes = await authFetchBackendApi('/users/microsoft/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
                         email: msEmail,
-                        createdAt: window.firebaseModules.firestoreTimestamp()
-                    }
-                );
+                        username: statusData.username,
+                        uuid: statusData.uuid
+                    })
+                }, msUser);
 
+                if (!verifyRes.ok) {
+                    const errData = await verifyRes.json().catch(() => ({}));
+                    throw new Error(errData.error || 'Could not link Microsoft account.');
+                }
+
+                await syncUserNavUI(msUser);
+                if (window.location.pathname.includes('/settings') && window.loadAccountSettings) {
+                    window.loadAccountSettings();
+                }
                 closeAuthModalFunc();
 
             } catch (error) {
@@ -5046,6 +5105,7 @@ async function init() {
                 loginError.textContent = parseAuthError(error);
                 loginError.style.display = 'block';
             } finally {
+                isAuthFlowBusy = false;
                 btn.disabled = false;
                 btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 23 23" fill="none">
                     <path d="M11.5 11.5H0V0H11.5V11.5Z" fill="#F25022"/>
@@ -5058,7 +5118,7 @@ async function init() {
     }
 
     // Auto-verify Microsoft account when opened from the launcher (one-time token)
-    async function autoVerifyFromLauncher(auth, firestore, token) {
+    async function autoVerifyFromLauncher(auth, token) {
         const overlay = document.createElement('div');
         overlay.id = 'launcherVerifyOverlay';
         overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,14,23,0.97);z-index:99999;display:flex;align-items:center;justify-content:center;';
@@ -5077,20 +5137,24 @@ async function init() {
             if (el) { el.textContent = msg; el.style.color = color; }
         };
 
+        isAuthFlowBusy = true;
         try {
-            // 1. Validate the one-time token from Firestore
+            // 1. Validate the one-time token from Cloudflare D1
             setStatus('Validating launcher token...');
-            const tokenDoc = await window.firebaseModules.getDoc(
-                window.firebaseModules.doc(firestore, 'pendingMsVerify', token)
-            );
+            const tokenRes = await fetchBackendApi(`/users/microsoft/pending-verify/${encodeURIComponent(token)}`, { cache: 'no-cache' });
+            if (!tokenRes.ok) throw new Error('This verification link is invalid or has already been used.');
 
-            if (!tokenDoc.exists()) throw new Error('This verification link is invalid or has already been used.');
-
-            const tokenData = tokenDoc.data();
+            const tokenJson = await tokenRes.json().catch(() => null);
+            const tokenData = (tokenJson && tokenJson.data) || {};
+            if (!tokenJson || !tokenJson.success || !tokenData.username) {
+                throw new Error('This verification link is invalid or has already been used.');
+            }
             if (tokenData.used) throw new Error('This verification link has already been used.');
-            if (new Date(tokenData.expiresAt) < new Date()) throw new Error('This verification link has expired. Please log in again from the launcher.');
+            if (tokenData.expiresAt && new Date(tokenData.expiresAt) < new Date()) {
+                throw new Error('This verification link has expired. Please log in again from the launcher.');
+            }
 
-            // 2. Sign in with Microsoft to get the email
+            // 2. Sign in with Microsoft to get the email & Firebase ID token
             setStatus('Opening Microsoft sign-in...');
             const { OAuthProvider, signInWithPopup } = window.firebaseModules;
             const provider = new OAuthProvider('microsoft.com');
@@ -5102,23 +5166,32 @@ async function init() {
 
             // 3. Mark token as used (one-time use)
             setStatus('Writing verification...');
-            await window.firebaseModules.setDoc(
-                window.firebaseModules.doc(firestore, 'pendingMsVerify', token),
-                { used: true }, { merge: true }
-            );
+            await authFetchBackendApi('/users/microsoft/pending-verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    token,
+                    data: { ...tokenData, used: true }
+                })
+            }, msUser);
 
-            // 4. Write microsoftVerified keyed by email
-            const emailKey = msEmail.replace(/\./g, '_DOT_').replace(/@/g, '_AT_');
-            await window.firebaseModules.setDoc(
-                window.firebaseModules.doc(firestore, 'microsoftVerified', emailKey),
-                {
+            // 4. Write microsoft_verified + link user in Cloudflare D1
+            const verifyRes = await authFetchBackendApi('/users/microsoft/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     email: msEmail,
                     username: tokenData.username,
-                    uuid: tokenData.uuid,
-                    verified: true,
-                    verifiedAt: new Date().toISOString()
-                }
-            );
+                    uuid: tokenData.uuid
+                })
+            }, msUser);
+
+            if (!verifyRes.ok) {
+                const errData = await verifyRes.json().catch(() => ({}));
+                throw new Error(errData.error || 'Could not complete verification.');
+            }
+
+            await syncUserNavUI(msUser);
 
             overlay.innerHTML = `
                 <div style="text-align:center;max-width:460px;padding:40px;background:rgba(255,255,255,0.04);border-radius:20px;border:1px solid rgba(79,175,74,0.3);">
@@ -5136,6 +5209,8 @@ async function init() {
                 <p style="color:#a3a3a3;margin-bottom:24px;">${err.message}</p>
                 <button onclick="window.close()" style="background:rgba(255,255,255,0.1);color:#fff;border:none;padding:12px 28px;border-radius:8px;cursor:pointer;font-size:1em;">Close tab</button>
             `;
+        } finally {
+            isAuthFlowBusy = false;
         }
     }
 
@@ -5194,11 +5269,10 @@ async function init() {
 
                 console.log('[Microsoft Link] Username:', username, 'UUID:', uuid);
 
-                const verifiedDoc = await window.firebaseModules.getDoc(
-                    window.firebaseModules.doc(firestore, "microsoftVerified", uuid)
-                );
+                const statusRes = await fetchBackendApi(`/users/microsoft/status?uuid=${encodeURIComponent(uuid)}`, { cache: 'no-cache' });
+                const verifiedData = statusRes.ok ? await statusRes.json().catch(() => null) : null;
 
-                if (!verifiedDoc.exists()) {
+                if (!verifiedData || !verifiedData.verified) {
                     await window.firebaseModules.signOut(auth);
                     throw new Error(
                         "This Minecraft account hasn't been verified in the launcher yet. " +
@@ -5206,21 +5280,17 @@ async function init() {
                     );
                 }
 
-                const verifiedData = verifiedDoc.data();
                 console.log('[Microsoft Link] Verified data:', verifiedData);
 
-                await window.firebaseModules.setDoc(
-                    window.firebaseModules.doc(firestore, "users", user.uid),
-                    {
-                        username: verifiedData.username,
-                        usernameLower: verifiedData.username.toLowerCase(),
-                        uuid: verifiedData.uuid,
-                        accountType: 'microsoft',
-                        minecraftUuid: verifiedData.uuid,
-                        email: user.email || '',
-                        createdAt: window.firebaseModules.firestoreTimestamp()
-                    }
-                );
+                await authFetchBackendApi('/users/microsoft/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: user.email || verifiedData.email || '',
+                        username: verifiedData.username || username,
+                        uuid: verifiedData.uuid || uuid
+                    })
+                }, user);
 
                 closeModal();
                 window.location.reload();
@@ -5328,18 +5398,20 @@ async function init() {
             loginError.style.display = 'none';
             btn.disabled = true;
             btn.textContent = 'Logging in...';
-            
+
             try {
                 let email = identifier;
-                // If it doesn't look like an email, resolve username → email via the public 'usernames' index
+                // If it doesn't look like an email, resolve username → email via Cloudflare D1
                 if (!identifier.includes('@')) {
-                    const usernameDoc = await window.firebaseModules.getDoc(
-                        window.firebaseModules.doc(firestore, 'usernames', identifier.toLowerCase())
-                    );
-                    if (!usernameDoc.exists()) {
+                    const resolveRes = await fetchBackendApi(`/users/resolve-email/${encodeURIComponent(identifier)}`, { cache: 'no-cache' });
+                    if (!resolveRes.ok) {
                         throw { code: 'auth/user-not-found' };
                     }
-                    email = usernameDoc.data().email;
+                    const resolveJson = await resolveRes.json().catch(() => null);
+                    if (!resolveJson || !resolveJson.email) {
+                        throw { code: 'auth/user-not-found' };
+                    }
+                    email = resolveJson.email;
                 }
 
                 await window.firebaseModules.signInWithEmailAndPassword(auth, email, password);
@@ -5398,7 +5470,7 @@ async function init() {
             const password = document.getElementById('registerPassword').value;
             const confirm = document.getElementById('registerConfirmPassword').value;
             const btn = document.getElementById('registerSubmitBtn');
-            
+
             registerError.style.display = 'none';
 
             if (password !== confirm) {
@@ -5409,19 +5481,21 @@ async function init() {
 
             btn.disabled = true;
             btn.textContent = 'Creating account...';
-            
+            isAuthFlowBusy = true;
+
             try {
                 // Validation matching offline launcher accounts
                 if (!/^[a-zA-Z0-9_]{3,16}$/.test(username)) {
                     throw new Error("Username must be 3-16 characters and contain only letters, numbers, and underscores.");
                 }
 
-                // Check if username is already taken
-                const usernameDoc = await window.firebaseModules.getDoc(
-                    window.firebaseModules.doc(firestore, 'usernames', username.toLowerCase())
-                );
-                if (usernameDoc.exists()) {
-                    throw new Error("This username is already taken.");
+                // Check if username is already taken in Cloudflare D1
+                const checkRes = await fetchBackendApi(`/users/${encodeURIComponent(username.toLowerCase())}`, { cache: 'no-cache' });
+                if (checkRes.ok) {
+                    const checkJson = await checkRes.json().catch(() => null);
+                    if (checkJson && checkJson.user) {
+                        throw new Error("This username is already taken.");
+                    }
                 }
 
                 const userCredential = await window.firebaseModules.createUserWithEmailAndPassword(auth, email, password);
@@ -5430,26 +5504,28 @@ async function init() {
                 const generateUuid = (name) => {
                     return CryptoJS.MD5("HelloWorldPlayer:" + name).toString(CryptoJS.enc.Hex);
                 };
-                
+
                 const uuid = generateUuid(username);
-                await window.firebaseModules.setDoc(window.firebaseModules.doc(firestore, "users", user.uid), {
-                    username: username,
-                    usernameLower: username.toLowerCase(),
-                    email: email,
-                    uuid: uuid,
-                    createdAt: window.firebaseModules.firestoreTimestamp()
-                });
-                // Write public username index so login-by-username works without auth
-                await window.firebaseModules.setDoc(
-                    window.firebaseModules.doc(firestore, 'usernames', username.toLowerCase()),
-                    { uid: user.uid, email: email }
-                );
-                
+                const patchRes = await authFetchBackendApi('/users/me', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, uuid })
+                }, user);
+
+                if (!patchRes.ok) {
+                    const errJson = await patchRes.json().catch(() => ({}));
+                    if (errJson.error === 'username_taken') {
+                        throw new Error("This username is already taken.");
+                    }
+                }
+
+                await syncUserNavUI(user);
                 closeAuthModalFunc();
             } catch (error) {
                 registerError.textContent = parseAuthError(error);
                 registerError.style.display = 'block';
             } finally {
+                isAuthFlowBusy = false;
                 btn.disabled = false;
                 btn.textContent = 'Register';
             }
@@ -5473,34 +5549,22 @@ async function init() {
         }
 
         try {
-            let docSnap = await window.firebaseModules.getDoc(window.firebaseModules.doc(firestore, "users", currentUser.uid));
+            const data = await fetchCurrentUserProfile(currentUser);
 
-            if (!docSnap.exists()) {
-                const defaultName = (currentUser.email || "Player").split('@')[0];
-                const safeName = defaultName.substring(0,16);
-                const generateUuid = (name) => CryptoJS.MD5("HelloWorldPlayer:" + name).toString(CryptoJS.enc.Hex);
-                await window.firebaseModules.setDoc(window.firebaseModules.doc(firestore, "users", currentUser.uid), {
-                    username: safeName,
-                    email: currentUser.email || "",
-                    uuid: generateUuid(safeName),
-                    createdAt: window.firebaseModules.firestoreTimestamp()
-                });
-                docSnap = await window.firebaseModules.getDoc(window.firebaseModules.doc(firestore, "users", currentUser.uid));
-            }
-
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                const isMicrosoftAccount = data.accountType === 'microsoft';
+            if (data) {
+                const isMicrosoftAccount = data.accountType === 'microsoft' || data.account_type === 'microsoft';
+                const uuid = data.mcUuid || data.mc_uuid || data.uuid;
+                const avatar = data.avatarUrl || data.avatar_url || data.avatarBase64;
                 if (userInp) userInp.value = data.username || "Player";
 
                 const fallbackName = data.username || (currentUser && currentUser.email ? currentUser.email.split('@')[0] : 'Player');
 
                 const avatarPreview = document.getElementById('dashboardAvatarPreview');
                 if (avatarPreview) {
-                    if (data.avatarBase64) {
-                        avatarPreview.src = data.avatarBase64;
-                    } else if (isMicrosoftAccount && data.uuid) {
-                        avatarPreview.src = `https://mc-heads.net/avatar/${data.uuid}`;
+                    if (avatar) {
+                        avatarPreview.src = avatar;
+                    } else if (isMicrosoftAccount && uuid) {
+                        avatarPreview.src = `https://mc-heads.net/avatar/${uuid}`;
                     } else {
                         avatarPreview.src = `https://ui-avatars.com/api/?name=${fallbackName}&background=random&color=fff&rounded=true&bold=true&format=svg`;
                     }
@@ -5508,7 +5572,7 @@ async function init() {
                 stagedAvatarBase64 = null;
                 stagedClearAvatar = false;
 
-                const navAvatarSrc = data.avatarBase64 || (isMicrosoftAccount && data.uuid ? `https://mc-heads.net/avatar/${data.uuid}` : null);
+                const navAvatarSrc = avatar || (isMicrosoftAccount && uuid ? `https://mc-heads.net/avatar/${uuid}` : null);
                 await setNavAvatarFromSource(navAvatarSrc, fallbackName);
 
                 const usernameFormGroup = document.getElementById('usernameFormGroup');
@@ -5903,12 +5967,16 @@ async function init() {
     if (useDefaultAvatarBtn) {
         useDefaultAvatarBtn.addEventListener('click', async () => {
             if (!currentUser) return;
-            const docSnap = await window.firebaseModules.getDoc(window.firebaseModules.doc(firestore, "users", currentUser.uid));
-            const uuid = docSnap.exists() ? docSnap.data().uuid : null;
-            stagedAvatarBase64 = null;
-            stagedClearAvatar = true;
-            const avatarPreview = document.getElementById('dashboardAvatarPreview');
-            if (avatarPreview && uuid) avatarPreview.src = `https://mc-heads.net/avatar/${uuid}`;
+            try {
+                const data = await fetchCurrentUserProfile(currentUser);
+                const uuid = data ? (data.mcUuid || data.mc_uuid || data.uuid) : null;
+                stagedAvatarBase64 = null;
+                stagedClearAvatar = true;
+                const avatarPreview = document.getElementById('dashboardAvatarPreview');
+                if (avatarPreview && uuid) avatarPreview.src = `https://mc-heads.net/avatar/${uuid}`;
+            } catch (err) {
+                console.warn('Could not load user profile for default avatar:', err);
+            }
         });
     }
 
@@ -5977,9 +6045,9 @@ async function init() {
         setSaveState(true, t('settings.saving', 'Saving...'));
 
         try {
-            const docSnap = await window.firebaseModules.getDoc(window.firebaseModules.doc(firestore, "users", currentUser.uid));
-            const currentData = docSnap.data();
-            const isMicrosoftAccount = currentData.accountType === 'microsoft';
+            const currentData = await fetchCurrentUserProfile(currentUser);
+            if (!currentData) throw new Error('User profile not found.');
+            const isMicrosoftAccount = currentData.accountType === 'microsoft' || currentData.account_type === 'microsoft';
 
             const updates = {};
 
@@ -5991,45 +6059,54 @@ async function init() {
                 }
 
                 if (newUsername && newUsername !== currentData.username) {
-                    const takenDoc = await window.firebaseModules.getDoc(
-                        window.firebaseModules.doc(firestore, 'usernames', newUsername.toLowerCase())
-                    );
-                    if (takenDoc.exists()) {
-                        throw new Error("This username is already taken.");
-                    }
                     updates.username = newUsername;
                     updates.uuid = CryptoJS.MD5("HelloWorldPlayer:" + newUsername).toString(CryptoJS.enc.Hex);
                 }
             }
 
+            let uploadedAvatarUrl = null;
             if (stagedClearAvatar) {
-                updates.avatarBase64 = window.firebaseModules.deleteField();
+                updates.avatar_url = null;
             } else if (stagedAvatarBase64) {
-                updates.avatarBase64 = stagedAvatarBase64;
+                const avatarBlob = dataUrlToBlob(stagedAvatarBase64);
+                const formData = new FormData();
+                formData.append('file', avatarBlob, 'avatar.png');
+                const uploadRes = await authFetchBackendApi('/storage/upload/avatar', {
+                    method: 'POST',
+                    body: formData
+                }, currentUser);
+                if (uploadRes.ok) {
+                    const uploadJson = await uploadRes.json().catch(() => null);
+                    if (uploadJson && uploadJson.avatarUrl) {
+                        uploadedAvatarUrl = uploadJson.avatarUrl;
+                    }
+                } else {
+                    updates.avatar_url = stagedAvatarBase64;
+                }
             }
 
             const bioEl = document.getElementById('dashboardBiography');
             if (bioEl) {
                 const val = bioEl.value.trim();
-                updates.biography = val ? val : window.firebaseModules.deleteField();
+                updates.biography = val ? val : null;
             }
 
             const mobEl = document.getElementById('dashboardFavoriteMob');
             if (mobEl) {
                 const val = mobEl.value.trim();
-                updates.favoriteMob = val ? val : window.firebaseModules.deleteField();
+                updates.favoriteMob = val ? val : null;
             }
 
             const countryEl = document.getElementById('dashboardCountry');
             if (countryEl) {
                 const val = countryEl.value;
-                updates.country = val ? val : window.firebaseModules.deleteField();
+                updates.country = val ? val : null;
             }
 
             const bgEl = document.getElementById('dashboardBackground');
             if (bgEl) {
                 const val = bgEl.value;
-                updates.background = val ? val : window.firebaseModules.deleteField();
+                updates.background = val ? val : null;
             }
 
             const linkFields = document.querySelectorAll('.link-field');
@@ -6041,31 +6118,24 @@ async function init() {
                     linksArray.push({ title, url });
                 }
             });
-            updates.links = linksArray.length > 0 ? linksArray : window.firebaseModules.deleteField();
+            updates.links = linksArray;
+            updates.playstyleTags = (selectedPlaystyleTags && selectedPlaystyleTags.length > 0) ? selectedPlaystyleTags : [];
 
-            if (selectedPlaystyleTags && selectedPlaystyleTags.length > 0) {
-                updates.playstyleTags = selectedPlaystyleTags;
-            } else {
-                updates.playstyleTags = window.firebaseModules.deleteField();
-            }
-            if (updates.username) {
-                updates.usernameLower = updates.username.toLowerCase();
-            }
+            const patchRes = await authFetchBackendApi('/users/me', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updates)
+            }, currentUser);
 
-            await window.firebaseModules.updateDoc(window.firebaseModules.doc(firestore, "users", currentUser.uid), updates);
-
-            if (updates.username && updates.username !== currentData.username) {
-                await window.firebaseModules.setDoc(
-                    window.firebaseModules.doc(firestore, 'usernames', updates.username.toLowerCase()),
-                    { uid: currentUser.uid, email: currentData.email || '' }
-                );
-                if (currentData.username) {
-                    await window.firebaseModules.updateDoc(
-                        window.firebaseModules.doc(firestore, 'usernames', currentData.username.toLowerCase()),
-                        { uid: window.firebaseModules.deleteField(), email: window.firebaseModules.deleteField() }
-                    ).catch(() => {});
+            const patchJson = await patchRes.json().catch(() => ({}));
+            if (!patchRes.ok || !patchJson.success) {
+                if (patchJson.error === 'username_taken') {
+                    throw new Error("This username is already taken.");
                 }
+                throw new Error(patchJson.error || 'Failed to update profile.');
             }
+
+            const freshData = patchJson.user || {};
 
             if (updates.username) {
                 const navUser = document.getElementById('navUsername');
@@ -6074,27 +6144,25 @@ async function init() {
 
             const displayName = document.getElementById('dashboardDisplayName');
             if (displayName) {
-                displayName.textContent = updates.username || currentData.username || 'Player';
+                displayName.textContent = freshData.username || updates.username || currentData.username || 'Player';
             }
 
-            let appliedAvatarSrc = stagedAvatarBase64;
+            let appliedAvatarSrc = uploadedAvatarUrl || freshData.avatarUrl || freshData.avatar_url || stagedAvatarBase64;
             if (!appliedAvatarSrc) {
-                const userDoc = await window.firebaseModules.getDoc(window.firebaseModules.doc(firestore, "users", currentUser.uid));
-                if (userDoc.exists()) {
-                    const freshData = userDoc.data();
-                    if (freshData.avatarBase64) {
-                        appliedAvatarSrc = freshData.avatarBase64;
-                    } else if (freshData.accountType === 'microsoft' && freshData.uuid) {
-                        appliedAvatarSrc = `https://mc-heads.net/avatar/${freshData.uuid}`;
-                    } else if (stagedClearAvatar && currentData.uuid) {
-                        appliedAvatarSrc = `https://mc-heads.net/avatar/${currentData.uuid}`;
-                    }
+                const freshUuid = freshData.mcUuid || freshData.mc_uuid || freshData.uuid || currentData.uuid;
+                if (isMicrosoftAccount && freshUuid) {
+                    appliedAvatarSrc = `https://mc-heads.net/avatar/${freshUuid}`;
                 }
             }
             stagedAvatarBase64 = null;
             stagedClearAvatar = false;
 
-            await setNavAvatarFromSource(appliedAvatarSrc, updates.username || currentData.username || 'Player');
+            const avatarPreview = document.getElementById('dashboardAvatarPreview');
+            if (avatarPreview && appliedAvatarSrc) {
+                avatarPreview.src = appliedAvatarSrc;
+            }
+
+            await setNavAvatarFromSource(appliedAvatarSrc, freshData.username || updates.username || currentData.username || 'Player');
 
             if (successDiv) {
                 successDiv.textContent = t('settings.saved_success', 'Changes saved successfully!');
@@ -6627,16 +6695,6 @@ async function init() {
 
 
     // === Fetch Statistics (Downloads & Stars) ===
-    async function fetchBackendApi(path, options = {}) {
-        const primary = 'https://api.hwlauncher.abelosky.com/api/v1' + path;
-        const fallback = 'https://hwlauncher-api.abeloskysb.workers.dev/api/v1' + path;
-        try {
-            const res = await fetch(primary, options);
-            if (res.ok) return res;
-        } catch (_) {}
-        return fetch(fallback, options);
-    }
-
     async function getRepoStats() {
         try {
             // 1. Get Stars & Reviews from Backend API

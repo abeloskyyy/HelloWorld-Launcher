@@ -417,10 +417,12 @@ async function update({ installPath, updateFile, launchAfter }, onProgress) {
     await killLauncher()
 
     emit('Applying update...', 75)
+    let appliedExecutablePath = null
     if (assetPath.toLowerCase().endsWith('.appimage')) {
       const targetAppImagePath = path.join(installPath, 'helloworld-launcher.AppImage')
       await fs.copy(assetPath, targetAppImagePath, { overwrite: true })
       await fs.chmod(targetAppImagePath, 0o755)
+      appliedExecutablePath = targetAppImagePath
       emit('AppImage update applied!', 85)
     } else {
       await extractZip(assetPath, installPath, (pct) => {
@@ -446,7 +448,7 @@ async function update({ installPath, updateFile, launchAfter }, onProgress) {
 
     emit('Update complete!', 100)
 
-    const executablePath = findLauncherExecutable(installPath)
+    const executablePath = appliedExecutablePath || findLauncherExecutable(installPath)
     if (launchAfter && executablePath) {
       setTimeout(() => {
         launchDetached(executablePath)

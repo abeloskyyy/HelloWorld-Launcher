@@ -7,6 +7,30 @@ interface UpdateEventData {
   progress?: number;
 }
 
+function compareSemver(v1: string, v2: string): number {
+  const parse = (s: string) =>
+    String(s || '0.0.0')
+      .replace(/^v/i, '')
+      .split('-')[0]
+      .split('.')
+      .map((n) => parseInt(n, 10) || 0);
+  const p1 = parse(v1);
+  const p2 = parse(v2);
+  for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+    const a = p1[i] || 0;
+    const b = p2[i] || 0;
+    if (a !== b) return a > b ? 1 : -1;
+  }
+  return 0;
+}
+
+function tr(key: string, fallback: string): string {
+  const fn = (window as any).t;
+  if (typeof fn !== 'function') return fallback;
+  const val = fn(key);
+  return val && val !== key ? val : fallback;
+}
+
 export const UpdateBadge: React.FC = () => {
   const [visible, setVisible] = useState(false);
   const [status, setStatus] = useState<'downloading' | 'ready' | 'installing'>('downloading');
@@ -14,34 +38,62 @@ export const UpdateBadge: React.FC = () => {
   const [version, setVersion] = useState('');
   const [filePath, setFilePath] = useState<string | null>(null);
   const [isMandatory, setIsMandatory] = useState(false);
+  const [, setLangTick] = useState(0);
 
   useEffect(() => {
-    // Restore persistent downloaded update state if present
-    const win = window as any;
-    let preVersion = '';
-    let prePath = win._currentUpdateDownloadedPath || null;
-    let preMandatory = false;
+    let cancelled = false;
 
-    if (!prePath) {
+    const restorePersistedState = async () => {
+      const win = window as any;
+      let preVersion = '';
+      let prePath = win._currentUpdateDownloadedPath || null;
+      let preMandatory = false;
+
+      if (!prePath) {
+        try {
+          prePath = localStorage.getItem('hw_downloaded_update_path');
+          preVersion = localStorage.getItem('hw_downloaded_update_version') || '';
+        } catch (_) {}
+      }
+
+      if (win._currentUpdateState) {
+        preVersion = win._currentUpdateState.latestVersion || preVersion;
+        preMandatory = Boolean(win._currentUpdateState.isMandatory);
+      }
+
+      if (!prePath) return;
+
+      // Verify current launcher version before restoring a persisted ready badge (prevents stale badge after Setup updates)
+      let currentVersion: string = win.APP_VERSION || '';
       try {
-        prePath = localStorage.getItem('hw_downloaded_update_path');
-        preVersion = localStorage.getItem('hw_downloaded_update_version') || '';
+        const api = win.hwlAPI || win.api;
+        if (api && typeof api.get_launcher_version === 'function') {
+          const v = await api.get_launcher_version();
+          if (v) currentVersion = v;
+        }
       } catch (_) {}
-    }
 
-    if (win._currentUpdateState) {
-      preVersion = win._currentUpdateState.latestVersion || preVersion;
-      preMandatory = Boolean(win._currentUpdateState.isMandatory);
-    }
+      if (cancelled) return;
 
-    if (prePath) {
+      if (currentVersion && (!preVersion || compareSemver(currentVersion, preVersion) >= 0)) {
+        try {
+          localStorage.removeItem('hw_downloaded_update_version');
+          localStorage.removeItem('hw_downloaded_update_path');
+          localStorage.removeItem('hw_update_auto_attempt');
+        } catch (_) {}
+        win._currentUpdateDownloadedPath = null;
+        return;
+      }
+
       setVisible(true);
       setStatus('ready');
       setProgress(100);
       if (preVersion) setVersion(preVersion);
       setFilePath(prePath);
       setIsMandatory(preMandatory);
-    }
+    };
+
+    restorePersistedState();
 
     // Listen for custom events dispatched by the update engine
     const handleUpdateAvailable = (e: any) => {
@@ -59,34 +111,46 @@ export const UpdateBadge: React.FC = () => {
       if (typeof data.percent === 'number') {
         setProgress(Math.min(100, Math.max(0, data.percent)));
       }
-      if (data.version && !version) {
-        setVersion(data.version);
+      if (data.version) {
+        setVersion((prev) => prev || data.version);
       }
     };
 
     const handleUpdateReady = (e: any) => {
       const data: UpdateEventData = e.detail || {};
       setVisible(true);
-      setStatus('ready');
       setProgress(100);
       if (data.version) setVersion(data.version);
       if (data.filePath) setFilePath(data.filePath);
+      if (data.isMandatory !== undefined) setIsMandatory(Boolean(data.isMandatory));
+      setStatus('ready');
+    };
 
-      // Si es obligatoria, aplicar de inmediato
-      if (data.isMandatory || isMandatory) {
-        setStatus('installing');
-        setTimeout(() => {
-          const win = window as any;
-          if (typeof win.hwlApplyDownloadedUpdate === 'function') {
-            win.hwlApplyDownloadedUpdate();
-          }
-        }, 1200);
-      }
+    const handleUpdateInstalling = () => {
+      setVisible(true);
+      setProgress(100);
+      setStatus('installing');
+    };
+
+    const handleUpdateFailed = () => {
+      setStatus('ready');
+    };
+
+    const handleUpdateCleared = () => {
+      setVisible(false);
+    };
+
+    const handleLanguageChanged = () => {
+      setLangTick((t) => t + 1);
     };
 
     window.addEventListener('hwl:update-available', handleUpdateAvailable);
     window.addEventListener('hwl:update-progress', handleUpdateProgress);
     window.addEventListener('hwl:update-ready', handleUpdateReady);
+    window.addEventListener('hwl:update-installing', handleUpdateInstalling);
+    window.addEventListener('hwl:update-failed', handleUpdateFailed);
+    window.addEventListener('hwl:update-cleared', handleUpdateCleared);
+    window.addEventListener('language-changed', handleLanguageChanged);
 
     // Exponer API global para scripts legacy
     (window as any).hwlUpdateBadge = {
@@ -110,11 +174,16 @@ export const UpdateBadge: React.FC = () => {
     };
 
     return () => {
+      cancelled = true;
       window.removeEventListener('hwl:update-available', handleUpdateAvailable);
       window.removeEventListener('hwl:update-progress', handleUpdateProgress);
       window.removeEventListener('hwl:update-ready', handleUpdateReady);
+      window.removeEventListener('hwl:update-installing', handleUpdateInstalling);
+      window.removeEventListener('hwl:update-failed', handleUpdateFailed);
+      window.removeEventListener('hwl:update-cleared', handleUpdateCleared);
+      window.removeEventListener('language-changed', handleLanguageChanged);
     };
-  }, [version, isMandatory]);
+  }, []);
 
   const handleClick = () => {
     if (status === 'installing') return;
@@ -135,20 +204,18 @@ export const UpdateBadge: React.FC = () => {
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (progress / 100) * circumference;
 
-  const t = (window as any).t || ((k: string) => k);
-
   const titleText =
     status === 'installing'
-      ? t('updater.badge_installing') || 'Installing...'
+      ? tr('updater.badge_installing', 'Installing...')
       : status === 'ready'
-      ? t('updater.badge_ready') || 'Update Ready!'
-      : t('updater.badge_downloading') || 'Downloading update...';
+      ? tr('updater.badge_ready', 'Update Ready!')
+      : tr('updater.badge_downloading', 'Downloading update...');
 
   const subText =
     status === 'installing'
-      ? t('updater.badge_restarting') || 'Restarting launcher...'
+      ? tr('updater.badge_restarting', 'Restarting launcher...')
       : status === 'ready'
-      ? t('updater.badge_click_restart') || 'Click to restart & apply'
+      ? tr('updater.badge_click_restart', 'Click to restart & apply')
       : `${progress}% · v${version || 'new'}`;
 
   return (
@@ -158,7 +225,7 @@ export const UpdateBadge: React.FC = () => {
       onClick={handleClick}
       role="button"
       tabIndex={0}
-      title={status === 'ready' ? t('updater.badge_click_restart') || 'Click to restart' : `${titleText} (${progress}%)`}
+      title={status === 'ready' ? tr('updater.badge_click_restart', 'Click to restart') : `${titleText} (${progress}%)`}
     >
       <div className="update-dock-progress-ring">
         <svg className="progress-ring-svg" width="38" height="38" viewBox="0 0 38 38">
@@ -198,7 +265,7 @@ export const UpdateBadge: React.FC = () => {
       <div className="update-dock-content">
         <div className="update-dock-title">
           <span>{titleText}</span>
-          {isMandatory && <span className="update-dock-mandatory-tag">{t('updater.mandatory') || 'Mandatory'}</span>}
+          {isMandatory && <span className="update-dock-mandatory-tag">{tr('updater.mandatory', 'Mandatory')}</span>}
         </div>
         <div className="update-dock-subtitle">{subText}</div>
       </div>

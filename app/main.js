@@ -5912,7 +5912,7 @@ async function downloadFileDirectly(downloadUrl, destPath, options = {}) {
 
 async function findLocalInstallerPath(expectedHash = null) {
   try {
-    const execDir = path.dirname(process.execPath);
+    const execDir = path.dirname(process.env.APPIMAGE || process.execPath);
     let candidates = [];
     if (process.platform === 'win32') {
       candidates = [
@@ -6057,7 +6057,7 @@ ipcMain.handle('check-downloaded-update', async (event, params = {}) => {
       try {
         const urlObj = new URL(downloadUrl);
         const parsedBase = path.basename(urlObj.pathname);
-        if (parsedBase && (parsedBase.includes('.deb') || parsedBase.includes('.dmg') || parsedBase.includes('.AppImage') || parsedBase.includes('.zip') || parsedBase.includes('.exe'))) {
+        if (parsedBase && (parsedBase.includes('.deb') || parsedBase.includes('.rpm') || parsedBase.includes('.dmg') || parsedBase.includes('.AppImage') || parsedBase.includes('.zip') || parsedBase.includes('.exe'))) {
           filename = parsedBase;
         } else if (process.platform === 'darwin') {
           filename = 'HelloWorld-Launcher.dmg';
@@ -6100,6 +6100,27 @@ ipcMain.handle('check-downloaded-update', async (event, params = {}) => {
   }
 });
 
+ipcMain.handle('cleanup-downloaded-updates', async () => {
+  try {
+    const updatesDir = path.join(app.getPath('userData'), 'updates');
+    if (!fs.existsSync(updatesDir)) return { success: true, removed: 0 };
+    let removed = 0;
+    for (const file of fs.readdirSync(updatesDir)) {
+      const lower = file.toLowerCase();
+      if (lower.startsWith('helloworld-launcher') || lower.includes('.tmp_')) {
+        try {
+          fs.unlinkSync(path.join(updatesDir, file));
+          removed++;
+        } catch (_) {}
+      }
+    }
+    return { success: true, removed };
+  } catch (err) {
+    console.warn('[cleanup-downloaded-updates] Error:', err);
+    return { success: false, error: err.message };
+  }
+});
+
 ipcMain.handle('prepare-test-update-file', async () => {
   try {
     const updatesDir = path.join(app.getPath('userData'), 'updates');
@@ -6120,9 +6141,16 @@ ipcMain.handle('prepare-test-update-file', async () => {
 
 ipcMain.handle('get-platform-info', () => {
   const isAppImage = Boolean(process.env.APPIMAGE);
+  const realExec = (process.platform === 'linux' && process.env.APPIMAGE) ? process.env.APPIMAGE : process.execPath;
+  const realExecDir = path.dirname(realExec);
+  const isSystemInstall = process.platform === 'linux' && (realExec.startsWith('/opt/') || realExec.startsWith('/usr/'));
+  const hasSetupBin = process.platform === 'linux' && fs.existsSync(path.join(realExecDir, 'setup.bin'));
+  const isUserLevelInstall = process.platform === 'linux' && !isAppImage && !isSystemInstall && (realExecDir.startsWith(os.homedir()) || hasSetupBin);
+
   let isRpm = false;
   let isDeb = false;
-  if (process.platform === 'linux' && !isAppImage) {
+  // User-level / Setup installs update cleanly via .zip + setup.bin, not system RPM/DEB packages
+  if (process.platform === 'linux' && !isAppImage && !isUserLevelInstall) {
     try {
       if (fs.existsSync('/etc/fedora-release') || fs.existsSync('/etc/redhat-release')) {
         isRpm = true;
@@ -6154,8 +6182,11 @@ ipcMain.handle('get-platform-info', () => {
     platform: process.platform,
     arch: process.arch,
     isAppImage,
+    isUserLevelInstall,
+    hasSetupBin,
     isDeb,
     isRpm,
+    realExecDir,
     appImagePath: process.env.APPIMAGE || null
   };
 });
@@ -6172,7 +6203,15 @@ ipcMain.handle('get-system-memory', () => {
   }
 });
 
+let isLaunchingInstaller = false;
+
 ipcMain.handle('launch-installer-and-quit', async (event, optionsOrPath) => {
+  if (isLaunchingInstaller) {
+    console.log('[launch-installer-and-quit] Duplicate launch request ignored.');
+    return { success: true, alreadyLaunching: true };
+  }
+  isLaunchingInstaller = true;
+
   try {
     let targetExe = null;
     let updateFile = null;
@@ -6206,8 +6245,13 @@ ipcMain.handle('launch-installer-and-quit', async (event, optionsOrPath) => {
     }
 
     const currentPid = process.pid;
-    const currentExec = process.execPath;
+    const currentExec = (process.platform === 'linux' && process.env.APPIMAGE) ? process.env.APPIMAGE : process.execPath;
     const currentDir = customInstallPath || path.dirname(currentExec);
+
+    const { execSync, spawn } = require('child_process');
+    const hasCommand = (cmd) => {
+      try { execSync(`command -v ${cmd}`, { stdio: 'ignore' }); return true; } catch (_) { return false; }
+    };
 
     // ── 1. Linux: AppImage ──────────────────────────────────────────────────
     if (targetExe && !targetExe.toLowerCase().includes('setup') && targetExe.toLowerCase().endsWith('.appimage')) {
@@ -6241,7 +6285,6 @@ rm -f "$0"
       }
 
       fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
-      const { spawn } = require('child_process');
       const child = spawn('bash', [scriptPath], {
         detached: true,
         stdio: 'ignore'
@@ -6267,6 +6310,10 @@ rm -f "$0"
           return false;
         }
       })();
+
+      if (isUserLevel ? (!hasCommand('dpkg-deb') && !hasCommand('dpkg')) : !hasCommand('dpkg')) {
+        throw new Error('dpkg/dpkg-deb is not available on this Linux distribution');
+      }
 
       const scriptPath = path.join(app.getPath('temp'), `hwl-update-deb-${Date.now()}.sh`);
       const scriptContent = `#!/usr/bin/env bash
@@ -6336,7 +6383,6 @@ rm -f "$0"
 `;
 
       fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
-      const { spawn } = require('child_process');
       const child = spawn('bash', [scriptPath], {
         detached: true,
         stdio: 'ignore'
@@ -6362,6 +6408,11 @@ rm -f "$0"
           return false;
         }
       })();
+
+      const canUserExtract = hasCommand('rpm2cpio') && hasCommand('cpio');
+      if (isUserLevel ? (!canUserExtract && !hasCommand('rpm')) : !hasCommand('rpm')) {
+        throw new Error('rpm/rpm2cpio is not available on this Linux distribution');
+      }
 
       const scriptPath = path.join(app.getPath('temp'), `hwl-update-rpm-${Date.now()}.sh`);
       const scriptContent = `#!/usr/bin/env bash
@@ -6432,7 +6483,6 @@ rm -f "$0"
 `;
 
       fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
-      const { spawn } = require('child_process');
       const child = spawn('bash', [scriptPath], {
         detached: true,
         stdio: 'ignore'
@@ -6510,7 +6560,6 @@ rm -rf "$TMP_DIR" "$0"
 `;
 
       fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
-      const { spawn } = require('child_process');
       const child = spawn('bash', [scriptPath], {
         detached: true,
         stdio: 'ignore'
@@ -6526,7 +6575,6 @@ rm -rf "$TMP_DIR" "$0"
 
     // ── 4. Windows (.exe / Setup o .zip pre-descargado) ──────────────────────
     const execDir = currentDir;
-    const { spawn } = require('child_process');
 
     if (!targetExe || !fs.existsSync(targetExe)) {
       targetExe = await findLocalInstallerPath(expectedSetupHash);
@@ -6648,6 +6696,7 @@ Remove-Item -Path $PSCommandPath -Force
 
     throw new Error('No setup executable or update file available');
   } catch (err) {
+    isLaunchingInstaller = false;
     console.error('[launch-installer-and-quit] Error:', err);
     return { success: false, error: err.message };
   }

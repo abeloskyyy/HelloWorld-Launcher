@@ -316,20 +316,17 @@
         </div>
     </div>
 
-    <!-- Firebase SDK Modules -->
+    <!-- Firebase Auth SDK (Database migrated 100% to Cloudflare D1 & R2) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, push, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut, OAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, deleteField, serverTimestamp as firestoreTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         window.firebaseModules = {
-            initializeApp, getDatabase, ref, push, onValue, serverTimestamp,
-            getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut, OAuthProvider, signInWithPopup,
-            getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, deleteField, firestoreTimestamp
+            initializeApp,
+            getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut, OAuthProvider, signInWithPopup
         };
     </script>
-    <script src="../script.js?v=2.2.0" type="module"></script>
+    <script src="../script.js?v=3.0.1" type="module"></script>
     <script src="changelog.js" type="module"></script>
 </body>
 </html>
