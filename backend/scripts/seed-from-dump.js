@@ -26,8 +26,7 @@ const sqlLines = [
   '-- ============================================================',
   '-- HelloWorld-Launcher: Datos Reales Migrados de Firebase',
   `-- Generado automáticamente: ${new Date().toISOString()}`,
-  '-- ============================================================',
-  'BEGIN TRANSACTION;'
+  '-- ============================================================'
 ];
 
 // 1. Migrar Usuarios y Subcolecciones (stats, inbox)
@@ -60,7 +59,24 @@ if (fs.existsSync(usersPath)) {
     sqlLines.push(`
 INSERT INTO users (uid, username, username_lower, email, uuid, mc_uuid, avatar_url, biography, favorite_mob, country, background, links_json, playstyle_tags_json, badges_json, client_version, account_type, microsoft_verified, created_at, updated_at)
 VALUES (${esc(uid)}, ${esc(username)}, ${esc(usernameLower)}, ${esc(email)}, ${esc(uuid)}, ${esc(mcUuid)}, ${esc(avatarUrl)}, ${esc(biography)}, ${esc(favoriteMob)}, ${esc(country)}, ${esc(background)}, ${esc(linksJson)}, ${esc(playstyleTagsJson)}, ${esc(badgesJson)}, ${esc(clientVersion)}, ${esc(accountType)}, ${msVerified}, ${esc(createdAt)}, ${esc(updatedAt)})
-ON CONFLICT(uid) DO UPDATE SET username = excluded.username, username_lower = excluded.username_lower, email = excluded.email, client_version = excluded.client_version, updated_at = excluded.updated_at;`);
+ON CONFLICT(uid) DO UPDATE SET
+  username = CASE WHEN COALESCE(users.client_version, '') LIKE '3.%' THEN users.username ELSE excluded.username END,
+  username_lower = CASE WHEN COALESCE(users.client_version, '') LIKE '3.%' THEN users.username_lower ELSE excluded.username_lower END,
+  email = COALESCE(excluded.email, users.email),
+  uuid = COALESCE(users.uuid, excluded.uuid),
+  mc_uuid = COALESCE(users.mc_uuid, excluded.mc_uuid),
+  avatar_url = CASE WHEN COALESCE(users.avatar_url, '') LIKE 'http%' THEN users.avatar_url WHEN COALESCE(users.client_version, '') LIKE '3.%' THEN users.avatar_url ELSE COALESCE(excluded.avatar_url, users.avatar_url) END,
+  biography = CASE WHEN COALESCE(users.client_version, '') LIKE '3.%' THEN users.biography ELSE COALESCE(excluded.biography, users.biography) END,
+  favorite_mob = CASE WHEN COALESCE(users.client_version, '') LIKE '3.%' THEN users.favorite_mob ELSE COALESCE(excluded.favorite_mob, users.favorite_mob) END,
+  country = CASE WHEN COALESCE(users.client_version, '') LIKE '3.%' THEN users.country ELSE COALESCE(excluded.country, users.country) END,
+  background = CASE WHEN COALESCE(users.client_version, '') LIKE '3.%' THEN users.background ELSE COALESCE(excluded.background, users.background) END,
+  links_json = CASE WHEN COALESCE(users.client_version, '') LIKE '3.%' THEN users.links_json ELSE excluded.links_json END,
+  playstyle_tags_json = CASE WHEN COALESCE(users.client_version, '') LIKE '3.%' THEN users.playstyle_tags_json ELSE excluded.playstyle_tags_json END,
+  badges_json = CASE WHEN COALESCE(users.client_version, '') LIKE '3.%' THEN users.badges_json ELSE excluded.badges_json END,
+  client_version = CASE WHEN COALESCE(users.client_version, '') LIKE '3.%' THEN users.client_version ELSE COALESCE(excluded.client_version, users.client_version) END,
+  account_type = CASE WHEN COALESCE(users.client_version, '') LIKE '3.%' THEN users.account_type ELSE excluded.account_type END,
+  microsoft_verified = MAX(users.microsoft_verified, excluded.microsoft_verified),
+  updated_at = CASE WHEN COALESCE(users.client_version, '') LIKE '3.%' THEN users.updated_at ELSE excluded.updated_at END;`);
 
     // Subcolección stats
     if (u._subcollections?.stats) {
@@ -75,7 +91,13 @@ ON CONFLICT(uid) DO UPDATE SET username = excluded.username, username_lower = ex
         sqlLines.push(`
 INSERT INTO stats (uid, total_hours, streak, max_streak, last_played, total_sessions, total_days_played, updated_at)
 VALUES (${esc(uid)}, ${totalHours}, ${streak}, ${maxStreak}, ${lastPlayed}, ${totalSessions}, ${totalDaysPlayed}, datetime('now'))
-ON CONFLICT(uid) DO UPDATE SET total_hours = excluded.total_hours, streak = excluded.streak, max_streak = excluded.max_streak, last_played = excluded.last_played, total_sessions = excluded.total_sessions, total_days_played = excluded.total_days_played;`);
+ON CONFLICT(uid) DO UPDATE SET
+  total_hours = MAX(stats.total_hours, excluded.total_hours),
+  streak = MAX(stats.streak, excluded.streak),
+  max_streak = MAX(stats.max_streak, excluded.max_streak),
+  last_played = MAX(stats.last_played, excluded.last_played),
+  total_sessions = MAX(stats.total_sessions, excluded.total_sessions),
+  total_days_played = MAX(stats.total_days_played, excluded.total_days_played);`);
       }
     }
 
@@ -269,8 +291,6 @@ ON CONFLICT(id) DO NOTHING;`);
     }
   }
 }
-
-sqlLines.push('COMMIT;');
 
 fs.writeFileSync(outSqlPath, sqlLines.join('\n'), 'utf8');
 console.log(`\n✅ Archivo SQL generado con éxito: ${outSqlPath}`);

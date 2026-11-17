@@ -33,10 +33,19 @@ usersApp.get('/me', requireAuth, async (c) => {
   const parsedBadges = JSON.parse(row.badges_json || '[]');
   const isAdmin = Boolean(user.role === 'admin' || user.role === 'owner' || parsedBadges.includes('creator'));
   const isMod = Boolean(isAdmin || user.role === 'moderator' || user.role === 'mod' || parsedBadges.includes('moderator'));
+  const isMs = row.account_type === 'microsoft' || row.microsoft_verified === 1 || parsedBadges.includes('premium');
   return c.json({
     success: true,
     user: {
       ...row,
+      accountType: row.account_type,
+      avatarUrl: row.avatar_url,
+      avatarBase64: row.avatar_url,
+      favoriteMob: row.favorite_mob,
+      mcUuid: row.mc_uuid || row.uuid,
+      uuid: row.uuid || row.mc_uuid,
+      clientVersion: row.client_version,
+      microsoftVerified: Boolean(isMs),
       links: JSON.parse(row.links_json || '[]'),
       playstyleTags: JSON.parse(row.playstyle_tags_json || '[]'),
       badges: parsedBadges,
@@ -47,15 +56,28 @@ usersApp.get('/me', requireAuth, async (c) => {
   });
 });
 
-// PATCH /api/v1/users/me - Actualizar perfil propio
+// PATCH /api/v1/users/me - Actualizar perfil propio (auto-crea fila en D1 si aún no existe)
 usersApp.patch('/me', requireAuth, async (c) => {
   const user = c.get('user');
   const body = await c.req.json<any>();
   const db = c.env.DB;
 
-  const current = await db.prepare('SELECT * FROM users WHERE uid = ?').bind(user.uid).first<any>();
+  let current = await db.prepare('SELECT * FROM users WHERE uid = ?').bind(user.uid).first<any>();
   if (!current) {
-    return c.json({ success: false, error: 'User profile not found' }, 404);
+    const requestedName = (typeof body.username === 'string' && body.username.trim())
+      ? body.username.trim()
+      : (user.email ? user.email.split('@')[0] : `user_${user.uid.slice(0, 8)}`);
+    const lower = requestedName.toLowerCase();
+    const taken = await db.prepare('SELECT uid FROM users WHERE username_lower = ?').bind(lower).first();
+    if (taken && typeof body.username === 'string' && body.username.trim()) {
+      return c.json({ success: false, error: 'username_taken' }, 400);
+    }
+    const finalUsername = taken ? `${requestedName}_${Math.floor(Math.random() * 1000)}` : requestedName;
+    await db.prepare(`
+      INSERT INTO users (uid, username, username_lower, email, account_type, badges_json, links_json, playstyle_tags_json)
+      VALUES (?, ?, ?, ?, 'helloworld', '[]', '[]', '[]')
+    `).bind(user.uid, finalUsername, finalUsername.toLowerCase(), user.email || null).run();
+    current = await db.prepare('SELECT * FROM users WHERE uid = ?').bind(user.uid).first<any>();
   }
 
   const updates: string[] = [];
@@ -138,13 +160,23 @@ usersApp.patch('/me', requireAuth, async (c) => {
   }
 
   const updatedRow = await db.prepare('SELECT * FROM users WHERE uid = ?').bind(user.uid).first<any>();
+  const updatedBadges = JSON.parse(updatedRow.badges_json || '[]');
+  const updatedIsMs = updatedRow.account_type === 'microsoft' || updatedRow.microsoft_verified === 1 || updatedBadges.includes('premium');
   return c.json({
     success: true,
     user: {
       ...updatedRow,
+      accountType: updatedRow.account_type,
+      avatarUrl: updatedRow.avatar_url,
+      avatarBase64: updatedRow.avatar_url,
+      favoriteMob: updatedRow.favorite_mob,
+      mcUuid: updatedRow.mc_uuid || updatedRow.uuid,
+      uuid: updatedRow.uuid || updatedRow.mc_uuid,
+      clientVersion: updatedRow.client_version,
+      microsoftVerified: Boolean(updatedIsMs),
       links: JSON.parse(updatedRow.links_json || '[]'),
       playstyleTags: JSON.parse(updatedRow.playstyle_tags_json || '[]'),
-      badges: JSON.parse(updatedRow.badges_json || '[]'),
+      badges: updatedBadges,
       role: user.role
     }
   });
@@ -238,19 +270,21 @@ usersApp.post('/microsoft/verify', requireAuth, async (c) => {
   } catch (_) {}
   if (!badges.includes('premium')) badges.push('premium');
 
-  // 3. Actualizar users
+  // 3. Crear o actualizar users en D1
   await db.prepare(`
-    UPDATE users SET
+    INSERT INTO users (uid, username, username_lower, email, uuid, mc_uuid, account_type, microsoft_verified, badges_json, links_json, playstyle_tags_json)
+    VALUES (?, ?, ?, ?, ?, ?, 'microsoft', 1, ?, '[]', '[]')
+    ON CONFLICT(uid) DO UPDATE SET
       account_type = 'microsoft',
-      username = ?,
-      username_lower = ?,
-      uuid = ?,
-      mc_uuid = ?,
+      username = excluded.username,
+      username_lower = excluded.username_lower,
+      email = COALESCE(excluded.email, users.email),
+      uuid = excluded.uuid,
+      mc_uuid = excluded.mc_uuid,
       microsoft_verified = 1,
-      badges_json = ?,
+      badges_json = excluded.badges_json,
       updated_at = datetime('now')
-    WHERE uid = ?
-  `).bind(body.username, body.username.toLowerCase(), body.uuid, body.uuid, JSON.stringify(badges), user.uid).run();
+  `).bind(user.uid, body.username, body.username.toLowerCase(), body.email, body.uuid, body.uuid, JSON.stringify(badges)).run();
 
   return c.json({ success: true, emailKey, verified: true });
 });
@@ -259,14 +293,23 @@ usersApp.post('/microsoft/verify', requireAuth, async (c) => {
 usersApp.get('/microsoft/status', optionalAuth, async (c) => {
   const username = c.req.query('username');
   const uuid = c.req.query('uuid');
-  if (!username && !uuid) return c.json({ success: false, verified: false }, 400);
+  const email = c.req.query('email');
+  if (!username && !uuid && !email) return c.json({ success: false, verified: false }, 400);
+
+  const normalizedEmail = email ? email.trim().toLowerCase() : null;
+  const emailKey = normalizedEmail ? normalizedEmail.replace(/\./g, '_DOT_').replace(/@/g, '_AT_') : null;
 
   const row = await c.env.DB.prepare(`
     SELECT * FROM microsoft_verified
     WHERE (? IS NOT NULL AND uuid = ?)
-       OR (? IS NOT NULL AND username = ?)
+       OR (? IS NOT NULL AND LOWER(username) = LOWER(?))
+       OR (? IS NOT NULL AND (email_key = ? OR LOWER(email) = ?))
     LIMIT 1
-  `).bind(uuid || null, uuid || '', username || null, username || '').first<any>();
+  `).bind(
+    uuid || null, uuid || '',
+    username || null, username || '',
+    normalizedEmail, emailKey || '', normalizedEmail || ''
+  ).first<any>();
 
   if (row && (row.verified === 1 || row.verified === true)) {
     return c.json({

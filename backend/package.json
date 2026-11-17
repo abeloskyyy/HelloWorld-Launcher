@@ -11,9 +11,9 @@
     "d1:init:prod": "wrangler d1 execute DB --remote --file=./migrations/0001_initial_schema.sql",
     "dump:live": "node ../scripts/dump-firebase.js",
     "seed:generate": "node scripts/seed-from-dump.js",
-    "migrate:data:local": "wrangler d1 execute DB --local --file=./migrations/0002_migrated_data.sql",
-    "migrate:data:prod": "wrangler d1 execute DB --remote --file=./migrations/0002_migrated_data.sql",
-    "sync:full:prod": "node ../scripts/dump-firebase.js && node scripts/seed-from-dump.js && wrangler d1 execute DB --remote --file=./migrations/0002_migrated_data.sql",
+    "migrate:data:local": "node scripts/apply-migration.js --local",
+    "migrate:data:prod": "node scripts/apply-migration.js --remote",
+    "sync:full:prod": "node ../scripts/dump-firebase.js && node scripts/seed-from-dump.js && node scripts/apply-migration.js --remote",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
