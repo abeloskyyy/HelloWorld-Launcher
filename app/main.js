@@ -459,13 +459,30 @@ const loadUserData = () => {
           userDataCache.firebase_ms_uid = match.firebase_ms_uid;
           changed = true;
         }
-        if (!userDataCache.last_skin_url && match.avatarUrl && match.avatarUrl.startsWith('http')) {
-          userDataCache.last_skin_url = match.avatarUrl;
+        if (!userDataCache.last_skin_url && match.last_skin_url) {
+          userDataCache.last_skin_url = match.last_skin_url;
           changed = true;
         }
         if (changed) saveUserData(userDataCache);
       }
     } catch (_) {}
+  }
+
+  // Sanitize active account avatars to prevent cross-contamination
+  if (userDataCache.account_type === 'offline') {
+    if (userDataCache.last_avatar_url) {
+      userDataCache.last_avatar_url = '';
+      saveUserData(userDataCache);
+    }
+  } else if (userDataCache.account_type === 'microsoft') {
+    if (userDataCache.last_avatar_url && (
+      userDataCache.last_avatar_url.includes('textures.minecraft.net') ||
+      userDataCache.last_avatar_url.includes('ui-avatars.com') ||
+      userDataCache.last_avatar_url.startsWith('data:image')
+    )) {
+      userDataCache.last_avatar_url = '';
+      saveUserData(userDataCache);
+    }
   }
 
   // Auto-restore active account from saved accounts if username is empty AND app is ready
@@ -479,7 +496,16 @@ const loadUserData = () => {
           userDataCache.username = latest.username;
           userDataCache.account_type = latest.type || 'offline';
           userDataCache.uuid = latest.uuid || '';
-          if (latest.avatarUrl) userDataCache.last_skin_url = latest.avatarUrl;
+          if (latest.type === 'helloworld') {
+            userDataCache.last_avatar_url = latest.avatarUrl || '';
+            userDataCache.last_skin_url = '';
+          } else if (latest.type === 'microsoft') {
+            userDataCache.last_avatar_url = (latest.avatarUrl && !latest.avatarUrl.includes('textures.minecraft.net') && !latest.avatarUrl.includes('ui-avatars.com') && !latest.avatarUrl.startsWith('data:image')) ? latest.avatarUrl : '';
+            userDataCache.last_skin_url = latest.last_skin_url || '';
+          } else {
+            userDataCache.last_avatar_url = '';
+            userDataCache.last_skin_url = '';
+          }
           if (latest.mc_token) userDataCache.mc_token = latest.mc_token;
           if (latest.msmc_auth) userDataCache.msmc_auth = latest.msmc_auth;
           if (latest.firebase_uid) userDataCache.firebase_uid = latest.firebase_uid;
@@ -610,6 +636,37 @@ function loadSavedAccounts() {
       }
     }
   }
+
+  // Sanitize stored avatars to guarantee strict account isolation
+  let accountsChanged = false;
+  for (const acc of accounts) {
+    if (acc.type === 'offline') {
+      if (acc.avatarUrl) {
+        acc.avatarUrl = '';
+        accountsChanged = true;
+      }
+    } else if (acc.type === 'microsoft') {
+      if (acc.avatarUrl && (acc.avatarUrl.includes('textures.minecraft.net') || acc.avatarUrl.includes('ui-avatars.com'))) {
+        acc.avatarUrl = '';
+        accountsChanged = true;
+      }
+      // If a Microsoft account has a base64 avatar leaked from a HelloWorld account of the same username
+      if (acc.avatarUrl && acc.avatarUrl.startsWith('data:image')) {
+        const hwAcc = accounts.find(a => a.type === 'helloworld' && a.username === acc.username);
+        if (hwAcc && !hwAcc.avatarUrl) {
+          hwAcc.avatarUrl = acc.avatarUrl;
+        }
+        acc.avatarUrl = '';
+        accountsChanged = true;
+      }
+    }
+  }
+  if (accountsChanged) {
+    try {
+      saveSavedAccounts(accounts);
+    } catch (_) {}
+  }
+
   return accounts;
 }
 
@@ -677,6 +734,19 @@ function addOrUpdateSavedAccount(userData) {
   const now = new Date().toISOString();
   const existingIndex = accounts.findIndex(a => a.id === accountId);
 
+  let cleanAvatarUrl = '';
+  if (userData.account_type === 'helloworld') {
+    cleanAvatarUrl = userData.last_avatar_url || (existingIndex >= 0 ? accounts[existingIndex].avatarUrl : '') || '';
+  } else if (userData.account_type === 'microsoft') {
+    const cand = userData.last_avatar_url || (existingIndex >= 0 ? accounts[existingIndex].avatarUrl : '');
+    if (cand && typeof cand === 'string' && !cand.includes('textures.minecraft.net') && !cand.includes('ui-avatars.com') && !cand.startsWith('data:image')) {
+      cleanAvatarUrl = cand;
+    }
+  } else {
+    // Offline accounts must never have an avatarUrl
+    cleanAvatarUrl = '';
+  }
+
   const entry = {
     id: accountId,
     type: userData.account_type || 'offline',
@@ -684,7 +754,9 @@ function addOrUpdateSavedAccount(userData) {
     uuid: userData.uuid || '',
     email: userData.account_type === 'helloworld' ? (userData._loginEmail || '') : '',
     msEmail: userData.account_type === 'microsoft' ? (userData._msEmail || '') : '',
-    avatarUrl: userData.last_avatar_url || '',
+    avatarUrl: cleanAvatarUrl,
+    last_skin_url: userData.account_type === 'microsoft' ? (userData.last_skin_url || (existingIndex >= 0 ? accounts[existingIndex].last_skin_url : '') || '') : '',
+    last_skin_variant: userData.account_type === 'microsoft' ? (userData.last_skin_variant || (existingIndex >= 0 ? accounts[existingIndex].last_skin_variant : 'classic') || 'classic') : 'classic',
     addedAt: existingIndex >= 0 ? (accounts[existingIndex].addedAt || now) : now,
     lastUsed: now,
     // sensitive (will be encrypted by saveSavedAccounts)
@@ -3987,6 +4059,23 @@ ipcMain.handle('login-microsoft', async () => {
     userData.firebase_uid = ""
     userData.firebase_refresh_token = ""
     userData.firebase_id_token = ""
+    userData.last_avatar_url = ""
+    if (existingMs && existingMs.avatarUrl && !existingMs.avatarUrl.includes('textures.minecraft.net') && !existingMs.avatarUrl.includes('ui-avatars.com') && !existingMs.avatarUrl.startsWith('data:image')) {
+      userData.last_avatar_url = existingMs.avatarUrl;
+    }
+    if (userData.firebase_ms_uid && !userData.last_avatar_url) {
+      try {
+        if (ApiClient && ApiClient.users && typeof ApiClient.users.getProfile === 'function') {
+          const msProf = await ApiClient.users.getProfile(userData.firebase_ms_uid);
+          if (msProf && msProf.user) {
+            const av = msProf.user.avatarUrl || msProf.user.avatar_url || msProf.user.avatarBase64;
+            if (av && !av.includes('textures.minecraft.net') && !av.includes('ui-avatars.com') && !av.startsWith('data:image')) {
+              userData.last_avatar_url = av;
+            }
+          }
+        }
+      } catch (_) {}
+    }
     if (profileData.skins && profileData.skins.length > 0 && profileData.skins[0].url) {
       userData.last_skin_url = profileData.skins[0].url;
       userData.last_skin_variant = profileData.skins[0].variant || 'classic';
@@ -4193,9 +4282,12 @@ ipcMain.handle('logout', async () => {
   data.last_skin_url = "";
   data.last_skin_variant = "classic";
   data.last_cape_url = "";
+  data.last_avatar_url = "";
   data.firebase_uid = "";
   data.firebase_refresh_token = "";
   data.firebase_id_token = "";
+  data.firebase_ms_uid = "";
+  data.firebase_ms_refresh_token = "";
 
   saveUserData(data)
   presenceManager.currentState = null;
@@ -4256,8 +4348,10 @@ ipcMain.handle('remove-saved-account', async (e, accountId) => {
       data.username = ''; data.account_type = 'offline'; data.uuid = '';
       data.mc_token = ''; data.msmc_auth = '';
       data.last_skin_url = ''; data.last_skin_variant = 'classic'; data.last_cape_url = '';
+      data.last_avatar_url = '';
       data.firebase_uid = ''; data.firebase_refresh_token = '';
       data.firebase_id_token = '';
+      data.firebase_ms_uid = ''; data.firebase_ms_refresh_token = '';
       saveUserData(data);
       presenceManager.currentState = null;
       presenceManager.gameContext = null;
@@ -4282,8 +4376,10 @@ ipcMain.handle('remove-all-accounts', async () => {
     data.username = ''; data.account_type = 'offline'; data.uuid = '';
     data.mc_token = ''; data.msmc_auth = '';
     data.last_skin_url = ''; data.last_skin_variant = 'classic'; data.last_cape_url = '';
+    data.last_avatar_url = '';
     data.firebase_uid = ''; data.firebase_refresh_token = '';
     data.firebase_id_token = '';
+    data.firebase_ms_uid = ''; data.firebase_ms_refresh_token = '';
     saveUserData(data);
     presenceManager.currentState = null;
     presenceManager.gameContext = null;
@@ -4366,11 +4462,16 @@ ipcMain.handle('switch-account', async (e, accountId, targetType = null) => {
       currentData.last_skin_url = '';
       currentData.last_skin_variant = 'classic';
       currentData.last_cape_url = '';
+      currentData.last_avatar_url = '';
       saveUserData(currentData);
 
       // Update lastUsed
       const idx = accounts.findIndex(a => a.id === acc.id);
-      if (idx >= 0) { accounts[idx].lastUsed = new Date().toISOString(); saveSavedAccounts(accounts); }
+      if (idx >= 0) {
+        accounts[idx].avatarUrl = '';
+        accounts[idx].lastUsed = new Date().toISOString();
+        saveSavedAccounts(accounts);
+      }
 
       return { success: true, newData: currentData };
     }
@@ -4486,11 +4587,29 @@ ipcMain.handle('switch-account', async (e, accountId, targetType = null) => {
         // Preserve MS social verification tokens from saved account
         currentData.firebase_ms_uid = acc.firebase_ms_uid || currentData.firebase_ms_uid || '';
         currentData.firebase_ms_refresh_token = acc.firebase_ms_refresh_token || currentData.firebase_ms_refresh_token || '';
+
+        // Check for verified custom avatar on MS account
+        let msAvatar = (acc.avatarUrl && typeof acc.avatarUrl === 'string' && !acc.avatarUrl.includes('textures.minecraft.net') && !acc.avatarUrl.includes('ui-avatars.com') && !acc.avatarUrl.startsWith('data:image')) ? acc.avatarUrl : '';
+        if (!msAvatar && currentData.firebase_ms_uid) {
+          try {
+            if (ApiClient && ApiClient.users && typeof ApiClient.users.getProfile === 'function') {
+              const msProf = await ApiClient.users.getProfile(currentData.firebase_ms_uid);
+              if (msProf && msProf.user) {
+                const av = msProf.user.avatarUrl || msProf.user.avatar_url || msProf.user.avatarBase64;
+                if (av && !av.includes('textures.minecraft.net') && !av.includes('ui-avatars.com') && !av.startsWith('data:image')) {
+                  msAvatar = av;
+                }
+              }
+            }
+          } catch (_) {}
+        }
+        currentData.last_avatar_url = msAvatar;
+
         if (profileData.skins && profileData.skins.length > 0 && profileData.skins[0].url) {
           currentData.last_skin_url = profileData.skins[0].url;
           currentData.last_skin_variant = profileData.skins[0].variant || 'classic';
         } else {
-          currentData.last_skin_url = acc.last_skin_url || (acc.avatarUrl && acc.avatarUrl.startsWith('http') ? acc.avatarUrl : '');
+          currentData.last_skin_url = acc.last_skin_url || '';
           currentData.last_skin_variant = acc.last_skin_variant || 'classic';
         }
         currentData.last_cape_url = '';
@@ -4505,8 +4624,8 @@ ipcMain.handle('switch-account', async (e, accountId, targetType = null) => {
           accounts[idx].username = profileData.name;
           if (currentData.last_skin_url) {
             accounts[idx].last_skin_url = currentData.last_skin_url;
-            accounts[idx].avatarUrl = currentData.last_skin_url;
           }
+          accounts[idx].avatarUrl = msAvatar;
           accounts[idx].lastUsed = new Date().toISOString();
           saveSavedAccounts(accounts);
         }
@@ -8126,6 +8245,22 @@ ipcMain.handle('ms-write-verified', async (e, emailKey, email, username, uuid, f
     const userData = loadUserData();
     userData.firebase_ms_uid = firebaseUid;
     userData.firebase_ms_refresh_token = firebaseRefreshToken;
+
+    // Check if this MS user has a custom chosen profile avatar in backend
+    if (firebaseUid && !userData.last_avatar_url) {
+      try {
+        if (ApiClient && ApiClient.users && typeof ApiClient.users.getProfile === 'function') {
+          const msProf = await ApiClient.users.getProfile(firebaseUid);
+          if (msProf && msProf.user) {
+            const av = msProf.user.avatarUrl || msProf.user.avatar_url || msProf.user.avatarBase64;
+            if (av && !av.includes('textures.minecraft.net') && !av.includes('ui-avatars.com') && !av.startsWith('data:image')) {
+              userData.last_avatar_url = av;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     saveUserData(userData);
     try {
       addOrUpdateSavedAccount(userData);

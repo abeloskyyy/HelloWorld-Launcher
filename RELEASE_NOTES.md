@@ -1,3 +1,12 @@
+# RELEASE 3.1.1
+
+## Fixed
+
+- **Account Profile Avatar Isolation**: Resolved avatar cross-contamination between different account types sharing the same nickname.
+- **Offline Profile Icon**: Offline accounts now strictly display the standard user profile icon instead of loading Minecraft skins or heads.
+- **Premium Minecraft Head Display**: Microsoft accounts accurately display the official Minecraft character head when no custom profile picture is configured, preventing unintended fallbacks.
+- **HelloWorld Custom Avatar & Initials**: HelloWorld accounts display their chosen profile photo or generated initials with zero data leakage.
+
 # RELEASE 3.1.0
 
 ## Added

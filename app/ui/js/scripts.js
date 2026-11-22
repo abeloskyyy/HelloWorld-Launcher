@@ -3540,16 +3540,19 @@ async function updateUserInterface(userData) {
                 avatarUrl = window.hasInternet ? (rawAvatar || fallbackUrl) : null;
             } else if (userData.account_type === 'microsoft') {
                 let rawAvatar = userData.last_avatar_url;
-                if (rawAvatar && typeof rawAvatar === 'string' && !rawAvatar.startsWith('data:') && !rawAvatar.startsWith('http')) {
-                    rawAvatar = 'data:image/png;base64,' + rawAvatar;
+                if (rawAvatar && typeof rawAvatar === 'string' && !rawAvatar.includes('textures.minecraft.net') && !rawAvatar.includes('ui-avatars.com') && !rawAvatar.startsWith('data:image')) {
+                    if (!rawAvatar.startsWith('data:') && !rawAvatar.startsWith('http')) {
+                        rawAvatar = 'data:image/png;base64,' + rawAvatar;
+                    }
+                } else {
+                    rawAvatar = null;
                 }
                 const id = userData.uuid || (userData.username ? encodeURIComponent(userData.username) : null);
-                const mcHeadUrl = id ? `https://mc-heads.net/avatar/${encodeURIComponent(userData.username || id)}` : null;
+                const mcHeadUrl = id ? `https://mc-heads.net/avatar/${encodeURIComponent(userData.uuid || userData.username || id)}` : null;
                 avatarUrl = window.hasInternet ? (rawAvatar || mcHeadUrl) : null;
             } else {
-                // Offline
-                const offUser = userData.username ? encodeURIComponent(userData.username) : null;
-                avatarUrl = window.hasInternet && offUser ? `https://mc-heads.net/avatar/${offUser}` : null;
+                // Offline: ALWAYS null so renderUserHead displays standard user person icon
+                avatarUrl = null;
             }
             await window.renderUserHead(avatarUrl);
         }
@@ -8520,6 +8523,13 @@ const switchAccountBtn = document.getElementById('switchAccountBtn');
 // Helper: get avatar URL for an account (for use in the switcher UI)
 function getAccountAvatarUrl(acc) {
     if (acc.type === 'microsoft') {
+        if (acc.avatarUrl && typeof acc.avatarUrl === 'string' && !acc.avatarUrl.includes('textures.minecraft.net') && !acc.avatarUrl.includes('ui-avatars.com') && !acc.avatarUrl.startsWith('data:image')) {
+            let u = acc.avatarUrl;
+            if (!u.startsWith('data:') && !u.startsWith('http://') && !u.startsWith('https://')) {
+                if (u.length > 30) u = 'data:image/png;base64,' + u;
+            }
+            return u;
+        }
         const id = acc.uuid || (acc.username ? encodeURIComponent(acc.username) : null);
         if (id) return `https://crafthead.net/helm/${id}/64`;
     }
@@ -8535,8 +8545,9 @@ function getAccountAvatarUrl(acc) {
             return `https://ui-avatars.com/api/?name=${encodeURIComponent(acc.username)}&background=1a1a24&color=ffd700&bold=true&size=64`;
         }
     }
-    if (acc.type === 'offline' && acc.username) {
-        return `https://crafthead.net/helm/${encodeURIComponent(acc.username)}/64`;
+    if (acc.type === 'offline') {
+        // Offline accounts must always render the fallback person icon, never a Minecraft head
+        return null;
     }
     return null;
 }
