@@ -8,5 +8,5 @@
 - **HelloWorld Custom Avatar & Initials**: HelloWorld accounts display their chosen profile photo or generated single initial letter with zero data leakage, eliminating accidental Steve skin heads in profile views.
 - **Update Download Resilience**: Cleaned up updater lifecycle so closing or quitting the launcher while an update is downloading aborts cleanly, removes temporary `.tmp_` files, and prevents orphaned file accumulation.
 - **Update Badge Disk Verification**: Verified that persisted update packages actually exist on disk before restoring the "Update Ready" dock badge.
-- **Gameplay Protection During Mandatory Updates**: Mandatory updates downloaded during an active game session now postpone installation until Minecraft closes cleanly, preventing disruptions.
+- **Complete Process Termination on Update & Quit**: When applying updates or closing the launcher, running Minecraft instances and launcher processes are terminated cleanly so updates install without locked files.
 - **Announcement Update Action**: Restored functionality of the update button in community announcement banners.

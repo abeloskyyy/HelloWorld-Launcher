@@ -1928,6 +1928,42 @@ function isMinecraftRunning() {
   return getRunningMinecraftCount() > 0;
 }
 
+function killAllMinecraftProcesses() {
+  console.log('[killAllMinecraftProcesses] Forcibly closing all running Minecraft instances...');
+  const { execSync } = require('child_process');
+
+  // 1. Internal child processes
+  for (const child of activeGameProcesses) {
+    try {
+      if (child && child.pid) {
+        if (process.platform === 'win32') {
+          try { execSync(`taskkill /pid ${child.pid} /T /F`, { stdio: 'ignore' }); } catch (_) {}
+        } else {
+          try { process.kill(child.pid, 'SIGKILL'); } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+  activeGameProcesses.clear();
+  internalGameProcessesMeta.clear();
+
+  // 2. External detected Minecraft PIDs
+  for (const pid of externalMinecraftPids) {
+    try {
+      if (process.platform === 'win32') {
+        try { execSync(`taskkill /pid ${pid} /T /F`, { stdio: 'ignore' }); } catch (_) {}
+      } else {
+        try { process.kill(pid, 'SIGKILL'); } catch (_) {}
+      }
+    } catch (_) {}
+  }
+  externalMinecraftPids.clear();
+  externalProcessesMeta.clear();
+
+  currentGameProcess = null;
+  lastKnownRunningState = false;
+}
+
 function getLocalStatsFilePath() {
   try {
     return path.join(path.dirname(paths.getUserFilePath()), 'stats.json');
@@ -6331,6 +6367,9 @@ ipcMain.handle('launch-installer-and-quit', async (event, optionsOrPath) => {
   isLaunchingInstaller = true;
 
   try {
+    // Si el juego está abierto, cerrarlo del todo para poder actualizar sin bloqueos de archivos
+    killAllMinecraftProcesses();
+
     let targetExe = null;
     let updateFile = null;
     let customInstallPath = null;
@@ -11171,9 +11210,8 @@ app.on('before-quit', async () => {
   }
   activeDownloads.clear();
 
-  // 2. Kill main game process if running (optional, but good practice)
-  // Assuming 'launcher' might have internal state, but MCLC doesn't expose the main process easily globally unless we track it
-  // But we have rpc.setIdle() which is good.
+  // 2. Cerrar completamente todos los procesos de Minecraft si están en ejecución
+  killAllMinecraftProcesses();
 
   // Hard exit fallback to guarantee process singleton lock is freed
   setTimeout(() => {

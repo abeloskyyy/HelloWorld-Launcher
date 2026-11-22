@@ -2581,13 +2581,6 @@ function triggerMandatoryAutoApply(updateData) {
         }
         return;
     }
-    // Si Minecraft está en ejecución, no interrumpir la partida activa del usuario.
-    // Posponer la auto-aplicación obligatoria hasta que el juego se cierre limpiamente.
-    if (window.isMinecraftRunning) {
-        console.log('[BackgroundUpdater] Mandatory update ready, but Minecraft is running. Postponing auto-apply until game closes.');
-        window._pendingMandatoryAutoApply = updateData;
-        return;
-    }
     setTimeout(() => {
         hwlApplyDownloadedUpdate(null, { isAuto: true });
     }, 800);
@@ -5090,14 +5083,6 @@ function onMinecraftClosed() {
     window.isLaunching = false;
     window.isMinecraftRunning = false;
     resetServerJoinButtons();
-
-    // Si había una actualización obligatoria pospuesta mientras se jugaba, aplicarla ahora
-    if (window._pendingMandatoryAutoApply) {
-        const pending = window._pendingMandatoryAutoApply;
-        window._pendingMandatoryAutoApply = null;
-        console.log('[onMinecraftClosed] Applying postponed mandatory update now that game is closed.');
-        triggerMandatoryAutoApply(pending);
-    }
 
     const playButton = document.querySelector('.play-button');
     if (playButton) {
