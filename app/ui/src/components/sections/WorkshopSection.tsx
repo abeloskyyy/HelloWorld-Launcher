@@ -200,8 +200,8 @@ export const WorkshopSection: React.FC = () => {
             </div>
             <i className="fas fa-chevron-down wk-accordion-arrow" style={{ transform: accStates.wkCommunityBody ? 'rotate(180deg)' : 'rotate(0deg)' }}></i>
           </div>
-          <div className={`wk-accordion-body ${accStates.wkCommunityBody ? 'open' : ''}`} id="wkCommunityBody" style={{ position: 'relative' }}>
-            <div style={{ position: 'relative', minHeight: '320px' }}>
+          <div className={`wk-accordion-body ${accStates.wkCommunityBody ? 'open' : ''}`} id="wkCommunityBody">
+            <div>
               {/* Lock overlay for non-online users */}
               <div id="wkCommunityLock" className="wk-community-lock" style={{ display: 'none' }}>
                 <div className="wk-lock-badge-icon">
@@ -445,7 +445,7 @@ export const WorkshopSection: React.FC = () => {
               <i className="fas fa-shield-alt"></i> <span data-i18n="workshop.admin.panel_title">Moderation Panel:</span>
             </span>
             <button
-              className="wk-admin-filter-btn active"
+              className="wk-admin-filter-btn"
               data-filter="pnd"
               onClick={() => handleFilterWkAdmin('pnd')}
               data-i18n="workshop.admin.pending"
@@ -469,7 +469,7 @@ export const WorkshopSection: React.FC = () => {
               Approved
             </button>
             <button
-              className="wk-admin-filter-btn"
+              className="wk-admin-filter-btn active"
               data-filter="all"
               onClick={() => handleFilterWkAdmin('all')}
               data-i18n="workshop.admin.all"

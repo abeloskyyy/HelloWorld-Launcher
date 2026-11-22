@@ -5,6 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 FIREBASE_PROJECT_ID = "helloworld-launcher"
+LAUNCHER_SECRET = "hwl_sec_7f9b8c2d1e0a4f5b9c8d7e6a5b4c3d2e1"
 CORS_ORIGIN = "*"
 BASE_URL = "https://api.hwlauncher.abelosky.com"
 NTFY_SERVER = "https://ntfy.sh"

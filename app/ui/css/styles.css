@@ -1050,7 +1050,9 @@ body:not(.disable-transitions) .full-screen-overlay.closing .review-overlay-cont
 
 .sidebar-submenu {
     position: relative;
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.25);
     margin: 0;
     padding: 0;
     border-radius: 12px;
@@ -1059,7 +1061,7 @@ body:not(.disable-transitions) .full-screen-overlay.closing .review-overlay-cont
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
-    transition: max-height 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    transition: max-height 0.24s cubic-bezier(0.4, 0, 0.2, 1),
                 opacity 0.18s ease,
                 margin 0.22s cubic-bezier(0.4, 0, 0.2, 1),
                 padding 0.22s cubic-bezier(0.4, 0, 0.2, 1),
@@ -1067,32 +1069,73 @@ body:not(.disable-transitions) .full-screen-overlay.closing .review-overlay-cont
 }
 
 .sidebar-submenu.active {
-    max-height: 210px;
+    max-height: 220px;
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
-    margin-top: 5px;
-    margin-bottom: 5px;
-    padding: 5px 0;
+    margin-top: 10px;
+    margin-bottom: 0px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .sidebar-submenu .sidebar-button.submenu-item {
-    font-size: 14px;
-    padding: 10px 15px 10px 45px !important;
-    border-radius: 8px !important;
-    margin: 4px 10px !important;
-    width: calc(100% - 20px) !important;
+    font-size: 13.5px !important;
+    font-weight: 550 !important;
+    color: #a4b0c2 !important;
+    padding: 0 14px !important;
+    border-radius: 9px !important;
+    margin: 0 !important;
+    width: 100% !important;
     background: transparent;
-    min-height: 42px;
+    height: 38px !important;
+    min-height: 38px !important;
     flex-shrink: 0;
     box-sizing: border-box;
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    border: 1px solid transparent !important;
+    transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
 
     /* Staggered slide-in from left */
-    animation: slideInFromLeft 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) backwards;
+    animation: slideInFromLeft 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) backwards;
+}
+
+.sidebar-submenu .sidebar-button.submenu-item i {
+    width: 18px;
+    text-align: center;
+    font-size: 14px;
+    opacity: 0.85;
+    transition: transform 0.18s ease, color 0.18s ease;
+}
+
+.sidebar-submenu .sidebar-button.submenu-item:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+    color: #f0f4f8 !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+    transform: translateX(2px) !important;
+}
+
+.sidebar-submenu .sidebar-button.submenu-item:hover i {
+    opacity: 1;
+    color: #4facfe;
+    transform: scale(1.1);
 }
 
 .sidebar-submenu .sidebar-button.submenu-item.active {
-    background: linear-gradient(90deg, rgba(79, 172, 254, 0.2), rgba(0, 242, 254, 0.1)) !important;
+    background: linear-gradient(90deg, rgba(79, 172, 254, 0.18), rgba(0, 242, 254, 0.08)) !important;
+    border-color: rgba(79, 172, 254, 0.35) !important;
+    color: #70baff !important;
+    font-weight: 600 !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+.sidebar-submenu .sidebar-button.submenu-item.active i {
+    opacity: 1;
+    color: #4facfe;
 }
 
 .sidebar-submenu .sidebar-button.submenu-item:nth-child(1) {
@@ -8169,6 +8212,8 @@ label {
     align-items: center;
     gap: 2px;
     cursor: pointer !important;
+    overflow: visible !important;
+    isolation: isolate;
 }
 
 /* Social Button */
@@ -8250,6 +8295,9 @@ label {
     user-select: none;
     line-height: 1;
     overflow: visible !important;
+    isolation: isolate;
+    backface-visibility: hidden;
+    transform: translateZ(0);
 }
 
 /* Authentic Twitter/Meta 12-scallop rosette SVG background */
@@ -8262,6 +8310,7 @@ label {
     pointer-events: none;
     z-index: 0;
     overflow: visible !important;
+    transform: translateZ(0);
 }
 
 /* Compact badges (names view, profile button, friend lists): only show the solid verified rosette seal with its color */
@@ -8360,6 +8409,8 @@ label {
     gap: 3px;
     vertical-align: middle;
     cursor: pointer;
+    overflow: visible !important;
+    isolation: isolate;
 }
 
 /* Fallback / Legacy .premium-badge alias — solid gold, no hover */
@@ -8433,6 +8484,8 @@ label {
     border-radius: 50%;
     vertical-align: middle;
     transition: all 0.3s ease;
+    isolation: isolate;
+    contain: layout style;
 }
 
 /* Ambient glow layer behind avatar */
@@ -8455,6 +8508,8 @@ label {
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s ease;
+    isolation: isolate;
+    contain: paint;
 }
 
 /* Radiant celestial corona/sparkle layer (Top tier) */
@@ -11232,14 +11287,14 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important;
-    border: none !important;
+    background: rgba(79, 172, 254, 0.22) !important;
+    border: 1px solid rgba(79, 172, 254, 0.5) !important;
     border-radius: 10px !important;
-    color: #ffffff !important;
+    color: #4facfe !important;
     font-size: 16px !important;
     cursor: pointer !important;
-    box-shadow: 0 4px 16px rgba(79, 172, 254, 0.4), 0 1px 3px rgba(0,0,0,0.25) !important;
-    transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.22s ease !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+    transition: background 0.22s ease, transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.22s ease, border-color 0.22s ease, color 0.18s ease !important;
     flex-shrink: 0 !important;
     position: relative !important;
     overflow: hidden !important;
@@ -11248,7 +11303,7 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
     content: '' !important;
     position: absolute !important;
     inset: 0 !important;
-    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%) !important;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.14) 50%, transparent 100%) !important;
     transform: translateX(-110%) !important;
     transition: transform 0.45s cubic-bezier(0.4,0,0.2,1) !important;
     pointer-events: none !important;
@@ -11257,13 +11312,15 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
     transform: translateX(110%) !important;
 }
 .wk-header-plus-btn:hover {
-    transform: translateY(-2px) scale(1.08) !important;
-    box-shadow: 0 8px 24px rgba(79, 172, 254, 0.6), 0 2px 6px rgba(0,0,0,0.2) !important;
-    color: #ffffff !important;
+    background: rgba(79, 172, 254, 0.32) !important;
+    border-color: rgba(79, 172, 254, 0.75) !important;
+    color: #70baff !important;
+    transform: translateY(-2px) scale(1.06) !important;
+    box-shadow: 0 4px 14px rgba(79, 172, 254, 0.3) !important;
 }
 .wk-header-plus-btn:active {
-    transform: scale(0.94) !important;
-    box-shadow: 0 3px 10px rgba(79, 172, 254, 0.4) !important;
+    transform: scale(0.96) !important;
+    box-shadow: 0 1px 4px rgba(79, 172, 254, 0.2) !important;
 }
 
 /* --- Tab bar --- */
@@ -11395,6 +11452,12 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
     overflow: hidden;
     pointer-events: none;
 }
+.wk-accordion-body:not(.open) {
+    grid-template-rows: 0fr !important;
+    opacity: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+}
 .wk-accordion-body.open {
     grid-template-rows: 1fr;
     opacity: 1;
@@ -11406,6 +11469,12 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
     overflow: hidden;
     padding: 0 4px;
     transition: padding 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.wk-accordion-body:not(.open) > * {
+    min-height: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    overflow: hidden !important;
 }
 .wk-accordion-body.open > * {
     padding: 16px 4px;
@@ -11555,9 +11624,10 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
     overflow: hidden;
 }
 .wk-card.wk-card-mine {
-    height: 350px !important;
-    min-height: 350px !important;
-    max-height: 350px !important;
+    height: 360px !important;
+    min-height: 360px !important;
+    max-height: 360px !important;
+    padding-bottom: 18px !important;
 }
 .wk-card.wk-card-admin {
     height: 284px !important;
@@ -11624,6 +11694,40 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
     align-items: center !important;
     justify-content: center !important;
     gap: 6px !important;
+}
+#wkModrinthGrid .mod-card .mod-card-actions button.btn-primary:not(.is-installed) {
+    background: rgba(79, 172, 254, 0.22) !important;
+    border: 1px solid rgba(79, 172, 254, 0.5) !important;
+    color: #4facfe !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+#wkModrinthGrid .mod-card .mod-card-actions button.btn-primary:not(.is-installed)::before {
+    content: '' !important;
+    position: absolute !important;
+    inset: 0 !important;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.14) 50%, transparent 100%) !important;
+    transform: translateX(-110%) !important;
+    transition: transform 0.45s cubic-bezier(0.4,0,0.2,1) !important;
+    pointer-events: none !important;
+}
+#wkModrinthGrid .mod-card .mod-card-actions button.btn-primary:not(.is-installed):hover {
+    background: rgba(79, 172, 254, 0.32) !important;
+    border-color: rgba(79, 172, 254, 0.75) !important;
+    color: #70baff !important;
+    box-shadow: 0 4px 14px rgba(79, 172, 254, 0.3) !important;
+    transform: translateY(-1px) !important;
+}
+#wkModrinthGrid .mod-card .mod-card-actions button.btn-primary:not(.is-installed):hover::before {
+    transform: translateX(110%) !important;
+}
+#wkModrinthGrid .mod-card .mod-card-actions button.btn-primary:not(.is-installed):active {
+    transform: translateY(0) scale(0.98) !important;
+    box-shadow: 0 1px 4px rgba(79, 172, 254, 0.2) !important;
 }
 .wk-card::after {
     content: '';
@@ -11705,7 +11809,11 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
     display: flex;
     flex-direction: column;
     gap: 6px;
-    margin-top: 6px !important;
+    margin-top: auto !important;
+}
+.wk-card.wk-card-mine .wk-card-actions {
+    margin-top: auto !important;
+    margin-bottom: 0 !important;
 }
 .wk-card-actions-row {
     display: flex;
@@ -11796,15 +11904,15 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
     100% { transform: scale(1.15) rotate(0deg); }
 }
 .wk-card-stats-block {
-    margin: 12px 0 8px 0;
-    padding: 10px 14px;
+    margin: 4px 0 6px 0 !important;
+    padding: 8px 12px !important;
     background: rgba(0, 0, 0, 0.25);
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 8px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    font-size: 13px;
+    gap: 4px !important;
+    font-size: 12.5px !important;
     color: #a0a8c0;
 }
 .wk-card-stat-line {
@@ -11859,9 +11967,10 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
 }
 
 .wk-card-skeleton.wk-card-mine {
-    height: 350px !important;
-    min-height: 350px !important;
-    max-height: 350px !important;
+    height: 360px !important;
+    min-height: 360px !important;
+    max-height: 360px !important;
+    padding-bottom: 18px !important;
 }
 
 .mod-card-skeleton {
@@ -12108,8 +12217,8 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
 
 /* --- Community Lock Overlay --- */
 .wk-community-lock {
-    position: absolute;
-    inset: 0;
+    position: relative;
+    width: 100%;
     min-height: 290px;
     background: radial-gradient(circle at 50% 35%, rgba(18, 24, 38, 0.98) 0%, rgba(10, 14, 22, 0.99) 100%);
     backdrop-filter: blur(16px);
@@ -12125,6 +12234,10 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
     text-align: center;
     box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
     box-sizing: border-box;
+    margin: 8px 0;
+}
+.wk-community-lock:not([style*="display: none"]) ~ .wk-community-controls {
+    display: none !important;
 }
 
 .wk-lock-badge-icon {

@@ -259,7 +259,7 @@ workshopApp.patch('/items/:id', requireAuth, async (c) => {
   const item = await db.prepare('SELECT * FROM workshop_items WHERE id = ?').bind(id).first<any>();
   if (!item) return c.json({ success: false, error: 'not_found' }, 404);
 
-  const isAdmin = user.role === 'admin' || user.role === 'owner';
+  const isAdmin = Boolean(user.isTokenVerified && (user.role === 'admin' || user.role === 'owner'));
   const isAuthor = item.uid === user.uid;
 
   if (!isAuthor && !isAdmin) {
@@ -326,7 +326,7 @@ workshopApp.delete('/items/:id', requireAuth, async (c) => {
   const item = await db.prepare('SELECT uid FROM workshop_items WHERE id = ?').bind(id).first<{ uid: string }>();
   if (!item) return c.json({ success: false, error: 'not_found' }, 404);
 
-  const isAdmin = user.role === 'admin' || user.role === 'owner';
+  const isAdmin = Boolean(user.isTokenVerified && (user.role === 'admin' || user.role === 'owner'));
   if (item.uid !== user.uid && !isAdmin) {
     return c.json({ success: false, error: 'forbidden' }, 403);
   }
@@ -359,7 +359,7 @@ workshopApp.patch('/items/:id/status', requireAuth, requireModerator, async (c) 
     bindings.push(normalizedStatus, body.note || null);
   }
 
-  const isAdmin = user.role === 'admin' || user.role === 'owner';
+  const isAdmin = Boolean(user.isTokenVerified && (user.role === 'admin' || user.role === 'owner'));
   if (isAdmin && body.isOfficial !== undefined && body.isOfficial !== null) {
     updates.push('is_official = ?');
     bindings.push(body.isOfficial ? 1 : 0);

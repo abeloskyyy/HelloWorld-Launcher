@@ -3279,7 +3279,7 @@ async function loadOwnBadges(userData) {
 
         if (badges.length === 0 && window.HW_API_URL) {
             try {
-                const uid = (userData.account_type === 'microsoft' ? (userData.firebase_ms_uid || userData.uuid) : (userData.firebase_uid || userData.uuid)) || userData.username;
+                const uid = (userData.account_type === 'microsoft' ? (userData.firebase_ms_uid || userData.uuid) : (userData.firebase_uid || userData.uuid));
                 if (uid) {
                     const apiRes = await fetch(`${window.HW_API_URL}/api/v1/users/${encodeURIComponent(uid)}`).then(r => r.json()).catch(() => null);
                     if (apiRes && apiRes.success && apiRes.user && Array.isArray(apiRes.user.badges) && apiRes.user.badges.length > 0) {
@@ -3305,7 +3305,7 @@ async function loadOwnBadges(userData) {
         if (typeof window.renderBadgesHtml === 'function') {
             badgesDisplay.innerHTML = window.renderBadgesHtml(badges, false);
         } else {
-            const BADGE_ROSETTE_SVG = '<svg class="hw-badge-shape" viewBox="0 0 22 22" aria-hidden="true"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.887-1.692-.474-.45-1.058-.756-1.692-.887-.633-.13-1.29-.083-1.897.14-.274-.586-.706-1.084-1.246-1.438C12.275 1.808 11.646 1.61 11 1.628c-.646.018-1.275.215-1.816.57-.54.354-.972.852-1.246 1.438-.607-.223-1.264-.27-1.897-.14-.634.131-1.218.437-1.692.887-.45.474-.756 1.058-.887 1.692-.13.633-.083 1.29.14 1.897-.586.274-1.084.706-1.438 1.246C1.808 9.725 1.61 10.354 1.628 11c.018.646.215 1.275.57 1.816.354.54.852.972 1.438 1.246-.223.607-.27 1.264-.14 1.897.131.634.437 1.218.887 1.692.474.45 1.058.756 1.692.887-.633.13-1.29-.083-1.897-.14-.274-.586-.706-1.084-1.246-1.438.541.355 1.17.552 1.816.57.646-.018 1.275-.215 1.816-.57.54-.354.972-.852 1.246-1.438.607.223 1.264.27 1.897.14.634-.131 1.218-.437 1.692-.887.45-.474.756-1.058.887-1.692.13-.633-.083-1.29-.14-1.897.586-.274 1.084-.706 1.438-1.246.355-.541.552-1.17.57-1.816z"/></svg>';
+            const BADGE_ROSETTE_SVG = '<svg class="hw-badge-shape" viewBox="0 0 22 22" overflow="visible" aria-hidden="true" style="overflow:visible;"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816z"/></svg>';
             const defs = {
                 premium:   { cls: 'hw-badge-premium', title: 'Cuenta Premium' },
                 moderator: { cls: 'hw-badge-moderator', title: 'Moderador' },
@@ -3529,30 +3529,29 @@ async function updateUserInterface(userData) {
 
 
         // Render head avatar
-
         if (window.renderUserHead) {
-
+            let avatarUrl = null;
             if (userData.account_type === 'helloworld') {
-
-                const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.username)}&background=random&color=fff&rounded=true&bold=true&format=svg`;
-
-                const avatarUrl = window.hasInternet ? (userData.last_avatar_url || fallbackUrl) : null;
-
-                await window.renderUserHead(avatarUrl);
-
+                const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.username || 'Player')}&background=random&color=fff&rounded=true&bold=true&format=svg`;
+                let rawAvatar = userData.last_avatar_url;
+                if (rawAvatar && typeof rawAvatar === 'string' && !rawAvatar.startsWith('data:') && !rawAvatar.startsWith('http')) {
+                    rawAvatar = 'data:image/png;base64,' + rawAvatar;
+                }
+                avatarUrl = window.hasInternet ? (rawAvatar || fallbackUrl) : null;
             } else if (userData.account_type === 'microsoft') {
+                let rawAvatar = userData.last_avatar_url;
+                if (rawAvatar && typeof rawAvatar === 'string' && !rawAvatar.startsWith('data:') && !rawAvatar.startsWith('http')) {
+                    rawAvatar = 'data:image/png;base64,' + rawAvatar;
+                }
                 const id = userData.uuid || (userData.username ? encodeURIComponent(userData.username) : null);
-                const skinUrl = window.hasInternet ? (id ? `https://crafthead.net/helm/${id}/64` : null) : null;
-                await window.renderUserHead(skinUrl);
-
+                const mcHeadUrl = id ? `https://mc-heads.net/avatar/${encodeURIComponent(userData.username || id)}` : null;
+                avatarUrl = window.hasInternet ? (rawAvatar || mcHeadUrl) : null;
             } else {
-
                 // Offline
-
-                await window.renderUserHead(null);
-
+                const offUser = userData.username ? encodeURIComponent(userData.username) : null;
+                avatarUrl = window.hasInternet && offUser ? `https://mc-heads.net/avatar/${offUser}` : null;
             }
-
+            await window.renderUserHead(avatarUrl);
         }
 
     } else {
@@ -3630,17 +3629,11 @@ async function updateUserInterface(userData) {
                     socialBtnEl.title = 'Social';
 
                 } else {
-
-                    socialBtnEl.disabled = false; // Don't use disabled attribute, use class instead
-
-                    socialBtnEl.classList.add('btn-disabled');
-
-                    socialBtnEl.style.cursor = 'default';
-
-                    socialBtnEl.style.opacity = '0.5';
-
-                    socialBtnEl.title = 'Verify your Microsoft account to use Social';
-
+                    socialBtnEl.disabled = false;
+                    socialBtnEl.classList.remove('btn-disabled');
+                    socialBtnEl.style.removeProperty('cursor');
+                    socialBtnEl.style.removeProperty('opacity');
+                    socialBtnEl.title = 'Social (Conectar cuenta)';
                 }
 
             } else {
@@ -3892,113 +3885,54 @@ async function waitForFirebase(timeout = 5000) {
 
 
 async function silentMicrosoftVerify(username, uuid) {
-
     const fb = await waitForFirebase();
-
-    if (!fb) return;
-
     try {
-
-        // If already signed into Firebase Auth, use that session silently (no popup)
-
-        const msUser = fb.fbAuth.currentUser;
-
-        if (msUser) {
-
-            await writeMsVerified(fb, msUser, username, uuid);
-
-            console.log('[MS Verify] Silently re-verified:', msUser.email);
-
-            if (typeof window.hideMsVerifyBanner === 'function') window.hideMsVerifyBanner(true);
-
-            const updatedData = await window.hwlAPI.get_user_json();
-
-            await updateUserInterface(updatedData);
-
-            return;
-
-        }
-
-
-
-        // If no Firebase session, check if already verified in Firestore
-
-        console.log('[MS Verify] No Firebase Auth session. Checking Firestore for existing verification...');
-
-        const PROJECT_ID = 'helloworld-launcher';
-
-        const queryUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents:runQuery`;
-
-        const queryBody = {
-
-            structuredQuery: {
-
-                from: [{ collectionId: "microsoftVerified" }],
-
-                where: {
-
-                    fieldFilter: {
-
-                        field: { fieldPath: "username" },
-
-                        op: "EQUAL",
-
-                        value: { stringValue: username }
-
-                    }
-
-                },
-
-                limit: 1
-
+        if (fb) {
+            // Wait for Firebase to finish loading persisted auth state from IndexedDB
+            if (typeof fb.fbAuth?.authStateReady === 'function') {
+                await fb.fbAuth.authStateReady();
             }
-
-        };
-
-
-
-        const queryRes = await fetch(queryUrl, {
-
-            method: 'POST',
-
-            headers: { 'Content-Type': 'application/json' },
-
-            body: JSON.stringify(queryBody)
-
-        }).then(r => r.json());
-
-
-
-        if (queryRes && queryRes[0] && queryRes[0].document) {
-
-            const fields = queryRes[0].document.fields;
-
-            const email = fields.email ? fields.email.stringValue : null;
-
-            if (email) {
-
-                console.log('[MS Verify] Found existing verification in Firestore for:', email);
-
+            // If already signed into Firebase Auth, use that session silently (no popup)
+            const msUser = fb.fbAuth?.currentUser;
+            if (msUser) {
+                await writeMsVerified(fb, msUser, username, uuid);
+                console.log('[MS Verify] Silently re-verified:', msUser.email);
                 if (typeof window.hideMsVerifyBanner === 'function') window.hideMsVerifyBanner(true);
-
                 const updatedData = await window.hwlAPI.get_user_json();
-
                 await updateUserInterface(updatedData);
-
+                if (typeof window.initSocial === 'function') {
+                    window.initSocial(true).catch(() => {});
+                }
                 return;
-
             }
-
         }
 
-        console.log('[MS Verify] No existing verification found in Firestore');
+        // If no Firebase session, check if already verified in Cloudflare Backend
+        console.log('[MS Verify] Checking Cloudflare Backend for existing verification...');
+        try {
+            const res = await fetch(`https://api.hwlauncher.abelosky.com/api/v1/users/microsoft/status?username=${encodeURIComponent(username)}&uuid=${encodeURIComponent(uuid || '')}`).then(r => r.json());
+            if (res && res.success && res.verified) {
+                console.log('[MS Verify] Found existing verification in backend for:', res.email || username);
+                if (typeof window.hideMsVerifyBanner === 'function') window.hideMsVerifyBanner(true);
+                const updatedData = await window.hwlAPI.get_user_json();
+                if (updatedData && res.firebase_uid && !updatedData.firebase_ms_uid) {
+                    updatedData.firebase_ms_uid = res.firebase_uid;
+                    await window.hwlAPI.save_user_json(updatedData);
+                }
+                await updateUserInterface(updatedData);
+                if (typeof window.initSocial === 'function') {
+                    window.initSocial(true).catch(() => {});
+                }
+                return;
+            }
+        } catch (apiCheckErr) {
+            console.warn('[MS Verify] Backend status check warning:', apiCheckErr.message);
+        }
 
+        console.log('[MS Verify] No existing verification found');
     } catch (e) {
-
         console.log('[MS Verify] Skipped:', e.code || e.message);
-
     }
-
 }
 
 
@@ -4524,7 +4458,7 @@ window.addServerToMinecraft = async function(serverIp, serverName = null) {
 // Global listener for info messages from main.js (launcher events)
 window.addEventListener('info-message', (e) => {
     const msg = String(e.detail);
-    const isGameReadyLog = /Connecting to\s+|joined the game|joined singleplayer|Player joined|Stopping worker threads|stage COMPLETE|Mod loading complete|MinecraftForge v.* Initialized|Narrator library for|LWJGL Version:/i.test(msg);
+    const isGameReadyLog = /Connecting to\s+|joined the game|joined singleplayer|Player joined|Stopping worker threads|stage COMPLETE|Mod loading complete|Narrator library for/i.test(msg);
 
     if (msg === "Game Closed" || msg.includes("Game Crashed") || msg.includes("has exited") || msg.includes("Game process closed")) {
         // Always re-enable button when game closes, regardless of sync state
@@ -8589,8 +8523,20 @@ function getAccountAvatarUrl(acc) {
         const id = acc.uuid || (acc.username ? encodeURIComponent(acc.username) : null);
         if (id) return `https://crafthead.net/helm/${id}/64`;
     }
-    if (acc.type === 'helloworld' && acc.avatarUrl) {
-        return acc.avatarUrl;
+    if (acc.type === 'helloworld') {
+        if (acc.avatarUrl) {
+            let u = acc.avatarUrl;
+            if (!u.startsWith('data:') && !u.startsWith('http://') && !u.startsWith('https://')) {
+                if (u.length > 30) u = 'data:image/png;base64,' + u;
+            }
+            return u;
+        }
+        if (acc.username) {
+            return `https://ui-avatars.com/api/?name=${encodeURIComponent(acc.username)}&background=1a1a24&color=ffd700&bold=true&size=64`;
+        }
+    }
+    if (acc.type === 'offline' && acc.username) {
+        return `https://crafthead.net/helm/${encodeURIComponent(acc.username)}/64`;
     }
     return null;
 }
@@ -13155,7 +13101,14 @@ window.renderUserHead = function(skinUrl) {
             return;
         }
 
-        const isAvatarProvider = skinUrl.includes('crafthead.net') || skinUrl.includes('mc-heads.net') || skinUrl.includes('minotar.net') || skinUrl.includes('ui-avatars.com') || skinUrl.startsWith('data:image/');
+        let formattedUrl = typeof skinUrl === 'string' ? skinUrl.trim() : '';
+        if (formattedUrl && !formattedUrl.startsWith('data:') && !formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+            if (formattedUrl.length > 30) {
+                formattedUrl = 'data:image/png;base64,' + formattedUrl;
+            }
+        }
+
+        const isAvatarProvider = formattedUrl.includes('crafthead.net') || formattedUrl.includes('mc-heads.net') || formattedUrl.includes('minotar.net') || formattedUrl.includes('ui-avatars.com') || formattedUrl.startsWith('data:image/');
 
         const img = new Image();
         if (!isAvatarProvider) {
@@ -13192,13 +13145,37 @@ window.renderUserHead = function(skinUrl) {
         };
 
         img.onerror = () => {
+            if (formattedUrl.includes('crafthead.net')) {
+                const idMatch = formattedUrl.match(/helm\/([^/]+)/);
+                if (idMatch && idMatch[1]) {
+                    const fallbackImg = new Image();
+                    fallbackImg.onload = () => {
+                        container.innerHTML = '';
+                        fallbackImg.style.width = '100%';
+                        fallbackImg.style.height = '100%';
+                        fallbackImg.style.objectFit = 'cover';
+                        fallbackImg.style.borderRadius = '50%';
+                        fallbackImg.style.imageRendering = 'pixelated';
+                        container.appendChild(fallbackImg);
+                        resolve();
+                    };
+                    fallbackImg.onerror = () => {
+                        if (!container.querySelector('img')) {
+                            container.innerHTML = '<i class="fas fa-user"></i>';
+                        }
+                        resolve();
+                    };
+                    fallbackImg.src = `https://mc-heads.net/avatar/${idMatch[1]}`;
+                    return;
+                }
+            }
             if (!container.querySelector('img')) {
                 container.innerHTML = '<i class="fas fa-user"></i>';
             }
             resolve();
         };
 
-        img.src = skinUrl;
+        img.src = formattedUrl;
     });
 };
 
@@ -14141,10 +14118,11 @@ if (window.hwlAPI && window.hwlAPI.onServicesDown429) {
 
 // --- Modal Backdrop Click Dismissal for Global Modals ---
 document.addEventListener('click', (e) => {
-    ['errorModal', 'statsModal', 'loginModal', 'featureLockedHWModal', 'featureLockedSkinsModal'].forEach(id => {
+    ['errorModal', 'statsModal', 'socialModal', 'loginModal', 'featureLockedHWModal', 'featureLockedSkinsModal'].forEach(id => {
         const modal = document.getElementById(id);
         if (modal && modal.classList.contains('show') && e.target === modal) {
             if (id === 'errorModal' && window.closeErrorModal) window.closeErrorModal();
+            else if (id === 'socialModal' && window.closeSocialModal) window.closeSocialModal();
             else modal.classList.remove('show');
         }
     });

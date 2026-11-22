@@ -200,7 +200,7 @@
                 }
                 // If already loaded, just show — no spinner, no reload
             } else if (tab === 'admin') {
-                loadWorkshopAdminItems('pnd');
+                loadWorkshopAdminItems(activeAdminFilter || 'all');
             }
         }, 180);
     };
@@ -276,7 +276,7 @@
 
     let isWkAdmin = false;
     let isWkMod = false;
-    let activeAdminFilter = 'pnd';
+    let activeAdminFilter = 'all';
 
     async function checkAdminAccess() {
         try {
@@ -494,6 +494,8 @@
 
         if (loginState !== 'online') {
             if (communityLock) communityLock.style.display = 'flex';
+            const controls = document.querySelector('.wk-community-controls');
+            if (controls) controls.style.display = 'none';
             if (communityGrid) communityGrid.innerHTML = '';
             await myItemsPromise;
             await modrinthPromise;
@@ -501,6 +503,8 @@
         }
 
         if (communityLock) communityLock.style.display = 'none';
+        const controls = document.querySelector('.wk-community-controls');
+        if (controls) controls.style.display = 'flex';
         allCommunityModPacks = allItems.filter(function(i) { return !i.isOfficial; });
         filterAndSortCommunityModPacks();
 
@@ -684,7 +688,7 @@
             '<button class="wk-btn wk-btn-reject" onclick="rejectWkItem(\'' + escHtml(item.id) + '\')" title="' + (window.t('workshop.modal.deny') || 'Deny') + '"><i class="fas fa-ban"></i></button>' +
             (isWkAdmin ? '<button class="wk-btn wk-btn-delete" onclick="deleteWkItem(\'' + escHtml(item.id) + '\')" title="' + (window.t('workshop.modal.delete') || 'Delete') + '"><i class="fas fa-trash"></i></button>' : '') : '';
         const myActions = context === 'mine' ? 
-            '<button class="wk-btn wk-btn-delete" onclick="deleteWkItem(\'' + escHtml(item.id) + '\')" title="' + (window.t('workshop.modal.delete') || 'Delete') + '"><i class="fas fa-trash"></i></button>' : '';
+            ('<button class="wk-btn wk-btn-delete' + (canInstall ? '' : ' wk-btn-full') + '" onclick="deleteWkItem(\'' + escHtml(item.id) + '\')" title="' + (window.t('workshop.modal.delete') || 'Delete') + '"><i class="fas fa-trash"></i>' + (canInstall ? '' : ' ' + (window.t('workshop.modal.delete') || 'Delete')) + '</button>') : '';
         
         // Like button for cards in bottom right (except in 'mine') - ONLY HEART, NO NUMBER!
         const isLiked = Array.isArray(item.likedBy) && currentWkUserUid && item.likedBy.includes(currentWkUserUid);
@@ -715,12 +719,12 @@
                         '<i class="fas fa-info-circle"></i> ' + (window.t('workshop.card_more_info') || 'More Info') +
                     '</button>' +
                 '</div>' +
-                (canInstall || likeBtn ? '<div class="wk-card-actions-row">' +
+                ((canInstall || likeBtn || myActions) ? '<div class="wk-card-actions-row">' +
                     (canInstall ? '<button class="wk-btn wk-btn-primary wk-btn-install" onclick="installWkModPack(\'' + escHtml(item.id) + '\')"><i class="fas fa-download"></i> ' + (window.t('workshop.modal.download') || 'Download') + '</button>' : '') +
                     likeBtn +
+                    (context === 'mine' ? myActions : '') +
                 '</div>' : '') +
                 (adminActions ? '<div class="wk-card-actions-admin-row">' + adminActions + '</div>' : '') +
-                (myActions ? '<div class="wk-card-actions-admin-row">' + myActions + '</div>' : '') +
             '</div>' +
         '</div>';
     }
@@ -1396,7 +1400,7 @@
 
     // --- Admin Moderation Functions ---
     window.filterWkAdminItems = function(filter) {
-        activeAdminFilter = filter || 'pnd';
+        activeAdminFilter = filter || 'all';
         document.querySelectorAll('.wk-admin-filter-btn').forEach(function(b) {
             b.classList.toggle('active', b.dataset.filter === activeAdminFilter);
         });
@@ -1406,9 +1410,13 @@
     async function loadWorkshopAdminItems(statusFilter) {
         const grid = document.getElementById('wkAdminGrid');
         if (!grid) return;
+        if (!isWkAdmin && !isWkMod) {
+            await checkAdminAccess();
+        }
+        const currentFilter = statusFilter || activeAdminFilter || 'all';
         grid.innerHTML = '<div class="wk-loading"><div class="wk-spinner"></div><span>' + (window.t('workshop.admin.loading') || 'Loading admin items...') + '</span></div>';
         try {
-            const res = await api().workshop_admin_get_items(statusFilter || activeAdminFilter);
+            const res = await api().workshop_admin_get_items(currentFilter);
             const items = (res && res.items) || [];
             if (items.length === 0) {
                 grid.innerHTML = '<div class="wk-empty"><i class="fas fa-shield-alt"></i><p>' + (window.t('workshop.admin.empty') || 'No items found for this filter.') + '</p></div>';

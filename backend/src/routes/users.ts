@@ -12,6 +12,15 @@ usersApp.get('/me', requireAuth, async (c) => {
   let row = await db.prepare('SELECT * FROM users WHERE uid = ?').bind(user.uid).first<any>();
 
   if (!row) {
+    const cleanHex = user.uid.replace(/-/g, '').toLowerCase();
+    row = await db.prepare(`
+      SELECT * FROM users
+      WHERE mc_uuid = ? OR uuid = ? OR LOWER(REPLACE(COALESCE(mc_uuid, ''), '-', '')) = ?
+      LIMIT 1
+    `).bind(user.uid, user.uid, cleanHex).first<any>();
+  }
+
+  if (!row) {
     // Primer inicio de sesión: inicializar perfil base en D1
     const defaultUsername = user.email ? user.email.split('@')[0] : `user_${user.uid.slice(0, 8)}`;
     const lower = defaultUsername.toLowerCase();
@@ -41,6 +50,7 @@ usersApp.get('/me', requireAuth, async (c) => {
       accountType: row.account_type,
       avatarUrl: row.avatar_url,
       avatarBase64: row.avatar_url,
+      avatar_url: row.avatar_url,
       favoriteMob: row.favorite_mob,
       mcUuid: row.mc_uuid || row.uuid,
       uuid: row.uuid || row.mc_uuid,
@@ -143,10 +153,10 @@ usersApp.patch('/me', requireAuth, async (c) => {
     bindings.push(JSON.stringify(body.playstyleTags));
   }
 
-  // Insignias solo modificables por Administradores
+  // Insignias solo modificables por Administradores con token criptográfico verificado
   if (Array.isArray(body.badges)) {
     const role = (user.role || '').toLowerCase();
-    if (role === 'admin' || role === 'owner') {
+    if (user.isTokenVerified && (role === 'admin' || role === 'owner')) {
       updates.push('badges_json = ?');
       bindings.push(JSON.stringify(body.badges));
     }
@@ -201,7 +211,7 @@ usersApp.get('/search', optionalAuth, async (c) => {
   if (!q) return c.json({ success: true, users: [], results: [] });
 
   const rows = await c.env.DB.prepare(`
-    SELECT uid, username, account_type, avatar_url, client_version, badges_json
+    SELECT uid, username, account_type, avatar_url, mc_uuid, uuid, client_version, badges_json
     FROM users
     WHERE username_lower LIKE ?
     ORDER BY username_lower ASC
@@ -209,9 +219,14 @@ usersApp.get('/search', optionalAuth, async (c) => {
   `).bind(`%${q}%`).all<any>();
 
   const results = (rows.results || []).map(r => ({
-    ...r,
+    uid: r.uid,
+    username: r.username,
     accountType: r.account_type,
     avatarUrl: r.avatar_url,
+    avatarBase64: r.avatar_url,
+    mcUuid: r.mc_uuid || r.uuid,
+    uuid: r.uuid || r.mc_uuid,
+    clientVersion: r.client_version,
     badges: JSON.parse(r.badges_json || '[]')
   }));
 
@@ -312,13 +327,45 @@ usersApp.get('/microsoft/status', optionalAuth, async (c) => {
   ).first<any>();
 
   if (row && (row.verified === 1 || row.verified === true)) {
+    let resolvedUid = row.firebase_uid || '';
+    if (!resolvedUid) {
+      const u = await c.env.DB.prepare(`
+        SELECT uid FROM users WHERE mc_uuid = ? OR uuid = ? OR LOWER(username) = ? LIMIT 1
+      `).bind(row.uuid || '', row.uuid || '', (row.username || '').toLowerCase()).first<{ uid: string }>();
+      if (u?.uid) resolvedUid = u.uid;
+    }
     return c.json({
       success: true,
       verified: true,
       email: row.email,
-      firebase_uid: row.firebase_uid,
+      firebase_uid: resolvedUid,
       username: row.username,
       uuid: row.uuid
+    });
+  }
+
+  // Fallback: Si no está en microsoft_verified, comprobar directamente en users
+  const cleanHex = uuid ? uuid.replace(/-/g, '').toLowerCase() : '';
+  const userRow = await c.env.DB.prepare(`
+    SELECT uid, username, email, mc_uuid, uuid, microsoft_verified, account_type FROM users
+    WHERE (? IS NOT NULL AND (mc_uuid = ? OR uuid = ? OR LOWER(REPLACE(COALESCE(mc_uuid, ''), '-', '')) = ?))
+       OR (? IS NOT NULL AND LOWER(username) = LOWER(?))
+       OR (? IS NOT NULL AND LOWER(email) = LOWER(?))
+    LIMIT 1
+  `).bind(
+    uuid || null, uuid || '', uuid || '', cleanHex || '',
+    username || null, username || '',
+    normalizedEmail, normalizedEmail || ''
+  ).first<any>();
+
+  if (userRow && (userRow.microsoft_verified === 1 || userRow.account_type === 'microsoft' || userRow.mc_uuid)) {
+    return c.json({
+      success: true,
+      verified: true,
+      email: userRow.email || '',
+      firebase_uid: userRow.uid,
+      username: userRow.username,
+      uuid: userRow.mc_uuid || userRow.uuid
     });
   }
 
@@ -350,6 +397,7 @@ usersApp.post('/microsoft/pending-verify', requireAuth, async (c) => {
 // GET /api/v1/users/:uidOrUsername - Perfil público por UID, UUID o nombre de usuario
 usersApp.get('/:uidOrUsername', optionalAuth, async (c) => {
   const identifier = c.req.param('uidOrUsername');
+  const accountType = c.req.query('accountType');
   const db = c.env.DB;
 
   let row = await db.prepare('SELECT * FROM users WHERE uid = ?').bind(identifier).first<any>();
@@ -357,23 +405,26 @@ usersApp.get('/:uidOrUsername', optionalAuth, async (c) => {
     const cleanUuid = identifier.replace(/-/g, '').toLowerCase();
     row = await db.prepare(`
       SELECT * FROM users
-      WHERE uuid = ? OR mc_uuid = ? OR uuid = ? OR mc_uuid = ?
-      ORDER BY
-        CASE WHEN badges_json != '[]' AND badges_json IS NOT NULL THEN 0 ELSE 1 END,
-        CASE WHEN account_type = 'microsoft' THEN 0 ELSE 1 END
+      WHERE uuid = ? OR mc_uuid = ? OR LOWER(REPLACE(COALESCE(uuid, ''), '-', '')) = ? OR LOWER(REPLACE(COALESCE(mc_uuid, ''), '-', '')) = ?
       LIMIT 1
     `).bind(identifier, identifier, cleanUuid, cleanUuid).first<any>();
   }
   if (!row) {
-    row = await db.prepare(`
-      SELECT * FROM users
-      WHERE username_lower = ?
-      ORDER BY
-        CASE WHEN badges_json != '[]' AND badges_json IS NOT NULL THEN 0 ELSE 1 END,
-        CASE WHEN account_type = 'microsoft' THEN 0 ELSE 1 END,
-        created_at DESC
-      LIMIT 1
-    `).bind(identifier.toLowerCase()).first<any>();
+    if (accountType) {
+      row = await db.prepare(`
+        SELECT * FROM users
+        WHERE username_lower = ? AND account_type = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).bind(identifier.toLowerCase(), accountType).first<any>();
+    } else {
+      row = await db.prepare(`
+        SELECT * FROM users
+        WHERE username_lower = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).bind(identifier.toLowerCase()).first<any>();
+    }
   }
 
   if (!row) {
@@ -399,6 +450,7 @@ usersApp.get('/:uidOrUsername', optionalAuth, async (c) => {
       accountType: row.account_type,
       avatarUrl: row.avatar_url,
       avatarBase64: row.avatar_url,
+      avatar_url: row.avatar_url,
       mcUuid: row.mc_uuid || row.uuid,
       uuid: row.uuid || row.mc_uuid,
       microsoftVerified: Boolean(isMs),
@@ -414,7 +466,8 @@ usersApp.get('/:uidOrUsername', optionalAuth, async (c) => {
       playstyleTags: JSON.parse(row.playstyle_tags_json || '[]'),
       badges: parsedBadges,
       email: isSelf ? row.email : undefined,
-      createdAt: row.created_at
+      createdAt: row.created_at,
+      created_at: row.created_at
     }
   });
 });

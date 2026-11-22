@@ -3,9 +3,13 @@
 const { spawn } = require('child_process');
 const electron = require('electron');
 
+const childEnv = { ...process.env };
+delete childEnv.ELECTRON_RUN_AS_NODE;
+
 const child = spawn(electron, ['.', ...process.argv.slice(2)], {
   stdio: 'inherit',
-  windowsHide: false
+  windowsHide: false,
+  env: childEnv
 });
 
 let isClosed = false;

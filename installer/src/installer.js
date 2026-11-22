@@ -70,6 +70,7 @@ function launchDetached(executablePath) {
     const child = spawn(executablePath, [], {
       detached: true,
       stdio: 'ignore',
+      cwd: path.dirname(executablePath),
       env: childEnv,
     })
     child.unref()
@@ -104,10 +105,43 @@ function readInstalledVersion(installPath) {
 /** Find the main launcher executable in an install directory */
 function findLauncherExecutable(installPath) {
   if (process.platform === 'win32') {
+    // If files are nested inside win-unpacked, flatten to installPath
+    const unpackedDir = path.join(installPath, 'win-unpacked')
+    if (fs.existsSync(unpackedDir)) {
+      try {
+        const items = fs.readdirSync(unpackedDir)
+        for (const item of items) {
+          fs.moveSync(path.join(unpackedDir, item), path.join(installPath, item), { overwrite: true })
+        }
+        fs.removeSync(unpackedDir)
+      } catch (err) {
+        console.warn('Failed to flatten win-unpacked:', err.message)
+      }
+    }
+
     const files = fs.readdirSync(installPath).filter(f =>
       f.endsWith('.exe') && !f.toLowerCase().startsWith('unins') && !f.toLowerCase().includes('setup')
     )
-    if (files.length > 0) return path.join(installPath, files[0])
+    if (files.length > 0) {
+      const preferred = files.find(f => f.toLowerCase().includes('helloworld')) || files[0]
+      return path.join(installPath, preferred)
+    }
+
+    // Fallback: check 1-level deep subdirectories
+    try {
+      const subdirs = fs.readdirSync(installPath, { withFileTypes: true }).filter(d => d.isDirectory())
+      for (const d of subdirs) {
+        const subPath = path.join(installPath, d.name)
+        const subFiles = fs.readdirSync(subPath).filter(f =>
+          f.endsWith('.exe') && !f.toLowerCase().startsWith('unins') && !f.toLowerCase().includes('setup')
+        )
+        if (subFiles.length > 0) {
+          const preferred = subFiles.find(f => f.toLowerCase().includes('helloworld')) || subFiles[0]
+          return path.join(subPath, preferred)
+        }
+      }
+    } catch (_) {}
+
     return null
   }
   // Linux
@@ -300,6 +334,88 @@ async function ensureInstallIcon(installPath) {
   return (await fs.pathExists(targetIconPng)) ? targetIconPng : null
 }
 
+/** Remove obsolete .AppImage or leftover archive files inside installPath when switching to unpacked zip */
+async function cleanupObsoleteLinuxPackageFiles(installPath) {
+  if (process.platform === 'win32' || !(await fs.pathExists(installPath))) return
+  try {
+    const entries = await fs.readdir(installPath)
+    for (const name of entries) {
+      const lower = name.toLowerCase()
+      if (lower.endsWith('.appimage') || (/^helloworld-launcher.*\.zip$/i.test(name))) {
+        await fs.remove(path.join(installPath, name)).catch(() => {})
+      }
+    }
+  } catch (_) {}
+}
+
+/** Apply either an AppImage or a zip/tarball asset uniformly across install, update, and reinstall */
+async function applyLauncherAsset(assetPath, installPath, emit, msg, progressStart, progressSpan) {
+  await fs.ensureDir(installPath)
+  if (assetPath.toLowerCase().endsWith('.appimage')) {
+    emit(msg, progressStart)
+    const targetAppImagePath = path.join(installPath, 'helloworld-launcher.AppImage')
+    await fs.copy(assetPath, targetAppImagePath, { overwrite: true })
+    await fs.chmod(targetAppImagePath, 0o755)
+    emit(msg, progressStart + progressSpan)
+    return targetAppImagePath
+  }
+
+  emit(msg, progressStart)
+  await cleanupObsoleteLinuxPackageFiles(installPath)
+  await extractZip(assetPath, installPath, (pct) => {
+    emit(msg, progressStart + Math.round((pct / 100) * progressSpan))
+  })
+
+  // On Windows, automatically unblock extracted files (strip Zone.Identifier / SmartScreen mark-of-the-web)
+  if (process.platform === 'win32') {
+    try {
+      const escapePs = (str) => (str || '').replace(/'/g, "''")
+      await execPromise(`powershell -NoProfile -NonInteractive -Command "Get-ChildItem -LiteralPath '${escapePs(installPath)}' -Recurse | Unblock-File"`).catch(() => {})
+    } catch (_) {}
+  }
+
+  return findLauncherExecutable(installPath)
+}
+
+/** Detect whether a desktop shortcut already exists so update/reinstall can preserve it */
+function hasExistingDesktopShortcut() {
+  if (process.platform === 'win32') {
+    return fs.existsSync(path.join(os.homedir(), 'Desktop', 'HelloWorld Launcher.lnk'))
+  }
+  return ['Desktop', 'Escritorio'].some(d =>
+    fs.existsSync(path.join(os.homedir(), d, 'helloworld-launcher.desktop'))
+  )
+}
+
+/** Sync icon, local setup binary, shortcuts, and OS/state registration */
+async function syncShortcutsAndState({ installPath, version, executablePath, createDesktop, createStartMenu, resetShortcuts = false }) {
+  const preserveDesktop = createDesktop !== undefined ? Boolean(createDesktop) : hasExistingDesktopShortcut()
+  const preserveStartMenu = createStartMenu !== undefined ? Boolean(createStartMenu) : true
+
+  const targetIconPng = await ensureInstallIcon(installPath)
+  const installerPath = (await copySetupToInstallDir(installPath)) || process.env.PORTABLE_EXECUTABLE_FILE || process.execPath
+
+  if (resetShortcuts) {
+    await removeShortcuts().catch(() => {})
+  }
+  if (executablePath) {
+    const iconPath = process.platform === 'win32' ? executablePath : (targetIconPng || 'helloworld-launcher')
+    await createShortcuts({
+      installPath,
+      executablePath,
+      createDesktop: preserveDesktop,
+      createStartMenu: preserveStartMenu,
+      iconPath,
+    })
+  }
+
+  if (version) {
+    await writeRegistry({ installPath, version, installerPath })
+    await writeState({ installPath, version, installerPath })
+  }
+  return { targetIconPng, installerPath }
+}
+
 // ── INSTALL ───────────────────────────────────────────────────────────────────
 
 async function install({ installPath, createDesktop, createStartMenu, launchAfter }, onProgress) {
@@ -325,43 +441,17 @@ async function install({ installPath, createDesktop, createStartMenu, launchAfte
     })
 
     emit('Preparing installation directory...', 72)
-    await fs.ensureDir(installPath)
-
-    if (release.launcher.name.toLowerCase().endsWith('.appimage')) {
-      emit('Installing AppImage...', 75)
-      const targetAppImagePath = path.join(installPath, 'helloworld-launcher.AppImage')
-      await fs.copy(assetPath, targetAppImagePath, { overwrite: true })
-      await fs.chmod(targetAppImagePath, 0o755)
-      emit('AppImage installed!', 85)
-    } else {
-      emit('Extracting files...', 75)
-      await extractZip(assetPath, installPath, (pct) => {
-        emit('Extracting files...', 75 + Math.round(pct * 0.12)) // 75-87%
-      })
-    }
-
-    // Copiar icono de la aplicación para los accesos directos
-    const targetIconPng = await ensureInstallIcon(installPath)
-
-    emit('Copying setup to installation folder...', 88)
-    const installerPath = await copySetupToInstallDir(installPath)
+    const executablePath = await applyLauncherAsset(assetPath, installPath, emit, 'Installing files...', 75, 13)
 
     emit('Creating shortcuts...', 90)
-    const executablePath = findLauncherExecutable(installPath)
-    if (executablePath) {
-      const iconPath = process.platform === 'win32' ? executablePath : (targetIconPng || 'helloworld-launcher')
-      await createShortcuts({
-        installPath,
-        executablePath,
-        createDesktop,
-        createStartMenu,
-        iconPath,
-      })
-    }
-
-    emit('Registering installation...', 93)
-    await writeRegistry({ installPath, version: release.version, installerPath })
-    await writeState({ installPath, version: release.version, installerPath })
+    await syncShortcutsAndState({
+      installPath,
+      version: release.version,
+      executablePath,
+      createDesktop,
+      createStartMenu,
+      resetShortcuts: true,
+    })
 
     emit('Cleaning up...', 97)
     await fs.remove(tempDir).catch(() => {})
@@ -416,19 +506,7 @@ async function update({ installPath, updateFile, launchAfter }, onProgress) {
     emit('Stopping launcher...', 72)
     await killLauncher()
 
-    emit('Applying update...', 75)
-    let appliedExecutablePath = null
-    if (assetPath.toLowerCase().endsWith('.appimage')) {
-      const targetAppImagePath = path.join(installPath, 'helloworld-launcher.AppImage')
-      await fs.copy(assetPath, targetAppImagePath, { overwrite: true })
-      await fs.chmod(targetAppImagePath, 0o755)
-      appliedExecutablePath = targetAppImagePath
-      emit('AppImage update applied!', 85)
-    } else {
-      await extractZip(assetPath, installPath, (pct) => {
-        emit('Applying update...', 75 + Math.round(pct * 0.15))
-      })
-    }
+    const executablePath = await applyLauncherAsset(assetPath, installPath, emit, 'Applying update...', 75, 15)
 
     // Resolver versión actualizada
     if (!targetVersion) {
@@ -436,19 +514,18 @@ async function update({ installPath, updateFile, launchAfter }, onProgress) {
     }
 
     emit('Updating registration...', 92)
-    await ensureInstallIcon(installPath)
-    const installerPath = await copySetupToInstallDir(installPath)
-    if (targetVersion) {
-      await writeRegistry({ installPath, version: targetVersion, installerPath })
-      await writeState({ installPath, version: targetVersion, installerPath })
-    }
+    await syncShortcutsAndState({
+      installPath,
+      version: targetVersion,
+      executablePath,
+      resetShortcuts: true,
+    })
 
     emit('Cleaning up...', 97)
     await fs.remove(tempDir).catch(() => {})
 
     emit('Update complete!', 100)
 
-    const executablePath = appliedExecutablePath || findLauncherExecutable(installPath)
     if (launchAfter && executablePath) {
       setTimeout(() => {
         launchDetached(executablePath)
@@ -489,31 +566,21 @@ async function reinstall({ installPath }, onProgress) {
     emit('Stopping launcher...', 50)
     await killLauncher()
 
-    emit('Restoring files...', 52)
-    if (process.platform === 'win32') {
-      await extractZip(assetPath, installPath, (pct) => {
-        emit(`Extracting files... ${pct}%`, 52 + Math.round((pct / 100) * 45))
-      })
-    } else {
-      // Linux: replace the AppImage
-      if (fs.existsSync(installPath)) {
-        const appImages = fs.readdirSync(installPath).filter(f => f.endsWith('.AppImage'))
-        for (const img of appImages) await fs.remove(path.join(installPath, img)).catch(() => {})
-      }
-      await fs.ensureDir(installPath)
-      const dest = path.join(installPath, release.launcher.name)
-      await fs.copy(assetPath, dest, { overwrite: true })
-      await execPromise(`chmod +x "${dest}"`).catch(() => {})
-    }
+    const executablePath = await applyLauncherAsset(assetPath, installPath, emit, 'Restoring files...', 52, 38)
+
+    emit('Refreshing shortcuts...', 92)
+    await syncShortcutsAndState({
+      installPath,
+      version: release.version,
+      executablePath,
+      resetShortcuts: true,
+    })
 
     emit('Cleaning up...', 97)
     await fs.remove(tempDir).catch(() => {})
 
-    // Update state version
-    await writeState({ installPath, version: release.version, installerPath: process.env.PORTABLE_EXECUTABLE_FILE || process.execPath })
-
     emit('Repair complete!', 100)
-    return { success: true, version: release.version }
+    return { success: true, version: release.version, executablePath }
   } catch (err) {
     await fs.remove(tempDir).catch(() => {})
     throw err

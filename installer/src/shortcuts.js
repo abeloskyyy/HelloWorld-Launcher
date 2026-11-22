@@ -20,17 +20,25 @@ function execPromise(cmd, opts = {}) {
 // ── Windows shortcuts via PowerShell WScript.Shell ────────────────────────────
 
 async function createWindowsShortcut({ targetPath, shortcutPath, workingDir, description, iconPath }) {
+  // Escape single quotes for PowerShell single-quoted literals: ' -> ''
+  const escapePs = (str) => (str || '').replace(/'/g, "''")
+  const sPath = escapePs(shortcutPath)
+  const tPath = escapePs(targetPath)
+  const wDir = escapePs(workingDir)
+  const desc = escapePs(description)
+  const iPath = escapePs(iconPath)
+
   const ps = `
 $WshShell = New-Object -ComObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut('${shortcutPath}')
-$Shortcut.TargetPath = '${targetPath}'
-$Shortcut.WorkingDirectory = '${workingDir}'
-$Shortcut.Description = '${description}'
-$Shortcut.IconLocation = '${iconPath}'
+$Shortcut = $WshShell.CreateShortcut('${sPath}')
+$Shortcut.TargetPath = '${tPath}'
+$Shortcut.WorkingDirectory = '${wDir}'
+$Shortcut.Description = '${desc}'
+$Shortcut.IconLocation = '${iPath}'
 $Shortcut.Save()
 `.trim()
 
-  await execPromise(`powershell -NoProfile -NonInteractive -Command "${ps.replace(/\n/g, '; ')}"`)
+  await execPromise(`powershell -NoProfile -NonInteractive -Command "${ps.replace(/\r?\n/g, '; ')}"`)
 }
 
 async function removeWindowsShortcut(shortcutPath) {
@@ -85,11 +93,31 @@ async function createLinuxDesktopEntry({ execPath, name, comment, iconPath, cate
   await execPromise('update-desktop-database ~/.local/share/applications').catch(() => {})
 }
 
+function getLinuxDesktopDirs() {
+  const dirs = new Set([
+    path.join(os.homedir(), 'Desktop'),
+    path.join(os.homedir(), 'Escritorio'),
+  ])
+  try {
+    const { execFileSync } = require('child_process')
+    const xdgDesktop = execFileSync('xdg-user-dir', ['DESKTOP'], { encoding: 'utf8' }).trim()
+    if (xdgDesktop && xdgDesktop !== os.homedir()) {
+      dirs.add(xdgDesktop)
+    }
+  } catch (_) {}
+  return Array.from(dirs).filter(d => fs.existsSync(d))
+}
+
 async function removeLinuxDesktopEntry() {
   const desktopFile = path.join(os.homedir(), '.local', 'share', 'applications', 'helloworld-launcher.desktop')
   await fs.remove(desktopFile).catch(() => {})
-  for (const dir of ['Desktop', 'Escritorio']) {
-    await fs.remove(path.join(os.homedir(), dir, 'helloworld-launcher.desktop')).catch(() => {})
+  const possibleDirs = new Set([
+    path.join(os.homedir(), 'Desktop'),
+    path.join(os.homedir(), 'Escritorio'),
+    ...getLinuxDesktopDirs(),
+  ])
+  for (const dir of possibleDirs) {
+    await fs.remove(path.join(dir, 'helloworld-launcher.desktop')).catch(() => {})
   }
   await execPromise('update-desktop-database ~/.local/share/applications').catch(() => {})
 }
@@ -137,18 +165,13 @@ async function createShortcuts({ installPath, executablePath, createDesktop, cre
       categories: 'Game;ActionGame;AdventureGame;',
     }).catch(() => {})
 
-    // Optional desktop icon on ~/Desktop or ~/Escritorio
+    // Optional desktop icon on ~/Desktop, ~/Escritorio or XDG desktop dir
     if (createDesktop) {
-      const desktopDir = [
-        path.join(os.homedir(), 'Desktop'),
-        path.join(os.homedir(), 'Escritorio'),
-      ].find(d => fs.existsSync(d))
-
-      if (desktopDir) {
-        const destDesktopFile = path.join(desktopDir, 'helloworld-launcher.desktop')
-        const srcDesktopFile = path.join(os.homedir(), '.local', 'share', 'applications', 'helloworld-launcher.desktop')
-        if (await fs.pathExists(srcDesktopFile)) {
-          await fs.copy(srcDesktopFile, destDesktopFile).catch(() => {})
+      const srcDesktopFile = path.join(os.homedir(), '.local', 'share', 'applications', 'helloworld-launcher.desktop')
+      if (await fs.pathExists(srcDesktopFile)) {
+        for (const desktopDir of getLinuxDesktopDirs()) {
+          const destDesktopFile = path.join(desktopDir, 'helloworld-launcher.desktop')
+          await fs.copy(srcDesktopFile, destDesktopFile, { overwrite: true }).catch(() => {})
           await execPromise(`chmod +x "${destDesktopFile}"`).catch(() => {})
           await execPromise(`gio set "${destDesktopFile}" metadata::trusted true 2>/dev/null`).catch(() => {})
         }

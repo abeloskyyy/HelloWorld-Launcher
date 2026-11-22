@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const replayBtn = document.getElementById('replayTutorialBtn');
 
     let currentStep = 1;
-    const totalSteps = 6;
+    const totalSteps = 5;
     let tutorialCompleted = false;
 
 
@@ -129,16 +129,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Update Buttons
         const backBtn = document.getElementById('wizBackBtn');
-        if (step === 1) {
+        if (step === 0 || step === 1) {
             backBtn.style.display = 'none';
         } else {
             backBtn.style.display = 'flex';
         }
 
         // Handle Next Button Visibility
-        // Steps 2 and 3 have their own action buttons, so hide the footer Next button
-        // Step 4 also has its own action buttons now
-        if (step === 2 || step === 3 || step === 4 || step === 5) {
+        // Step 0 checks linked account status; Steps 2, 3, 4 have their own buttons
+        if (step === 0) {
+            updateOnboardingAccountState();
+        } else if (step === 2 || step === 3 || step === 4) {
             nextBtn.style.display = 'none';
         } else {
             nextBtn.style.display = 'flex';
@@ -162,12 +163,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Back Button Listener
-    // Back Button Listener
     const backBtn = document.getElementById('wizBackBtn');
     if (backBtn) {
         backBtn.addEventListener('click', () => {
-            // If we are on Step 4 (Accounts), always go back to Step 2 (Tutorial Intro)
-            if (currentStep === 4) {
+            // If we are on Step 4 (Addons) and skipped the tutorial, go back to Step 2
+            if (currentStep === 4 && !tutorialCompleted) {
                 showStep(2);
             } else if (currentStep > 1) {
                 showStep(currentStep - 1);
@@ -197,7 +197,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const skipTutorialBtn = document.getElementById('skipTutorialBtn');
     if (skipTutorialBtn) {
         skipTutorialBtn.addEventListener('click', () => {
-            // Skip tutorial and go to Accounts (Step 4)
+            // Skip tutorial and go to Addons (Step 4)
             showStep(4);
         });
     }
@@ -221,7 +221,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const nextStepBtn = document.getElementById('nextStepBtn');
     if (nextStepBtn) {
         nextStepBtn.addEventListener('click', () => {
-            showStep(4); // Show Identity Intro
+            showStep(4); // Show Addons
         });
     }
 
@@ -244,35 +244,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // --- Step 4 (Identity) Actions ---
-    const startTutorialStep2Btn = document.getElementById('startTutorialStep2Btn');
-    const skipTutorialStep2Btn = document.getElementById('skipTutorialStep2Btn');
-
-    if (startTutorialStep2Btn) {
-        startTutorialStep2Btn.addEventListener('click', () => {
-            closeWizard();
-            setTimeout(() => {
-                if (typeof window.startTutorialStep2 === 'function') {
-                    window.startTutorialStep2();
-                } else {
-                    console.error("startTutorialStep2 not found");
-                    openWizard(5); // Skip if missing
-                }
-            }, 500);
-
-            window.onTutorialStep2Complete = async () => {
-                openWizard(5); // Go to Addons step
-            };
-        });
-    }
-
-    if (skipTutorialStep2Btn) {
-        skipTutorialStep2Btn.addEventListener('click', () => {
-            showStep(5);
-        });
-    }
-
-    // --- Step 5 (Addons) Actions ---
+    // --- Step 4 (Addons) Actions ---
     const startTutorialStep3Btn = document.getElementById('startTutorialStep3Btn');
     const skipTutorialStep3Btn = document.getElementById('skipTutorialStep3Btn');
 
@@ -284,19 +256,302 @@ document.addEventListener('DOMContentLoaded', async () => {
                     window.startTutorialStep3();
                 } else {
                     console.error("startTutorialStep3 not found");
-                    openWizard(6); // Skip if missing
+                    openWizard(5); // Skip if missing
                 }
             }, 500);
 
             window.onTutorialStep3Complete = async () => {
-                openWizard(6); // Go to Addons step
+                openWizard(5); // Go to Finish step
             };
         });
     }
 
     if (skipTutorialStep3Btn) {
         skipTutorialStep3Btn.addEventListener('click', () => {
-            showStep(6);
+            showStep(5);
+        });
+    }
+
+    // --- Step 0 (Account Selection / Login) Handlers ---
+    const wizBtnLoginMs = document.getElementById('wizBtnLoginMs');
+    if (wizBtnLoginMs) {
+        wizBtnLoginMs.addEventListener('click', async () => {
+            wizBtnLoginMs.disabled = true;
+            wizBtnLoginMs.innerHTML = '<span class="spinner-small"></span> <span>' + ((window.t ? window.t('login.waiting') : '') || 'Waiting...') + '</span>';
+            try {
+                if (window.hwlAPI && window.hwlAPI.login_microsoft) {
+                    const res = await window.hwlAPI.login_microsoft();
+                    if (res && res.success) {
+                        wizBtnLoginMs.innerHTML = '<i class="fas fa-check"></i> <span>' + ((window.t ? window.t('auth.success') : '') || 'Success!') + '</span>';
+                        setTimeout(() => {
+                            showStep(1);
+                        }, 400);
+                    }
+                }
+            } catch (err) {
+                console.error('[Onboarding] Microsoft login error:', err);
+            } finally {
+                setTimeout(() => {
+                    if (wizBtnLoginMs) {
+                        wizBtnLoginMs.disabled = false;
+                        wizBtnLoginMs.innerHTML = '<i class="fab fa-microsoft"></i> <span>' + ((window.t ? window.t('login.login_microsoft') : '') || 'Login with Microsoft') + '</span>';
+                    }
+                }, 3000);
+            }
+        });
+    }
+
+    // Advance if login-success event fires while on Step 0
+    window.addEventListener('login-success', () => {
+        if (currentStep === 0) {
+            showStep(1);
+        }
+    });
+
+    // HelloWorld Inline Form Handlers
+    const wizShowHwFormBtn = document.getElementById('wizShowHwFormBtn');
+    const wizHwForm = document.getElementById('wizHwForm');
+    const wizHwFeatures = document.getElementById('wizHwFeatures');
+    const wizHwCancelBtn = document.getElementById('wizHwCancelBtn');
+    const wizHwSubmitBtn = document.getElementById('wizHwSubmitBtn');
+    const wizHwError = document.getElementById('wizHwError');
+    const wizHwIdentifier = document.getElementById('wizHwIdentifier');
+    const wizHwPassword = document.getElementById('wizHwPassword');
+
+    if (wizShowHwFormBtn && wizHwForm) {
+        wizShowHwFormBtn.addEventListener('click', () => {
+            wizShowHwFormBtn.style.display = 'none';
+            if (wizHwFeatures) wizHwFeatures.style.display = 'none';
+            wizHwForm.style.display = 'flex';
+            if (wizHwIdentifier) wizHwIdentifier.focus();
+        });
+    }
+
+    if (wizHwCancelBtn) {
+        wizHwCancelBtn.addEventListener('click', () => {
+            wizHwForm.style.display = 'none';
+            if (wizHwFeatures) wizHwFeatures.style.display = 'flex';
+            if (wizShowHwFormBtn) wizShowHwFormBtn.style.display = 'flex';
+            if (wizHwError) wizHwError.style.display = 'none';
+        });
+    }
+
+    if (wizHwSubmitBtn) {
+        const handleHwSubmit = async () => {
+            const idVal = wizHwIdentifier ? wizHwIdentifier.value.trim() : '';
+            const passVal = wizHwPassword ? wizHwPassword.value : '';
+            if (!idVal || !passVal) {
+                if (wizHwError) {
+                    wizHwError.textContent = (window.t ? window.t('auth.fields_required') : '') || 'Please fill in all fields';
+                    wizHwError.style.display = 'block';
+                }
+                return;
+            }
+            wizHwSubmitBtn.disabled = true;
+            wizHwSubmitBtn.innerHTML = '<span class="spinner-small"></span>';
+            if (wizHwError) wizHwError.style.display = 'none';
+
+            try {
+                if (window.hwlAPI && window.hwlAPI.login_helloworld) {
+                    const res = await window.hwlAPI.login_helloworld(idVal, passVal);
+                    if (res && res.success) {
+                        if (typeof window.onLoginSuccess === 'function') {
+                            await window.onLoginSuccess();
+                        }
+                        showStep(1);
+                    } else {
+                        if (wizHwError) {
+                            wizHwError.textContent = (res && res.error) || 'Login failed';
+                            wizHwError.style.display = 'block';
+                        }
+                    }
+                }
+            } catch (e) {
+                if (wizHwError) {
+                    wizHwError.textContent = e.message || 'Login failed';
+                    wizHwError.style.display = 'block';
+                }
+            } finally {
+                wizHwSubmitBtn.disabled = false;
+                wizHwSubmitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> <span>' + ((window.t ? window.t('auth.sign_in') : '') || 'Log In') + '</span>';
+            }
+        };
+
+        wizHwSubmitBtn.addEventListener('click', handleHwSubmit);
+        if (wizHwPassword) {
+            wizHwPassword.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') handleHwSubmit();
+            });
+        }
+        if (wizHwIdentifier) {
+            wizHwIdentifier.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && wizHwPassword) wizHwPassword.focus();
+            });
+        }
+    }
+
+    // Offline Inline Form Handlers
+    const wizShowOfflineFormBtn = document.getElementById('wizShowOfflineFormBtn');
+    const wizOfflineForm = document.getElementById('wizOfflineForm');
+    const wizOfflineFeatures = document.getElementById('wizOfflineFeatures');
+    const wizOfflineCancelBtn = document.getElementById('wizOfflineCancelBtn');
+    const wizOfflineSubmitBtn = document.getElementById('wizOfflineSubmitBtn');
+    const wizOfflineNick = document.getElementById('wizOfflineNick');
+    const wizOfflineError = document.getElementById('wizOfflineError');
+
+    if (wizShowOfflineFormBtn && wizOfflineForm) {
+        wizShowOfflineFormBtn.addEventListener('click', () => {
+            wizShowOfflineFormBtn.style.display = 'none';
+            if (wizOfflineFeatures) wizOfflineFeatures.style.display = 'none';
+            wizOfflineForm.style.display = 'flex';
+            if (wizOfflineNick) wizOfflineNick.focus();
+        });
+    }
+
+    if (wizOfflineCancelBtn) {
+        wizOfflineCancelBtn.addEventListener('click', () => {
+            wizOfflineForm.style.display = 'none';
+            if (wizOfflineFeatures) wizOfflineFeatures.style.display = 'flex';
+            if (wizShowOfflineFormBtn) wizShowOfflineFormBtn.style.display = 'flex';
+            if (wizOfflineError) wizOfflineError.style.display = 'none';
+        });
+    }
+
+    if (wizOfflineSubmitBtn) {
+        const handleOfflineSubmit = async () => {
+            const nick = wizOfflineNick ? wizOfflineNick.value.trim() : '';
+            if (!nick) {
+                if (wizOfflineError) {
+                    wizOfflineError.textContent = (window.t ? window.t('tutorial.offline_nick_required') : '') || 'Please enter a nickname.';
+                    wizOfflineError.style.display = 'block';
+                }
+                return;
+            }
+            if (!/^[a-zA-Z0-9_]{3,16}$/.test(nick)) {
+                if (wizOfflineError) {
+                    wizOfflineError.textContent = (window.t ? window.t('tutorial.offline_nick_invalid') : '') || 'Nickname must be 3-16 characters (letters, numbers and _).';
+                    wizOfflineError.style.display = 'block';
+                }
+                return;
+            }
+            wizOfflineSubmitBtn.disabled = true;
+            wizOfflineSubmitBtn.innerHTML = '<span class="spinner-small"></span>';
+            if (wizOfflineError) wizOfflineError.style.display = 'none';
+
+            try {
+                if (window.hwlAPI && window.hwlAPI.save_user_json) {
+                    const saved = await window.hwlAPI.save_user_json({ username: nick, account_type: 'offline' });
+                    if (typeof updateUserInterface === 'function') {
+                        await updateUserInterface(saved || { username: nick, account_type: 'offline' });
+                    }
+                    if (typeof loadProfiles === 'function') await loadProfiles();
+                    if (typeof loadVersions === 'function') await loadVersions();
+                    showStep(1);
+                }
+            } catch (e) {
+                if (wizOfflineError) {
+                    wizOfflineError.textContent = e.message || 'Failed to save';
+                    wizOfflineError.style.display = 'block';
+                }
+            } finally {
+                wizOfflineSubmitBtn.disabled = false;
+                wizOfflineSubmitBtn.innerHTML = '<i class="fas fa-play"></i> <span>' + ((window.t ? window.t('offline_login.enter_btn') : '') || 'Enter') + '</span>';
+            }
+        };
+
+        wizOfflineSubmitBtn.addEventListener('click', handleOfflineSubmit);
+        if (wizOfflineNick) {
+            wizOfflineNick.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') handleOfflineSubmit();
+            });
+        }
+    }
+
+    // --- Step 0 Linked Account State Controller ---
+    async function updateOnboardingAccountState() {
+        const selectionView = document.getElementById('wizAccountSelectionView');
+        const linkedView = document.getElementById('wizAccountLinkedView');
+        if (!selectionView || !linkedView) return;
+
+        let user = null;
+        try {
+            if (window.hwlAPI && window.hwlAPI.get_user_json) {
+                user = await window.hwlAPI.get_user_json();
+            } else if (api && api.getUserJson) {
+                user = await api.getUserJson();
+            }
+        } catch (_) {}
+
+        const hasAccount = user && user.username && user.username !== 'Player' && (user.account_type === 'microsoft' || user.account_type === 'helloworld' || (user.account_type === 'offline' && user.username.trim()));
+
+        if (hasAccount) {
+            selectionView.style.display = 'none';
+            linkedView.style.display = 'flex';
+
+            const usernameEl = document.getElementById('wizLinkedUsername');
+            if (usernameEl) usernameEl.textContent = user.username;
+
+            const badgeEl = document.getElementById('wizLinkedBadge');
+            if (badgeEl) {
+                const type = user.account_type || 'offline';
+                badgeEl.className = 'wiz-card-badge ' + (type === 'microsoft' ? 'ms' : (type === 'helloworld' ? 'hw' : 'offline'));
+                badgeEl.textContent = type === 'microsoft' ? 'Microsoft' : (type === 'helloworld' ? 'HelloWorld' : 'Offline');
+            }
+
+            const avatarEl = document.getElementById('wizLinkedAvatar');
+            if (avatarEl) {
+                let avUrl = '';
+                if (user.account_type === 'microsoft') {
+                    const id = user.uuid || encodeURIComponent(user.username);
+                    avUrl = `https://crafthead.net/helm/${id}/96`;
+                } else if (user.account_type === 'helloworld') {
+                    let raw = user.last_avatar_url;
+                    if (raw && typeof raw === 'string') {
+                        if (!raw.startsWith('data:') && !raw.startsWith('http')) {
+                            raw = 'data:image/png;base64,' + raw;
+                        }
+                        avUrl = raw;
+                    } else {
+                        avUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}&background=1a1a24&color=ffd700&bold=true&size=96`;
+                    }
+                } else {
+                    avUrl = `https://crafthead.net/helm/${encodeURIComponent(user.username)}/96`;
+                }
+                avatarEl.src = avUrl;
+                avatarEl.onerror = () => {
+                    avatarEl.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username || 'U')}&background=1a1a24&color=fff&size=96`;
+                };
+            }
+
+            if (nextBtn && currentStep === 0) {
+                nextBtn.style.display = 'flex';
+            }
+        } else {
+            selectionView.style.display = 'block';
+            linkedView.style.display = 'none';
+            if (nextBtn && currentStep === 0) {
+                nextBtn.style.display = 'none';
+            }
+        }
+    }
+
+    const wizLinkedContinueBtn = document.getElementById('wizLinkedContinueBtn');
+    if (wizLinkedContinueBtn) {
+        wizLinkedContinueBtn.addEventListener('click', () => {
+            showStep(1);
+        });
+    }
+
+    const wizLinkedSwitchBtn = document.getElementById('wizLinkedSwitchBtn');
+    if (wizLinkedSwitchBtn) {
+        wizLinkedSwitchBtn.addEventListener('click', () => {
+            const selectionView = document.getElementById('wizAccountSelectionView');
+            const linkedView = document.getElementById('wizAccountLinkedView');
+            if (selectionView) selectionView.style.display = 'block';
+            if (linkedView) linkedView.style.display = 'none';
+            if (nextBtn && currentStep === 0) {
+                nextBtn.style.display = 'none';
+            }
         });
     }
 
@@ -372,16 +627,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const status = await api.getOnboardingStatus();
             if (status.showOnboarding) {
-                openWizard(1);
+                let startStep = 0;
+                try {
+                    const u = await api.getUserJson();
+                    if (u && u.username && u.username !== 'Player' && (u.account_type === 'microsoft' || u.account_type === 'helloworld')) {
+                        startStep = 1;
+                    }
+                } catch (_) {}
+                openWizard(startStep);
             }
         } catch (e) {
             console.error("Failed to check onboarding status:", e);
         }
     }
 
-    function openWizard(startStep = 1) {
+    function openWizard(startStep = 0) {
         overlay.classList.add('active');
-        if (startStep === 1) tutorialCompleted = false;
+        if (startStep <= 1) tutorialCompleted = false;
         loadConfig();
         // Preload trailer video immediately so it is 100% buffered by Step 6
         preloadTrailerVideo();
@@ -605,7 +867,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- Replay Button ---
     if (replayBtn) {
         replayBtn.addEventListener('click', () => {
-            openWizard(1); // Re-open from start
+            openWizard(0); // Re-open from Step 0 (shows linked account or login options)
         });
     }
 

@@ -5,11 +5,43 @@ export const UserAreaControls: React.FC = () => {
     <>
       {/* Login Button / User Badge */}
       <div id="userAreaControls">
-        <button id="statsBtn" className="social-btn" style={{ display: 'none' }} title="Stats" data-i18n-title="social.stats_title">
+        <button
+          id="statsBtn"
+          className="social-btn"
+          style={{ display: 'none' }}
+          title="Stats"
+          data-i18n-title="social.stats_title"
+          onClick={(e) => {
+            const btn = e.currentTarget;
+            if (btn.classList.contains('locked-feature')) return;
+            e.stopPropagation();
+            const win = window as any;
+            if (typeof win.openMyStats === 'function') {
+              win.openMyStats();
+            } else if (typeof win.openStatsModal === 'function') {
+              win.openStatsModal();
+            }
+          }}
+        >
           <i className="fas fa-chart-bar"></i>
           <span className="lock-badge"><i className="fas fa-lock"></i></span>
         </button>
-        <button id="socialBtn" className="social-btn" style={{ display: 'none' }} title="Social" data-i18n-title="social.social_title">
+        <button
+          id="socialBtn"
+          className="social-btn"
+          style={{ display: 'none' }}
+          title="Social"
+          data-i18n-title="social.social_title"
+          onClick={(e) => {
+            const btn = e.currentTarget;
+            if (btn.classList.contains('locked-feature')) return;
+            e.stopPropagation();
+            const win = window as any;
+            if (typeof win.openSocialModal === 'function') {
+              win.openSocialModal('received');
+            }
+          }}
+        >
           <i className="fas fa-user-friends"></i>
           <span id="socialBadge" className="social-badge-count"></span>
           <span className="lock-badge"><i className="fas fa-lock"></i></span>
@@ -20,7 +52,7 @@ export const UserAreaControls: React.FC = () => {
               <i className="fas fa-user"></i>
             </div>
             <span id="userDisplayName"></span>
-            <span id="userBadgesDisplay" className="hw-badges-row" style={{ marginLeft: '3px' }}></span>
+            <span id="userBadgesDisplay" className="hw-badges-row" style={{ marginLeft: '3px', isolation: 'isolate', overflow: 'visible' }}></span>
             {/* Dropdown menu */}
             <div className="user-dropdown" id="userDropdown">
               <button className="dropdown-item" id="viewOwnProfileBtn" data-i18n="user_menu.view_profile">

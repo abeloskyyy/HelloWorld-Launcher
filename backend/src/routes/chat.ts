@@ -273,3 +273,101 @@ chatApp.post('/groups', requireAuth, async (c) => {
   await db.batch(stmts);
   return c.json({ success: true, groupId });
 });
+
+// GET /api/v1/chat/groups/:id - Obtener detalles del grupo y perfiles de miembros
+chatApp.get('/groups/:id', requireAuth, async (c) => {
+  const user = c.get('user');
+  const groupId = c.req.param('id');
+  const db = c.env.DB;
+
+  const isMember = await db.prepare('SELECT 1 FROM friendship_members WHERE friendship_id = ? AND uid = ?').bind(groupId, user.uid).first();
+  if (!isMember) return c.json({ success: false, error: 'not_member' }, 403);
+
+  const group = await db.prepare('SELECT * FROM friendships WHERE id = ? AND is_group = 1').bind(groupId).first<any>();
+  if (!group) return c.json({ success: false, error: 'group_not_found' }, 404);
+
+  const members = await db.prepare('SELECT uid FROM friendship_members WHERE friendship_id = ?').bind(groupId).all<{ uid: string }>();
+  const memberUids = (members.results || []).map(m => m.uid);
+  const admins = JSON.parse(group.admins_json || '[]');
+
+  const profiles: any[] = [];
+  for (const mUid of memberUids) {
+    const p = await db.prepare('SELECT uid, username, account_type, avatar_url, client_version, badges_json FROM users WHERE uid = ?').bind(mUid).first<any>();
+    if (p) {
+      profiles.push({
+        uid: p.uid,
+        username: p.username,
+        accountType: p.account_type,
+        avatarBase64: p.avatar_url || '',
+        avatarUrl: p.avatar_url || '',
+        clientVersion: p.client_version || '',
+        badges: JSON.parse(p.badges_json || '[]')
+      });
+    } else {
+      profiles.push({ uid: mUid, username: 'Unknown', accountType: 'helloworld', avatarBase64: '', badges: [] });
+    }
+  }
+
+  return c.json({
+    success: true,
+    group: {
+      id: group.id,
+      name: group.name,
+      description: '',
+      imageBase64: group.icon || '',
+      icon: group.icon || '',
+      members: memberUids,
+      admin: admins[0] || user.uid,
+      admins,
+      createdAt: group.created_at
+    },
+    profiles
+  });
+});
+
+// POST /api/v1/chat/groups/:id/admins - Promover miembro a admin de grupo
+chatApp.post('/groups/:id/admins', requireAuth, async (c) => {
+  const user = c.get('user');
+  const groupId = c.req.param('id');
+  const body = await c.req.json<{ memberUid: string }>();
+  const db = c.env.DB;
+
+  const group = await db.prepare('SELECT admins_json FROM friendships WHERE id = ? AND is_group = 1').bind(groupId).first<any>();
+  if (!group) return c.json({ success: false, error: 'group_not_found' }, 404);
+
+  const admins = JSON.parse(group.admins_json || '[]');
+  if (!admins.includes(user.uid)) return c.json({ success: false, error: 'not_admin' }, 403);
+
+  const isMember = await db.prepare('SELECT 1 FROM friendship_members WHERE friendship_id = ? AND uid = ?').bind(groupId, body.memberUid).first();
+  if (!isMember) return c.json({ success: false, error: 'not_member' }, 404);
+
+  if (!admins.includes(body.memberUid)) {
+    admins.push(body.memberUid);
+    await db.prepare('UPDATE friendships SET admins_json = ? WHERE id = ?').bind(JSON.stringify(admins), groupId).run();
+  }
+
+  return c.json({ success: true, admins });
+});
+
+// DELETE /api/v1/chat/groups/:id/admins/:adminUid - Degradar admin de grupo
+chatApp.delete('/groups/:id/admins/:adminUid', requireAuth, async (c) => {
+  const user = c.get('user');
+  const groupId = c.req.param('id');
+  const adminUid = c.req.param('adminUid');
+  const db = c.env.DB;
+
+  const group = await db.prepare('SELECT admins_json FROM friendships WHERE id = ? AND is_group = 1').bind(groupId).first<any>();
+  if (!group) return c.json({ success: false, error: 'group_not_found' }, 404);
+
+  const admins = JSON.parse(group.admins_json || '[]');
+  const owner = admins[0];
+  if (user.uid !== owner && user.uid !== adminUid) {
+    return c.json({ success: false, error: 'not_owner' }, 403);
+  }
+
+  const newAdmins = admins.filter((a: string) => a !== adminUid);
+  if (newAdmins.length === 0) newAdmins.push(user.uid);
+
+  await db.prepare('UPDATE friendships SET admins_json = ? WHERE id = ?').bind(JSON.stringify(newAdmins), groupId).run();
+  return c.json({ success: true, admins: newAdmins });
+});

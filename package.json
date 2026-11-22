@@ -1,6 +1,6 @@
 {
   "name": "helloworld-launcher",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "The official custom Minecraft launcher for the HelloWorld community, featuring fast updates, rich presence, and smooth performance.",
   "repository": {
     "type": "git",
@@ -57,6 +57,7 @@
       ],
       "icon": "app/build/icon.ico",
       "sign": null,
+      "requestedExecutionLevel": "asInvoker",
       "artifactName": "helloworld-launcher-win.${ext}"
     },
     "linux": {

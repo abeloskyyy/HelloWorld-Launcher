@@ -1,3 +1,31 @@
+let myCachedStats = null;
+
+async function openMyStats() {
+    let username = 'Player';
+    try {
+        if (window.hwlAPI && window.hwlAPI.get_user_json) {
+            const userJson = await window.hwlAPI.get_user_json();
+            if (userJson && userJson.username) username = userJson.username;
+        }
+    } catch (_) {}
+
+    showStatsModal(username, myCachedStats || { streak: 0, maxStreak: 0, totalHours: 0, totalDaysPlayed: 0, totalSessions: 0 }, null);
+
+    if (window.hwlAPI && window.hwlAPI.stats_get_my_stats) {
+        try {
+            const res = await window.hwlAPI.stats_get_my_stats();
+            if (res && res.stats) {
+                myCachedStats = res.stats;
+                showStatsModal(username, res.stats, null);
+            }
+        } catch (e) {
+            console.error('[Stats] Error refreshing my stats:', e);
+        }
+    }
+}
+window.openMyStats = openMyStats;
+window.openStatsModal = openMyStats;
+
 // --- STREAK & STATS SYSTEM ---
 function applyCachedStreak(username) {
     try {
@@ -37,7 +65,8 @@ async function loadMyStats() {
             applyCachedStreak(userJson.username);
 
             const res = await window.hwlAPI.stats_get_my_stats();
-            if (res && res.success && res.stats) {
+            if (res && res.stats) {
+                myCachedStats = res.stats;
                 const targetStreak = res.stats.streak || 0;
                 const currentStreak = parseInt(streakCount ? streakCount.innerText : '0') || 0;
 
@@ -68,7 +97,8 @@ async function loadMyStats() {
 
                 if (statsBtn) {
                     statsBtn.style.display = 'inline-flex';
-                    statsBtn.onclick = () => {
+                    statsBtn.onclick = (e) => {
+                        e?.stopPropagation?.();
                         showStatsModal(userJson.username, res.stats, null);
                     };
                 }
@@ -241,22 +271,27 @@ async function updateProfileCompletion(userJson) {
     
     function showStatsModal(username, stats, avatarUrl) {
         const modal = document.getElementById('statsModal');
-        document.getElementById('statsUsername').innerText = username;
+        const userEl = document.getElementById('statsUsername');
+        if (userEl) userEl.innerText = username;
         
+        stats = stats || {};
         const streak = stats.streak !== undefined ? stats.streak : 0;
         const maxStreak = stats.maxStreak !== undefined ? stats.maxStreak : (stats.streak || 0);
         const totalHours = typeof stats.totalHours === 'number' ? stats.totalHours.toFixed(1) : (stats.totalHours || 0);
         const days = stats.totalDaysPlayed || 0;
         const sessions = stats.totalSessions || 0;
         
+        const daysUnit = (typeof window.t === 'function' ? window.t('stats.days_unit') : '') || 'días';
+        const hoursUnit = (typeof window.t === 'function' ? window.t('stats.hours_unit') : '') || 'h';
+        
         const streakEl = document.getElementById('statsModalStreak');
-        if (streakEl) streakEl.innerHTML = `${streak} <span style="font-size: 14px; font-weight: normal; color: #888;">${window.t('stats.days_unit')}</span>`;
+        if (streakEl) streakEl.innerHTML = `${streak} <span style="font-size: 14px; font-weight: normal; color: #888;">${daysUnit}</span>`;
         const maxStreakEl = document.getElementById('statsModalMaxStreak');
-        if (maxStreakEl) maxStreakEl.innerHTML = `${maxStreak} <span style="font-size: 14px; font-weight: normal; color: #888;">${window.t('stats.days_unit')}</span>`;
+        if (maxStreakEl) maxStreakEl.innerHTML = `${maxStreak} <span style="font-size: 14px; font-weight: normal; color: #888;">${daysUnit}</span>`;
         const hoursEl = document.getElementById('statsModalHours');
-        if (hoursEl) hoursEl.innerHTML = `${totalHours} <span style="font-size: 14px; font-weight: normal; color: #888;">${window.t('stats.hours_unit')}</span>`;
+        if (hoursEl) hoursEl.innerHTML = `${totalHours} <span style="font-size: 14px; font-weight: normal; color: #888;">${hoursUnit}</span>`;
         const daysEl = document.getElementById('statsModalDays');
-        if (daysEl) daysEl.innerHTML = `${days} <span style="font-size: 14px; font-weight: normal; color: #888;">${window.t('stats.days_unit')}</span>`;
+        if (daysEl) daysEl.innerHTML = `${days} <span style="font-size: 14px; font-weight: normal; color: #888;">${daysUnit}</span>`;
         const sessionsEl = document.getElementById('statsModalSessions');
         if (sessionsEl) sessionsEl.innerHTML = `${sessions}`;
         
@@ -283,18 +318,61 @@ async function updateProfileCompletion(userJson) {
             }
         }
         
-        if (modal) modal.classList.add('show');
+        if (modal) { modal.classList.remove('closing'); modal.classList.add('show'); }
     }
     
     function setupModalEvents() {
-    const closeBtn = document.getElementById('closeStatsModalBtn');
-    if (closeBtn) {
-        closeBtn.onclick = () => {
-            const modal = document.getElementById('statsModal');
-            if (modal) modal.classList.remove('show');
-        };
+        const closeBtn = document.getElementById('closeStatsModalBtn');
+        if (closeBtn) {
+            closeBtn.onclick = () => {
+                const modal = document.getElementById('statsModal');
+                if (modal) modal.classList.remove('show');
+            };
+        }
+        const statsModalEl = document.getElementById('statsModal');
+        if (statsModalEl) {
+            statsModalEl.addEventListener('click', (e) => {
+                if (e.target === statsModalEl) statsModalEl.classList.remove('show');
+            });
+        }
+        const statsBtn = document.getElementById('statsBtn');
+        if (statsBtn) {
+            statsBtn.onclick = (e) => {
+                if (statsBtn.classList.contains('locked-feature')) return;
+                e?.stopPropagation?.();
+                openMyStats();
+            };
+        }
+        const streakBadgeContainer = document.getElementById('streakBadgeContainer');
+        if (streakBadgeContainer) {
+            streakBadgeContainer.style.cursor = 'pointer';
+            streakBadgeContainer.onclick = (e) => {
+                if (statsBtn && statsBtn.classList.contains('locked-feature')) return;
+                e?.stopPropagation?.();
+                openMyStats();
+            };
+        }
     }
-}
+
+// Delegated click handler for statsBtn and streakBadgeContainer
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('#statsBtn');
+    if (btn && !btn.classList.contains('locked-feature')) {
+        e.preventDefault();
+        e.stopPropagation();
+        openMyStats();
+        return;
+    }
+    const streak = e.target.closest('#streakBadgeContainer');
+    if (streak) {
+        const statsBtn = document.getElementById('statsBtn');
+        if (statsBtn && !statsBtn.classList.contains('locked-feature')) {
+            e.preventDefault();
+            e.stopPropagation();
+            openMyStats();
+        }
+    }
+});
 
 function initStats() {
     loadMyStats();

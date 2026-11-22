@@ -25,16 +25,33 @@ function getApiEndpoint(endpointPath) {
   return `${_activeUrl}/api/${_apiVersion}/${cleanPath}`;
 }
 
+const LAUNCHER_SECRET = 'hwl_sec_7f9b8c2d1e0a4f5b9c8d7e6a5b4c3d2e1';
+
 async function request(method, endpointPath, options = {}) {
   const { data, params, requiresAuth = false, retryOnAuth = true } = options;
 
   let headers = { ...(options.headers || {}) };
+  headers['X-Launcher-Secret'] = LAUNCHER_SECRET;
   let authData = null;
 
-  if (requiresAuth && typeof _getToken === 'function') {
-    authData = await _getToken();
-    if (authData && authData.idToken) {
-      headers['Authorization'] = `Bearer ${authData.idToken}`;
+  if (typeof _getToken === 'function') {
+    try {
+      authData = await _getToken();
+      if (authData) {
+        if (authData.idToken) {
+          headers['Authorization'] = `Bearer ${authData.idToken}`;
+        }
+        if (authData.username) {
+          headers['X-User-Username'] = authData.username;
+        }
+        if (authData.uid) {
+          headers['X-User-Uid'] = authData.uid;
+        }
+      }
+    } catch (authErr) {
+      if (requiresAuth && !headers['Authorization'] && !headers['X-User-Username']) {
+        throw authErr;
+      }
     }
   }
 
@@ -152,6 +169,9 @@ const ApiClient = {
     setReplyState: (channelId, reply) => request('POST', `chat/channels/${channelId}/reply-state`, { data: { reply }, requiresAuth: true }),
     createGroup: (name, memberUids, icon) => request('POST', 'chat/groups', { data: { name, memberUids, icon }, requiresAuth: true }),
     editGroup: (groupId, updates) => request('PATCH', `chat/groups/${groupId}`, { data: updates, requiresAuth: true }),
+    getGroupDetails: (groupId) => request('GET', `chat/groups/${groupId}`, { requiresAuth: true }),
+    promoteGroupAdmin: (groupId, memberUid) => request('POST', `chat/groups/${groupId}/admins`, { data: { memberUid }, requiresAuth: true }),
+    demoteGroupAdmin: (groupId, adminUid) => request('DELETE', `chat/groups/${groupId}/admins/${adminUid}`, { requiresAuth: true }),
     addGroupMembers: (groupId, memberUids) => request('POST', `chat/groups/${groupId}/members`, { data: { memberUids }, requiresAuth: true }),
     removeGroupMember: (groupId, memberUid) => request('DELETE', `chat/groups/${groupId}/members/${memberUid}`, { requiresAuth: true })
   },
@@ -184,6 +204,13 @@ const ApiClient = {
   reviews: {
     getReviews: () => request('GET', 'reviews', { requiresAuth: false }),
     submitReview: (data) => request('POST', 'reviews', { data, requiresAuth: false })
+  },
+
+  // === Módulo Stats ===
+  stats: {
+    getMyStats: () => request('GET', 'stats/me', { requiresAuth: true }),
+    getUserStats: (uid) => request('GET', `stats/${uid}`, { requiresAuth: false }),
+    record: (data) => request('POST', 'stats/record', { data, requiresAuth: true })
   },
 
   // === Módulo Storage R2 ===

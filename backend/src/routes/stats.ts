@@ -1,17 +1,34 @@
 import { Hono } from 'hono';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, optionalAuth } from '../middleware/auth';
 import type { Env, CustomVariables } from '../types/env';
 
 export const statsApp = new Hono<{ Bindings: Env; Variables: CustomVariables }>();
 
-// GET /api/v1/stats/:uid - Obtener estadísticas de un usuario
-statsApp.get('/:uid', requireAuth, async (c) => {
+// GET /api/v1/stats/:uid - Obtener estadísticas de un usuario (público o autenticado)
+statsApp.get('/:uid', optionalAuth, async (c) => {
   const targetUid = c.req.param('uid');
   const user = c.get('user');
-  const effectiveUid = targetUid === 'me' ? user.uid : targetUid;
+  let effectiveUid = targetUid;
+  if (targetUid === 'me') {
+    if (!user || !user.uid) {
+      return c.json({ success: false, error: 'Unauthorized: login required for /me' }, 401);
+    }
+    effectiveUid = user.uid;
+  }
   const db = c.env.DB;
 
   let row = await db.prepare('SELECT * FROM stats WHERE uid = ?').bind(effectiveUid).first<any>();
+
+  if (!row) {
+    // Buscar si effectiveUid es un Mojang UUID, UUID secundario, o nombre de usuario
+    const cleanHex = effectiveUid.replace(/-/g, '').toLowerCase();
+    row = await db.prepare(`
+      SELECT s.* FROM stats s
+      JOIN users u ON u.uid = s.uid
+      WHERE u.uid = ? OR u.mc_uuid = ? OR u.uuid = ? OR LOWER(REPLACE(COALESCE(u.mc_uuid, ''), '-', '')) = ? OR LOWER(u.username) = LOWER(?)
+      LIMIT 1
+    `).bind(effectiveUid, effectiveUid, effectiveUid, cleanHex, effectiveUid).first<any>();
+  }
 
   if (!row) {
     // Si no tiene estadísticas registradas aún

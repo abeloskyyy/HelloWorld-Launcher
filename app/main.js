@@ -444,17 +444,26 @@ const loadUserData = () => {
     console.warn('[loadUserData] username was an object on disk, sanitized to:', userDataCache.username);
   }
 
-  // Auto-fix: if Microsoft account is missing uuid, try to restore from saved accounts
-  if (userDataCache.account_type === 'microsoft' && (!userDataCache.uuid || userDataCache.uuid === 'undefined')) {
+  // Auto-fix: if Microsoft account is missing uuid or firebase_ms_uid, try to restore from saved accounts
+  if (userDataCache.account_type === 'microsoft') {
     try {
       const savedAccs = loadSavedAccounts();
-      const match = savedAccs.find(a => a.type === 'microsoft' && (a.username === userDataCache.username || a.uuid));
-      if (match && match.uuid) {
-        userDataCache.uuid = match.uuid;
+      const match = savedAccs.find(a => a.type === 'microsoft' && (a.username === userDataCache.username || a.uuid === userDataCache.uuid));
+      if (match) {
+        let changed = false;
+        if ((!userDataCache.uuid || userDataCache.uuid === 'undefined') && match.uuid) {
+          userDataCache.uuid = match.uuid;
+          changed = true;
+        }
+        if (!userDataCache.firebase_ms_uid && match.firebase_ms_uid) {
+          userDataCache.firebase_ms_uid = match.firebase_ms_uid;
+          changed = true;
+        }
         if (!userDataCache.last_skin_url && match.avatarUrl && match.avatarUrl.startsWith('http')) {
           userDataCache.last_skin_url = match.avatarUrl;
+          changed = true;
         }
-        saveUserData(userDataCache);
+        if (changed) saveUserData(userDataCache);
       }
     } catch (_) {}
   }
@@ -736,128 +745,26 @@ if (cliConfigUrl || process.env.REMOTE_CONFIG_GIST_URL || process.env.REMOTE_CON
   APP_SECRETS.REMOTE_CONFIG_GIST_URL = cliConfigUrl || process.env.REMOTE_CONFIG_GIST_URL || process.env.REMOTE_CONFIG_URL;
 }
 const FIREBASE_API_KEY = APP_SECRETS.FIREBASE_API_KEY;
-const FIREBASE_PROJECT_ID = APP_SECRETS.FIREBASE_PROJECT_ID || "helloworld-launcher";
-const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
-
-// --- Account Switcher Utility Functions ---
-
-/**
- * Refresh a Firebase ID token using a stored refresh_token.
- * @returns { uid, idToken, refreshToken }
- */
-async function refreshFirebaseToken(refreshToken) {
-  const url = `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`;
-  const res = await axios.post(url, {
-    grant_type: 'refresh_token',
-    refresh_token: refreshToken
-  });
-  const { user_id, id_token, refresh_token: newRefreshToken } = res.data;
-  if (!user_id || !id_token) throw new Error('INVALID_REFRESH_TOKEN');
-  return { uid: user_id, idToken: id_token, refreshToken: newRefreshToken || refreshToken };
-}
-
-
-
-
-// --- Social Helper: Parse Firestore doc fields ---
-function parseFirestoreFields(fields) {
-  if (!fields) return {};
-  const out = {};
-  for (const [k, v] of Object.entries(fields)) {
-    if (v.stringValue !== undefined) out[k] = v.stringValue;
-    else if (v.integerValue !== undefined) out[k] = parseInt(v.integerValue);
-    else if (v.doubleValue !== undefined) out[k] = v.doubleValue;
-    else if (v.booleanValue !== undefined) out[k] = v.booleanValue;
-    else if (v.timestampValue !== undefined) out[k] = v.timestampValue;
-    else if (v.nullValue !== undefined) out[k] = null;
-    else if (v.mapValue !== undefined) out[k] = parseFirestoreFields(v.mapValue.fields || {});
-    else if (v.arrayValue !== undefined) {
-      out[k] = (v.arrayValue.values || []).map(item => {
-        if (item.stringValue !== undefined) return item.stringValue;
-        else if (item.integerValue !== undefined) return parseInt(item.integerValue);
-        else if (item.doubleValue !== undefined) return item.doubleValue;
-        else if (item.booleanValue !== undefined) return item.booleanValue;
-        else if (item.mapValue !== undefined) return parseFirestoreFields(item.mapValue.fields || {});
-        else return null;
-      });
-    }
-  }
-  return out;
-}
-
-// --- Social Helper: Build Firestore fields from plain object ---
-function buildFSFields(obj) {
-  const fields = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (typeof v === 'string') fields[k] = { stringValue: v };
-    else if (typeof v === 'boolean') fields[k] = { booleanValue: v };
-    else if (typeof v === 'number') fields[k] = Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
-    else if (v === null) fields[k] = { nullValue: null };
-    else if (Array.isArray(v)) fields[k] = { arrayValue: { values: v.map(i => ({ stringValue: String(i) })) } };
-  }
-  return fields;
-}
 
 // --- Maintenance State, Mandatory Update State & Admin Bypass ---
 let _isMaintenanceActive = false;
 let _adminBypassGranted = false;
 let _isMandatoryUpdateActive = false;
 
-// --- Social Helper: Firestore REST calls ---
-async function fsGet(docPath, idToken) {
-  const headers = idToken ? { Authorization: `Bearer ${idToken}` } : {};
-  const res = await axios.get(`${FIRESTORE_BASE}/${docPath}`, { headers });
-  return { id: docPath.split('/').pop(), ...parseFirestoreFields(res.data.fields) };
-}
-async function fsSet(docPath, obj, idToken, mask) {
-  const url = mask
-    ? `${FIRESTORE_BASE}/${docPath}?${mask.map(f => `updateMask.fieldPaths=${f}`).join('&')}`
-    : `${FIRESTORE_BASE}/${docPath}`;
-  const res = await axios.patch(url, { fields: buildFSFields(obj) }, { headers: { Authorization: `Bearer ${idToken}` } });
-  return res.data;
-}
-async function fsDel(docPath, idToken) {
-  await axios.delete(`${FIRESTORE_BASE}/${docPath}`, { headers: { Authorization: `Bearer ${idToken}` } });
-}
-async function fsUpdate(docPath, data, idToken) {
-  const fields = buildFSFields(data);
-  const mask = Object.keys(data).map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
-  await axios.patch(`${FIRESTORE_BASE}/${docPath}?${mask}`, { fields }, { headers: { Authorization: `Bearer ${idToken}` } });
-}
-async function fsQuery(collectionId, filters, idToken, orderBy, limit = 50) {
-  const makeFilter = (f) => ({ fieldFilter: { field: { fieldPath: f.field }, op: f.op, value: f.value } });
-  const body = { structuredQuery: { from: [{ collectionId }], limit } };
-  if (filters.length === 1) body.structuredQuery.where = makeFilter(filters[0]);
-  else if (filters.length > 1) body.structuredQuery.where = { compositeFilter: { op: 'AND', filters: filters.map(makeFilter) } };
-  if (orderBy) body.structuredQuery.orderBy = [{ field: { fieldPath: orderBy }, direction: 'DESCENDING' }];
-  const res = await axios.post(`${FIRESTORE_BASE}:runQuery`, body,
-    idToken ? { headers: { Authorization: `Bearer ${idToken}` } } : {});
-  return (res.data || []).filter(r => r.document).map(r => ({
-    id: r.document.name.split('/').pop(),
-    ...parseFirestoreFields(r.document.fields)
-  }));
-}
-async function fsQuerySub(parentPath, collectionId, filters, idToken, orderBy, limit = 50) {
-  const makeFilter = (f) => ({ fieldFilter: { field: { fieldPath: f.field }, op: f.op, value: f.value } });
-  const body = { structuredQuery: { from: [{ collectionId }], limit } };
-  if (filters.length === 1) body.structuredQuery.where = makeFilter(filters[0]);
-  else if (filters.length > 1) body.structuredQuery.where = { compositeFilter: { op: 'AND', filters: filters.map(makeFilter) } };
-  if (orderBy) body.structuredQuery.orderBy = [{ field: { fieldPath: orderBy }, direction: 'DESCENDING' }];
-  const res = await axios.post(`${FIRESTORE_BASE}/${parentPath}:runQuery`, body,
-    { headers: { Authorization: `Bearer ${idToken}` } });
-  return (res.data || []).filter(r => r.document).map(r => ({
-    id: r.document.name.split('/').pop(),
-    ...parseFirestoreFields(r.document.fields)
-  }));
-}
-
-// --- Social Helper: Refresh Firebase ID token ---
+// --- Account Auth Helper: Refresh Firebase ID token ---
+/**
+ * Refresh a Firebase ID token using a stored refresh_token.
+ * @returns { uid, idToken, refreshToken }
+ */
 async function refreshFirebaseToken(refreshToken) {
   try {
     const res = await axios.post(`https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`, {
-      grant_type: 'refresh_token', refresh_token: refreshToken
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken
     });
-    return { idToken: res.data.id_token, refreshToken: res.data.refresh_token, uid: res.data.user_id };
+    const { user_id, id_token, refresh_token: newRefreshToken } = res.data;
+    if (!user_id || !id_token) throw new Error('INVALID_REFRESH_TOKEN');
+    return { uid: user_id, idToken: id_token, refreshToken: newRefreshToken || refreshToken };
   } catch (err) {
     if (err.response && err.response.status === 400) {
       throw new Error('INVALID_REFRESH_TOKEN');
@@ -868,11 +775,13 @@ async function refreshFirebaseToken(refreshToken) {
 
 let hasSyncedVersionThisSession = false;
 async function syncClientVersionToUsersDoc(auth, force = false) {
-  if (!auth || !auth.uid || !auth.idToken) return;
+  if (!auth || !auth.uid) return;
   if (hasSyncedVersionThisSession && !force) return;
   try {
     const curVer = app.getVersion();
-    await fsUpdate(`users/${auth.uid}`, { clientVersion: curVer, updatedAt: new Date().toISOString() }, auth.idToken);
+    if (ApiClient && ApiClient.users && typeof ApiClient.users.syncVersion === 'function') {
+      await ApiClient.users.syncVersion(curVer);
+    }
     hasSyncedVersionThisSession = true;
     console.log(`[VersionSync] Successfully synced users/${auth.uid} clientVersion to v${curVer}`);
   } catch (err) {
@@ -923,7 +832,7 @@ async function getAuthForSocialAccount(accountInfo) {
 async function getSocialAuth() {
   const userData = loadUserData();
   const currentType = userData.account_type;
-  const currentUid = currentType === 'microsoft' ? userData.firebase_ms_uid : userData.firebase_uid;
+  const currentUid = currentType === 'microsoft' ? (userData.firebase_ms_uid || userData.uuid || userData.username) : userData.firebase_uid;
   if (cachedSocialAuth && cachedSocialAuth.uid === currentUid && Date.now() < cachedSocialAuthExpires) {
     return cachedSocialAuth;
   }
@@ -952,29 +861,62 @@ async function getSocialAuth() {
     }
   }
   if (userData.account_type === 'microsoft') {
-    if (!userData.firebase_ms_refresh_token) throw new Error('NO_SOCIAL_AUTH');
-    try {
-      const refreshed = await refreshFirebaseToken(userData.firebase_ms_refresh_token);
-      userData.firebase_ms_refresh_token = refreshed.refreshToken;
-      saveUserData(userData);
-      const authObj = { uid: userData.firebase_ms_uid, idToken: refreshed.idToken, accountType: 'microsoft', username: userData.username };
+    if (userData.firebase_ms_refresh_token) {
+      try {
+        const refreshed = await refreshFirebaseToken(userData.firebase_ms_refresh_token);
+        userData.firebase_ms_refresh_token = refreshed.refreshToken;
+        saveUserData(userData);
+        const authObj = { uid: userData.firebase_ms_uid, idToken: refreshed.idToken, accountType: 'microsoft', username: userData.username };
+        cachedSocialAuth = authObj;
+        cachedSocialAuthExpires = Date.now() + 45 * 60 * 1000;
+        syncClientVersionToUsersDoc(authObj);
+        return authObj;
+      } catch (err) {
+        invalidateSocialAuthCache();
+        if (err.message === 'INVALID_REFRESH_TOKEN') {
+          userData.firebase_ms_refresh_token = "";
+          saveUserData(userData);
+        }
+      }
+    }
+    if (!userData.firebase_ms_uid && ApiClient && ApiClient.users && typeof ApiClient.users.checkMicrosoftVerified === 'function') {
+      try {
+        const msStatus = await ApiClient.users.checkMicrosoftVerified(userData.username, userData.uuid);
+        if (msStatus && msStatus.verified && msStatus.firebase_uid) {
+          userData.firebase_ms_uid = msStatus.firebase_uid;
+          saveUserData(userData);
+        }
+      } catch (_) {}
+    }
+    // Microsoft / Premium account authenticated via Minecraft OAuth & Cloudflare backend
+    const effectiveUid = userData.firebase_ms_uid || userData.uuid || userData.username;
+    if (effectiveUid && userData.username) {
+      const authObj = { uid: effectiveUid, idToken: null, accountType: 'microsoft', username: userData.username };
       cachedSocialAuth = authObj;
       cachedSocialAuthExpires = Date.now() + 45 * 60 * 1000;
-      syncClientVersionToUsersDoc(authObj);
       return authObj;
-    } catch (err) {
-      invalidateSocialAuthCache();
-      if (err.message === 'INVALID_REFRESH_TOKEN') {
-        userData.firebase_ms_uid = "";
-        userData.firebase_ms_refresh_token = "";
-        saveUserData(userData);
-        throw new Error('NO_SOCIAL_AUTH');
-      }
-      throw err;
     }
+    throw new Error('NO_SOCIAL_AUTH');
   }
   throw new Error('NO_SOCIAL_AUTH');
 }
+
+// Bind ApiClient token handlers with getSocialAuth & local user fallback
+try {
+  const getAuthTokenSafe = async () => {
+    try {
+      return await getSocialAuth();
+    } catch (_) {
+      const ud = loadUserData();
+      return {
+        username: ud ? ud.username : '',
+        uid: ud ? (ud.firebase_ms_uid || ud.firebase_uid || ud.uuid) : '',
+        accountType: ud ? ud.account_type : ''
+      };
+    }
+  };
+  ApiClient.setAuthHandlers(getAuthTokenSafe, getAuthTokenSafe);
+} catch (_) {}
 
 // --- Social Helper: Deterministic friendship doc ID ---
 function friendshipId(uid1, uid2) { return [uid1, uid2].sort().join('__'); }
@@ -1154,7 +1096,10 @@ class PresenceManager {
       updatedAt: now
     };
     const wrote = await this.withAuth(async (auth) => {
-      await fsSet(`presence/${uid}`, payload, auth.idToken);
+      if (ApiClient && ApiClient.presence && typeof ApiClient.presence.heartbeat === 'function') {
+        await ApiClient.presence.heartbeat(payload);
+      }
+      return true;
     });
     if (!wrote) return false;
     this.currentState = { ...state, statusText, updatedAt: now };
@@ -1257,7 +1202,19 @@ class PresenceManager {
     if (!uid) return;
     const now = new Date().toISOString();
     const wrote = await this.withAuth(async (auth) => {
-      await fsSet(`presence/${uid}`, { updatedAt: now }, auth.idToken, ['updatedAt']);
+      if (ApiClient && ApiClient.presence && typeof ApiClient.presence.heartbeat === 'function') {
+        await ApiClient.presence.heartbeat({
+          status: this.currentState.status || 'online',
+          statusText: this.currentState.statusText || '',
+          mcVersion: this.currentState.mcVersion || '',
+          instanceName: this.currentState.instanceName || '',
+          serverIp: this.currentState.serverIp || '',
+          worldName: this.currentState.worldName || '',
+          playerName: this.currentState.ign || this.getPlayerName(),
+          clientVersion: app.getVersion()
+        });
+      }
+      return true;
     });
     if (wrote && this.currentState) {
       this.currentState.updatedAt = now;
@@ -1305,18 +1262,11 @@ class PresenceManager {
     if (!uid) return;
     const now = new Date().toISOString();
     await this.withAuth(async (auth) => {
-      await fsSet(`presence/${uid}`, {
-        status: 'offline',
-        statusText: presenceStatusLabel('offline'),
-        mcVersion: '',
-        instanceName: '',
-        serverIp: '',
-        worldName: '',
-        playerName: this.getPlayerName(),
-        updatedAt: now,
-        lastSeenAt: now
-      }, auth.idToken);
-    });
+      if (ApiClient && ApiClient.presence && typeof ApiClient.presence.offline === 'function') {
+        await ApiClient.presence.offline();
+      }
+      return true;
+    }).catch(() => {});
     this.currentState = { status: 'offline', mcVersion: '', instanceName: '', serverIp: '', worldName: '', statusText: presenceStatusLabel('offline'), ign: this.getPlayerName(), updatedAt: now };
     this.gameContext = null;
     this.lastServerIp = '';
@@ -1744,18 +1694,21 @@ function buildPresenceResponse(rawDoc) {
 }
 
 async function fetchPresenceForUser(uid, auth, fsDocId = null) {
-  if (!uid || !auth) return buildPresenceResponse(null);
+  if (!uid) return buildPresenceResponse(null);
   try {
-    const doc = await fsGet(`presence/${uid}`, auth.idToken);
-    return buildPresenceResponse(doc);
+    if (ApiClient && ApiClient.presence && typeof ApiClient.presence.getPresence === 'function') {
+      const res = await ApiClient.presence.getPresence(uid);
+      if (res && res.presence) {
+        return buildPresenceResponse(res.presence);
+      }
+    }
   } catch (e) {
     if (e?.response?.status === 404 || e?.response?.status === 403) {
-      // 404: presence doc not created yet. 403: restricted by Firestore rules (e.g. not friends).
       return buildPresenceResponse(null);
     }
     console.warn('[Presence] fetchPresenceForUser failed:', e.message || e);
-    return buildPresenceResponse(null);
   }
+  return buildPresenceResponse(null);
 }
 
 // --- Minecraft Process, Window & Daily Streak Detection ---
@@ -1903,19 +1856,61 @@ function isMinecraftRunning() {
   return getRunningMinecraftCount() > 0;
 }
 
+function getLocalStatsFilePath() {
+  try {
+    return path.join(path.dirname(paths.getUserFilePath()), 'stats.json');
+  } catch (_) {
+    return null;
+  }
+}
+
+function loadLocalStats() {
+  try {
+    const filePath = getLocalStatsFilePath();
+    if (filePath && fs.existsSync(filePath)) {
+      const data = fs.readJsonSync(filePath);
+      if (data && typeof data === 'object') return data;
+    }
+  } catch (_) {}
+  const ud = loadUserData();
+  const sessions = (ud && typeof ud.launch_count === 'number') ? ud.launch_count : 0;
+  return {
+    streak: 0,
+    maxStreak: 0,
+    totalHours: 0,
+    totalSessions: sessions,
+    totalDaysPlayed: sessions > 0 ? 1 : 0,
+    lastPlayed: Date.now(),
+    streakCompletedToday: false
+  };
+}
+
+function saveLocalStats(stats) {
+  try {
+    const filePath = getLocalStatsFilePath();
+    if (filePath) {
+      fs.writeJsonSync(filePath, stats, { spaces: 2 });
+    }
+  } catch (err) {
+    console.warn('[Stats] Failed to save local stats:', err.message);
+  }
+}
+
 async function addPlaytimeToUserStats(playTimeHours) {
   if (playTimeHours <= 0 || isLaunchCancelled) return;
   try {
-    const auth = await getSocialAuth().catch(() => null);
-    if (!auth) return;
-    let stats;
+    const local = loadLocalStats();
+    const newHours = (local.totalHours || 0) + playTimeHours;
+    const updated = { ...local, totalHours: newHours };
+    saveLocalStats(updated);
+
+    // Sync to Cloudflare backend
     try {
-      stats = await fsGet(`users/${auth.uid}/stats/main`, auth.idToken);
-    } catch (e) {
-      stats = { totalHours: 0 };
-    }
-    const newHours = (stats.totalHours || 0) + playTimeHours;
-    await fsSet(`users/${auth.uid}/stats/main`, { ...stats, totalHours: newHours }, auth.idToken);
+      if (ApiClient && ApiClient.stats && typeof ApiClient.stats.record === 'function') {
+        ApiClient.stats.record({ addedHours: playTimeHours }).catch(() => {});
+      }
+    } catch (_) {}
+
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('stats-updated');
     }
@@ -1938,9 +1933,12 @@ async function checkDailyStreakForRunningGame() {
   if (!auth) return;
 
   try {
-    let stats;
+    let stats = null;
     try {
-      stats = await fsGet(`users/${auth.uid}/stats/main`, auth.idToken);
+      if (ApiClient && ApiClient.stats && typeof ApiClient.stats.getMyStats === 'function') {
+        const res = await ApiClient.stats.getMyStats();
+        if (res && res.success && res.stats) stats = res.stats;
+      }
     } catch (e) {
       stats = null;
     }
@@ -2004,10 +2002,11 @@ async function pollMinecraftProcesses() {
     }
 
     // State transitions
+    const hasUnreadyInternalProcess = Array.from(internalGameProcessesMeta.values()).some(m => !m.isReady);
     if (!lastKnownRunningState && currentlyRunning) {
       lastKnownRunningState = true;
       console.log(`[ProcessMonitor] Minecraft process detected running (count: ${getRunningMinecraftCount()})`);
-      if (mainWindow && !mainWindow.isDestroyed()) {
+      if (!hasUnreadyInternalProcess && mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('info-message', 'Game Ready');
         mainWindow.webContents.send('game-status', { running: true, count: getRunningMinecraftCount() });
       }
@@ -2046,29 +2045,20 @@ function triggerStreakUpdate() {
 
 async function updateStreakAndSessions() {
   try {
-    const auth = await getSocialAuth().catch(() => null);
-    if (!auth) return;
-    
-    let stats;
-    try {
-      stats = await fsGet(`users/${auth.uid}/stats/main`, auth.idToken);
-    } catch (e) {
-      stats = { streak: 0, lastPlayed: 0, totalHours: 0, totalSessions: 0, totalDaysPlayed: 0 };
-    }
-    
+    const local = loadLocalStats();
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
-    const lastDate = stats.lastPlayed ? new Date(stats.lastPlayed).toISOString().split('T')[0] : null;
-    
-    let streak = stats.streak || 0;
-    let totalDaysPlayed = stats.totalDaysPlayed || 0;
-    let maxStreak = stats.maxStreak || stats.streak || 0;
-    
+    const lastDate = local.lastPlayed ? new Date(local.lastPlayed).toISOString().split('T')[0] : null;
+
+    let streak = local.streak || 0;
+    let totalDaysPlayed = local.totalDaysPlayed || 0;
+    let maxStreak = local.maxStreak || streak || 0;
+
     if (lastDate !== todayStr) {
       const yesterday = new Date(now);
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split('T')[0];
-      
+
       if (lastDate === yesterdayStr) {
         streak += 1;
       } else {
@@ -2077,17 +2067,25 @@ async function updateStreakAndSessions() {
       totalDaysPlayed += 1;
       if (streak > maxStreak) maxStreak = streak;
     }
-    
-    const updates = {
+
+    const updated = {
+      ...local,
       streak,
       maxStreak,
       lastPlayed: now.getTime(),
-      totalSessions: (stats.totalSessions || 0) + 1,
-      totalDaysPlayed
+      totalSessions: (local.totalSessions || 0) + 1,
+      totalDaysPlayed,
+      streakCompletedToday: true
     };
-    
-    await fsSet(`users/${auth.uid}/stats/main`, { ...stats, ...updates }, auth.idToken);
-    
+    saveLocalStats(updated);
+
+    // Sync to Cloudflare backend
+    try {
+      if (ApiClient && ApiClient.stats && typeof ApiClient.stats.record === 'function') {
+        ApiClient.stats.record({ addedHours: 0 }).catch(() => {});
+      }
+    } catch (_) {}
+
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('stats-updated');
     }
@@ -2473,37 +2471,30 @@ async function pollPresence(initPass = false) {
   }
 
   try {
-    const friendships = await fsQuery('friendships', [
-      { field: 'users', op: 'ARRAY_CONTAINS', value: { stringValue: auth.uid } }
-    ], auth.idToken, null, 100);
+    let friends = [];
+    if (ApiClient && ApiClient.social && typeof ApiClient.social.getFriends === 'function') {
+      const friendsRes = await ApiClient.social.getFriends();
+      friends = friendsRes?.friends || [];
+    }
 
     const seenUids = new Set();
 
-    for (const fsDoc of friendships) {
-      if (fsDoc.isGroup) continue;
-      const friendUid = (fsDoc.users || []).find(u => u !== auth.uid);
+    for (const friend of friends) {
+      const friendUid = friend.uid;
       if (!friendUid) continue;
       seenUids.add(friendUid);
 
-      let profile = friendProfileCache.get(friendUid);
-      if (!profile) {
-        try {
-          profile = await fsGet(`users/${friendUid}`, auth.idToken);
-          friendProfileCache.set(friendUid, { ...profile, uid: friendUid });
-        } catch (_) {
-          profile = { uid: friendUid, username: 'Unknown', accountType: 'helloworld' };
-        }
-      }
+      friendProfileCache.set(friendUid, friend);
 
-      const presence = await fetchPresenceForUser(friendUid, auth, fsDoc.id);
+      const presence = friend.presence ? buildPresenceResponse(friend.presence) : await fetchPresenceForUser(friendUid, auth);
       const prev = lastPresenceStates.get(friendUid);
       lastPresenceStates.set(friendUid, presence);
 
       if (!presencePollingReady || initPass) continue;
       const message = shouldNotifyPresence(prev, presence);
       if (message) {
-        const name = profile?.username || 'Amigo';
-        showPresenceNotification(name, message, profile);
+        const name = friend.username || 'Amigo';
+        showPresenceNotification(name, message, friend);
       }
     }
 
@@ -2679,23 +2670,17 @@ async function pollMessages() {
         let cachedMsgs = userInboxCache.get(auth.uid) || [];
 
         if (!hasCache) {
-          // Initial load for this account: fetch once and store in memory
+          // Initial load for this account: fetch once from Cloudflare ApiClient
           let msgs = [];
           try {
-            const res = await axios.get(
-              `${FIRESTORE_BASE}/users/${auth.uid}/inbox?pageSize=100`,
-              { headers: { Authorization: `Bearer ${auth.idToken}` } }
-            );
-            if (res.data && res.data.documents) {
-              msgs = res.data.documents.map(doc => ({
-                id: doc.name.split('/').pop(),
-                ...parseFirestoreFields(doc.fields)
-              }));
+            if (ApiClient && ApiClient.inbox && typeof ApiClient.inbox.getInbox === 'function') {
+              const res = await ApiClient.inbox.getInbox();
+              if (res && res.success && Array.isArray(res.messages)) {
+                msgs = res.messages;
+              }
             }
           } catch (innerErr) {
-            if (innerErr.response?.status !== 403) {
-              console.error(`[InboxPoll] Error fetching inbox for ${auth.uid}:`, innerErr.message);
-            }
+            console.warn(`[InboxPoll] Error fetching inbox for ${auth.uid}:`, innerErr.message);
           }
 
           cachedMsgs = msgs.filter(m => m.senderId !== auth.uid && !m.isSentCopy);
@@ -2750,24 +2735,17 @@ async function pollMessages() {
           continue;
         }
 
-        // Incremental check: only query for messages NEWER than the newest cached message
-        let maxTimestamp = 0;
-        for (const m of cachedMsgs) {
-          const t = typeof m.timestamp === 'string' ? new Date(m.timestamp).getTime() : (Number(m.timestamp) || 0);
-          if (t > maxTimestamp) maxTimestamp = t;
-        }
-
+        // Incremental check: fetch latest messages from Cloudflare ApiClient
         let newDocs = [];
         try {
-          if (maxTimestamp > 0) {
-            newDocs = await fsQuerySub(`users/${auth.uid}`, 'inbox', [
-              { field: 'timestamp', op: 'GREATER_THAN', value: { integerValue: String(maxTimestamp) } }
-            ], auth.idToken, 'timestamp', 20);
+          if (ApiClient && ApiClient.inbox && typeof ApiClient.inbox.getInbox === 'function') {
+            const res = await ApiClient.inbox.getInbox();
+            if (res && res.success && Array.isArray(res.messages)) {
+              newDocs = res.messages;
+            }
           }
         } catch (innerErr) {
-          if (innerErr.response?.status !== 403) {
-            console.error(`[InboxPoll] Error in incremental check for ${auth.uid}:`, innerErr.message);
-          }
+          console.warn(`[InboxPoll] Error in incremental check for ${auth.uid}:`, innerErr.message);
         }
 
         const existingIds = new Set(cachedMsgs.map(m => m.id));
@@ -2967,10 +2945,12 @@ async function showMsgNotification(msg, recipientInfo = null) {
     let profile = friendProfileCache.get(msg.senderId);
     if (!profile && msg.senderId) {
       try {
-        const token = recipientInfo?.idToken || (await getSocialAuth().then(a => a.idToken).catch(() => null));
-        if (token) {
-          profile = await fsGet(`users/${msg.senderId}`, token);
-          if (profile) friendProfileCache.set(msg.senderId, { ...profile, uid: msg.senderId });
+        if (ApiClient && ApiClient.users && typeof ApiClient.users.getProfile === 'function') {
+          const res = await ApiClient.users.getProfile(msg.senderId);
+          if (res && res.success && res.user) {
+            profile = res.user;
+            friendProfileCache.set(msg.senderId, { ...profile, uid: msg.senderId });
+          }
         }
       } catch (_) {}
     }
@@ -3986,6 +3966,19 @@ ipcMain.handle('login-microsoft', async () => {
         userData.firebase_ms_refresh_token = "";
     }
 
+    // Recover existing Microsoft account UID from Cloudflare D1 Backend if missing (e.g. after fresh install/disk format)
+    if (!userData.firebase_ms_uid && ApiClient && ApiClient.users && typeof ApiClient.users.checkMicrosoftVerified === 'function') {
+      try {
+        const msStatus = await ApiClient.users.checkMicrosoftVerified(profileData.name, profileData.id);
+        if (msStatus && msStatus.verified && msStatus.firebase_uid) {
+          userData.firebase_ms_uid = msStatus.firebase_uid;
+          console.log(`[login-microsoft] Recovered existing Microsoft account UID from backend: ${msStatus.firebase_uid}`);
+        }
+      } catch (checkErr) {
+        console.warn(`[login-microsoft] Could not check backend MS status:`, checkErr.message);
+      }
+    }
+
     userData.account_type = "microsoft"
     userData.username = profileData.name
     userData.uuid = profileData.id
@@ -4045,28 +4038,23 @@ ipcMain.handle('login-microsoft', async () => {
 ipcMain.handle('login-helloworld', async (e, identifier, password) => {
   console.log(`[HelloWorld Login] Attempting login for: ${identifier}`);
   try {
-    const PROJECT_ID = FIREBASE_PROJECT_ID;
     let email = identifier;
 
     // 1. Resolve Email if username was provided
     if (!identifier.includes('@')) {
       console.log(`[HelloWorld Login] Resolving username: ${identifier}`);
-      const queryUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/usernames/${encodeURIComponent(identifier.toLowerCase())}?key=${FIREBASE_API_KEY}`;
-      
       try {
-        const queryRes = await axios.get(queryUrl);
-        if (queryRes.data && queryRes.data.fields) {
-          email = queryRes.data.fields.email ? queryRes.data.fields.email.stringValue : null;
-          if (!email) throw new Error("Could not find email associated with this username.");
-          console.log(`[HelloWorld Login] Resolved to email: ${email}`);
-        } else {
-          throw new Error("Username not found. Please register first.");
+        const apiRes = await ApiClient.users.resolveEmail(identifier);
+        if (apiRes && apiRes.success && apiRes.email) {
+          email = apiRes.email;
+          console.log(`[HelloWorld Login] Resolved to email via Backend API: ${email}`);
         }
-      } catch (err) {
-        if (err.response && err.response.status === 404) {
-          throw new Error("Username not found. Please register first.");
-        }
-        throw err;
+      } catch (backendErr) {
+        console.warn(`[HelloWorld Login] Backend email resolve warning:`, backendErr.message);
+      }
+
+      if (!email || email === identifier) {
+        return { success: false, error: "Could not resolve username to email. Please log in using your email address." };
       }
     }
 
@@ -4081,23 +4069,25 @@ ipcMain.handle('login-helloworld', async (e, identifier, password) => {
     const { localId, idToken, displayName } = authRes.data;
     console.log(`[HelloWorld Login] Auth successful for UID: ${localId}`);
 
-    // 3. Fetch full User Profile from Firestore to get Skin/Variant
-    const docUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/${localId}`;
-    const docRes = await axios.get(docUrl, {
-      headers: { Authorization: `Bearer ${idToken}` }
-    });
-
+    // 3. Fetch full User Profile (Cloudflare D1 Backend)
     let username = identifier.includes('@') ? (displayName || email.split('@')[0]) : identifier;
     let avatarUrl = "";
     let uuid = localId.replace(/-/g, ''); // Minecraft-compatible UUID usually (Firebase UID is different, but we use it as base)
 
-    if (docRes.data && docRes.data.fields) {
-      const f = docRes.data.fields;
-      if (f.username) username = f.username.stringValue;
-      if (f.uuid) uuid = f.uuid.stringValue;
-      if (f.avatarBase64) {
-        avatarUrl = f.avatarBase64.stringValue || "";
+    try {
+      if (ApiClient && ApiClient.users && typeof ApiClient.users.getProfile === 'function') {
+        const d1Profile = await ApiClient.users.getProfile(localId);
+        if (d1Profile && d1Profile.user) {
+          const u = d1Profile.user;
+          if (u.username) username = u.username;
+          if (u.mc_uuid || u.uuid) uuid = u.mc_uuid || u.uuid;
+          if (u.avatar_url || u.avatarUrl || u.avatarBase64) {
+            avatarUrl = u.avatar_url || u.avatarUrl || u.avatarBase64;
+          }
+        }
       }
+    } catch (d1Err) {
+      console.warn('[HelloWorld Login] D1 profile fetch warning:', d1Err.message);
     }
 
     uuid = ensureHelloWorldUuid(username, uuid);
@@ -4128,16 +4118,12 @@ ipcMain.handle('login-helloworld', async (e, identifier, password) => {
       addOrUpdateSavedAccount({ ...userData, _loginEmail: identifier });
     } catch (saErr) { console.warn('[SavedAccounts] Could not persist HW account:', saErr.message); }
 
-    // 5. Update users doc with social-searchable fields (merge: only update these fields)
+    // 5. Sync client version to Cloudflare D1
     try {
-      await fsUpdate(`users/${localId}`, {
-        accountType: 'helloworld', username, mcUuid: uuid,
-        clientVersion: app.getVersion(),
-        usernameLower: usernameLower(username), updatedAt: new Date().toISOString()
-      }, idToken);
-    } catch (spErr) {
-      console.warn('[HelloWorld Login] Could not update users doc:', spErr.message);
-    }
+      if (ApiClient && ApiClient.users && typeof ApiClient.users.syncVersion === 'function') {
+        ApiClient.users.syncVersion(app.getVersion()).catch(() => {});
+      }
+    } catch (_) {}
 
     const safeProfile = {
       name: username,
@@ -4161,16 +4147,20 @@ ipcMain.handle('login-helloworld', async (e, identifier, password) => {
 
     return { success: true, profile: safeProfile };
   } catch (err) {
-    console.error("[HelloWorld Login] Error:", err.response ? JSON.stringify(err.response.data) : err.message);
+    const rawError = err.response ? JSON.stringify(err.response.data) : err.message;
+    console.error("[HelloWorld Login] Error:", rawError);
     let errorMessage = "Authentication failed.";
 
     if (err.response && err.response.data && err.response.data.error) {
-      const code = err.response.data.error.message;
-      if (code === "INVALID_PASSWORD") errorMessage = "Incorrect password.";
+      const fbErr = err.response.data.error;
+      const code = typeof fbErr === 'string' ? fbErr : (fbErr.message || '');
+      if (code === "INVALID_PASSWORD" || code === "INVALID_LOGIN_CREDENTIALS") errorMessage = "Incorrect password.";
       else if (code === "EMAIL_NOT_FOUND") errorMessage = "User not found.";
       else if (code === "USER_DISABLED") errorMessage = "This account has been disabled.";
+      else if (code.includes("TOO_MANY_ATTEMPTS_TRY_LATER")) errorMessage = "Too many failed attempts. Please try again later.";
+      else if (err.response.status === 403 || code.includes("PERMISSION_DENIED")) errorMessage = "Authentication error. Please check your credentials.";
       else errorMessage = code.replace(/_/g, ' ');
-    } else {
+    } else if (err.message) {
       errorMessage = err.message;
     }
 
@@ -4218,7 +4208,18 @@ ipcMain.handle('logout', async () => {
 
 ipcMain.handle('get-saved-accounts', async () => {
   try {
+    const current = loadUserData();
     const accounts = loadSavedAccounts();
+    // Ensure active account has the most up-to-date avatar
+    if (current && current.username) {
+      for (const acc of accounts) {
+        if (acc.type === 'helloworld' && (acc.id === current.firebase_uid || acc.username === current.username)) {
+          if (!acc.avatarUrl && current.last_avatar_url) {
+            acc.avatarUrl = current.last_avatar_url;
+          }
+        }
+      }
+    }
     // Return safe views (no tokens) sorted by lastUsed desc
     const sorted = [...accounts].sort((a, b) => (b.lastUsed || '').localeCompare(a.lastUsed || ''));
     return { success: true, accounts: sorted.map(safeAccountView) };
@@ -4382,18 +4383,20 @@ ipcMain.handle('switch-account', async (e, accountId, targetType = null) => {
       try {
         const refreshed = await refreshFirebaseToken(acc.firebase_refresh_token);
 
-        // Load full profile from Firestore
+        // Load full profile from Cloudflare API
         let username = acc.username;
         let uuid = acc.uuid;
         let avatarUrl = acc.avatarUrl || '';
         try {
-          const docUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/users/${refreshed.uid}`;
-          const docRes = await axios.get(docUrl, { headers: { Authorization: `Bearer ${refreshed.idToken}` } });
-          if (docRes.data && docRes.data.fields) {
-            const f = docRes.data.fields;
-            if (f.username) username = f.username.stringValue;
-            if (f.uuid) uuid = f.uuid.stringValue;
-            if (f.avatarBase64) avatarUrl = f.avatarBase64.stringValue || '';
+          if (ApiClient && ApiClient.users && typeof ApiClient.users.getProfile === 'function') {
+            const profileRes = await ApiClient.users.getProfile(refreshed.uid);
+            if (profileRes && profileRes.user) {
+              if (profileRes.user.username) username = profileRes.user.username;
+              if (profileRes.user.uuid || profileRes.user.mc_uuid) uuid = profileRes.user.uuid || profileRes.user.mc_uuid;
+              if (profileRes.user.avatarUrl || profileRes.user.avatar_url || profileRes.user.avatarBase64) {
+                avatarUrl = profileRes.user.avatarUrl || profileRes.user.avatar_url || profileRes.user.avatarBase64;
+              }
+            }
           }
         } catch (_) {}
 
@@ -5422,28 +5425,16 @@ ipcMain.handle('refresh-session', async () => {
 
     if (userData.account_type === 'helloworld') {
       try {
-        const PROJECT_ID = "helloworld-launcher";
-        const queryUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents:runQuery`;
-        const queryBody = {
-          structuredQuery: {
-            from: [{ collectionId: "users" }],
-            where: {
-              fieldFilter: {
-                field: { fieldPath: "username" },
-                op: "EQUAL",
-                value: { stringValue: userData.username }
-              }
-            },
-            limit: 1
-          }
-        };
-
-        const queryRes = await axios.post(queryUrl, queryBody);
-        if (queryRes.data && queryRes.data[0] && queryRes.data[0].document) {
-          const fields = queryRes.data[0].document.fields;
-          if (fields.avatarBase64) {
-            userData.last_avatar_url = fields.avatarBase64.stringValue || "";
-            saveUserData(userData);
+        if (ApiClient && ApiClient.users && typeof ApiClient.users.getProfile === 'function') {
+          const target = userData.firebase_uid || userData.username;
+          const d1Profile = await ApiClient.users.getProfile(target);
+          if (d1Profile && d1Profile.user) {
+            const u = d1Profile.user;
+            const av = u.avatar_url || u.avatarUrl || u.avatarBase64;
+            if (av) {
+              userData.last_avatar_url = av;
+              saveUserData(userData);
+            }
           }
         }
       } catch (err) {
@@ -5465,18 +5456,6 @@ ipcMain.handle('refresh-session', async () => {
     // Use centralized refresh helper (handles rate-limiting and credential clearing safely)
     const refreshResult = await refreshMicrosoftSession(userData);
     if (refreshResult.success) {
-      // Validate microsoftVerified in Firestore / Backend safely without destructively wiping local tokens
-      if (userData.firebase_ms_uid && userData.firebase_ms_refresh_token) {
-        try {
-          const refreshed = await refreshFirebaseToken(userData.firebase_ms_refresh_token);
-          const userDoc = await fsGet(`users/${userData.firebase_ms_uid}`, refreshed.idToken);
-          if (!userDoc || !userDoc.microsoftVerified) {
-            console.log('[Refresh] microsoftVerified status check: not verified in Firestore doc');
-          }
-        } catch (verifyErr) {
-          console.warn('[Refresh] Could not check microsoftVerified in Firestore:', verifyErr.message);
-        }
-      }
       const freshData = loadUserData();
       return {
         success: true,
@@ -7900,17 +7879,19 @@ ipcMain.handle('get-user-capes', async () => {
       }
     }
 
-    // For HelloWorld accounts, fetch from Firestore
+    // For HelloWorld accounts, fetch from ApiClient
     if (userData.account_type === 'helloworld') {
       const auth = await getSocialAuth();
-      if (auth) {
+      if (auth && auth.uid) {
         try {
-          const userDoc = await fsGet(`users/${auth.uid}`, auth.idToken);
-          if (userDoc.capeBase64) {
-            return { success: true, capes: [{ id: 'default', name: 'Default Cape', base64: userDoc.capeBase64 }] };
+          if (ApiClient && ApiClient.users && typeof ApiClient.users.getProfile === 'function') {
+            const res = await ApiClient.users.getProfile(auth.uid);
+            if (res && res.success && res.user && res.user.capeBase64) {
+              return { success: true, capes: [{ id: 'default', name: 'Default Cape', base64: res.user.capeBase64 }] };
+            }
           }
         } catch (e) {
-          console.error("Error fetching Firestore capes:", e);
+          console.error("Error fetching capes:", e);
         }
       }
     }
@@ -8150,50 +8131,16 @@ ipcMain.handle('ms-write-verified', async (e, emailKey, email, username, uuid, f
       addOrUpdateSavedAccount(userData);
     } catch (saErr) { console.warn('[SavedAccounts] Could not persist MS verification:', saErr.message); }
 
-    // Get a fresh idToken to write to Firestore
-    const refreshed = await refreshFirebaseToken(firebaseRefreshToken);
-
-    // Write microsoftVerified for web login check
-    const emailK = emailKey || email.replace(/\./g, '_DOT_').replace(/@/g, '_AT_');
-    await fsSet(`microsoftVerified/${emailK}`, {
-      email, username, uuid, verified: true, verifiedAt: new Date().toISOString()
-    }, refreshed.idToken);
-
-    // Read current user doc to merge badges array (avoid overwriting existing badges)
-    let existingBadges = [];
+    // Primary: Cloudflare D1 Backend
     try {
-      const existingDoc = await fsGet(`users/${firebaseUid}`, refreshed.idToken);
-      if (existingDoc && Array.isArray(existingDoc.badges)) {
-        existingBadges = existingDoc.badges;
+      if (ApiClient && ApiClient.users && typeof ApiClient.users.verifyMicrosoft === 'function') {
+        await ApiClient.users.verifyMicrosoft({ email, username, uuid });
       }
-    } catch (_) {}
+    } catch (cfErr) {
+      console.warn('[MS Verify] Cloudflare verify error:', cfErr.message);
+    }
 
-    // Ensure "premium" badge is in the list (append if missing)
-    const mergedBadges = existingBadges.includes('premium')
-      ? existingBadges
-      : [...existingBadges, 'premium'];
-
-    // Create/update users doc so this account is discoverable in social features
-    await fsUpdate(`users/${firebaseUid}`, {
-      accountType: 'microsoft', username, uuid,
-      mcUuid: uuid, usernameLower: usernameLower(username),
-      clientVersion: app.getVersion(),
-      microsoftVerified: true,
-      badges: mergedBadges,
-      updatedAt: new Date().toISOString()
-    }, refreshed.idToken);
-
-    // Also write into usernames index for instant lowercase lookup
-    try {
-      await fsSet(`usernames/${username.toLowerCase()}`, {
-        uid: firebaseUid,
-        username,
-        accountType: 'microsoft',
-        updatedAt: new Date().toISOString()
-      }, refreshed.idToken);
-    } catch (_) {}
-
-    console.log('[MS Verify] users doc + microsoftVerified + premium badge written for:', email);
+    console.log('[MS Verify] Microsoft verified status recorded in Cloudflare D1 for:', email);
     return { success: true };
   } catch (err) {
     console.warn('[MS Verify] Failed to write:', err.message);
@@ -8835,8 +8782,8 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
     function checkMinecraftWindow(pid) {
       return new Promise((resolve) => {
         if (!pid) return resolve(false);
+        const { exec } = require('child_process');
         if (process.platform === 'win32') {
-          const { exec } = require('child_process');
           exec(`tasklist /v /fo csv /fi "PID eq ${pid}"`, { windowsHide: true, timeout: 2500 }, (err, stdout) => {
             if (!err && stdout) {
               const lines = stdout.split(/\r?\n/).filter(l => l.trim().length > 0);
@@ -8844,7 +8791,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
                 const cols = parseCsvLine(lines[i]);
                 if (cols.length >= 9) {
                   const title = cols[8].replace(/^"|"$/g, '').trim();
-                  if (isMinecraftGameWindowTitle(title)) {
+                  if (title && title !== 'N/A' && isMinecraftGameWindowTitle(title)) {
                     return resolve(true);
                   }
                 }
@@ -8852,14 +8799,52 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
             }
             resolve(false);
           });
+        } else if (process.platform === 'darwin') {
+          // macOS: Check windows belonging to PID via AppleScript System Events
+          const script = `tell application "System Events" to get name of every window of (every process whose unix id is ${pid})`;
+          exec(`osascript -e '${script}'`, { timeout: 2500 }, (err, stdout) => {
+            if (!err && stdout) {
+              const cleaned = stdout.trim();
+              if (cleaned && cleaned !== 'missing value' && cleaned !== '{}') {
+                return resolve(true);
+              }
+            }
+            // Fallback: check count of windows for this process
+            const countScript = `tell application "System Events" to count of windows of (every process whose unix id is ${pid})`;
+            exec(`osascript -e '${countScript}'`, { timeout: 2000 }, (err2, stdout2) => {
+              if (!err2 && stdout2) {
+                const count = parseInt(stdout2.trim(), 10);
+                if (!isNaN(count) && count > 0) {
+                  return resolve(true);
+                }
+              }
+              resolve(false);
+            });
+          });
         } else {
-          // macOS & Linux: check if child process is active and running
-          try {
-            process.kill(pid, 0);
-            resolve(true);
-          } catch (_) {
-            resolve(false);
-          }
+          // Linux: Query wmctrl (X11/Xwayland) or xdotool
+          exec('wmctrl -l -p', { timeout: 2500 }, (err, stdout) => {
+            if (!err && stdout) {
+              const lines = stdout.split(/\r?\n/).filter(l => l.trim().length > 0);
+              for (const line of lines) {
+                const parts = line.trim().split(/\s+/);
+                if (parts.length >= 5) {
+                  const winPid = parseInt(parts[2], 10);
+                  const title = parts.slice(4).join(' ');
+                  if (winPid === pid || isMinecraftGameWindowTitle(title)) {
+                    return resolve(true);
+                  }
+                }
+              }
+            }
+            // Fallback: search window with xdotool
+            exec(`xdotool search --pid ${pid} || xdotool search --name "Minecraft"`, { timeout: 2000 }, (xErr, xStdout) => {
+              if (!xErr && xStdout && xStdout.trim().length > 0) {
+                return resolve(true);
+              }
+              resolve(false);
+            });
+          });
         }
       });
     }
@@ -8877,13 +8862,19 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
 
       let isGameMarkedReady = false;
       let windowPollTimer = null;
+      let fallbackReadyTimer = null;
 
       const triggerGameReady = (reason) => {
         if (isGameMarkedReady) return;
         isGameMarkedReady = true;
+        childMeta.isReady = true;
         if (windowPollTimer) {
           clearInterval(windowPollTimer);
           windowPollTimer = null;
+        }
+        if (fallbackReadyTimer) {
+          clearTimeout(fallbackReadyTimer);
+          fallbackReadyTimer = null;
         }
         console.log(`[Launch] Game marked READY (${reason})`);
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -8897,6 +8888,10 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
         if (windowPollTimer) {
           clearInterval(windowPollTimer);
           windowPollTimer = null;
+        }
+        if (fallbackReadyTimer) {
+          clearTimeout(fallbackReadyTimer);
+          fallbackReadyTimer = null;
         }
         activeGameProcesses.delete(child);
         internalGameProcessesMeta.delete(child);
@@ -8924,13 +8919,23 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       const childMeta = {
         pid: child.pid,
         startTime: childStartTime,
+        isReady: false,
         streakTimer: setTimeout(() => {
           if (!isLaunchCancelled && activeGameProcesses.has(child)) {
             triggerStreakUpdate();
           }
         }, 30000),
-        windowPollTimer: null
+        windowPollTimer: null,
+        fallbackReadyTimer: null
       };
+
+      // Fallback timer: if after 60 seconds no window or completion log was detected, transition to ready
+      fallbackReadyTimer = setTimeout(() => {
+        if (!isGameMarkedReady && activeGameProcesses.has(child)) {
+          triggerGameReady('Fallback timeout (60s elapsed without window signal)');
+        }
+      }, 60000);
+      childMeta.fallbackReadyTimer = fallbackReadyTimer;
 
       internalGameProcessesMeta.set(child, childMeta);
       activeGameProcesses.add(child);
@@ -8970,7 +8975,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
         if (!msg) return false;
         // High-confidence completion signatures across Vanilla, Fabric, Forge, NeoForge:
         // Excludes early logs like texture atlas creation or LWJGL library loading.
-        return /Connecting to\s+|joined the game|joined singleplayer|Player joined|Stopping worker threads|stage COMPLETE|Mod loading complete|MinecraftForge v.* Initialized|Narrator library for|LWJGL Version:/i.test(msg);
+        return /Connecting to\s+|joined the game|joined singleplayer|Player joined|Stopping worker threads|stage COMPLETE|Mod loading complete|Narrator library for/i.test(msg);
       };
 
       child.stdout?.on('data', (data) => {
@@ -9019,6 +9024,10 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
             clearInterval(meta.windowPollTimer);
             meta.windowPollTimer = null;
           }
+          if (meta.fallbackReadyTimer) {
+            clearTimeout(meta.fallbackReadyTimer);
+            meta.fallbackReadyTimer = null;
+          }
           if (meta.streakTimer) {
             clearTimeout(meta.streakTimer);
             meta.streakTimer = null;
@@ -9048,6 +9057,10 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
           if (meta.windowPollTimer) {
             clearInterval(meta.windowPollTimer);
             meta.windowPollTimer = null;
+          }
+          if (meta.fallbackReadyTimer) {
+            clearTimeout(meta.fallbackReadyTimer);
+            meta.fallbackReadyTimer = null;
           }
           if (meta.streakTimer) {
             clearTimeout(meta.streakTimer);
@@ -9323,8 +9336,22 @@ ipcMain.handle('social-get-auth', async () => {
 
 ipcMain.handle('stats-get-my-stats', async () => {
   try {
-    const auth = await getSocialAuth();
-    const stats = await fsGet(`users/${auth.uid}/stats/main`, auth.idToken);
+    let stats = null;
+
+    // 1. Primary: Cloudflare Worker backend
+    try {
+      if (ApiClient && ApiClient.stats && typeof ApiClient.stats.getMyStats === 'function') {
+        const apiRes = await ApiClient.stats.getMyStats();
+        if (apiRes && apiRes.success && apiRes.stats) {
+          stats = apiRes.stats;
+        }
+      }
+    } catch (_) {}
+
+    // 2. Fallback to local stats file
+    if (!stats || (!stats.totalSessions && !stats.lastPlayed)) {
+      stats = loadLocalStats();
+    }
     
     // Calculate effective streak for UI display without saving to DB yet
     const now = new Date();
@@ -9337,48 +9364,46 @@ ipcMain.handle('stats-get-my-stats', async () => {
     
     let effectiveStreak = stats.streak || 0;
     let streakCompletedToday = false;
-    const dbMaxStreak = stats.maxStreak || 0; // Save original DB value BEFORE any modifications
-    const dbStreak = stats.streak || 0;       // Save original DB streak BEFORE overwrite
+    const dbMaxStreak = stats.maxStreak || 0;
+    const dbStreak = stats.streak || 0;
     
     if (lastDate === todayStr) {
       streakCompletedToday = true;
     } else if (lastDate !== yesterdayStr && effectiveStreak > 0) {
-      // Streak lost
       effectiveStreak = 0;
     }
     
-    // Preserve the real maxStreak from DB BEFORE overwriting stats.streak
-    // This is critical: if the streak was just broken, stats.streak should still
-    // count toward maxStreak since it was valid until yesterday
-    const realMaxStreak = Math.max(dbMaxStreak, dbStreak);
+    const realMaxStreak = Math.max(dbMaxStreak, dbStreak, effectiveStreak);
     
-    // Override streak property for UI, and pass completion status
     stats.streak = effectiveStreak;
     stats.maxStreak = realMaxStreak;
     stats.streakCompletedToday = streakCompletedToday;
-    
-    // If maxStreak in DB is lower than what we just computed, update it
-    // (this repairs users who had a streak but maxStreak was never properly saved)
-    if (realMaxStreak > dbMaxStreak) {
-      try {
-        const auth2 = await getSocialAuth().catch(() => null);
-        if (auth2) {
-          await fsUpdate(`users/${auth2.uid}/stats/main`, { maxStreak: realMaxStreak }, auth2.idToken);
-        }
-      } catch (e2) { /* non-critical */ }
-    }
+
+    saveLocalStats(stats);
     
     return { success: true, stats };
   } catch (e) {
-    if (e.message === 'NO_SOCIAL_AUTH') return { success: false, error: 'offline' };
-    return { success: true, stats: { streak: 0, totalHours: 0, totalSessions: 0, totalDaysPlayed: 0, streakCompletedToday: false } };
+    const fallbackStats = loadLocalStats();
+    return { success: true, stats: fallbackStats, offline: true };
   }
 });
 
 ipcMain.handle('stats-get-user', async (e, targetUid) => {
   try {
-    const auth = await getSocialAuth();
-    const stats = await fsGet(`users/${targetUid}/stats/main`, auth.idToken);
+    let stats = null;
+    // Primary: Cloudflare backend
+    try {
+      if (ApiClient && ApiClient.stats && typeof ApiClient.stats.getUserStats === 'function') {
+        const apiRes = await ApiClient.stats.getUserStats(targetUid);
+        if (apiRes && apiRes.success && apiRes.stats) {
+          stats = apiRes.stats;
+        }
+      }
+    } catch (_) {}
+
+    if (!stats) {
+      return { success: true, stats: { streak: 0, maxStreak: 0, totalHours: 0, totalSessions: 0, totalDaysPlayed: 0, streakCompletedToday: false }, offline: true };
+    }
     
     // Calculate effective streak for UI display without saving to DB yet
     const now = new Date();
@@ -9395,218 +9420,87 @@ ipcMain.handle('stats-get-user', async (e, targetUid) => {
     if (lastDate === todayStr) {
       streakCompletedToday = true;
     } else if (lastDate !== yesterdayStr && effectiveStreak > 0) {
-      // Streak lost
       effectiveStreak = 0;
     }
     
-    // Preserve the real maxStreak from DB BEFORE overwriting stats.streak
-    const realMaxStreak = Math.max(stats.maxStreak || 0, stats.streak || 0);
+    const realMaxStreak = Math.max(stats.maxStreak || 0, stats.streak || 0, effectiveStreak);
     
-    // Override streak property for UI, and pass completion status
     stats.streak = effectiveStreak;
     stats.maxStreak = realMaxStreak;
     stats.streakCompletedToday = streakCompletedToday;
 
     return { success: true, stats };
   } catch (e) {
-    if (e.message === 'NO_SOCIAL_AUTH') return { success: false, error: 'offline' };
-    return { success: true, stats: { streak: 0, totalHours: 0, totalSessions: 0, totalDaysPlayed: 0, streakCompletedToday: false } };
+    return { success: true, stats: { streak: 0, maxStreak: 0, totalHours: 0, totalSessions: 0, totalDaysPlayed: 0, streakCompletedToday: false }, offline: true };
   }
 });
 
 ipcMain.handle('stats-revert-today-streak', async () => {
   try {
-    const auth = await getSocialAuth().catch(() => null);
-    if (!auth) return { success: false, error: 'NO_AUTH' };
-
-    let stats;
-    try {
-      stats = await fsGet(`users/${auth.uid}/stats/main`, auth.idToken);
-    } catch (e) {
-      return { success: false, error: 'NO_STATS' };
+    if (ApiClient && ApiClient.stats && typeof ApiClient.stats.revertTodayStreak === 'function') {
+      const res = await ApiClient.stats.revertTodayStreak();
+      if (res && res.success) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('stats-updated');
+        }
+        return res;
+      }
     }
-    if (!stats || !stats.lastPlayed) return { success: false, error: 'NO_STATS' };
-
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    const lastDate = new Date(stats.lastPlayed).toISOString().split('T')[0];
-
-    if (lastDate !== todayStr) {
-      return { success: false, message: 'Streak was not recorded today' };
-    }
-
-    const newStreak = Math.max(0, (stats.streak || 1) - 1);
-    const newSessions = Math.max(0, (stats.totalSessions || 1) - 1);
-    const newDays = Math.max(0, (stats.totalDaysPlayed || 1) - 1);
-
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    const updates = {
-      ...stats,
-      streak: newStreak,
-      totalSessions: newSessions,
-      totalDaysPlayed: newDays,
-      lastPlayed: newStreak > 0 ? yesterday.getTime() : 0
-    };
-
-    await fsSet(`users/${auth.uid}/stats/main`, updates, auth.idToken);
-
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('stats-updated');
-    }
-
-    return { success: true, newStreak };
+    return { success: false, error: 'NO_STATS' };
   } catch (e) {
     console.error('[Stats] Error reverting today streak:', e.message);
     return { success: false, error: e.message };
   }
 });
-
 ipcMain.handle('social-search-user', async (e, query) => {
   try {
-    const auth = await getSocialAuth();
     if (!query || query.trim().length < 2) return { success: false, error: 'Query too short' };
     const q = query.trim();
-    const results = [];
-    const seenUids = new Set([auth.uid]);
-
-    const token = q.toLowerCase();
-
-    // Helper to process and push a user doc
-    const processUserDoc = (u, uid) => {
-      if (!u || seenUids.has(uid)) return;
-      seenUids.add(uid);
-      const isMs = u.accountType === 'microsoft' || u.microsoftVerified;
-      results.push({
-        uid: uid,
-        username: u.username || q,
-        mcUuid: u.mcUuid || u.uuid || (isMs ? u.username : ''),
-        accountType: isMs ? 'microsoft' : (u.accountType || 'helloworld'),
-        avatarBase64: u.avatarBase64 || '',
-        badges: Array.isArray(u.badges) ? u.badges : (isMs ? ['premium'] : [])
-      });
-      // Self-heal usernameLower if missing
-      if (!u.usernameLower && u.username) {
-        fsUpdate(`users/${uid}`, { usernameLower: u.username.toLowerCase() }, auth.idToken).catch(() => {});
+    if (ApiClient && ApiClient.users && typeof ApiClient.users.search === 'function') {
+      const apiRes = await ApiClient.users.search(q);
+      if (apiRes && apiRes.success && Array.isArray(apiRes.users)) {
+        return { success: true, results: apiRes.users };
       }
-    };
-
-    // 1. Direct check in 'usernames' index (exact lowercase username lookup)
-    try {
-      const unameDoc = await fsGet(`usernames/${token}`, auth.idToken);
-      if (unameDoc && unameDoc.uid) {
-        try {
-          const u = await fsGet(`users/${unameDoc.uid}`, auth.idToken);
-          processUserDoc(u, unameDoc.uid);
-        } catch (_) {}
-      }
-    } catch (_) {}
-
-    // 2. Prefix range search on usernameLower (standard search)
-    try {
-      const allResults = await fsQuery('users', [
-        { field: 'usernameLower', op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: token } },
-        { field: 'usernameLower', op: 'LESS_THAN', value: { stringValue: token + '\uf8ff' } }
-      ], auth.idToken, null, 20);
-      for (const u of allResults) {
-        processUserDoc(u, u.id);
-      }
-    } catch (_) {}
-
-    // 3. Fallback: Prefix search on exact 'username' field (handles users without usernameLower)
-    const queriesToTry = [q];
-    const cap = q.charAt(0).toUpperCase() + q.slice(1);
-    if (cap !== q) queriesToTry.push(cap);
-
-    for (const variant of queriesToTry) {
-      try {
-        const exactResults = await fsQuery('users', [
-          { field: 'username', op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: variant } },
-          { field: 'username', op: 'LESS_THAN', value: { stringValue: variant + '\uf8ff' } }
-        ], auth.idToken, null, 20);
-        for (const u of exactResults) {
-          processUserDoc(u, u.id);
-        }
-      } catch (_) {}
     }
-
-    // 4. Substring search: scan users collection to find partial matches anywhere in username (e.g. 'chispita' in '14ChispitaCode_')
-    try {
-      const scanUsers = await fsQuery('users', [], auth.idToken, null, 250);
-      for (const u of scanUsers) {
-        const uName = (u.username || '').toLowerCase();
-        const uLower = (u.usernameLower || uName);
-        if (uLower.includes(token) || uName.includes(token)) {
-          processUserDoc(u, u.id);
-        }
-      }
-    } catch (_) {}
-
-    return { success: true, results };
-  } catch (e) {
-    return { success: false, error: e.message };
+    return { success: true, results: [] };
+  } catch (apiErr) {
+    return { success: false, error: apiErr.response?.data?.error || apiErr.message };
   }
 });
 
 ipcMain.handle('social-send-request', async (e, toUid) => {
   try {
     const auth = await getSocialAuth();
+    if (!auth || !auth.uid) return { success: false, error: 'no_auth' };
     if (toUid === auth.uid) return { success: false, error: 'cannot_self' };
 
-    // Check if blocked by target user — direct GET, rule allows if blockedUid == auth.uid
-    try {
-      await fsGet(`blocks/${toUid}__${auth.uid}`, auth.idToken);
-      return { success: false, error: 'user_not_found' };
-    } catch (_) { }
-
-    // Check existing friendship
-    const fid = friendshipId(auth.uid, toUid);
-    try { await fsGet(`friendships/${fid}`, auth.idToken); return { success: false, error: 'already_friends' }; } catch (_) { }
-
-    // Check if we already sent a request — direct GET of known doc ID
-    try {
-      const sent = await fsGet(`friendRequests/${auth.uid}__${toUid}`, auth.idToken);
-      if (sent.status === 'pending') return { success: false, error: 'request_already_sent' };
-    } catch (_) { }
-
-    // Check if they already sent us a request — direct GET of known doc ID
-    try {
-      const received = await fsGet(`friendRequests/${toUid}__${auth.uid}`, auth.idToken);
-      if (received.status === 'pending') return { success: false, error: 'request_already_received' };
-    } catch (_) { }
-
-    const reqId = `${auth.uid}__${toUid}`;
-    await fsSet(`friendRequests/${reqId}`, {
-      fromUid: auth.uid, toUid, status: 'pending', createdAt: new Date().toISOString()
-    }, auth.idToken);
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+    if (ApiClient && ApiClient.social && typeof ApiClient.social.sendRequest === 'function') {
+      const apiRes = await ApiClient.social.sendRequest(toUid);
+      if (apiRes) return apiRes;
+    }
+    return { success: false, error: 'api_unavailable' };
+  } catch (apiErr) {
+    if (apiErr.response && apiErr.response.data) return apiErr.response.data;
+    return { success: false, error: apiErr.message };
   }
 });
 
 ipcMain.handle('social-get-requests', async () => {
   try {
     const auth = await getSocialAuth();
-    const allSent = await fsQuery('friendRequests', [
-      { field: 'fromUid', op: 'EQUAL', value: { stringValue: auth.uid } }
-    ], auth.idToken);
-    const sent = allSent.filter(r => r.status === 'pending');
-    const allReceived = await fsQuery('friendRequests', [
-      { field: 'toUid', op: 'EQUAL', value: { stringValue: auth.uid } }
-    ], auth.idToken);
-    const received = allReceived.filter(r => r.status === 'pending');
+    if (!auth || !auth.uid) return { success: true, sent: [], received: [] };
 
-    // Enrich with profile data
-    const enrich = async (reqs, uidField) => {
-      return Promise.all(reqs.map(async r => {
-        const uid = r[uidField];
-        try { const p = await fsGet(`users/${uid}`, auth.idToken); return { ...r, profile: { ...p, uid } }; }
-        catch (_) { return { ...r, profile: { uid, username: 'Unknown', accountType: 'helloworld' } }; }
-      }));
-    };
-    return { success: true, sent: await enrich(sent, 'toUid'), received: await enrich(received, 'fromUid') };
+    if (ApiClient && ApiClient.social && typeof ApiClient.social.getRequests === 'function') {
+      const apiRes = await ApiClient.social.getRequests();
+      if (apiRes && apiRes.success) {
+        return {
+          success: true,
+          sent: Array.isArray(apiRes.sent) ? apiRes.sent : [],
+          received: Array.isArray(apiRes.received) ? apiRes.received : []
+        };
+      }
+    }
+    return { success: true, sent: [], received: [] };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -9614,115 +9508,55 @@ ipcMain.handle('social-get-requests', async () => {
 
 ipcMain.handle('social-accept-request', async (e, requestId) => {
   try {
-    const auth = await getSocialAuth();
-    let req;
-    try { req = await fsGet(`friendRequests/${requestId}`, auth.idToken); }
-    catch (_) { return { success: false, error: 'request_not_found' }; }
-    if (req.toUid !== auth.uid) return { success: false, error: 'not_authorized' };
-
-    const fid = friendshipId(auth.uid, req.fromUid);
-    await fsSet(`friendships/${fid}`, {
-      users: [auth.uid, req.fromUid], createdAt: new Date().toISOString(), lastMessageAt: new Date().toISOString()
-    }, auth.idToken);
-    await fsDel(`friendRequests/${requestId}`, auth.idToken);
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+    if (ApiClient && ApiClient.social && typeof ApiClient.social.acceptRequest === 'function') {
+      const apiRes = await ApiClient.social.acceptRequest(requestId);
+      if (apiRes && (apiRes.success || apiRes.error)) return apiRes;
+    }
+    return { success: false, error: 'api_unavailable' };
+  } catch (apiErr) {
+    if (apiErr.response && apiErr.response.data) return apiErr.response.data;
+    return { success: false, error: apiErr.message };
   }
 });
 
 ipcMain.handle('social-reject-request', async (e, requestId) => {
   try {
-    const auth = await getSocialAuth();
-    await fsDel(`friendRequests/${requestId}`, auth.idToken);
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+    if (ApiClient && ApiClient.social && typeof ApiClient.social.rejectRequest === 'function') {
+      const apiRes = await ApiClient.social.rejectRequest(requestId);
+      if (apiRes && (apiRes.success || apiRes.error)) return apiRes;
+    }
+    return { success: false, error: 'api_unavailable' };
+  } catch (apiErr) {
+    if (apiErr.response && apiErr.response.data) return apiErr.response.data;
+    return { success: false, error: apiErr.message };
   }
 });
 
 ipcMain.handle('social-cancel-request', async (e, requestId) => {
   try {
-    const auth = await getSocialAuth();
-    await fsDel(`friendRequests/${requestId}`, auth.idToken);
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+    if (ApiClient && ApiClient.social && typeof ApiClient.social.rejectRequest === 'function') {
+      const apiRes = await ApiClient.social.rejectRequest(requestId);
+      if (apiRes && (apiRes.success || apiRes.error)) return apiRes;
+    }
+    return { success: false, error: 'api_unavailable' };
+  } catch (apiErr) {
+    if (apiErr.response && apiErr.response.data) return apiErr.response.data;
+    return { success: false, error: apiErr.message };
   }
 });
 
 ipcMain.handle('social-get-friends', async () => {
   try {
     const auth = await getSocialAuth();
-    // No orderBy here — ARRAY_CONTAINS + orderBy on different field requires composite index.
-    // Sort client-side instead.
-    const friendships = await fsQuery('friendships', [
-      { field: 'users', op: 'ARRAY_CONTAINS', value: { stringValue: auth.uid } }
-    ], auth.idToken, null, 100);
+    if (!auth || !auth.uid) return { success: true, friends: [] };
 
-    const friends = await Promise.all(friendships.map(async fs => {
-      // Last message preview
-      let lastMsg = null;
-      try {
-        const msgs = await fsQuerySub(`friendships/${fs.id}`, 'messages', [], auth.idToken, 'timestamp', 1);
-        if (msgs.length > 0) lastMsg = msgs[0];
-      } catch (_) { }
-
-      // Unread count
-      let unread = 0;
-      try {
-        const unreadDoc = await fsGet(`friendships/${fs.id}/unread/${auth.uid}`, auth.idToken);
-        unread = unreadDoc.count || 0;
-      } catch (_) { }
-
-      if (fs.isGroup) {
-        const memberVersions = {};
-        for (const mUid of (fs.users || [])) {
-          if (mUid === auth.uid) continue;
-          try {
-            const mDoc = await fsGet(`users/${mUid}`, auth.idToken);
-            let mVer = (mDoc && mDoc.clientVersion) || '';
-            if (!mVer) {
-              try {
-                const mPres = await fetchPresenceForUser(mUid, auth, fs.id);
-                if (mPres && mPres.clientVersion) mVer = mPres.clientVersion;
-              } catch(_) {}
-            }
-            if (mVer || mDoc) memberVersions[mUid] = { username: (mDoc && mDoc.username) || 'Member', version: mVer };
-          } catch (_) {}
-        }
-        return {
-          friendshipId: fs.id,
-          isGroup: true,
-          groupData: { name: fs.name, description: fs.description, imageBase64: fs.imageBase64, members: fs.users, admin: fs.admin, admins: fs.admins || [fs.admin], memberVersions },
-          lastMsg, unread, lastMessageAt: fs.lastMessageAt
-        };
+    if (ApiClient && ApiClient.social && typeof ApiClient.social.getFriends === 'function') {
+      const apiRes = await ApiClient.social.getFriends();
+      if (apiRes && apiRes.success && Array.isArray(apiRes.friends)) {
+        return { success: true, friends: apiRes.friends };
       }
-
-      const friendUid = (fs.users || []).find(u => u !== auth.uid);
-      if (!friendUid) return null;
-      let profile = { uid: friendUid, username: 'Unknown', accountType: 'helloworld' };
-      try { profile = await fsGet(`users/${friendUid}`, auth.idToken); } catch (_) { }
-
-      const presence = await fetchPresenceForUser(friendUid, auth, fs.id);
-      const friendClientVersion = profile.clientVersion || (presence && presence.clientVersion) || '';
-
-      return {
-        friendshipId: fs.id,
-        profile: { ...profile, uid: friendUid, clientVersion: friendClientVersion },
-        presence,
-        lastMsg,
-        unread,
-        lastMessageAt: fs.lastMessageAt
-      };
-    }));
-
-    const sorted = friends.filter(Boolean).sort((a, b) => {
-      const ta = a.lastMessageAt || '';
-      const tb = b.lastMessageAt || '';
-      return tb > ta ? 1 : tb < ta ? -1 : 0;
-    });
-    return { success: true, friends: sorted };
+    }
+    return { success: true, friends: [] };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -9730,127 +9564,65 @@ ipcMain.handle('social-get-friends', async () => {
 
 ipcMain.handle('social-create-group', async (e, name, description, imageBase64, members) => {
   try {
-    const auth = await getSocialAuth();
-    if (!members.includes(auth.uid)) members.push(auth.uid);
-    const groupId = `group_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const now = new Date().toISOString();
-    await fsSet(`friendships/${groupId}`, {
-      isGroup: true,
-      name,
-      description: description || '',
-      imageBase64: imageBase64 || '',
-      users: members,
-      admin: auth.uid,
-      admins: [auth.uid],
-      createdAt: now,
-      lastMessageAt: now
-    }, auth.idToken);
-    return { success: true, groupId };
-  } catch (e) {
-    return { success: false, error: e.message };
+    if (ApiClient && ApiClient.chat && typeof ApiClient.chat.createGroup === 'function') {
+      const apiRes = await ApiClient.chat.createGroup(name, members, imageBase64);
+      if (apiRes && apiRes.success) return apiRes;
+    }
+    return { success: false, error: 'api_unavailable' };
+  } catch (apiErr) {
+    if (apiErr.response && apiErr.response.data) return apiErr.response.data;
+    return { success: false, error: apiErr.message };
   }
 });
 
-async function deleteFriendshipCompletely(fid, idToken) {
-  const deleteSub = async (sub) => {
-    try {
-      let hasMore = true;
-      while (hasMore) {
-        const docs = await fsQuerySub(`friendships/${fid}`, sub, [], idToken, null, 100);
-        if (docs.length === 0) hasMore = false;
-        else {
-          for (const d of docs) await fsDel(`friendships/${fid}/${sub}/${d.id}`, idToken);
-        }
-      }
-    } catch (e) { console.error(`Error deleting subcollection ${sub} of ${fid}:`, e.message); }
-  };
-  await deleteSub('messages');
-  await deleteSub('unread');
-  await deleteSub('replyState');
-  await fsDel(`friendships/${fid}`, idToken);
-}
-
 ipcMain.handle('social-remove-friend', async (e, targetFriendshipId) => {
   try {
-    const auth = await getSocialAuth();
-    const doc = await fsGet(`friendships/${targetFriendshipId}`, auth.idToken);
-
-    if (doc.isGroup) {
-      // Leave group
-      const newUsers = (doc.users || []).filter(u => u !== auth.uid);
-      const newAdmins = (doc.admins || []).filter(u => u !== auth.uid);
-      if (newUsers.length === 0) {
-        // Delete group if empty
-        await deleteFriendshipCompletely(targetFriendshipId, auth.idToken);
-      } else {
-        const update = { users: newUsers };
-        // If owner leaves, transfer ownership to next admin or first member
-        if (doc.admin === auth.uid) {
-          const nextAdmin = newAdmins.length > 0 ? newAdmins[0] : newUsers[0];
-          update.admin = nextAdmin;
-          // Ensure new owner is in admins
-          if (!newAdmins.includes(nextAdmin)) {
-            update.admins = [...newAdmins, nextAdmin];
-          } else {
-            update.admins = newAdmins;
-          }
-        } else {
-          update.admins = newAdmins;
-        }
-        await fsSet(`friendships/${targetFriendshipId}`, update, auth.idToken, Object.keys(update));
-      }
-    } else {
-      // Remove friend (DM)
-      await deleteFriendshipCompletely(targetFriendshipId, auth.idToken);
+    if (ApiClient && ApiClient.social && typeof ApiClient.social.removeFriend === 'function') {
+      const apiRes = await ApiClient.social.removeFriend(targetFriendshipId);
+      if (apiRes && (apiRes.success || apiRes.error)) return apiRes;
     }
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+    return { success: false, error: 'api_unavailable' };
+  } catch (apiErr) {
+    if (apiErr.response && apiErr.response.data) return apiErr.response.data;
+    return { success: false, error: apiErr.message };
   }
 });
 
 ipcMain.handle('social-block-user', async (e, targetUid, sourceFriendshipId) => {
   try {
-    const auth = await getSocialAuth();
-    const blockId = `${auth.uid}__${targetUid}`;
-    await fsSet(`blocks/${blockId}`, { blockerUid: auth.uid, blockedUid: targetUid, createdAt: new Date().toISOString() }, auth.idToken);
-    if (sourceFriendshipId) {
-      try { await deleteFriendshipCompletely(sourceFriendshipId, auth.idToken); } catch (_) { }
+    if (ApiClient && ApiClient.social && typeof ApiClient.social.blockUser === 'function') {
+      const apiRes = await ApiClient.social.blockUser(targetUid);
+      if (apiRes && (apiRes.success || apiRes.error)) return apiRes;
     }
-    // Cancel any pending requests between the two
-    const reqId1 = `${auth.uid}__${targetUid}`;
-    const reqId2 = `${targetUid}__${auth.uid}`;
-    try { await fsDel(`friendRequests/${reqId1}`, auth.idToken); } catch (_) { }
-    try { await fsDel(`friendRequests/${reqId2}`, auth.idToken); } catch (_) { }
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+    return { success: false, error: 'api_unavailable' };
+  } catch (apiErr) {
+    if (apiErr.response && apiErr.response.data) return apiErr.response.data;
+    return { success: false, error: apiErr.message };
   }
 });
 
 ipcMain.handle('social-unblock-user', async (e, targetUid) => {
   try {
-    const auth = await getSocialAuth();
-    const blockId = `${auth.uid}__${targetUid}`;
-    await fsDel(`blocks/${blockId}`, auth.idToken);
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+    if (ApiClient && ApiClient.social && typeof ApiClient.social.unblockUser === 'function') {
+      const apiRes = await ApiClient.social.unblockUser(targetUid);
+      if (apiRes && (apiRes.success || apiRes.error)) return apiRes;
+    }
+    return { success: false, error: 'api_unavailable' };
+  } catch (apiErr) {
+    if (apiErr.response && apiErr.response.data) return apiErr.response.data;
+    return { success: false, error: apiErr.message };
   }
 });
 
 ipcMain.handle('social-get-blocked', async () => {
   try {
-    const auth = await getSocialAuth();
-    const blocks = await fsQuery('blocks', [
-      { field: 'blockerUid', op: 'EQUAL', value: { stringValue: auth.uid } }
-    ], auth.idToken);
-    const enriched = await Promise.all(blocks.map(async b => {
-      let profile = { uid: b.blockedUid, username: 'Unknown', accountType: 'helloworld' };
-      try { profile = await fsGet(`users/${b.blockedUid}`, auth.idToken); } catch (_) { }
-      return { blockId: b.id, profile: { ...profile, uid: b.blockedUid } };
-    }));
-    return { success: true, blocked: enriched };
+    if (ApiClient && ApiClient.social && typeof ApiClient.social.getBlocked === 'function') {
+      const apiRes = await ApiClient.social.getBlocked();
+      if (apiRes && apiRes.success && Array.isArray(apiRes.blocked)) {
+        return { success: true, blocked: apiRes.blocked };
+      }
+    }
+    return { success: true, blocked: [] };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -9858,95 +9630,67 @@ ipcMain.handle('social-get-blocked', async () => {
 
 ipcMain.handle('social-send-message', async (e, targetFriendshipId, content, replyTo = null) => {
   try {
-    const auth = await getSocialAuth();
     if (!content || !content.trim()) return { success: false, error: 'empty_message' };
-    const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const now = new Date().toISOString();
-    const msgData = {
-      senderId: auth.uid,
-      content: content.trim(),
-      timestamp: now,
-      status: 'sent'
-    };
-    if (replyTo) {
-      msgData.replyTo = replyTo.id;
-      msgData.replyContent = replyTo.content;
-      msgData.replySender = replyTo.senderId;
-      msgData.replySenderName = replyTo.senderName;
+
+    if (ApiClient && ApiClient.chat && typeof ApiClient.chat.sendMessage === 'function') {
+      const apiRes = await ApiClient.chat.sendMessage(targetFriendshipId, content, replyTo);
+      if (apiRes && (apiRes.success || apiRes.msgId || apiRes.messageId)) return apiRes;
     }
-    await fsSet(`friendships/${targetFriendshipId}/messages/${msgId}`, msgData, auth.idToken);
-    // Update friendship lastMessageAt
-    await fsSet(`friendships/${targetFriendshipId}`, { lastMessageAt: now }, auth.idToken, ['lastMessageAt']);
-    // Increment unread for all other users
-    const fDoc = await fsGet(`friendships/${targetFriendshipId}`, auth.idToken);
-    const otherUids = (fDoc.users || []).filter(u => u !== auth.uid);
-    for (const otherUid of otherUids) {
-      let currentUnread = 0;
-      try { const ud = await fsGet(`friendships/${targetFriendshipId}/unread/${otherUid}`, auth.idToken); currentUnread = ud.count || 0; } catch (_) { }
-      await fsSet(`friendships/${targetFriendshipId}/unread/${otherUid}`, { count: currentUnread + 1 }, auth.idToken);
-    }
-    return { success: true, msgId };
-  } catch (e) {
-    return { success: false, error: e.message };
+    return { success: false, error: 'api_unavailable' };
+  } catch (apiErr) {
+    if (apiErr.response && apiErr.response.data) return apiErr.response.data;
+    return { success: false, error: apiErr.message };
   }
 });
 
 ipcMain.handle('social-edit-message', async (e, targetFriendshipId, msgId, newContent) => {
   try {
-    const auth = await getSocialAuth();
     if (!newContent || !newContent.trim()) return { success: false, error: 'empty_message' };
-    const msgDoc = await fsGet(`friendships/${targetFriendshipId}/messages/${msgId}`, auth.idToken);
-    if (msgDoc.senderId !== auth.uid) return { success: false, error: 'not_owner' };
 
-    // Pass the full document back to satisfy strict Firestore rules
-    const updatedMsg = {
-      ...msgDoc,
-      content: newContent.trim(),
-      edited: true,
-      editedAt: new Date().toISOString()
-    };
-    delete updatedMsg.id; // remove local id property
-
-    await fsSet(`friendships/${targetFriendshipId}/messages/${msgId}`, updatedMsg, auth.idToken);
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+    if (ApiClient && ApiClient.chat && typeof ApiClient.chat.editMessage === 'function') {
+      const apiRes = await ApiClient.chat.editMessage(targetFriendshipId, msgId, newContent);
+      if (apiRes && apiRes.success) return { success: true };
+    }
+    return { success: false, error: 'api_unavailable' };
+  } catch (apiErr) {
+    if (apiErr.response && apiErr.response.data) return apiErr.response.data;
+    return { success: false, error: apiErr.message };
   }
 });
 
 ipcMain.handle('social-delete-message', async (e, targetFriendshipId, msgId) => {
   try {
-    const auth = await getSocialAuth();
-    const msgDoc = await fsGet(`friendships/${targetFriendshipId}/messages/${msgId}`, auth.idToken);
-    if (msgDoc.senderId !== auth.uid) return { success: false, error: 'not_owner' };
-    await fsDel(`friendships/${targetFriendshipId}/messages/${msgId}`, auth.idToken);
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+    if (ApiClient && ApiClient.chat && typeof ApiClient.chat.deleteMessage === 'function') {
+      const apiRes = await ApiClient.chat.deleteMessage(targetFriendshipId, msgId);
+      if (apiRes && apiRes.success) return { success: true };
+    }
+    return { success: false, error: 'api_unavailable' };
+  } catch (apiErr) {
+    if (apiErr.response && apiErr.response.data) return apiErr.response.data;
+    return { success: false, error: apiErr.message };
   }
 });
 
 ipcMain.handle('social-set-reply', async (e, targetFriendshipId, replyTo) => {
   try {
-    const auth = await getSocialAuth();
-    const replyData = replyTo ? {
-      msgId: replyTo.id,
-      content: replyTo.content,
-      senderId: replyTo.senderId,
-      senderName: replyTo.senderName
-    } : null;
-    await fsSet(`friendships/${targetFriendshipId}/replyState/${auth.uid}`, { reply: replyData }, auth.idToken);
+    if (ApiClient && ApiClient.chat && typeof ApiClient.chat.setReplyState === 'function') {
+      const apiRes = await ApiClient.chat.setReplyState(targetFriendshipId, replyTo);
+      if (apiRes && apiRes.success) return { success: true };
+    }
     return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+  } catch (apiErr) {
+    if (apiErr.response && apiErr.response.data) return apiErr.response.data;
+    return { success: false, error: apiErr.message };
   }
 });
 
 ipcMain.handle('social-get-reply', async (e, targetFriendshipId) => {
   try {
-    const auth = await getSocialAuth();
-    const doc = await fsGet(`friendships/${targetFriendshipId}/replyState/${auth.uid}`, auth.idToken);
-    return { success: true, reply: doc.reply || null };
+    if (ApiClient && ApiClient.chat && typeof ApiClient.chat.getReplyState === 'function') {
+      const apiRes = await ApiClient.chat.getReplyState(targetFriendshipId);
+      if (apiRes && apiRes.success) return { success: true, reply: apiRes.reply || null };
+    }
+    return { success: true, reply: null };
   } catch (e) {
     return { success: true, reply: null };
   }
@@ -9954,39 +9698,29 @@ ipcMain.handle('social-get-reply', async (e, targetFriendshipId) => {
 
 ipcMain.handle('social-get-messages', async (e, targetFriendshipId, beforeTimestamp) => {
   try {
-    const auth = await getSocialAuth();
-    // Use listDocuments for subcollection without filters (avoids 400 error from runQuery with empty where)
-    const res = await axios.get(`${FIRESTORE_BASE}/friendships/${targetFriendshipId}/messages?pageSize=1000`,
-      { headers: { Authorization: `Bearer ${auth.idToken}` } });
-    const allMsgs = (res.data.documents || []).map(doc => ({
-      id: doc.name.split('/').pop(),
-      ...parseFirestoreFields(doc.fields)
-    }));
-    const msgs = beforeTimestamp ? allMsgs.filter(m => m.timestamp < beforeTimestamp) : allMsgs;
-    const sorted = msgs.sort((a, b) => a.timestamp > b.timestamp ? 1 : a.timestamp < b.timestamp ? -1 : 0);
-    return { success: true, messages: sorted };
-  } catch (e) {
-    console.error('[Social] social-get-messages error:', e.message);
-    return { success: false, error: e.message };
+    if (ApiClient && ApiClient.chat && typeof ApiClient.chat.getMessages === 'function') {
+      const apiRes = await ApiClient.chat.getMessages(targetFriendshipId, beforeTimestamp);
+      if (apiRes && apiRes.success && Array.isArray(apiRes.messages)) {
+        return { success: true, messages: apiRes.messages };
+      }
+    }
+    return { success: true, messages: [] };
+  } catch (apiErr) {
+    console.error('[Social] social-get-messages error:', apiErr.message);
+    return { success: false, error: apiErr.response?.data?.error || apiErr.message, messages: [] };
   }
 });
 
 ipcMain.handle('social-mark-read', async (e, targetFriendshipId) => {
   try {
-    const auth = await getSocialAuth();
-    await fsSet(`friendships/${targetFriendshipId}/unread/${auth.uid}`, { count: 0 }, auth.idToken);
-    // Mark messages from other users as delivered
-    try {
-      const msgs = await fsQuerySub(`friendships/${targetFriendshipId}`, 'messages', [], auth.idToken, null, 100);
-      for (const msg of msgs) {
-        if (msg.senderId !== auth.uid && (!msg.status || msg.status === 'sent')) {
-          await fsSet(`friendships/${targetFriendshipId}/messages/${msg.id}`, { status: 'delivered' }, auth.idToken, ['status']);
-        }
-      }
-    } catch (_) { }
+    if (ApiClient && ApiClient.chat && typeof ApiClient.chat.markRead === 'function') {
+      const apiRes = await ApiClient.chat.markRead(targetFriendshipId);
+      if (apiRes && apiRes.success) return { success: true };
+    }
     return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+  } catch (apiErr) {
+    console.error('[Social] social-mark-read error:', apiErr.message);
+    return { success: false, error: apiErr.response?.data?.error || apiErr.message };
   }
 });
 
@@ -10068,36 +9802,26 @@ loadLocalSentInboxMsgs();
 
 ipcMain.handle('social-get-badge-counts', async () => {
   try {
-    const auth = await getSocialAuth();
-    const allRecv = await fsQuery('friendRequests', [
-      { field: 'toUid', op: 'EQUAL', value: { stringValue: auth.uid } }
-    ], auth.idToken, null, 100);
-    const received = allRecv.filter(r => r.status === 'pending');
+    let pendingRequests = 0;
+    let unreadMessages = 0;
 
-    let totalUnread = 0;
-    const localReadSet = localReadInboxMsgIds.get(auth.uid) || new Set();
-    const cachedMsgs = userInboxCache.get(auth.uid);
-    if (cachedMsgs) {
-      totalUnread = cachedMsgs.filter(m => m.senderId !== auth.uid && !m.isSentCopy && m.read === false && !localReadSet.has(m.id)).length;
-    } else {
-      try {
-        const res = await axios.get(
-          `${FIRESTORE_BASE}/users/${auth.uid}/inbox?pageSize=100`,
-          { headers: { Authorization: `Bearer ${auth.idToken}` } }
-        );
-        if (res.data && res.data.documents) {
-          const msgs = res.data.documents.map(doc => ({
-            id: doc.name.split('/').pop(),
-            ...parseFirestoreFields(doc.fields)
-          }));
-          const filtered = msgs.filter(m => m.senderId !== auth.uid && !m.isSentCopy);
-          userInboxCache.set(auth.uid, filtered);
-          totalUnread = filtered.filter(m => m.read === false && !localReadSet.has(m.id)).length;
+    try {
+      if (ApiClient && ApiClient.social && typeof ApiClient.social.getRequests === 'function') {
+        const reqs = await ApiClient.social.getRequests();
+        if (reqs && reqs.success && Array.isArray(reqs.received)) {
+          pendingRequests = reqs.received.length;
         }
-      } catch (_) {}
-    }
+      }
+      if (ApiClient && ApiClient.social && typeof ApiClient.social.getFriends === 'function') {
+        const fRes = await ApiClient.social.getFriends();
+        if (fRes && fRes.success && Array.isArray(fRes.friends)) {
+          unreadMessages = fRes.friends.reduce((acc, f) => acc + (f.unread || 0), 0);
+        }
+      }
+      return { success: true, pendingRequests, unreadMessages };
+    } catch (_) {}
 
-    return { success: true, pendingRequests: received.length, unreadMessages: totalUnread };
+    return { success: true, pendingRequests, unreadMessages };
   } catch (e) {
     if (e.message === 'NO_SOCIAL_AUTH') return { success: true, pendingRequests: 0, unreadMessages: 0 };
     return { success: false, error: e.message };
@@ -10106,128 +9830,50 @@ ipcMain.handle('social-get-badge-counts', async () => {
 
 ipcMain.handle('social-edit-group', async (e, groupId, updates) => {
   try {
-    const auth = await getSocialAuth();
-    const doc = await fsGet(`friendships/${groupId}`, auth.idToken);
-    if (!doc.isGroup) return { success: false, error: 'not_a_group' };
-    const admins = doc.admins || [doc.admin];
-    if (!admins.includes(auth.uid)) return { success: false, error: 'not_admin' };
-    const allowed = {};
-    if (updates.name !== undefined) allowed.name = updates.name;
-    if (updates.description !== undefined) allowed.description = updates.description;
-    if (updates.imageBase64 !== undefined) allowed.imageBase64 = updates.imageBase64;
-    if (Object.keys(allowed).length === 0) return { success: false, error: 'no_changes' };
-    await fsSet(`friendships/${groupId}`, allowed, auth.idToken, Object.keys(allowed));
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+    if (ApiClient && ApiClient.chat && typeof ApiClient.chat.editGroup === 'function') {
+      const apiRes = await ApiClient.chat.editGroup(groupId, updates);
+      if (apiRes && apiRes.success) return apiRes;
+    }
+    return { success: false, error: 'api_unavailable' };
+  } catch (apiErr) {
+    return { success: false, error: apiErr.response?.data?.error || apiErr.message };
   }
 });
 
 ipcMain.handle('social-add-group-members', async (e, groupId, memberUids) => {
   try {
-    const auth = await getSocialAuth();
-    const doc = await fsGet(`friendships/${groupId}`, auth.idToken);
-    if (!doc.isGroup) return { success: false, error: 'not_a_group' };
-    const admins = doc.admins || [doc.admin];
-    if (!admins.includes(auth.uid)) return { success: false, error: 'not_admin' };
-    const currentUsers = doc.users || [];
-    const newUsers = [...new Set([...currentUsers, ...memberUids])];
-    await fsSet(`friendships/${groupId}`, { users: newUsers }, auth.idToken, ['users']);
-    return { success: true, users: newUsers };
-  } catch (e) {
-    return { success: false, error: e.message };
+    if (ApiClient && ApiClient.chat && typeof ApiClient.chat.addGroupMembers === 'function') {
+      const apiRes = await ApiClient.chat.addGroupMembers(groupId, memberUids);
+      if (apiRes && apiRes.success) return apiRes;
+    }
+    return { success: false, error: 'api_unavailable' };
+  } catch (apiErr) {
+    return { success: false, error: apiErr.response?.data?.error || apiErr.message };
   }
 });
 
 ipcMain.handle('social-remove-group-member', async (e, groupId, memberUid) => {
   try {
-    const auth = await getSocialAuth();
-    const doc = await fsGet(`friendships/${groupId}`, auth.idToken);
-    if (!doc.isGroup) return { success: false, error: 'not_a_group' };
-    const admins = doc.admins || [doc.admin];
-    const isAdmin = admins.includes(auth.uid);
-    const isOwner = doc.admin === auth.uid;
-    // Only admin can remove others; user can remove themselves via leave group (social-remove-friend)
-    if (memberUid !== auth.uid && !isAdmin) return { success: false, error: 'not_admin' };
-    if (memberUid === doc.admin && !isOwner) return { success: false, error: 'cannot_remove_owner' };
-    if (memberUid === doc.admin) return { success: false, error: 'owner_must_transfer' };
-    const newUsers = (doc.users || []).filter(u => u !== memberUid);
-    const newAdmins = (doc.admins || []).filter(u => u !== memberUid);
-    if (newUsers.length === 0) {
-      await deleteFriendshipCompletely(groupId, auth.idToken);
-    } else {
-      await fsSet(`friendships/${groupId}`, { users: newUsers, admins: newAdmins }, auth.idToken, ['users', 'admins']);
+    if (ApiClient && ApiClient.chat && typeof ApiClient.chat.removeGroupMember === 'function') {
+      const apiRes = await ApiClient.chat.removeGroupMember(groupId, memberUid);
+      if (apiRes && apiRes.success) return apiRes;
     }
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+    return { success: false, error: 'api_unavailable' };
+  } catch (apiErr) {
+    return { success: false, error: apiErr.response?.data?.error || apiErr.message };
   }
 });
 
 // --- Social Inbox IPC Handlers ---
 ipcMain.handle('social-inbox-get', async (e, beforeTimestamp = null) => {
   try {
-    const auth = await getSocialAuth();
-    if (!auth || !auth.idToken) return { success: false, messages: [] };
-
-    let messages = userInboxCache.get(auth.uid);
-    if (!messages) {
-      // Fetch once if cache is not yet populated
-      try {
-        const res = await axios.get(`${FIRESTORE_BASE}/users/${auth.uid}/inbox?pageSize=100`, {
-          headers: { Authorization: `Bearer ${auth.idToken}` }
-        });
-        if (res.data && res.data.documents) {
-          messages = res.data.documents.map(doc => ({
-            id: doc.name.split('/').pop(),
-            ...parseFirestoreFields(doc.fields)
-          }));
-        }
-      } catch (err) {
-        console.warn('[Social] Could not fetch users/' + auth.uid + '/inbox:', err.message);
+    if (ApiClient && ApiClient.inbox && typeof ApiClient.inbox.getInbox === 'function') {
+      const apiRes = await ApiClient.inbox.getInbox(beforeTimestamp);
+      if (apiRes && apiRes.success && Array.isArray(apiRes.messages)) {
+        return { success: true, messages: apiRes.messages, lastRead: Date.now() };
       }
-
-      if (messages && messages.length > 0) {
-        const sentCopies = messages.filter(m => m.isSentCopy === true || m.senderId === auth.uid);
-        if (sentCopies.length > 0) {
-          const currentSent = userSentInboxCache.get(auth.uid) || [];
-          const sentMap = new Map(currentSent.map(m => [m.id, m]));
-          for (const sc of sentCopies) {
-            if (!sentMap.has(sc.id)) sentMap.set(sc.id, sc);
-          }
-          userSentInboxCache.set(auth.uid, Array.from(sentMap.values()));
-          saveLocalSentInboxMsgs();
-        }
-      }
-
-      messages = (messages || []).filter(m => m.senderId !== auth.uid && !m.isSentCopy);
-      userInboxCache.set(auth.uid, messages);
-      console.log(`[Social] Initial load: cached ${messages.length} inbox messages for ${auth.uid}`);
     }
-
-    // Apply local read set
-    const localReadSet = localReadInboxMsgIds.get(auth.uid) || new Set();
-    let result = messages.map(m => ({
-      ...m,
-      read: m.read === true || localReadSet.has(m.id)
-    }));
-
-    // Filter by timestamp if paging
-    if (beforeTimestamp) {
-      result = result.filter(m => {
-        const t = typeof m.timestamp === 'string' ? new Date(m.timestamp).getTime() : (Number(m.timestamp) || 0);
-        return t < beforeTimestamp;
-      });
-    }
-
-    // Sort descending by timestamp (newest first)
-    result.sort((a, b) => {
-      const ta = typeof a.timestamp === 'string' ? new Date(a.timestamp).getTime() : (Number(a.timestamp) || 0);
-      const tb = typeof b.timestamp === 'string' ? new Date(b.timestamp).getTime() : (Number(b.timestamp) || 0);
-      return tb - ta;
-    });
-
-    return { success: true, messages: result, lastRead: Date.now() };
+    return { success: true, messages: [], lastRead: Date.now() };
   } catch (e) {
     console.error('[Social] Error in social-inbox-get:', e.message);
     return { success: false, error: e.message, messages: [] };
@@ -10236,152 +9882,28 @@ ipcMain.handle('social-inbox-get', async (e, beforeTimestamp = null) => {
 
 ipcMain.handle('social-inbox-send', async (e, recipientUids, content, type = 'text', recipientNames = []) => {
   try {
-    const auth = await getSocialAuth();
-    if (!auth || !auth.idToken) return { success: false, error: 'NO_AUTH' };
-    const senderName = auth.username || auth.displayName || 'User';
-    const now = Date.now();
     const targets = Array.isArray(recipientUids) ? recipientUids : [recipientUids];
     const names = Array.isArray(recipientNames) ? recipientNames : (recipientNames ? [recipientNames] : []);
-
-    // Create and save sent record for sender
-    const sentId = `${now}_${Math.random().toString(36).slice(2)}`;
-    const sentRecord = {
-      id: sentId,
-      senderId: auth.uid,
-      senderName,
-      recipientUids: targets,
-      recipientNames: names,
-      recipientUid: targets[0] || '',
-      content,
-      type,
-      timestamp: now,
-      read: true,
-      isSentCopy: true
-    };
-
-    if (!userSentInboxCache.has(auth.uid)) {
-      userSentInboxCache.set(auth.uid, []);
+    if (ApiClient && ApiClient.inbox && typeof ApiClient.inbox.send === 'function') {
+      const apiRes = await ApiClient.inbox.send({ targets, names, content, type });
+      if (apiRes && apiRes.success) return apiRes;
     }
-    const sentList = userSentInboxCache.get(auth.uid);
-    sentList.unshift(sentRecord);
-    if (sentList.length > 200) sentList.length = 200;
-    saveLocalSentInboxMsgs();
-
-    // 1. Save sent copy in user's own inbox subcollection (uses existing Firestore rules for inbox)
-    fsSet(`users/${auth.uid}/inbox/${sentId}`, sentRecord, auth.idToken).catch((err) => {
-      console.warn('[Social] Could not save sent copy in users/' + auth.uid + '/inbox:', err.message);
-    });
-
-    // 2. Also attempt users/${auth.uid}/sent/${sentId} (if sent rules enabled in Firestore)
-    fsSet(`users/${auth.uid}/sent/${sentId}`, sentRecord, auth.idToken).catch(() => {});
-
-    for (const target of targets) {
-      if (target === auth.uid) continue;
-
-      const msgId = `${now}_${Math.random().toString(36).slice(2)}`;
-      const msgData = {
-        id: msgId,
-        senderId: auth.uid,
-        senderName,
-        recipientUid: target,
-        recipientNames: names,
-        content,
-        type,
-        timestamp: now,
-        read: false
-      };
-
-      try {
-        await fsSet(`users/${target}/inbox/${msgId}`, msgData, auth.idToken);
-      } catch (err) {
-        console.warn(`[Social] Failed to set users/${target}/inbox/${msgId}:`, err.message);
-        try {
-          await fsSet(`inbox/${msgId}`, msgData, auth.idToken);
-        } catch (_) {}
-      }
-    }
-
-    return { success: true, sentRecord };
-  } catch (e) {
-    console.error('[Social] social-inbox-send error:', e.message);
-    return { success: false, error: e.message };
+    return { success: false, error: 'api_unavailable' };
+  } catch (apiErr) {
+    console.error('[Social] social-inbox-send error:', apiErr.message);
+    return { success: false, error: apiErr.response?.data?.error || apiErr.message };
   }
 });
 
 ipcMain.handle('social-inbox-get-sent', async (e, beforeTimestamp = null) => {
   try {
-    const auth = await getSocialAuth();
-    if (!auth || !auth.idToken) return { success: false, messages: [] };
-
-    let messages = userSentInboxCache.get(auth.uid) || [];
-    if (!messages || messages.length === 0) {
-      const foundMsgs = [];
-      const seenIds = new Set();
-
-      // Check users/${auth.uid}/inbox for sent copies
-      try {
-        const res = await axios.get(`${FIRESTORE_BASE}/users/${auth.uid}/inbox?pageSize=100`, {
-          headers: { Authorization: `Bearer ${auth.idToken}` }
-        });
-        if (res.data && res.data.documents) {
-          const docs = res.data.documents.map(doc => ({
-            id: doc.name.split('/').pop(),
-            ...parseFirestoreFields(doc.fields)
-          }));
-          const sentCopies = docs.filter(m => m.isSentCopy === true || m.senderId === auth.uid);
-          for (const m of sentCopies) {
-            if (!seenIds.has(m.id)) {
-              seenIds.add(m.id);
-              foundMsgs.push(m);
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('[Social] Could not check users/' + auth.uid + '/inbox for sent copies:', err.message);
-      }
-
-      // Also try users/${auth.uid}/sent if allowed
-      try {
-        const res = await axios.get(`${FIRESTORE_BASE}/users/${auth.uid}/sent?pageSize=100`, {
-          headers: { Authorization: `Bearer ${auth.idToken}` }
-        });
-        if (res.data && res.data.documents) {
-          const remoteMsgs = res.data.documents.map(doc => ({
-            id: doc.name.split('/').pop(),
-            ...parseFirestoreFields(doc.fields)
-          }));
-          for (const m of remoteMsgs) {
-            if (!seenIds.has(m.id)) {
-              seenIds.add(m.id);
-              foundMsgs.push(m);
-            }
-          }
-        }
-      } catch (_) {}
-
-      if (foundMsgs.length > 0) {
-        userSentInboxCache.set(auth.uid, foundMsgs);
-        saveLocalSentInboxMsgs();
-        messages = foundMsgs;
+    if (ApiClient && ApiClient.inbox && typeof ApiClient.inbox.getSent === 'function') {
+      const apiRes = await ApiClient.inbox.getSent(beforeTimestamp);
+      if (apiRes && apiRes.success && Array.isArray(apiRes.messages)) {
+        return { success: true, messages: apiRes.messages };
       }
     }
-
-    let result = messages ? [...messages] : [];
-
-    if (beforeTimestamp) {
-      result = result.filter(m => {
-        const t = typeof m.timestamp === 'string' ? new Date(m.timestamp).getTime() : (Number(m.timestamp) || 0);
-        return t < beforeTimestamp;
-      });
-    }
-
-    result.sort((a, b) => {
-      const ta = typeof a.timestamp === 'string' ? new Date(a.timestamp).getTime() : (Number(a.timestamp) || 0);
-      const tb = typeof b.timestamp === 'string' ? new Date(b.timestamp).getTime() : (Number(b.timestamp) || 0);
-      return tb - ta;
-    });
-
-    return { success: true, messages: result };
+    return { success: true, messages: [] };
   } catch (e) {
     console.error('[Social] Error in social-inbox-get-sent:', e.message);
     return { success: false, error: e.message, messages: [] };
@@ -10390,28 +9912,17 @@ ipcMain.handle('social-inbox-get-sent', async (e, beforeTimestamp = null) => {
 
 ipcMain.handle('social-inbox-mark-read', async (e, msgId) => {
   try {
-    const auth = await getSocialAuth();
-    if (!auth || !auth.uid) return { success: false, error: 'NO_AUTH' };
-
-    if (!localReadInboxMsgIds.has(auth.uid)) {
-      localReadInboxMsgIds.set(auth.uid, new Set());
+    if (ApiClient && ApiClient.inbox && typeof ApiClient.inbox.markRead === 'function') {
+      await ApiClient.inbox.markRead(msgId);
     }
-    localReadInboxMsgIds.get(auth.uid).add(msgId);
-    saveLocalReadInboxMsgs();
-
-    const cached = userInboxCache.get(auth.uid);
-    if (cached) {
-      const targetMsg = cached.find(m => m.id === msgId);
-      if (targetMsg) targetMsg.read = true;
+    const auth = await getSocialAuth().catch(() => null);
+    if (auth && auth.uid) {
+      if (!localReadInboxMsgIds.has(auth.uid)) {
+        localReadInboxMsgIds.set(auth.uid, new Set());
+      }
+      localReadInboxMsgIds.get(auth.uid).add(msgId);
+      saveLocalReadInboxMsgs();
     }
-
-    // Try updating Firestore
-    try {
-      await fsSet(`users/${auth.uid}/inbox/${msgId}`, { read: true }, auth.idToken, ['read']);
-    } catch (fsErr) {
-      console.warn(`[Social] Could not update Firestore read status for ${msgId}:`, fsErr.message);
-    }
-
     return { success: true };
   } catch (err) {
     console.error('[Social] social-inbox-mark-read error:', err.message);
@@ -10422,11 +9933,10 @@ ipcMain.handle('social-inbox-mark-read', async (e, msgId) => {
 ipcMain.handle('get-user-profile', async (e, uid, username) => {
   try {
     const auth = await getSocialAuth().catch(() => null);
-    const token = auth ? auth.idToken : null;
     let userDoc = null;
     let resolvedUid = uid;
 
-    // 0. Primary: Fetch directly from Cloudflare Backend API
+    // 1. Primary: Fetch directly from Cloudflare Backend API
     const targetLookup = uid || (username || (typeof uid === 'string' && !uid.includes('-') && uid.length < 30 ? uid : null));
     if (targetLookup) {
       try {
@@ -10441,98 +9951,23 @@ ipcMain.handle('get-user-profile', async (e, uid, username) => {
       } catch (_) {}
     }
 
-    // 1. Try direct fetch by uid if provided
-    if (uid) {
-      try {
-        userDoc = await fsGet(`users/${uid}`, token);
-      } catch (_) {}
-    }
-
-    // 2. If not found by uid, try lookup by username
-    const targetName = username || (typeof uid === 'string' && !uid.includes('-') && uid.length < 30 ? uid : null);
-    if (!userDoc && targetName) {
-      const lower = targetName.toLowerCase();
-      try {
-        const uDoc = await fsGet(`usernames/${lower}`, token);
-        if (uDoc && uDoc.uid) {
-          resolvedUid = uDoc.uid;
-          try { userDoc = await fsGet(`users/${resolvedUid}`, token); } catch (_) {}
-        }
-      } catch (_) {}
-
-      // 3. Fallback: query users collection by usernameLower or username
-      if (!userDoc) {
-        try {
-          const byLower = await fsQuery('users', [
-            { field: 'usernameLower', op: 'EQUAL', value: { stringValue: lower } }
-          ], token, null, 1);
-          if (byLower && byLower.length > 0) {
-            userDoc = byLower[0];
-            resolvedUid = userDoc.id || userDoc.uid || resolvedUid;
-          }
-        } catch (_) {}
-      }
-
-      if (!userDoc) {
-        try {
-          const byExact = await fsQuery('users', [
-            { field: 'username', op: 'EQUAL', value: { stringValue: targetName } }
-          ], token, null, 1);
-          if (byExact && byExact.length > 0) {
-            userDoc = byExact[0];
-            resolvedUid = userDoc.id || userDoc.uid || resolvedUid;
-          }
-        } catch (_) {}
-      }
-
-      // 4. Substring / in-memory scan fallback
-      if (!userDoc) {
-        try {
-          const scan = await fsQuery('users', [], token, null, 250);
-          for (const u of scan) {
-            if ((u.username && u.username.toLowerCase() === lower) || (u.usernameLower && u.usernameLower === lower)) {
-              userDoc = u;
-              resolvedUid = u.id || u.uid || resolvedUid;
-              break;
-            }
-          }
-        } catch (_) {}
-      }
-
-      // Self-heal index in usernames/ if missing
-      if (userDoc && resolvedUid && token) {
-        fsSet(`usernames/${lower}`, { uid: resolvedUid }, token).catch(() => {});
-      }
-    }
-
-    // Presence
+    // 2. Presence
     let presence = { state: 'offline' };
     if (resolvedUid) {
       presence = await fetchPresenceForUser(resolvedUid, auth).catch(() => ({ state: 'offline' }));
     }
 
-    // Moderator / Admin check
-    let isModerator = false;
-    let isAdmin = false;
-    if (resolvedUid) {
-      try {
-        const adminDoc = await fsGet(`admins/${resolvedUid}`, token);
-        if (adminDoc) {
-          const role = (adminDoc.role || 'admin').toLowerCase();
-          if (role === 'admin' || role === 'owner') { isAdmin = true; isModerator = true; }
-          else if (role === 'moderator' || role === 'mod') { isModerator = true; }
-        }
-      } catch (_) {}
-    }
+    // 3. Roles and badges
+    const isAdmin = Boolean(userDoc?.isAdmin || userDoc?.role === 'admin' || userDoc?.role === 'owner' || (userDoc?.badges && userDoc.badges.includes('creator')));
+    const isModerator = Boolean(isAdmin || userDoc?.isMod || userDoc?.role === 'moderator' || userDoc?.role === 'mod' || (userDoc?.badges && userDoc.badges.includes('moderator')));
 
-    // Badges
     const badges = Array.isArray(userDoc && userDoc.badges) ? [...userDoc.badges] : [];
     if (userDoc && (userDoc.microsoftVerified === true || userDoc.accountType === 'microsoft') && !badges.includes('premium')) {
       badges.push('premium');
     }
     if (isModerator && !badges.includes('moderator')) badges.push('moderator');
 
-    // Graceful fallback user doc if still null
+    // Graceful fallback user doc if not found
     if (!userDoc) {
       userDoc = {
         username: username || uid || 'Unknown',
@@ -10570,13 +10005,14 @@ ipcMain.handle('get-user-profile', async (e, uid, username) => {
 });
 
 // Fetch current user's own badges (for the account button in the launcher header)
+// Strictly handled by account UID to prevent badge collision between different accounts sharing the same username
 ipcMain.handle('get-own-badges', async () => {
   try {
     const userData = loadUserData();
     const isMicrosoft = userData.account_type === 'microsoft';
     const targetUid = isMicrosoft ? (userData.firebase_ms_uid || userData.uuid) : (userData.firebase_uid || userData.uuid);
 
-    // 1. Primary: Fetch directly from Cloudflare D1 Backend
+    // 1. Primary: Fetch directly from Cloudflare D1 Backend strictly by UID
     if (targetUid) {
       try {
         const res = await ApiClient.users.getProfile(targetUid);
@@ -10588,89 +10024,43 @@ ipcMain.handle('get-own-badges', async () => {
           if ((isMicrosoft || res.user.microsoftVerified) && !badges.includes('premium')) {
             badges.push('premium');
           }
-          if (badges.length > 0) {
-            return { success: true, badges };
-          }
+          return { success: true, badges };
         }
       } catch (apiErr) {
         console.warn('[get-own-badges] Backend API by UID lookup failed:', apiErr.message);
       }
     }
 
-    // 2. Secondary Backend check: lookup by username
-    if (userData.username) {
-      try {
-        const res = await ApiClient.users.getProfile(encodeURIComponent(userData.username));
-        if (res && res.success && res.user) {
-          const badges = Array.isArray(res.user.badges) ? [...res.user.badges] : [];
-          if ((res.user.isAdmin || res.user.role === 'admin' || res.user.role === 'owner') && !badges.includes('moderator')) {
-            badges.push('moderator');
-          }
-          if ((isMicrosoft || res.user.microsoftVerified) && !badges.includes('premium')) {
-            badges.push('premium');
-          }
-          if (badges.length > 0) {
-            return { success: true, badges };
-          }
-        }
-      } catch (apiErr) {
-        console.warn('[get-own-badges] Backend API by username lookup failed:', apiErr.message);
-      }
+    // 2. Default fallback: Microsoft accounts have premium badge
+    if (isMicrosoft) {
+      return { success: true, badges: ['premium'] };
     }
 
-    // 3. Fallback: Legacy Firestore lookup
-    try {
-      const auth = await getSocialAuth();
-      const userDoc = await fsGet(`users/${auth.uid}`, auth.idToken);
-      const badges = Array.isArray(userDoc && userDoc.badges) ? [...userDoc.badges] : [];
-
-      if (userDoc && (userDoc.microsoftVerified === true || isMicrosoft) && !badges.includes('premium')) {
-        badges.push('premium');
-      }
-
-      try {
-        const adminDoc = await fsGet(`admins/${auth.uid}`, auth.idToken);
-        if (adminDoc) {
-          const role = (adminDoc.role || 'admin').toLowerCase();
-          if ((role === 'admin' || role === 'owner' || role === 'moderator' || role === 'mod') && !badges.includes('moderator')) {
-            badges.push('moderator');
-          }
-        }
-      } catch (_) {}
-
-      if (badges.length > 0) {
-        return { success: true, badges };
-      }
-    } catch (_) {}
-
-    // 4. Default fallback: Microsoft verified accounts always have premium badge
-    const defaultBadges = isMicrosoft ? ['premium'] : [];
-    return { success: true, badges: defaultBadges };
-  } catch (e) {
     return { success: true, badges: [] };
+  } catch (err) {
+    console.error('[get-own-badges] Error:', err);
+    return { success: false, badges: [] };
   }
 });
 
 ipcMain.handle('add-profile-link', async (e, uid, url, title, type) => {
   try {
     const auth = await getSocialAuth();
-    // Verify user is editing their own profile
     if (auth.uid !== uid) {
       return { success: false, error: 'Cannot edit other users profile' };
     }
 
-    // Get current user document
-    const userDoc = await fsGet(`users/${uid}`, auth.idToken);
-    const existingLinks = userDoc.links || [];
-
-    // Add new link
     const newLink = { url, title, type, createdAt: new Date().toISOString() };
-    const updatedLinks = [...existingLinks, newLink];
-
-    // Update user document
-    await fsSet(`users/${uid}`, { links: updatedLinks }, auth.idToken, ['links']);
-
-    return { success: true };
+    if (ApiClient && ApiClient.users && typeof ApiClient.users.getMe === 'function') {
+      const meRes = await ApiClient.users.getMe();
+      if (meRes && meRes.success && meRes.user) {
+        const existingLinks = Array.isArray(meRes.user.links) ? meRes.user.links : [];
+        const updatedLinks = [...existingLinks, newLink];
+        await ApiClient.users.updateMe({ links: updatedLinks });
+        return { success: true };
+      }
+    }
+    return { success: false, error: 'Failed to update links' };
   } catch (e) {
     console.error('[add-profile-link] Error:', e);
     return { success: false, error: e.message };
@@ -10679,63 +10069,37 @@ ipcMain.handle('add-profile-link', async (e, uid, url, title, type) => {
 
 ipcMain.handle('social-promote-admin', async (e, groupId, memberUid) => {
   try {
-    const auth = await getSocialAuth();
-    const doc = await fsGet(`friendships/${groupId}`, auth.idToken);
-    if (!doc.isGroup) return { success: false, error: 'not_a_group' };
-    const admins = doc.admins || [doc.admin];
-    if (!admins.includes(auth.uid)) return { success: false, error: 'not_admin' };
-    if (!(doc.users || []).includes(memberUid)) return { success: false, error: 'not_member' };
-    if (admins.includes(memberUid)) return { success: false, error: 'already_admin' };
-    const newAdmins = [...admins, memberUid];
-    await fsSet(`friendships/${groupId}`, { admins: newAdmins }, auth.idToken, ['admins']);
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+    if (ApiClient && ApiClient.chat && typeof ApiClient.chat.promoteGroupAdmin === 'function') {
+      const res = await ApiClient.chat.promoteGroupAdmin(groupId, memberUid);
+      if (res && res.success) return res;
+    }
+    return { success: false, error: 'api_unavailable' };
+  } catch (err) {
+    return { success: false, error: err.response?.data?.error || err.message };
   }
 });
 
 ipcMain.handle('social-demote-admin', async (e, groupId, adminUid) => {
   try {
-    const auth = await getSocialAuth();
-    const doc = await fsGet(`friendships/${groupId}`, auth.idToken);
-    if (!doc.isGroup) return { success: false, error: 'not_a_group' };
-    if (doc.admin !== auth.uid) return { success: false, error: 'not_owner' };
-    if (adminUid === doc.admin) return { success: false, error: 'cannot_demote_self' };
-    const admins = doc.admins || [doc.admin];
-    if (!admins.includes(adminUid)) return { success: false, error: 'not_admin' };
-    const newAdmins = admins.filter(u => u !== adminUid);
-    await fsSet(`friendships/${groupId}`, { admins: newAdmins }, auth.idToken, ['admins']);
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+    if (ApiClient && ApiClient.chat && typeof ApiClient.chat.demoteGroupAdmin === 'function') {
+      const res = await ApiClient.chat.demoteGroupAdmin(groupId, adminUid);
+      if (res && res.success) return res;
+    }
+    return { success: false, error: 'api_unavailable' };
+  } catch (err) {
+    return { success: false, error: err.response?.data?.error || err.message };
   }
 });
 
 ipcMain.handle('social-get-group-details', async (e, groupId) => {
   try {
-    const auth = await getSocialAuth();
-    const doc = await fsGet(`friendships/${groupId}`, auth.idToken);
-    if (!doc.isGroup) return { success: false, error: 'not_a_group' };
-    if (!(doc.users || []).includes(auth.uid)) return { success: false, error: 'not_member' };
-    const profiles = await Promise.all((doc.users || []).map(async uid => {
-      try { const p = await fsGet(`users/${uid}`, auth.idToken); return { ...p, uid: p.uid || p.id || uid }; } catch (_) { return { uid, username: 'Unknown', accountType: 'helloworld' }; }
-    }));
-    return {
-      success: true,
-      group: {
-        id: groupId,
-        name: doc.name,
-        description: doc.description || '',
-        imageBase64: doc.imageBase64 || '',
-        members: doc.users || [],
-        admin: doc.admin,
-        admins: doc.admins || [doc.admin],
-        createdAt: doc.createdAt
-      },
-      profiles
-    };
-  } catch (e) {
-    return { success: false, error: e.message };
+    if (ApiClient && ApiClient.chat && typeof ApiClient.chat.getGroupDetails === 'function') {
+      const res = await ApiClient.chat.getGroupDetails(groupId);
+      if (res && res.success) return res;
+    }
+    return { success: false, error: 'api_unavailable' };
+  } catch (err) {
+    return { success: false, error: err.response?.data?.error || err.message };
   }
 });
 
@@ -10793,48 +10157,37 @@ async function _wkGetUserRoles(idToken) {
 
     // 1. Candidate UIDs (primary UID + linked account UIDs for current user only)
     const candidateUids = new Set([uid]);
+    let currentUsername = '';
     try {
       const ud = loadUserData();
+      if (ud.username) currentUsername = ud.username;
       if (ud.firebase_uid === uid || ud.firebase_ms_uid === uid || ud.uuid === uid) {
         if (ud.firebase_uid) candidateUids.add(ud.firebase_uid);
         if (ud.firebase_ms_uid) candidateUids.add(ud.firebase_ms_uid);
       }
     } catch (_) {}
 
-    // 3. Query Firestore admins/ collection
-    for (const cUid of candidateUids) {
+    // 2. Query Cloudflare Backend via ApiClient
+    const targets = [...candidateUids];
+    if (currentUsername && !targets.includes(currentUsername)) {
+      targets.push(currentUsername);
+    }
+    for (const ident of targets) {
       try {
-        const doc = await fsGet(`admins/${cUid}`, idToken);
-        if (doc) {
-          const role = (doc.role || 'admin').toLowerCase();
-          if (role === 'admin' || role === 'owner') {
+        const res = await ApiClient.users.getProfile(encodeURIComponent(ident));
+        if (res && res.success && res.user) {
+          const u = res.user;
+          const role = (u.role || '').toLowerCase();
+          const badges = Array.isArray(u.badges) ? u.badges : [];
+          if (u.isAdmin || role === 'admin' || role === 'owner' || badges.includes('creator')) {
             isAdmin = true;
             isMod = true;
             break;
-          } else if (role === 'moderator' || role === 'mod') {
+          } else if (u.isMod || role === 'moderator' || role === 'mod' || badges.includes('moderator')) {
             isMod = true;
           }
         }
       } catch (_) {}
-    }
-
-    // 4. Fallback check: users/ doc role
-    if (!isAdmin) {
-      for (const cUid of candidateUids) {
-        try {
-          const userDoc = await fsGet(`users/${cUid}`, idToken);
-          if (userDoc) {
-            const role = (userDoc.role || '').toLowerCase();
-            if (role === 'admin' || role === 'owner') {
-              isAdmin = true;
-              isMod = true;
-              break;
-            } else if (role === 'moderator' || role === 'mod') {
-              isMod = true;
-            }
-          }
-        } catch (_) {}
-      }
     }
 
     const roles = { isAdmin, isMod: isMod || isAdmin };
@@ -10962,9 +10315,9 @@ function packageProfileConfigs(profileDir) {
     if (!hasFiles) return null;
 
     const buffer = zip.toBuffer();
-    // Keep zip buffer under 550KB so base64 string is <= 733KB, well within Firestore's 1MB document limit
+    // Keep zip buffer under 550KB so base64 string is <= 733KB, well within cloud payload limits
     if (buffer.length > 550 * 1024) {
-      console.warn('[packageProfileConfigs] Configs zip exceeds 550KB, skipping to protect Firestore document size:', buffer.length);
+      console.warn('[packageProfileConfigs] Configs zip exceeds 550KB, skipping to protect payload size:', buffer.length);
       return null;
     }
     console.log(`[packageProfileConfigs] Successfully packaged configs (${buffer.length} bytes compressed)`);
@@ -11032,21 +10385,11 @@ function wkParseItem(item) {
 
 ipcMain.handle('workshop-get-items', async (e, type, xst) => {
   try {
-    let idToken = null;
-    try {
-      const auth = await getSocialAuth();
-      if (auth && auth.idToken) idToken = auth.idToken;
-    } catch (_) {}
-
-    const filters = [
-      { field: 'type', op: 'EQUAL', value: { stringValue: type || 'modpack' } },
-      { field: 'xst', op: 'EQUAL', value: { stringValue: xst || 'pub' } }
-    ];
-    // Pass null for orderBy to avoid composite index 403 errors in Firestore
-    const items = await fsQuery('workshop', filters, idToken, null, 100);
-    const parsed = items.map(wkParseItem);
-    parsed.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
-    return { success: true, items: parsed };
+    const res = await ApiClient.workshop.getItems(type || 'modpack', 'latest');
+    if (res && res.success && Array.isArray(res.items)) {
+      return { success: true, items: res.items };
+    }
+    return { success: true, items: [] };
   } catch(e) {
     console.error('[workshop-get-items]', e.message);
     return { success: false, items: [], error: e.message };
@@ -11056,13 +10399,11 @@ ipcMain.handle('workshop-get-items', async (e, type, xst) => {
 // GET single item by id
 ipcMain.handle('workshop-get-item', async (e, id) => {
   try {
-    let idToken = null;
-    try {
-      const auth = await getSocialAuth();
-      if (auth && auth.idToken) idToken = auth.idToken;
-    } catch (_) {}
-    const item = await fsGet(`workshop/${id}`, idToken);
-    return { success: true, item: wkParseItem({ ...item, id }) };
+    const res = await ApiClient.workshop.getItem(id);
+    if (res && res.success && res.item) {
+      return { success: true, item: res.item };
+    }
+    return { success: false, error: 'item_not_found' };
   } catch(e) {
     console.error('[workshop-get-item]', e.message);
     return { success: false, error: e.message };
@@ -11072,15 +10413,11 @@ ipcMain.handle('workshop-get-item', async (e, id) => {
 // GET my own items (any status)
 ipcMain.handle('workshop-get-my-items', async () => {
   try {
-    const auth = await getSocialAuth();
-    const filters = [
-      { field: 'uid', op: 'EQUAL', value: { stringValue: auth.uid } }
-    ];
-    // Pass null for orderBy to avoid composite index 403 errors
-    const items = await fsQuery('workshop', filters, auth.idToken, null, 50);
-    const parsed = items.map(wkParseItem);
-    parsed.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
-    return { success: true, items: parsed };
+    const res = await ApiClient.workshop.getMyItems();
+    if (res && res.success && Array.isArray(res.items)) {
+      return { success: true, items: res.items };
+    }
+    return { success: true, items: [] };
   } catch(e) {
     console.error('[workshop-get-my-items]', e.message);
     return { success: false, items: [], error: e.message };
@@ -11091,14 +10428,12 @@ ipcMain.handle('workshop-get-my-items', async () => {
 ipcMain.handle('workshop-submit-item', async (e, data) => {
   try {
     const auth = await getSocialAuth();
-    // Get author name from user profile
     let authorName = auth.uid;
     try {
-      const userDoc = await fsGet(`users/${auth.uid}`, auth.idToken);
-      authorName = userDoc.username || userDoc.displayName || auth.uid;
-    } catch(_) {}
+      const ud = loadUserData();
+      authorName = ud.username || ud.displayName || auth.uid;
+    } catch (_) {}
 
-    const now = new Date().toISOString();
     let iconName = data.icon || '';
     let iconB64 = data.iconB64 || null;
 
@@ -11118,7 +10453,6 @@ ipcMain.handle('workshop-submit-item', async (e, data) => {
 
     if (iconName && !iconB64) {
       if (!isLauncherIcon(iconName)) {
-        // It's a custom icon! Convert it to base64 so other users don't get 404 / default icon
         try {
           const rawB64 = profileManager.getProfileIconAsBase64(iconName);
           if (rawB64 && (rawB64.startsWith('data:') || rawB64.length > 50)) {
@@ -11131,82 +10465,34 @@ ipcMain.handle('workshop-submit-item', async (e, data) => {
       }
     }
 
-    const docData = {
+    const submitPayload = {
       type: data.type || 'modpack',
-      xst: 'pnd',             // pending
-      uid: auth.uid,
-      authorName,
-      title: (data.title || '').slice(0, 30),
-      desc: (data.desc || '').slice(0, 200),
-      icon: iconName,
-      isOfficial: false,
-      ts: now,
-      likes: 0,
-      likedBy: [],
-      downloads: 0,
-      dlUsers: [],
-      views: 0
+      title: (data.title || '').slice(0, 50),
+      desc: (data.desc || '').slice(0, 300),
+      icon: iconB64 || iconName,
+      snap: data.snap || {}
     };
 
-    // Add icon base64 if custom
-    if (iconB64) docData.iconB64 = iconB64;
-
-    // Add snapshot (can't use buildFSFields for nested, use REST directly)
-    const snapFields = {};
-    const snap = data.snap || {};
-    if (snap.version) snapFields.version = { stringValue: snap.version };
-    if (snap.jvmArgs) snapFields.jvmArgs = { stringValue: snap.jvmArgs };
-    // Addons as JSON string (Firestore array of maps is complex)
-    if (snap.addons && snap.addons.length > 0) {
-      snapFields.addonsJson = { stringValue: JSON.stringify(snap.addons) };
+    const res = await ApiClient.workshop.submitItem(submitPayload);
+    if (res && res.success && res.id) {
+      await _wkNotifyAdmin({ ...submitPayload, _id: res.id }, authorName).catch(() => {});
+      return { success: true, id: res.id };
     }
-    // Configs & options as Base64 ZIP
-    if (snap.configZipB64 && typeof snap.configZipB64 === 'string') {
-      snapFields.configZipB64 = { stringValue: snap.configZipB64 };
-    }
-
-    const fields = buildFSFields(docData);
-    fields.snap = { mapValue: { fields: snapFields } };
-
-    const url = `${FIRESTORE_BASE}/workshop`;
-    const res = await axios.post(url, { fields }, { headers: { Authorization: `Bearer ${auth.idToken}` } });
-    const docId = res.data.name ? res.data.name.split('/').pop() : 'unknown';
-
-    // Notify admin
-    await _wkNotifyAdmin({ ...docData, _id: docId }, authorName).catch(()=>{});
-
-    return { success: true, id: docId };
+    return { success: false, error: 'submit_failed' };
   } catch(e) {
     console.error('[workshop-submit-item]', e.message);
-    return { success: false, error: e.message };
+    return { success: false, error: e.response?.data?.error || e.message };
   }
 });
 
 // --- Workshop Stats IPC Handlers ---
 ipcMain.handle('workshop-record-view', async (e, id) => {
   try {
-    let uid = null;
-    let idToken = null;
-    try {
-      const auth = await getSocialAuth();
-      if (auth && auth.uid) { uid = auth.uid; idToken = auth.idToken; }
-    } catch(_) {}
-    const item = await fsGet(`workshop/${id}`, idToken);
-    if (!item) return { success: false };
-    if (uid && item.uid === uid) return { success: false, reason: 'author' };
-    
-    let viewUsers = Array.isArray(item.viewUsers) ? item.viewUsers : (Array.isArray(item.vwUsers) ? item.vwUsers : []);
-    if (uid) {
-      if (viewUsers.includes(uid)) {
-        return { success: false, reason: 'already_viewed', views: item.views || viewUsers.length || 0 };
-      }
-      viewUsers.push(uid);
-    } else {
-      return { success: false, reason: 'not_logged_in', views: item.views || viewUsers.length || 0 };
+    const res = await ApiClient.workshop.recordView(id);
+    if (res && res.success) {
+      return { success: true };
     }
-    const viewsCount = Math.max(viewUsers.length, (parseInt(item.views) || 0) + 1);
-    await fsUpdate(`workshop/${id}`, { viewUsers, views: viewsCount }, idToken);
-    return { success: true, views: viewsCount, viewUsers };
+    return { success: false };
   } catch(err) {
     console.error('[workshop-record-view]', err.message);
     return { success: false, error: err.message };
@@ -11215,55 +10501,24 @@ ipcMain.handle('workshop-record-view', async (e, id) => {
 
 ipcMain.handle('workshop-toggle-like', async (e, id) => {
   try {
-    const auth = await getSocialAuth();
-    if (!auth || !auth.uid || !auth.idToken) {
-      return { success: false, error: 'You must be logged in to like items.' };
+    const res = await ApiClient.workshop.toggleLike(id);
+    if (res && res.success) {
+      return { success: true, isLiked: res.liked ?? res.isLiked, likes: res.likes };
     }
-    const item = await fsGet(`workshop/${id}`, auth.idToken);
-    if (!item) return { success: false, error: 'Modpack not found.' };
-    if (item.uid === auth.uid) {
-      return { success: false, error: 'You cannot like your own modpack.' };
-    }
-    let likedBy = Array.isArray(item.likedBy) ? item.likedBy : [];
-    const idx = likedBy.indexOf(auth.uid);
-    let isLiked = false;
-    if (idx !== -1) {
-      likedBy.splice(idx, 1);
-      isLiked = false;
-    } else {
-      likedBy.push(auth.uid);
-      isLiked = true;
-    }
-    const likesCount = likedBy.length;
-    await fsUpdate(`workshop/${id}`, { likedBy, likes: likesCount }, auth.idToken);
-    return { success: true, isLiked, likes: likesCount, likedBy };
+    return { success: false, error: 'toggle_like_failed' };
   } catch(err) {
     console.error('[workshop-toggle-like]', err.message);
-    return { success: false, error: err.message };
+    return { success: false, error: err.response?.data?.error || err.message };
   }
 });
 
 ipcMain.handle('workshop-record-download', async (e, id) => {
   try {
-    let uid = null;
-    let idToken = null;
-    try {
-      const auth = await getSocialAuth();
-      if (auth && auth.uid) { uid = auth.uid; idToken = auth.idToken; }
-    } catch(_) {}
-    const item = await fsGet(`workshop/${id}`, idToken);
-    if (!item) return { success: false };
-    if (uid && item.uid === uid) return { success: false, reason: 'author' };
-    let dlUsers = Array.isArray(item.dlUsers) ? item.dlUsers : [];
-    if (uid) {
-      if (dlUsers.includes(uid)) {
-        return { success: false, reason: 'already_downloaded', downloads: dlUsers.length || item.downloads || 0 };
-      }
-      dlUsers.push(uid);
+    const res = await ApiClient.workshop.recordDownload(id);
+    if (res && res.success) {
+      return { success: true };
     }
-    const downloadsCount = dlUsers.length;
-    await fsUpdate(`workshop/${id}`, { dlUsers, downloads: downloadsCount }, idToken);
-    return { success: true, downloads: downloadsCount, dlUsers };
+    return { success: false };
   } catch(err) {
     console.error('[workshop-record-download]', err.message);
     return { success: false, error: err.message };
@@ -11395,10 +10650,33 @@ ipcMain.handle('get-dismissed-announcements', async () => {
 
 ipcMain.handle('workshop-check-admin', async () => {
   try {
-    const auth = await getSocialAuth();
-    if (!auth || !auth.idToken) return { success: true, isAdmin: false, isMod: false };
-    const roles = await _wkGetUserRoles(auth.idToken);
-    return { success: true, isAdmin: roles.isAdmin, isMod: roles.isMod };
+    let auth = null;
+    try { auth = await getSocialAuth(); } catch (_) {}
+    if (auth && auth.idToken) {
+      const roles = await _wkGetUserRoles(auth.idToken);
+      if (roles.isAdmin || roles.isMod) {
+        return { success: true, isAdmin: roles.isAdmin, isMod: roles.isMod };
+      }
+    }
+    // Also check current logged-in user profile from ApiClient strictly by UID
+    try {
+      const ud = loadUserData();
+      const isMicrosoft = ud && ud.account_type === 'microsoft';
+      const targetUid = isMicrosoft ? (ud.firebase_ms_uid || ud.uuid) : (ud.firebase_uid || ud.uuid);
+      if (targetUid) {
+        const res = await ApiClient.users.getProfile(targetUid);
+        if (res && res.success && res.user) {
+          const u = res.user;
+          const role = (u.role || '').toLowerCase();
+          const badges = Array.isArray(u.badges) ? u.badges : [];
+          const isAdmin = Boolean(u.isAdmin || role === 'admin' || role === 'owner' || badges.includes('creator'));
+          const isMod = Boolean(isAdmin || u.isMod || role === 'moderator' || role === 'mod' || badges.includes('moderator'));
+          return { success: true, isAdmin, isMod };
+        }
+      }
+    } catch (_) {}
+
+    return { success: true, isAdmin: false, isMod: false };
   } catch(e) {
     return { success: true, isAdmin: false, isMod: false };
   }
@@ -11406,71 +10684,40 @@ ipcMain.handle('workshop-check-admin', async () => {
 
 ipcMain.handle('workshop-admin-get-items', async (e, statusFilter) => {
   try {
-    const auth = await getSocialAuth();
-    if (!auth || !auth.idToken || !await _wkModCheck(auth.idToken)) {
-      return { success: false, items: [], error: 'Unauthorized: Admin or Moderator access required.' };
+    const res = await ApiClient.workshop.getAdminItems(statusFilter || 'all');
+    if (res && res.success && Array.isArray(res.items)) {
+      return { success: true, items: res.items };
     }
-    const filters = [];
-    if (statusFilter && statusFilter !== 'all') {
-      filters.push({ field: 'xst', op: 'EQUAL', value: { stringValue: statusFilter } });
-    }
-    const items = await fsQuery('workshop', filters, auth.idToken, null, 100);
-    const parsed = items.map(wkParseItem);
-    parsed.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
-    return { success: true, items: parsed };
+    return { success: true, items: [] };
   } catch(e) {
     console.error('[workshop-admin-get-items]', e.message);
-    return { success: false, items: [], error: e.message };
+    return { success: false, items: [], error: e.response?.data?.error || e.message };
   }
 });
 
 ipcMain.handle('workshop-moderate-item', async (e, id, newStatus, note, isOfficial) => {
   try {
-    const auth = await getSocialAuth();
-    if (!auth || !auth.idToken) {
-      return { success: false, error: 'Unauthorized: Access required.' };
+    const res = await ApiClient.workshop.updateStatus(id, newStatus, note, isOfficial);
+    if (res && res.success) {
+      return { success: true };
     }
-    const isAdmin = await _wkAdminCheck(auth.idToken);
-    const isMod = await _wkModCheck(auth.idToken);
-    if (!isMod) {
-      return { success: false, error: 'Unauthorized: Moderator or Admin access required.' };
-    }
-    const updateData = {};
-    if (newStatus) updateData.xst = newStatus;
-    if (typeof note === 'string') updateData.note = note;
-    if (typeof isOfficial === 'boolean') {
-      if (!isAdmin) {
-        return { success: false, error: 'Unauthorized: Only Admins can make items official.' };
-      }
-      updateData.isOfficial = isOfficial;
-    }
-    
-    await fsUpdate(`workshop/${id}`, updateData, auth.idToken);
-    return { success: true };
+    return { success: false, error: 'moderate_failed' };
   } catch(e) {
     console.error('[workshop-moderate-item]', e.message);
-    return { success: false, error: e.message };
+    return { success: false, error: e.response?.data?.error || e.message };
   }
 });
 
 ipcMain.handle('workshop-delete-item', async (e, id) => {
   try {
-    const auth = await getSocialAuth();
-    if (!auth || !auth.idToken) {
-      return { success: false, error: 'Unauthorized: You must be logged in.' };
+    const res = await ApiClient.workshop.deleteItem(id);
+    if (res && res.success) {
+      return { success: true };
     }
-    const isAdmin = await _wkAdminCheck(auth.idToken);
-    if (!isAdmin) {
-      const item = await fsGet(`workshop/${id}`, auth.idToken);
-      if (!item || item.uid !== auth.uid) {
-        return { success: false, error: 'Unauthorized: You can only delete your own items.' };
-      }
-    }
-    await fsDel(`workshop/${id}`, auth.idToken);
-    return { success: true };
+    return { success: false, error: 'delete_failed' };
   } catch(e) {
     console.error('[workshop-delete-item]', e.message);
-    return { success: false, error: e.message };
+    return { success: false, error: e.response?.data?.error || e.message };
   }
 });
 // Windows shortcut maintenance helper

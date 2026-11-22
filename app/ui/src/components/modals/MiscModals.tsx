@@ -64,18 +64,167 @@ export const MiscModals: React.FC = () => {
         <div className="onboarding-modal">
           <div className="onboarding-header">
             <div className="onboarding-progress">
-              <div className="progress-dot active" data-step="1"></div>
+              <div className="progress-dot active" data-step="0"></div>
+              <div className="progress-dot" data-step="1"></div>
               <div className="progress-dot" data-step="2"></div>
               <div className="progress-dot" data-step="3"></div>
               <div className="progress-dot" data-step="4"></div>
               <div className="progress-dot" data-step="5"></div>
-              <div className="progress-dot" data-step="6"></div>
             </div>
           </div>
 
           <div className="onboarding-body">
+            {/* Step 0: Choose Account (Login) */}
+            <div className="onboarding-step active" id="step0">
+              <div id="wizAccountSelectionView">
+                <h2 className="onboarding-title" data-i18n="tutorial.login_step_title">
+                  Choose How to Play
+                </h2>
+                <p className="onboarding-description" data-i18n="tutorial.login_step_desc">
+                  Select your account to get started with HelloWorld Launcher.
+                </p>
+
+                <div className="onboarding-login-cards">
+                {/* Card 1: Microsoft */}
+                <div className="wiz-login-card wiz-card-ms">
+                  <div className="wiz-card-header">
+                    <div className="wiz-card-icon-wrap ms">
+                      <i className="fab fa-microsoft"></i>
+                    </div>
+                    <span className="wiz-card-badge ms" data-i18n="tutorial.login_card_ms_badge">Minecraft Official</span>
+                  </div>
+                  <h3 className="wiz-card-title" data-i18n="tutorial.login_card_ms_title">Microsoft Account</h3>
+                  <p className="wiz-card-desc" data-i18n="tutorial.login_card_ms_desc">Official Minecraft account with access to all online features.</p>
+                  <ul className="wiz-card-features">
+                    <li><i className="fas fa-check"></i> <span data-i18n="tutorial.login_card_ms_f1">Official multiplayer servers</span></li>
+                    <li><i className="fas fa-check"></i> <span data-i18n="tutorial.login_card_ms_f2">Custom skins &amp; capes support</span></li>
+                    <li><i className="fas fa-check"></i> <span data-i18n="tutorial.login_card_ms_f3">Full Mojang profile integration</span></li>
+                  </ul>
+                  <button className="btn-wiz-login btn-wiz-ms" id="wizBtnLoginMs">
+                    <i className="fab fa-microsoft"></i> <span data-i18n="login.login_microsoft">Login with Microsoft</span>
+                  </button>
+                </div>
+
+                {/* Card 2: HelloWorld */}
+                <div className="wiz-login-card wiz-card-hw">
+                  <div className="wiz-card-header">
+                    <div className="wiz-card-icon-wrap hw">
+                      <i className="fas fa-cube"></i>
+                    </div>
+                    <span className="wiz-card-badge hw" data-i18n="tutorial.login_card_hw_badge">Community</span>
+                  </div>
+                  <h3 className="wiz-card-title" data-i18n="tutorial.login_card_hw_title">HelloWorld Account</h3>
+                  <p className="wiz-card-desc" data-i18n="tutorial.login_card_hw_desc">Connect with the community and save your settings to the cloud.</p>
+                  <ul className="wiz-card-features" id="wizHwFeatures">
+                    <li><i className="fas fa-check"></i> <span data-i18n="tutorial.login_card_hw_f1">Cloud modpack workshop</span></li>
+                    <li><i className="fas fa-check"></i> <span data-i18n="tutorial.login_card_hw_f2">Social chat, friends &amp; badges</span></li>
+                    <li><i className="fas fa-check"></i> <span data-i18n="tutorial.login_card_hw_f3">Playtime statistics tracking</span></li>
+                  </ul>
+                  <button className="btn-wiz-login btn-wiz-hw" id="wizShowHwFormBtn">
+                    <i className="fas fa-sign-in-alt"></i> <span data-i18n="login.login_helloworld">Login with HelloWorld</span>
+                  </button>
+                  <div id="wizHwForm" className="wiz-inline-form" style={{ display: 'none' }}>
+                    <input
+                      type="text"
+                      id="wizHwIdentifier"
+                      className="wiz-input"
+                      placeholder="Username or Email"
+                      data-i18n-placeholder="auth.identifier_placeholder"
+                    />
+                    <input
+                      type="password"
+                      id="wizHwPassword"
+                      className="wiz-input"
+                      placeholder="Password"
+                      data-i18n-placeholder="auth.password_placeholder"
+                    />
+                    <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '4px' }}>
+                      <button id="wizHwCancelBtn" type="button" className="btn-wiz-cancel" title="Cancel">
+                        <i className="fas fa-arrow-left"></i>
+                      </button>
+                      <button id="wizHwSubmitBtn" type="button" className="btn-wiz-login btn-wiz-hw" style={{ flex: 1 }}>
+                        <i className="fas fa-sign-in-alt"></i> <span data-i18n="auth.sign_in">Log In</span>
+                      </button>
+                    </div>
+                    <div id="wizHwError" className="wiz-inline-error" style={{ display: 'none' }}></div>
+                  </div>
+                </div>
+
+                {/* Card 3: Offline */}
+                <div className="wiz-login-card wiz-card-offline">
+                  <div className="wiz-card-header">
+                    <div className="wiz-card-icon-wrap offline">
+                      <i className="fas fa-user-tag"></i>
+                    </div>
+                    <span className="wiz-card-badge offline" data-i18n="tutorial.login_card_offline_badge">Quick Play</span>
+                  </div>
+                  <h3 className="wiz-card-title" data-i18n="tutorial.login_card_offline_title">Offline Mode</h3>
+                  <p className="wiz-card-desc" data-i18n="tutorial.login_card_offline_desc">Play immediately without an account by choosing a nickname.</p>
+                  <ul className="wiz-card-features" id="wizOfflineFeatures">
+                    <li><i className="fas fa-check"></i> <span data-i18n="tutorial.login_card_offline_f1">No registration required</span></li>
+                    <li><i className="fas fa-check"></i> <span data-i18n="tutorial.login_card_offline_f2">Singleplayer &amp; LAN worlds</span></li>
+                    <li><i className="fas fa-check"></i> <span data-i18n="tutorial.login_card_offline_f3">Compatible offline servers</span></li>
+                  </ul>
+                  <button className="btn-wiz-login btn-wiz-offline" id="wizShowOfflineFormBtn">
+                    <i className="fas fa-user"></i> <span data-i18n="login.offline_mode">Continue Offline</span>
+                  </button>
+                  <div id="wizOfflineForm" className="wiz-inline-form" style={{ display: 'none' }}>
+                    <input
+                      type="text"
+                      id="wizOfflineNick"
+                      className="wiz-input"
+                      placeholder="Type your nickname"
+                      data-i18n-placeholder="offline_login.placeholder"
+                      maxLength={16}
+                    />
+                    <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '4px' }}>
+                      <button id="wizOfflineCancelBtn" type="button" className="btn-wiz-cancel" title="Cancel">
+                        <i className="fas fa-arrow-left"></i>
+                      </button>
+                      <button id="wizOfflineSubmitBtn" type="button" className="btn-wiz-login btn-wiz-offline" style={{ flex: 1 }}>
+                        <i className="fas fa-play"></i> <span data-i18n="offline_login.enter_btn">Enter</span>
+                      </button>
+                    </div>
+                    <div id="wizOfflineError" className="wiz-inline-error" style={{ display: 'none' }}></div>
+                  </div>
+                </div>
+              </div>
+              </div>
+
+              {/* Mode B: Account Linked (when already logged in or replaying onboarding) */}
+              <div id="wizAccountLinkedView" style={{ display: 'none' }}>
+                <h2 className="onboarding-title" data-i18n="tutorial.account_linked_title">
+                  Account Linked
+                </h2>
+                <p className="onboarding-description" data-i18n="tutorial.account_linked_desc">
+                  Your account is connected and ready to configure the launcher.
+                </p>
+
+                <div className="wiz-account-linked-card">
+                  <div className="wiz-linked-avatar-wrap">
+                    <img id="wizLinkedAvatar" src="" alt="Avatar" />
+                  </div>
+                  <div className="wiz-linked-info">
+                    <div className="wiz-linked-name-row">
+                      <h3 id="wizLinkedUsername" className="wiz-linked-username">Username</h3>
+                      <span id="wizLinkedBadge" className="wiz-card-badge ms">Microsoft</span>
+                    </div>
+                    <p id="wizLinkedSubtext" className="wiz-linked-subtext" data-i18n="tutorial.active_session">Active Session</p>
+                  </div>
+                  <div className="wiz-linked-actions">
+                    <button id="wizLinkedContinueBtn" type="button" className="btn-wiz-continue">
+                      <span data-i18n="tutorial.continue_setup">Continue Setup</span> <i className="fas fa-arrow-right"></i>
+                    </button>
+                    <button id="wizLinkedSwitchBtn" type="button" className="btn-wiz-switch">
+                      <i className="fas fa-exchange-alt"></i> <span data-i18n="tutorial.change_account">Change Account</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Step 1: Config */}
-            <div className="onboarding-step active" id="step1">
+            <div className="onboarding-step" id="step1">
               <h2 className="onboarding-title" data-i18n="tutorial.step1_title">
                 Welcome to HelloWorld Launcher
               </h2>
@@ -481,55 +630,8 @@ export const MiscModals: React.FC = () => {
               </div>
             </div>
 
-            {/* Step 4: Accounts (Interactive) */}
+            {/* Step 4: Addons (Interactive) */}
             <div className="onboarding-step" id="step4">
-              <h2 className="onboarding-title" data-i18n="tutorial.title4">
-                Identity &amp; Access
-              </h2>
-              <p className="onboarding-description">
-                <span data-i18n="tutorial.desc4">
-                  Log in easily. <strong>Note:</strong> Custom Skins and Capes features are exclusively available for Microsoft Accounts.
-                </span>
-              </p>
-              <div className="tutorial-actions" style={{ marginTop: '40px', display: 'flex', gap: '20px', justifyContent: 'center' }}>
-                <button
-                  id="startTutorialStep2Btn"
-                  className="btn-blue"
-                  style={{
-                    padding: '15px 30px',
-                    fontSize: '16px',
-                    minWidth: '150px',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <i className="fas fa-play"></i> <span data-i18n="tutorial.start">Start</span>
-                </button>
-                <button
-                  id="skipTutorialStep2Btn"
-                  className="btn-secondary"
-                  style={{
-                    padding: '15px 30px',
-                    fontSize: '16px',
-                    background: 'rgba(255,255,255,0.1)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: 'white',
-                    minWidth: '150px',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <span data-i18n="tutorial.skip">Skip</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Step 5: Addons (Interactive) */}
-            <div className="onboarding-step" id="step5">
               <h2 className="onboarding-title" data-i18n="tutorial.title5">
                 Powerful Add-ons
               </h2>
@@ -575,8 +677,8 @@ export const MiscModals: React.FC = () => {
               </div>
             </div>
 
-            {/* Step 6: Finish */}
-            <div className="onboarding-step" id="step6">
+            {/* Step 5: Finish */}
+            <div className="onboarding-step" id="step5">
               <h2 className="onboarding-title" data-i18n="tutorial.title6">
                 You're Ready!
               </h2>

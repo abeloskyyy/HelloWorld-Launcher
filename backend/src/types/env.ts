@@ -3,6 +3,7 @@ export interface Env {
   PRESENCE_KV: KVNamespace;
   STORAGE_BUCKET?: R2Bucket;
   FIREBASE_PROJECT_ID: string;
+  LAUNCHER_SECRET?: string;
   CORS_ORIGIN?: string;
   BASE_URL?: string;
   NTFY_SERVER?: string;
@@ -13,6 +14,7 @@ export interface AuthUser {
   uid: string;
   email?: string;
   role?: 'admin' | 'owner' | 'moderator' | 'mod' | 'user';
+  isTokenVerified?: boolean;
 }
 
 export interface CustomVariables {

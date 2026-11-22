@@ -114,7 +114,7 @@
     ];
 
     // Authentic 12-scallop Twitter/Meta verified rosette SVG
-    const BADGE_ROSETTE_SVG = '<svg class="hw-badge-shape" viewBox="0 0 22 22" overflow="visible" aria-hidden="true"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816z"/></svg>';
+    const BADGE_ROSETTE_SVG = '<svg class="hw-badge-shape" viewBox="0 0 22 22" overflow="visible" aria-hidden="true" style="overflow:visible;"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816z"/></svg>';
 
     /**
      * Renders an HTML string with badge icons for a given badges array.
@@ -306,15 +306,37 @@
                     if (typeof loadRequests === 'function') loadRequests(true);
                     const inboxPanel = document.getElementById('socialPanelInbox');
                     if (inboxPanel && inboxPanel.style.display !== 'none' && typeof loadInboxMessages === 'function') {
-                        loadInboxMessages(true);
+                        loadInboxMessages(false);
                     }
                 }
             } else {
-                window.onSocialLogout();
+                socialAuth = null;
+                socialInitialized = false;
+                stopBadgePolling();
+                stopModalPolling();
+                const badge = document.getElementById('socialBadge');
+                if (badge) badge.style.display = 'none';
+                if (socialModalOpen) {
+                    const offlineMsg = document.getElementById('socialOfflineMsg');
+                    const container = document.getElementById('friendsListContainer');
+                    if (offlineMsg) offlineMsg.style.display = 'flex';
+                    if (container) container.style.display = 'none';
+                }
             }
         } catch (e) {
             console.warn('[Social] initSocial failed:', e.message);
-            window.onSocialLogout();
+            socialAuth = null;
+            socialInitialized = false;
+            stopBadgePolling();
+            stopModalPolling();
+            const badge = document.getElementById('socialBadge');
+            if (badge) badge.style.display = 'none';
+            if (socialModalOpen) {
+                const offlineMsg = document.getElementById('socialOfflineMsg');
+                const container = document.getElementById('friendsListContainer');
+                if (offlineMsg) offlineMsg.style.display = 'flex';
+                if (container) container.style.display = 'none';
+            }
         } finally {
             socialInitializing = false;
         }
@@ -451,7 +473,75 @@
             const ft = document.getElementById('socialTabFriends');
             if (ft) ft.classList.add('active');
             document.querySelectorAll('.social-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === 'friends'));
-            if (offlineMsg) offlineMsg.style.display = 'flex';
+            if (offlineMsg) {
+                (async () => {
+                    let uData = null;
+                    try { if (window.hwlAPI && window.hwlAPI.get_user_json) uData = await window.hwlAPI.get_user_json(); } catch (_) {}
+                    if (uData && uData.account_type === 'microsoft') {
+                        if (!uData.firebase_ms_uid) {
+                            offlineMsg.innerHTML = `
+                                <div style="display:flex; flex-direction:column; align-items:center; text-align:center; gap:12px; padding:28px 16px;">
+                                    <i class="fab fa-microsoft" style="font-size:42px; color:#00a4ef;"></i>
+                                    <div style="font-size:16px; font-weight:700; color:#fff;">Verifica tu cuenta Microsoft</div>
+                                    <p style="font-size:13px; color:#a0a8c0; line-height:1.5; margin:0; max-width:280px;">
+                                        Conecta tu cuenta para acceder a la lista de amigos, chatear y compartir contenido en HelloWorld Launcher.
+                                    </p>
+                                    <button id="socialConnectMsBtn" class="wk-btn wk-btn-primary" style="margin-top:6px; padding:10px 22px; font-size:13.5px; border-radius:10px; gap:8px;">
+                                        <i class="fab fa-microsoft"></i> Conectar cuenta
+                                    </button>
+                                </div>
+                            `;
+                            const connectBtn = document.getElementById('socialConnectMsBtn');
+                            if (connectBtn) {
+                                connectBtn.onclick = async () => {
+                                    connectBtn.disabled = true;
+                                    connectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Conectando...';
+                                    if (typeof window.verifyWithPopup === 'function') {
+                                        const res = await window.verifyWithPopup();
+                                        if (res && res.success) {
+                                            if (typeof window.initSocial === 'function') await window.initSocial(true);
+                                            openSocialModal('received');
+                                        } else {
+                                            connectBtn.disabled = false;
+                                            connectBtn.innerHTML = '<i class="fab fa-microsoft"></i> Conectar cuenta';
+                                        }
+                                    }
+                                };
+                            }
+                        } else {
+                            offlineMsg.innerHTML = `
+                                <div style="display:flex; flex-direction:column; align-items:center; text-align:center; gap:12px; padding:28px 16px;">
+                                    <i class="fab fa-microsoft" style="font-size:42px; color:#00a4ef;"></i>
+                                    <div style="font-size:16px; font-weight:700; color:#fff;">Cuenta Microsoft conectada</div>
+                                    <p style="font-size:13px; color:#a0a8c0; line-height:1.5; margin:0; max-width:280px;">
+                                        No se pudo sincronizar la sesión social en este momento. Haz clic en reintentar para cargar tus amigos y mensajes.
+                                    </p>
+                                    <button id="socialRetryMsBtn" class="wk-btn wk-btn-primary" style="margin-top:6px; padding:10px 22px; font-size:13.5px; border-radius:10px; gap:8px;">
+                                        <i class="fas fa-redo-alt"></i> Reintentar conexión
+                                    </button>
+                                </div>
+                            `;
+                            const retryBtn = document.getElementById('socialRetryMsBtn');
+                            if (retryBtn) {
+                                retryBtn.onclick = async () => {
+                                    retryBtn.disabled = true;
+                                    retryBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Conectando...';
+                                    if (typeof window.initSocial === 'function') await window.initSocial(true);
+                                    openSocialModal('received');
+                                };
+                            }
+                        }
+                    } else {
+                        offlineMsg.innerHTML = `
+                            <i class="fas fa-wifi"></i>
+                            <p data-i18n="social.req_account">
+                                Social features require a <strong>HelloWorld</strong> or <strong>Premium</strong> account.
+                            </p>
+                        `;
+                    }
+                })();
+                offlineMsg.style.display = 'flex';
+            }
             if (container) container.style.display = 'none';
             return;
         }
@@ -1311,8 +1401,20 @@
                     if (createdAt) {
                         const date = createdAt.toDate ? createdAt.toDate() : new Date(createdAt._seconds ? createdAt._seconds * 1000 : createdAt);
                         if (!isNaN(date.getTime())) {
+                            const lang = window.currentLanguage || 'en';
                             const opts = { year: 'numeric', month: 'long' };
-                            memberSinceText = `Member since ${date.toLocaleDateString('en-US', opts)}`;
+                            let formattedDate = date.toLocaleDateString(lang, opts);
+                            if (formattedDate && typeof formattedDate === 'string') {
+                                formattedDate = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
+                            }
+                            let template = (typeof window.t === 'function' ? window.t('social.profile.member_since', { date: formattedDate }) : null);
+                            if (!template || template === 'social.profile.member_since') {
+                                template = (typeof window.t === 'function' ? window.t('profile.member_since', { date: formattedDate }) : null);
+                            }
+                            if (!template || template === 'profile.member_since') {
+                                template = `Member since ${formattedDate}`;
+                            }
+                            memberSinceText = template;
                         }
                     }
                     memberSinceEl.textContent = memberSinceText;
@@ -3424,19 +3526,32 @@
         const socialBtn = document.getElementById('socialBtn');
         if (socialBtn) {
             socialBtn.addEventListener('click', (e) => {
-                // Prevent click if button is disabled
-                if (socialBtn.classList.contains('btn-disabled')) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return;
-                }
+                if (socialBtn.classList.contains('locked-feature')) return;
+                e.stopPropagation();
                 openSocialModal('received');
             });
         }
 
-        // Close button
+        // Close button & backdrop dismissal
         const closeBtn = document.getElementById('closeSocialModal');
         if (closeBtn) closeBtn.addEventListener('click', closeSocialModal);
+        const socialModalEl = document.getElementById('socialModal');
+        if (socialModalEl) {
+            socialModalEl.addEventListener('click', (e) => {
+                if (e.target === socialModalEl) closeSocialModal();
+            });
+        }
+
+        // Delegated click handler as bulletproof fallback for #socialBtn
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('#socialBtn');
+            if (btn) {
+                if (btn.classList.contains('locked-feature')) return;
+                e.preventDefault();
+                e.stopPropagation();
+                openSocialModal('received');
+            }
+        });
 
         // OS notification click / navigation events → open social modal and inbox
         window.addEventListener('navigate-to-chat', (e) => {
@@ -3644,23 +3759,31 @@
     let currentInboxTab = 'received';
 
     window.switchInboxTab = function(tab) {
+        const prevTab = currentInboxTab;
         currentInboxTab = (tab === 'sent') ? 'sent' : 'received';
+        if (prevTab !== currentInboxTab) {
+            lastRenderedInboxSig = '';
+        }
         const btnRecv = document.getElementById('inboxTabReceived');
         const btnSent = document.getElementById('inboxTabSent');
         if (btnRecv) btnRecv.classList.toggle('active', currentInboxTab === 'received');
         if (btnSent) btnSent.classList.toggle('active', currentInboxTab === 'sent');
-        loadInboxMessages(true);
+        loadInboxMessages(prevTab !== currentInboxTab);
     };
 
     window.openInbox = function(targetTab = 'received') {
+        const prevTab = currentInboxTab;
         currentInboxTab = (targetTab === 'sent') ? 'sent' : 'received';
+        if (prevTab !== currentInboxTab) {
+            lastRenderedInboxSig = '';
+        }
         const panel = document.getElementById('socialPanelInbox');
         if (panel) panel.style.display = 'flex';
         const btnRecv = document.getElementById('inboxTabReceived');
         const btnSent = document.getElementById('inboxTabSent');
         if (btnRecv) btnRecv.classList.toggle('active', currentInboxTab === 'received');
         if (btnSent) btnSent.classList.toggle('active', currentInboxTab === 'sent');
-        loadInboxMessages(true);
+        loadInboxMessages(false);
     };
 
     window.closeInbox = function() {
@@ -3687,7 +3810,8 @@
     async function loadInboxMessages(initial = false) {
         if (!socialAuth) return;
         const container = document.getElementById('inboxMessages');
-        if (container && (initial || !container.children.length)) {
+        // Only show skeletons if the container has no messages or when explicit tab switch with no items
+        if (container && (!container.children.length || (initial && container.querySelector('.social-inbox-skeleton')))) {
             container.innerHTML = getInboxSkeletonsHTML(4);
         }
         try {
