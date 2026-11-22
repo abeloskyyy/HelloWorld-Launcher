@@ -110,8 +110,11 @@ const hwlAPI = {
     launchInstallerAndQuit: (installerPath) => ipcRenderer.invoke('launch-installer-and-quit', installerPath),
     downloadInstallerFile: (downloadUrl) => ipcRenderer.invoke('download-installer-file', downloadUrl),
     onInstallerDownloadProgress: (callback) => {
-      ipcRenderer.removeAllListeners('installer-download-progress');
-      ipcRenderer.on('installer-download-progress', (event, data) => callback(data));
+      const listener = (event, data) => callback(data);
+      ipcRenderer.on('installer-download-progress', listener);
+      return () => {
+        try { ipcRenderer.removeListener('installer-download-progress', listener); } catch (_) {}
+      };
     },
     getPlatformInfo: () => ipcRenderer.invoke('get-platform-info'),
     getSystemMemory: () => ipcRenderer.invoke('get-system-memory'),
@@ -323,8 +326,11 @@ const pywebviewAPI = {
     launch_installer_and_quit: (installerPath) => ipcRenderer.invoke('launch-installer-and-quit', installerPath),
     download_installer_file: (downloadUrl) => ipcRenderer.invoke('download-installer-file', downloadUrl),
     on_installer_download_progress: (callback) => {
-      ipcRenderer.removeAllListeners('installer-download-progress');
-      ipcRenderer.on('installer-download-progress', (event, data) => callback(data));
+      const listener = (event, data) => callback(data);
+      ipcRenderer.on('installer-download-progress', listener);
+      return () => {
+        try { ipcRenderer.removeListener('installer-download-progress', listener); } catch (_) {}
+      };
     },
     get_platform_info: () => ipcRenderer.invoke('get-platform-info'),
     get_system_memory: () => ipcRenderer.invoke('get-system-memory'),

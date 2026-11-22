@@ -2081,8 +2081,12 @@ function handleAnnouncement(announcement) {
                         if (btn.tooltip) b.title = btn.tooltip;
                         b.onclick = (e) => {
                             e.preventDefault();
-                            if (typeof checkAppUpdates === 'function') {
-                                checkAppUpdates(true);
+                            if (_currentUpdateDownloadedPath) {
+                                hwlApplyDownloadedUpdate(_currentUpdateDownloadedPath);
+                            } else if (_currentUpdateState && typeof showUpdateModal === 'function') {
+                                showUpdateModal(_currentUpdateState);
+                            } else if (typeof checkAppUpdates === 'function') {
+                                checkAppUpdates(window.HW_CHANGELOG);
                             }
                         };
                         break;
@@ -2209,6 +2213,7 @@ function initUpdateModalListeners() {
             }
             if (_currentUpdateState && dontRemindCheckbox && dontRemindCheckbox.checked) {
                 localStorage.setItem(`hw_skip_version_${_currentUpdateState.latestVersion}`, 'true');
+                clearDownloadedUpdateState();
             }
             const modal = document.getElementById('updateModal');
             if (modal) {
@@ -2438,6 +2443,9 @@ async function showUpdateModal(updateData) {
 }
 
 async function checkAppUpdates(changelog) {
+    if (!changelog || typeof changelog !== 'object' || !changelog.latestVersion) {
+        changelog = window.HW_CHANGELOG || null;
+    }
     if (!changelog || !changelog.latestVersion) return;
 
     let currentVersion = window.APP_VERSION || '2.1.0';
@@ -2571,6 +2579,13 @@ function triggerMandatoryAutoApply(updateData) {
         if (typeof showUpdateModal === 'function') {
             showUpdateModal(updateData).catch(() => {});
         }
+        return;
+    }
+    // Si Minecraft está en ejecución, no interrumpir la partida activa del usuario.
+    // Posponer la auto-aplicación obligatoria hasta que el juego se cierre limpiamente.
+    if (window.isMinecraftRunning) {
+        console.log('[BackgroundUpdater] Mandatory update ready, but Minecraft is running. Postponing auto-apply until game closes.');
+        window._pendingMandatoryAutoApply = updateData;
         return;
     }
     setTimeout(() => {
@@ -2810,8 +2825,15 @@ async function startBackgroundUpdate(updateData) {
     } catch (err) {
         _isBackgroundDownloading = false;
         console.error('[BackgroundUpdater] Download error:', err);
-        if (window.hwlUpdateBadge && typeof window.hwlUpdateBadge.hide === 'function') {
-            window.hwlUpdateBadge.hide();
+        if (isMandatory) {
+            // Si la actualización obligatoria falla en segundo plano, mostrar el modal con el error y botón de reintento
+            if (typeof showUpdateModal === 'function') {
+                showUpdateModal(updateData).catch(() => {});
+            }
+        } else {
+            if (window.hwlUpdateBadge && typeof window.hwlUpdateBadge.hide === 'function') {
+                window.hwlUpdateBadge.hide();
+            }
         }
     }
 }
@@ -5068,6 +5090,14 @@ function onMinecraftClosed() {
     window.isLaunching = false;
     window.isMinecraftRunning = false;
     resetServerJoinButtons();
+
+    // Si había una actualización obligatoria pospuesta mientras se jugaba, aplicarla ahora
+    if (window._pendingMandatoryAutoApply) {
+        const pending = window._pendingMandatoryAutoApply;
+        window._pendingMandatoryAutoApply = null;
+        console.log('[onMinecraftClosed] Applying postponed mandatory update now that game is closed.');
+        triggerMandatoryAutoApply(pending);
+    }
 
     const playButton = document.querySelector('.play-button');
     if (playButton) {

@@ -5802,6 +5802,10 @@ function cleanOrphanedTmpFiles(dir) {
   } catch (_) {}
 }
 
+let activeInstallerDownload = null;
+let activeInstallerDownloadPromise = null;
+let activeInstallerDownloadUrl = null;
+
 // Verifica el hash sha512 o sha256 (en hex o base64) de un archivo contra el hash esperado
 function verifyFileHash(filePath, expectedHash) {
   if (!expectedHash || typeof expectedHash !== 'string') return true;
@@ -5887,6 +5891,8 @@ async function downloadFileDirectly(downloadUrl, destPath, options = {}) {
           'Connection': 'keep-alive'
         }
       });
+
+      activeInstallerDownload = { res, writer, tempPath };
 
       const contentType = (res.headers['content-type'] || '').toLowerCase();
       if (contentType.includes('text/html')) {
@@ -6000,6 +6006,10 @@ async function downloadFileDirectly(downloadUrl, destPath, options = {}) {
 
       if (attempt < maxAttempts) {
         await new Promise(r => setTimeout(r, 1200));
+      }
+    } finally {
+      if (activeInstallerDownload && activeInstallerDownload.writer === writer) {
+        activeInstallerDownload = null;
       }
     }
   }
@@ -6149,23 +6159,35 @@ ipcMain.handle('check-downloaded-update', async (event, params = {}) => {
     const updatesDir = path.join(app.getPath('userData'), 'updates');
     if (!fs.existsSync(updatesDir)) return { exists: false };
 
-    let filename = process.platform === 'win32' ? 'helloworld-launcher-win.zip' : 'helloworld-launcher-update';
-    const downloadUrl = params.downloadUrl;
-    if (downloadUrl) {
-      try {
-        const urlObj = new URL(downloadUrl);
-        const parsedBase = path.basename(urlObj.pathname);
-        if (parsedBase && (parsedBase.includes('.deb') || parsedBase.includes('.rpm') || parsedBase.includes('.dmg') || parsedBase.includes('.AppImage') || parsedBase.includes('.zip') || parsedBase.includes('.exe'))) {
-          filename = parsedBase;
-        } else if (process.platform === 'darwin') {
-          filename = 'HelloWorld-Launcher.dmg';
-        } else if (process.platform === 'linux') {
-          filename = 'helloworld-launcher-linux-amd64.AppImage';
-        }
-      } catch (_) {}
+    // Si no hay descarga activa en memoria, limpiar cualquier .tmp_ huérfano para evitar bloqueos
+    if (!activeInstallerDownload) {
+      cleanOrphanedTmpFiles(updatesDir);
     }
 
-    const targetPath = path.join(updatesDir, filename);
+    let targetPath = null;
+    let filename = process.platform === 'win32' ? 'helloworld-launcher-win.zip' : 'helloworld-launcher-update';
+
+    if (params.filePath && typeof params.filePath === 'string' && fs.existsSync(params.filePath)) {
+      targetPath = params.filePath;
+      filename = path.basename(targetPath);
+    } else {
+      const downloadUrl = params.downloadUrl;
+      if (downloadUrl) {
+        try {
+          const urlObj = new URL(downloadUrl);
+          const parsedBase = path.basename(urlObj.pathname);
+          if (parsedBase && (parsedBase.includes('.deb') || parsedBase.includes('.rpm') || parsedBase.includes('.dmg') || parsedBase.includes('.AppImage') || parsedBase.includes('.zip') || parsedBase.includes('.exe'))) {
+            filename = parsedBase;
+          } else if (process.platform === 'darwin') {
+            filename = 'HelloWorld-Launcher.dmg';
+          } else if (process.platform === 'linux') {
+            filename = 'helloworld-launcher-linux-amd64.AppImage';
+          }
+        } catch (_) {}
+      }
+      targetPath = path.join(updatesDir, filename);
+    }
+
     if (!fs.existsSync(targetPath)) return { exists: false };
 
     const stat = fs.statSync(targetPath);
@@ -6185,9 +6207,7 @@ ipcMain.handle('check-downloaded-update', async (event, params = {}) => {
       }
     }
 
-    const allFiles = fs.readdirSync(updatesDir);
-    const isCurrentlyDownloading = allFiles.some(f => f.startsWith(filename + '.tmp_'));
-    if (isCurrentlyDownloading) {
+    if (activeInstallerDownload) {
       return { exists: false };
     }
 
@@ -6803,6 +6823,13 @@ Remove-Item -Path $PSCommandPath -Force
 ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
   try {
     if (!downloadUrl) throw new Error('No download URL provided');
+
+    // Si ya existe una descarga en curso de esta misma URL, reutilizar la promesa en vuelo
+    if (activeInstallerDownloadPromise && activeInstallerDownloadUrl === downloadUrl) {
+      console.log('[download-installer-file] Reusing in-flight download for:', downloadUrl);
+      return await activeInstallerDownloadPromise;
+    }
+
     const updatesDir = path.join(app.getPath('userData'), 'updates');
     if (!fs.existsSync(updatesDir)) {
       fs.mkdirSync(updatesDir, { recursive: true });
@@ -6831,7 +6858,14 @@ ipcMain.handle('download-installer-file', async (event, downloadUrl) => {
       }
     };
 
-    return await downloadFileDirectly(downloadUrl, destPath, { minSizeBytes: minSize, onProgress });
+    activeInstallerDownloadUrl = downloadUrl;
+    activeInstallerDownloadPromise = downloadFileDirectly(downloadUrl, destPath, { minSizeBytes: minSize, onProgress })
+      .finally(() => {
+        activeInstallerDownloadPromise = null;
+        activeInstallerDownloadUrl = null;
+      });
+
+    return await activeInstallerDownloadPromise;
   } catch (err) {
     console.error('[download-installer-file] Final error:', err);
     return { success: false, error: err.message };
@@ -11009,6 +11043,9 @@ function ensureLinuxDesktopShortcut() {
 // --- App Events ---
 app.whenReady().then(() => {
   try {
+    cleanOrphanedTmpFiles(path.join(app.getPath('userData'), 'updates'));
+  } catch (_) {}
+  try {
     const initUserData = loadUserData();
     if (initUserData.start_on_boot !== undefined) {
       applyAutoStartSetting(initUserData.start_on_boot);
@@ -11100,6 +11137,23 @@ app.on('before-quit', async () => {
 
   // Set presence to offline when launcher closes (await to ensure it completes)
   await presenceManager.setOffline();
+
+  // Abort any active installer download cleanly and delete its temp file
+  if (activeInstallerDownload) {
+    console.log('[before-quit] Aborting active installer download and cleaning temp files...');
+    try {
+      if (activeInstallerDownload.res && activeInstallerDownload.res.data) {
+        activeInstallerDownload.res.data.destroy();
+      }
+      if (activeInstallerDownload.writer && !activeInstallerDownload.writer.destroyed) {
+        activeInstallerDownload.writer.destroy();
+      }
+      if (activeInstallerDownload.tempPath && fs.existsSync(activeInstallerDownload.tempPath)) {
+        try { fs.unlinkSync(activeInstallerDownload.tempPath); } catch (_) {}
+      }
+    } catch (_) {}
+    activeInstallerDownload = null;
+  }
 
   // 1. Kill all active download game processes
   for (const [version_id, info] of activeDownloads) {

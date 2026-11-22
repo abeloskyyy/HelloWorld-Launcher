@@ -85,6 +85,35 @@ export const UpdateBadge: React.FC = () => {
         return;
       }
 
+      // Si el usuario omitió esta versión y no es obligatoria, no restaurar el badge
+      if (!preMandatory && preVersion) {
+        try {
+          const isSkipped = localStorage.getItem(`hw_skip_version_${preVersion}`);
+          if (isSkipped === 'true') {
+            win._currentUpdateDownloadedPath = null;
+            return;
+          }
+        } catch (_) {}
+      }
+
+      // Verificar que el archivo realmente existe en disco
+      try {
+        const api = win.hwlAPI || win.api;
+        if (api && typeof api.checkDownloadedUpdate === 'function') {
+          const check = await api.checkDownloadedUpdate({ filePath: prePath });
+          if (!check || !check.exists) {
+            try {
+              localStorage.removeItem('hw_downloaded_update_version');
+              localStorage.removeItem('hw_downloaded_update_path');
+            } catch (_) {}
+            win._currentUpdateDownloadedPath = null;
+            return;
+          }
+        }
+      } catch (_) {}
+
+      if (cancelled) return;
+
       setVisible(true);
       setStatus('ready');
       setProgress(100);
