@@ -512,14 +512,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
                         avUrl = raw;
                     } else {
-                        avUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}&background=1a1a24&color=ffd700&bold=true&size=96`;
+                        const firstLetter = (user.username || 'P')[0].toUpperCase();
+                        avUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(firstLetter)}&background=1a1a24&color=4facfe&bold=true&length=1&size=96`;
                     }
                 } else {
-                    avUrl = `https://crafthead.net/helm/${encodeURIComponent(user.username)}/96`;
+                    // Offline accounts strictly display user person icon, never a Minecraft head
+                    avUrl = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="%23ffffff" opacity="0.6"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
                 }
                 avatarEl.src = avUrl;
                 avatarEl.onerror = () => {
-                    avatarEl.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username || 'U')}&background=1a1a24&color=fff&size=96`;
+                    const firstLetter = (user.username || 'P')[0].toUpperCase();
+                    avatarEl.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(firstLetter)}&background=1a1a24&color=4facfe&bold=true&length=1&size=96`;
                 };
             }
 

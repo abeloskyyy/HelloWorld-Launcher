@@ -3532,7 +3532,8 @@ async function updateUserInterface(userData) {
         if (window.renderUserHead) {
             let avatarUrl = null;
             if (userData.account_type === 'helloworld') {
-                const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.username || 'Player')}&background=random&color=fff&rounded=true&bold=true&format=svg`;
+                const firstLetter = (userData.username || 'P')[0].toUpperCase();
+                const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(firstLetter)}&background=1a1a24&color=4facfe&rounded=true&bold=true&length=1&format=svg`;
                 let rawAvatar = userData.last_avatar_url;
                 if (rawAvatar && typeof rawAvatar === 'string' && !rawAvatar.startsWith('data:') && !rawAvatar.startsWith('http')) {
                     rawAvatar = 'data:image/png;base64,' + rawAvatar;
@@ -3751,7 +3752,8 @@ async function loadSkinData() {
 
         if (userData.account_type === 'helloworld') {
 
-            const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.username)}&background=random&color=fff&rounded=true&bold=true&format=svg`;
+            const firstLetter = (userData.username || 'P')[0].toUpperCase();
+            const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(firstLetter)}&background=1a1a24&color=4facfe&rounded=true&bold=true&length=1&format=svg`;
 
             avatarUrl = window.hasInternet ? (userData.last_avatar_url || fallbackUrl) : null;
 
@@ -8542,7 +8544,8 @@ function getAccountAvatarUrl(acc) {
             return u;
         }
         if (acc.username) {
-            return `https://ui-avatars.com/api/?name=${encodeURIComponent(acc.username)}&background=1a1a24&color=ffd700&bold=true&size=64`;
+            const firstLetter = (acc.username || 'P')[0].toUpperCase();
+            return `https://ui-avatars.com/api/?name=${encodeURIComponent(firstLetter)}&background=1a1a24&color=4facfe&bold=true&length=1&size=64`;
         }
     }
     if (acc.type === 'offline') {

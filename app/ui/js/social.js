@@ -59,15 +59,18 @@
         if (!profile) return '<span class="avatar-letter">?</span>';
         const sz = size || 38;
         const letter = (profile.username || '?')[0].toUpperCase();
-        const mcId = profile.mcUuid || profile.uuid || (profile.accountType === 'microsoft' ? profile.username : null);
-        if (profile.accountType === 'microsoft' && mcId) {
+        const isMs = profile.accountType === 'microsoft';
+        const mcId = isMs ? (profile.mcUuid || profile.uuid || profile.username) : null;
+
+        if (isMs && mcId) {
             return `<img src="https://mc-heads.net/avatar/${encodeURIComponent(mcId)}/${sz}" alt="" style="width:100%;height:100%;object-fit:cover;image-rendering:pixelated;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="avatar-letter" style="display:none">${letter}</span>`;
         }
         if (profile.avatarBase64) {
             return `<img src="${profile.avatarBase64}" alt="" style="width:100%;height:100%;object-fit:cover;image-rendering:pixelated;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="avatar-letter" style="display:none">${letter}</span>`;
         }
-        if (mcId) {
-            return `<img src="https://mc-heads.net/avatar/${encodeURIComponent(mcId)}/${sz}" alt="" style="width:100%;height:100%;object-fit:cover;image-rendering:pixelated;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="avatar-letter" style="display:none">${letter}</span>`;
+        const avUrl = profile.avatarUrl || profile.avatar_url;
+        if (avUrl && avUrl.startsWith('http')) {
+            return `<img src="${avUrl}" alt="" style="width:100%;height:100%;object-fit:cover;image-rendering:pixelated;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="avatar-letter" style="display:none">${letter}</span>`;
         }
         return `<span class="avatar-letter">${letter}</span>`;
     }
@@ -1294,7 +1297,8 @@
         if (avatarWrapper) {
             avatarWrapper.classList.remove('hw-halo-creator', 'hw-halo-moderator', 'hw-halo-premium');
         }
-        if (avatarPreview) avatarPreview.src = `https://ui-avatars.com/api/?name=${username}&background=random&color=fff&rounded=true&bold=true&format=svg`;
+        const initialFirstLetter = (username || 'P')[0].toUpperCase();
+        if (avatarPreview) avatarPreview.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(initialFirstLetter)}&background=1a1a24&color=4facfe&rounded=true&bold=true&length=1&size=128&format=svg`;
         if (biography) biography.textContent = 'Loading...';
         if (linksContainer) linksContainer.innerHTML = '<p style="margin: 0; color: #6b7280; font-size: 0.9rem; font-style: italic;">Loading...</p>';
         if (favoriteMob) favoriteMob.textContent = '-';
@@ -1377,15 +1381,26 @@
                 updateAvatarHalo('profileAvatarWrapper', profileBadges);
                 
                 // Update avatar if available
-                if (data.avatarBase64 && avatarPreview) {
-                    // Check if avatarBase64 already has data: or http(s): prefix
-                    const avatarSrc = (data.avatarBase64.startsWith('data:') || data.avatarBase64.startsWith('http')) ? data.avatarBase64 : `data:image/png;base64,${data.avatarBase64}`;
+                const isMs = data.accountType === 'microsoft';
+                const firstLetter = (data.displayName || username || 'P')[0].toUpperCase();
+                const letterFallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(firstLetter)}&background=1a1a24&color=4facfe&rounded=true&bold=true&length=1&size=128&format=svg`;
+
+                const customAvatar = data.avatarBase64 || data.avatarUrl || data.avatar_url;
+                if (customAvatar && avatarPreview) {
+                    const avatarSrc = (customAvatar.startsWith('data:') || customAvatar.startsWith('http')) ? customAvatar : `data:image/png;base64,${customAvatar}`;
                     avatarPreview.src = avatarSrc;
-                } else if (avatarPreview) {
+                    avatarPreview.onerror = () => {
+                        avatarPreview.src = letterFallbackUrl;
+                    };
+                } else if (isMs && avatarPreview) {
                     const id = data.mcUuid || data.uuid || (data.accountType === 'microsoft' ? data.username : null) || username;
-                    if (id && (data.accountType === 'microsoft' || data.mcUuid || data.uuid)) {
-                        avatarPreview.src = `https://mc-heads.net/avatar/${encodeURIComponent(id)}`;
-                    }
+                    avatarPreview.src = `https://mc-heads.net/avatar/${encodeURIComponent(id)}`;
+                    avatarPreview.onerror = () => {
+                        avatarPreview.src = letterFallbackUrl;
+                    };
+                } else if (avatarPreview) {
+                    // HelloWorld or non-microsoft account: ONLY the first letter! Never Steve!
+                    avatarPreview.src = letterFallbackUrl;
                 }
                 
                 // Update biography
