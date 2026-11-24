@@ -7,9 +7,156 @@
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, x-admin-key, Authorization',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Launcher-Secret, X-User-Uid, X-User-Uuid',
 };
+
+const GOOGLE_JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
+let _jwksCache = { keys: null, expiresAt: 0 };
+
+function base64UrlToUint8Array(str) {
+  const pad = '='.repeat((4 - (str.length % 4)) % 4);
+  const b64 = (str + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+async function getGoogleJwks() {
+  if (_jwksCache.keys && Date.now() < _jwksCache.expiresAt) {
+    return _jwksCache.keys;
+  }
+  const res = await fetch(GOOGLE_JWKS_URL);
+  if (!res.ok) throw new Error('Failed to fetch Google JWKS');
+  const data = await res.json();
+  _jwksCache = { keys: data.keys || [], expiresAt: Date.now() + 10 * 60 * 1000 };
+  return _jwksCache.keys;
+}
+
+async function verifyFirebaseIdToken(token, projectId) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 3) return null;
+
+  const header = JSON.parse(new TextDecoder().decode(base64UrlToUint8Array(parts[0])));
+  const payload = JSON.parse(new TextDecoder().decode(base64UrlToUint8Array(parts[1])));
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (typeof payload.exp !== 'number' || payload.exp <= nowSec) return null;
+  if (payload.aud !== projectId) return null;
+  if (payload.iss !== `https://securetoken.google.com/${projectId}`) return null;
+  const uid = payload.user_id || payload.sub;
+  if (!uid || typeof uid !== 'string') return null;
+
+  const keys = await getGoogleJwks();
+  const jwk = keys.find((k) => k.kid === header.kid);
+  if (!jwk) return null;
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'jwk',
+    jwk,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['verify']
+  );
+
+  const signingInput = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
+  const signature = base64UrlToUint8Array(parts[2]);
+  const valid = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', cryptoKey, signature, signingInput);
+  if (!valid) return null;
+
+  return { uid: uid.trim(), email: payload.email || null };
+}
+
+/**
+ * Strict server-side moderator/admin check against main hwl-db (AUTH_DB)
+ * ONLY matches by verified UID / UUID / mc_uuid — NEVER by username!
+ */
+async function verifyModeratorAccess(request, env) {
+  if (!env.AUTH_DB) {
+    return { allowed: false, reason: 'auth_db_not_bound' };
+  }
+
+  const candidateIds = new Set();
+
+  // 1. Cryptographically verified Firebase ID Token (HelloWorld / verified MS)
+  const authHeader = request.headers.get('Authorization') || '';
+  if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7).trim();
+    const projectId = env.FIREBASE_PROJECT_ID || 'helloworld-launcher';
+    try {
+      const verified = await verifyFirebaseIdToken(token, projectId);
+      if (verified && verified.uid) {
+        candidateIds.add(verified.uid);
+      }
+    } catch (err) {
+      console.warn('[Telemetry Auth] Firebase token verification failed:', err.message);
+    }
+  }
+
+  // 2. Launcher-authenticated UID/UUID (for verified Microsoft / HelloWorld accounts)
+  const launcherSecret = request.headers.get('X-Launcher-Secret') || '';
+  const expectedSecret = env.LAUNCHER_SECRET || '';
+  if (expectedSecret && launcherSecret === expectedSecret) {
+    const hdrUid = (request.headers.get('X-User-Uid') || '').trim();
+    const hdrUuid = (request.headers.get('X-User-Uuid') || '').trim();
+    if (hdrUid && !hdrUid.startsWith('local_') && hdrUid.length >= 16) {
+      candidateIds.add(hdrUid);
+    }
+    if (hdrUuid && !hdrUuid.startsWith('local_') && hdrUuid.length >= 16) {
+      candidateIds.add(hdrUuid);
+    }
+  }
+
+  if (candidateIds.size === 0) {
+    return { allowed: false, reason: 'missing_identity' };
+  }
+
+  // 3. Strictly query AUTH_DB (users + admins) by exact uid / uuid / mc_uuid ONLY (ZERO username lookup!)
+  for (const id of candidateIds) {
+    const cleanHex = id.replace(/-/g, '').toLowerCase();
+    try {
+      const userRow = await env.AUTH_DB.prepare(`
+        SELECT uid, badges_json, account_type
+        FROM users
+        WHERE uid = ?
+           OR uuid = ?
+           OR mc_uuid = ?
+           OR LOWER(REPLACE(COALESCE(uuid, ''), '-', '')) = ?
+           OR LOWER(REPLACE(COALESCE(mc_uuid, ''), '-', '')) = ?
+        LIMIT 1
+      `).bind(id, id, id, cleanHex, cleanHex).first();
+
+      const resolvedUid = userRow?.uid || id;
+      const adminRow = await env.AUTH_DB.prepare(
+        'SELECT role FROM admins WHERE uid = ? LIMIT 1'
+      ).bind(resolvedUid).first();
+
+      let badges = [];
+      if (userRow?.badges_json) {
+        try { badges = JSON.parse(userRow.badges_json); } catch (_) {}
+      }
+
+      const roleStr = String(adminRow?.role || '').toLowerCase();
+      const isAdmin = roleStr === 'admin' || roleStr === 'owner' || badges.includes('creator');
+      const isMod = isAdmin || roleStr === 'moderator' || roleStr === 'mod' || badges.includes('moderator');
+
+      if (isMod) {
+        return {
+          allowed: true,
+          uid: resolvedUid,
+          role: roleStr || (isAdmin ? 'admin' : 'moderator'),
+          isAdmin,
+          isMod
+        };
+      }
+    } catch (dbErr) {
+      console.error('[Telemetry Auth] D1 role check error:', dbErr);
+    }
+  }
+
+  return { allowed: false, reason: 'forbidden_not_moderator' };
+}
 
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data, null, 2), {
@@ -342,11 +489,22 @@ export default {
       }
     }
 
+    // --- Strict Moderator Auth Check Endpoint: GET /auth/check ---
+    if (request.method === 'GET' && (url.pathname === '/auth/check' || url.pathname === '/api/auth/check')) {
+      const auth = await verifyModeratorAccess(request, env);
+      return jsonResponse({
+        success: true,
+        hasAccess: Boolean(auth.allowed),
+        role: auth.role || 'user',
+        uid: auth.uid || null,
+      });
+    }
+
     // --- Stats API: GET /reports/stats ---
     if (request.method === 'GET' && (url.pathname === '/reports/stats' || url.pathname === '/api/reports/stats')) {
-      const adminKey = request.headers.get('x-admin-key') || url.searchParams.get('key');
-      if (env.ADMIN_API_KEY && adminKey !== env.ADMIN_API_KEY) {
-        return jsonResponse({ error: 'Unauthorized. Provide valid x-admin-key header.' }, 401);
+      const auth = await verifyModeratorAccess(request, env);
+      if (!auth.allowed) {
+        return jsonResponse({ error: 'Forbidden: moderator privileges required.' }, 403);
       }
       if (!env.DB) return jsonResponse({ error: 'D1 Database not bound' }, 500);
 
@@ -366,11 +524,11 @@ export default {
       });
     }
 
-    // --- Query API: GET /reports?username=... (For Abelosky) ---
+    // --- Query API: GET /reports?username=... (Moderators only) ---
     if (request.method === 'GET' && (url.pathname === '/reports' || url.pathname === '/api/reports')) {
-      const adminKey = request.headers.get('x-admin-key') || url.searchParams.get('key');
-      if (env.ADMIN_API_KEY && adminKey !== env.ADMIN_API_KEY) {
-        return jsonResponse({ error: 'Unauthorized. Provide valid x-admin-key header.' }, 401);
+      const auth = await verifyModeratorAccess(request, env);
+      if (!auth.allowed) {
+        return jsonResponse({ error: 'Forbidden: moderator privileges required.' }, 403);
       }
 
       if (!env.DB) {
@@ -433,9 +591,9 @@ export default {
     // --- Delete Single Report: DELETE /reports/:id ---
     const deleteMatch = url.pathname.match(/^\/(?:api\/)?reports\/([a-zA-Z0-9_-]+)$/);
     if (request.method === 'DELETE' && deleteMatch) {
-      const adminKey = request.headers.get('x-admin-key') || url.searchParams.get('key');
-      if (env.ADMIN_API_KEY && adminKey !== env.ADMIN_API_KEY) {
-        return jsonResponse({ error: 'Unauthorized' }, 401);
+      const auth = await verifyModeratorAccess(request, env);
+      if (!auth.allowed) {
+        return jsonResponse({ error: 'Forbidden: moderator privileges required.' }, 403);
       }
       if (!env.DB) return jsonResponse({ error: 'D1 not bound' }, 500);
 
@@ -456,6 +614,10 @@ export default {
     // --- Query Single Report: GET /reports/:id ---
     const reportMatch = url.pathname.match(/^\/(?:api\/)?reports\/([a-zA-Z0-9_-]+)$/);
     if (request.method === 'GET' && reportMatch) {
+      const auth = await verifyModeratorAccess(request, env);
+      if (!auth.allowed) {
+        return jsonResponse({ error: 'Forbidden: moderator privileges required.' }, 403);
+      }
       const reportId = reportMatch[1];
       if (!env.DB) return jsonResponse({ error: 'D1 Database not bound' }, 500);
 
@@ -468,6 +630,10 @@ export default {
     // --- Download Full Log from R2: GET /reports/:id/logs ---
     const logsMatch = url.pathname.match(/^\/(?:api\/)?reports\/([a-zA-Z0-9_-]+)\/logs$/);
     if (request.method === 'GET' && logsMatch) {
+      const auth = await verifyModeratorAccess(request, env);
+      if (!auth.allowed) {
+        return jsonResponse({ error: 'Forbidden: moderator privileges required.' }, 403);
+      }
       const reportId = logsMatch[1];
       if (!env.DB || !env.BUCKET) return jsonResponse({ error: 'Storage or Database not bound' }, 500);
 
@@ -489,9 +655,9 @@ export default {
 
     // --- Manual / Maintenance Purge Endpoint: POST /reports/purge ---
     if (request.method === 'POST' && url.pathname === '/reports/purge') {
-      const adminKey = request.headers.get('x-admin-key') || url.searchParams.get('key');
-      if (env.ADMIN_API_KEY && adminKey !== env.ADMIN_API_KEY) {
-        return jsonResponse({ error: 'Unauthorized' }, 401);
+      const auth = await verifyModeratorAccess(request, env);
+      if (!auth.allowed) {
+        return jsonResponse({ error: 'Forbidden: moderator privileges required.' }, 403);
       }
 
       const days = parseInt(url.searchParams.get('days') || '30', 10);

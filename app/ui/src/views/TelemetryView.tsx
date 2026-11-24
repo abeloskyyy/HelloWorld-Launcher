@@ -411,6 +411,7 @@ export const TelemetryView: React.FC = () => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [leftWidthPercent, setLeftWidthPercent] = useState<number>(35);
   const [, setLangTick] = useState(0);
+  const [telemetryEnterTick, setTelemetryEnterTick] = useState(0);
   const isDraggingSplitter = useRef(false);
 
   // Isolate view: only hide streak, user badges, promos when telemetry is the active section
@@ -418,12 +419,20 @@ export const TelemetryView: React.FC = () => {
     const handleSectionChange = (e: any) => {
       if (e.detail?.section === 'telemetry') {
         document.body.classList.add('in-telemetry');
+        setTelemetryEnterTick((n) => n + 1);
       } else {
         document.body.classList.remove('in-telemetry');
       }
     };
 
     const handleLanguageChange = () => setLangTick((n) => n + 1);
+    const handleAuthChange = () => {
+      setReports([]);
+      setSelectedReport(null);
+      setFullBundle(null);
+      setStats(null);
+      setHydratedMetaMap({});
+    };
 
     const telemetryEl = document.getElementById('telemetry');
     if (telemetryEl && telemetryEl.classList.contains('active')) {
@@ -434,9 +443,11 @@ export const TelemetryView: React.FC = () => {
 
     window.addEventListener('section-changed', handleSectionChange);
     window.addEventListener('language-changed', handleLanguageChange);
+    window.addEventListener('auth-state-changed', handleAuthChange);
     return () => {
       window.removeEventListener('section-changed', handleSectionChange);
       window.removeEventListener('language-changed', handleLanguageChange);
+      window.removeEventListener('auth-state-changed', handleAuthChange);
       document.body.classList.remove('in-telemetry');
     };
   }, []);
@@ -491,8 +502,11 @@ export const TelemetryView: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchReports();
-  }, [crashOnly, modLoaderFilter, osFilter]);
+    const telemetryEl = document.getElementById('telemetry');
+    if (telemetryEnterTick > 0 || (telemetryEl && telemetryEl.classList.contains('active'))) {
+      fetchReports();
+    }
+  }, [crashOnly, modLoaderFilter, osFilter, telemetryEnterTick]);
 
   // Load full logs when selecting report
   useEffect(() => {
@@ -803,14 +817,24 @@ export const TelemetryView: React.FC = () => {
   const handleDownloadR2 = async () => {
     if (!selectedReport) return;
     try {
-      const url = `https://hwlauncher-telemetry.abeloskysb.workers.dev/reports/${selectedReport.id}/logs`;
+      const win = window as any;
+      if (!win.hwlAPI?.telemetryAdmin?.fetchFullLogs) {
+        throw new Error('Telemetry log download unavailable');
+      }
+      showToast(t('telemetry.downloading_toast', 'Descargando archivo de logs...'));
+      const res = await win.hwlAPI.telemetryAdmin.fetchFullLogs(selectedReport.id);
+      if (!res || !res.success || !res.bundle) {
+        throw new Error(res?.error || 'Unauthorized');
+      }
+      const blob = new Blob([JSON.stringify(res.bundle, null, 2)], { type: 'application/json' });
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `logs_${selectedReport.username}_${selectedReport.id.slice(0, 8)}.json.gz`;
+      a.href = blobUrl;
+      a.download = `logs_${selectedReport.username}_${selectedReport.id.slice(0, 8)}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      showToast(t('telemetry.downloading_toast', 'Descargando archivo comprimido de logs...'));
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
     } catch (err: any) {
       showToast('Error: ' + err.message);
     }

@@ -394,6 +394,52 @@ usersApp.post('/microsoft/pending-verify', requireAuth, async (c) => {
   return c.json({ success: true });
 });
 
+// GET /api/v1/users/role-by-id/:identifier - Verificación estricta de rol staff/moderador SOLO por UID/UUID (NUNCA por username)
+usersApp.get('/role-by-id/:identifier', optionalAuth, async (c) => {
+  const rawId = (c.req.param('identifier') || '').trim();
+  if (!rawId || rawId.startsWith('local_') || rawId.length < 16) {
+    return c.json({ success: true, found: false, role: 'user', isAdmin: false, isMod: false });
+  }
+
+  const db = c.env.DB;
+  const cleanHex = rawId.replace(/-/g, '').toLowerCase();
+
+  const row = await db.prepare(`
+    SELECT uid, badges_json, account_type
+    FROM users
+    WHERE uid = ?
+       OR uuid = ?
+       OR mc_uuid = ?
+       OR LOWER(REPLACE(COALESCE(uuid, ''), '-', '')) = ?
+       OR LOWER(REPLACE(COALESCE(mc_uuid, ''), '-', '')) = ?
+    LIMIT 1
+  `).bind(rawId, rawId, rawId, cleanHex, cleanHex).first<{ uid: string; badges_json: string | null; account_type: string | null }>();
+
+  const resolvedUid = row?.uid || rawId;
+  const adminRow = await db.prepare('SELECT role FROM admins WHERE uid = ? LIMIT 1')
+    .bind(resolvedUid)
+    .first<{ role: string }>()
+    .catch(() => null);
+
+  let parsedBadges: string[] = [];
+  if (row?.badges_json) {
+    try { parsedBadges = JSON.parse(row.badges_json); } catch (_) {}
+  }
+
+  const roleStr = (adminRow?.role || '').toLowerCase();
+  const isAdmin = Boolean(roleStr === 'admin' || roleStr === 'owner' || parsedBadges.includes('creator'));
+  const isMod = Boolean(isAdmin || roleStr === 'moderator' || roleStr === 'mod' || parsedBadges.includes('moderator'));
+
+  return c.json({
+    success: true,
+    found: Boolean(row || adminRow),
+    uid: resolvedUid,
+    role: roleStr || (isAdmin ? 'admin' : isMod ? 'moderator' : 'user'),
+    isAdmin,
+    isMod
+  });
+});
+
 // GET /api/v1/users/:uidOrUsername - Perfil público por UID, UUID o nombre de usuario
 usersApp.get('/:uidOrUsername', optionalAuth, async (c) => {
   const identifier = c.req.param('uidOrUsername');

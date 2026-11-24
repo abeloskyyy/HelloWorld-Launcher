@@ -2,11 +2,17 @@ name = "hwlauncher-telemetry"
 main = "src/index.js"
 compatibility_date = "2024-04-01"
 
-# Cloudflare D1 Database Binding
+# Cloudflare D1 Database Binding (Telemetry Reports)
 [[d1_databases]]
 binding = "DB"
 database_name = "hwlauncher-telemetry"
 database_id = "7a91ef4f-00dd-4026-a4ea-809f22840e29"
+
+# Cloudflare D1 Database Binding (Main Users & Admins DB for strict UID/UUID moderator auth)
+[[d1_databases]]
+binding = "AUTH_DB"
+database_name = "hwl-db"
+database_id = "97eae20b-0d21-413b-a9d2-6a2add309fbb"
 
 # Cloudflare R2 Storage Bucket Binding (for full compressed logs)
 [[r2_buckets]]
@@ -14,7 +20,8 @@ binding = "BUCKET"
 bucket_name = "hwlauncher-logs"
 
 [vars]
-ADMIN_API_KEY = "hwlauncher_admin_telemetry_key"
+FIREBASE_PROJECT_ID = "helloworld-launcher"
+LAUNCHER_SECRET = "hwl_sec_7f9b8c2d1e0a4f5b9c8d7e6a5b4c3d2e1"
 NTFY_SERVER = "https://ntfy.sh"
 NTFY_TOPIC = "helloworld_launcher_ai_notify_29373"
 

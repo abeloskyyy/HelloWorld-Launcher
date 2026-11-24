@@ -3950,6 +3950,8 @@ window.addEventListener('login-success', async (event) => {
         if (typeof loadOptions === 'function') loadOptions();
     }
 
+    window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: profile || null }));
+
 });
 
 
@@ -7754,8 +7756,9 @@ if (loginButton) {
         const savedBtn = document.getElementById('selectSavedAccountsBtn');
         if (savedBtn && window.hwlAPI && window.hwlAPI.get_saved_accounts) {
             try {
-                const accs = await window.hwlAPI.get_saved_accounts();
-                if (accs && accs.length > 0) {
+                const res = await window.hwlAPI.get_saved_accounts();
+                const accs = Array.isArray(res) ? res : (res && Array.isArray(res.accounts) ? res.accounts : []);
+                if (accs.length > 0) {
                     savedBtn.style.display = 'inline-flex';
                 } else {
                     savedBtn.style.display = 'none';
@@ -9033,9 +9036,14 @@ async function renderAccountSwitcherList() {
         let isActive = false;
         if (currentData && currentData.username) {
             if (acc.type === 'helloworld' && currentData.account_type === 'helloworld') {
-                isActive = acc.id === currentData.firebase_uid;
+                isActive = Boolean(
+                    (currentData.firebase_uid && (acc.id === currentData.firebase_uid || acc.firebase_uid === currentData.firebase_uid)) ||
+                    (!currentData.firebase_uid && acc.username === currentData.username)
+                );
             } else if (acc.type === 'microsoft' && currentData.account_type === 'microsoft') {
-                isActive = acc.uuid === currentData.uuid;
+                const accUuid = (acc.uuid || '').replace(/-/g, '').toLowerCase();
+                const curUuid = (currentData.uuid || '').replace(/-/g, '').toLowerCase();
+                isActive = Boolean(accUuid && curUuid && accUuid === curUuid);
             } else if (acc.type === 'offline' && currentData.account_type === 'offline') {
                 isActive = acc.username === currentData.username;
             }
@@ -9155,6 +9163,7 @@ window.performAccountSwitch = async function (accountId, openInboxAfter = false,
             if (modal) modal.classList.remove('show');
 
             await updateUserInterface(res.newData);
+            window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: res.newData }));
             await loadProfiles();
             await loadVersions();
             await loadOptions();
@@ -9410,11 +9419,28 @@ async function removeAccountFromSwitcher(accountId, username, itemEl) {
             }
 
             if (res.sessionCleared && res.newData) {
+                const remaining = Array.isArray(res.remainingAccounts) ? res.remainingAccounts : [];
+                if (remaining.length > 0 && typeof window.performAccountSwitch === 'function') {
+                    // Auto-switch to the most recently used remaining saved account instead of dumping to Login button
+                    const nextAcc = remaining[0];
+                    await window.performAccountSwitch(
+                        nextAcc.id,
+                        false,
+                        nextAcc.email || '',
+                        nextAcc.username || '',
+                        nextAcc.type || ''
+                    );
+                    await renderAccountSwitcherList();
+                    return;
+                }
+
                 const modalEl = document.getElementById('accountSwitcherModal');
                 if (modalEl) modalEl.classList.remove('show');
                 await updateUserInterface(res.newData);
+                window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: res.newData }));
                 await loadProfiles();
                 await loadVersions();
+                await loadOptions();
                 if (window.renderUserHead) await window.renderUserHead(null).catch(() => {});
                 if (typeof showSection === 'function') {
                     showSection('play');
@@ -9517,6 +9543,7 @@ function initAccountSwitcherEvents() {
                     if (modal) modal.classList.remove('show');
 
                     await updateUserInterface(res.newData);
+                    window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: res.newData }));
                     await loadProfiles();
                     await loadVersions();
                     await loadOptions();

@@ -649,9 +649,19 @@ function loadSavedAccounts() {
     }
   }
 
-  // Sanitize stored avatars to guarantee strict account isolation
+  // Sanitize stored avatars to guarantee strict account isolation & ensure every account has a stable unique id
   let accountsChanged = false;
   for (const acc of accounts) {
+    if (!acc.id) {
+      if (acc.type === 'helloworld') {
+        acc.id = acc.firebase_uid || buildDeterministicUuid(`helloworld:${acc.username || Date.now()}`);
+      } else if (acc.type === 'microsoft') {
+        acc.id = acc.uuid || buildDeterministicUuid(`microsoft:${acc.username || Date.now()}`);
+      } else {
+        acc.id = buildDeterministicUuid(`offline:${acc.username || Date.now()}`);
+      }
+      accountsChanged = true;
+    }
     if (acc.type === 'offline') {
       if (acc.avatarUrl) {
         acc.avatarUrl = '';
@@ -4071,7 +4081,34 @@ ipcMain.handle('save-user-json', async (e, data) => {
     newData.username = newData.username.name || newData.username.username || newData.username.displayName || 'Player';
     console.warn('[save-user-json] username was an object, sanitized to:', newData.username);
   }
+  const accountChanged = Boolean(
+    (cleanedData.account_type !== undefined && cleanedData.account_type !== current.account_type) ||
+    (cleanedData.username !== undefined && cleanedData.username !== current.username) ||
+    (cleanedData.uuid !== undefined && cleanedData.uuid !== current.uuid)
+  );
+  if (cleanedData.account_type === 'offline') {
+    newData.firebase_uid = '';
+    newData.firebase_refresh_token = '';
+    newData.firebase_id_token = '';
+    newData.firebase_ms_uid = '';
+    newData.firebase_ms_refresh_token = '';
+    newData.mc_token = '';
+    newData.msmc_auth = '';
+    if (!cleanedData.uuid && newData.username) {
+      newData.uuid = buildDeterministicUuid(`offline:${newData.username}`);
+    }
+  }
   saveUserData(newData);
+  if (accountChanged) {
+    invalidateSocialAuthCache();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('auth-state-changed', {
+        account_type: newData.account_type,
+        username: newData.username,
+        uuid: newData.uuid
+      });
+    }
+  }
   if (newData.start_on_boot !== undefined) {
     applyAutoStartSetting(newData.start_on_boot);
   }
@@ -4388,9 +4425,13 @@ ipcMain.handle('logout', async () => {
   data.firebase_ms_refresh_token = "";
 
   saveUserData(data)
+  invalidateSocialAuthCache();
   presenceManager.currentState = null;
   presenceManager.gameContext = null;
   presenceManager.stopHeartbeat();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('auth-state-changed', { account_type: 'offline', username: '', uuid: '' });
+  }
   return data
 })
 
@@ -4421,20 +4462,37 @@ ipcMain.handle('get-saved-accounts', async () => {
 
 ipcMain.handle('remove-saved-account', async (e, accountId) => {
   try {
+    if (!accountId || typeof accountId !== 'string') {
+      return { success: false, error: 'Invalid account ID' };
+    }
     let accounts = loadSavedAccounts();
     const wasActive = (() => {
       const current = loadUserData();
-      // Find the account by id and check if it matches the active session
+      if (!current || !current.username) return false;
       const acc = accounts.find(a => a.id === accountId);
       if (!acc) return false;
-      if (current.account_type === 'helloworld') return acc.firebase_uid === current.firebase_uid;
-      if (current.account_type === 'microsoft') return acc.uuid === current.uuid;
-      if (current.account_type === 'offline') return acc.username === current.username && acc.type === 'offline';
+      if (acc.type !== current.account_type) return false;
+      if (current.account_type === 'helloworld') {
+        return Boolean(
+          (acc.firebase_uid && current.firebase_uid && acc.firebase_uid === current.firebase_uid) ||
+          (acc.id && current.firebase_uid && acc.id === current.firebase_uid)
+        );
+      }
+      if (current.account_type === 'microsoft') {
+        return Boolean(acc.uuid && current.uuid && normalizeUuid(acc.uuid) === normalizeUuid(current.uuid));
+      }
+      if (current.account_type === 'offline') {
+        return acc.username === current.username;
+      }
       return false;
     })();
 
     accounts = accounts.filter(a => a.id !== accountId);
     saveSavedAccounts(accounts);
+
+    const remainingSorted = [...accounts]
+      .sort((a, b) => (b.lastUsed || '').localeCompare(a.lastUsed || ''))
+      .map(safeAccountView);
 
     // If this was the active account, also clear the active session
     if (wasActive) {
@@ -4451,12 +4509,16 @@ ipcMain.handle('remove-saved-account', async (e, accountId) => {
       data.firebase_id_token = '';
       data.firebase_ms_uid = ''; data.firebase_ms_refresh_token = '';
       saveUserData(data);
+      invalidateSocialAuthCache();
       presenceManager.currentState = null;
       presenceManager.gameContext = null;
       presenceManager.stopHeartbeat();
-      return { success: true, sessionCleared: true, newData: data };
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('auth-state-changed', { account_type: 'offline', username: '', uuid: '' });
+      }
+      return { success: true, sessionCleared: true, newData: data, remainingAccounts: remainingSorted };
     }
-    return { success: true, sessionCleared: false };
+    return { success: true, sessionCleared: false, remainingAccounts: remainingSorted };
   } catch (e) {
     console.error('[SavedAccounts] remove-saved-account error:', e);
     return { success: false, error: e.message };
@@ -4479,9 +4541,13 @@ ipcMain.handle('remove-all-accounts', async () => {
     data.firebase_id_token = '';
     data.firebase_ms_uid = ''; data.firebase_ms_refresh_token = '';
     saveUserData(data);
+    invalidateSocialAuthCache();
     presenceManager.currentState = null;
     presenceManager.gameContext = null;
     presenceManager.stopHeartbeat();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('auth-state-changed', { account_type: 'offline', username: '', uuid: '' });
+    }
     return { success: true, newData: data };
   } catch (e) {
     console.error('[SavedAccounts] remove-all-accounts error:', e);
@@ -4562,6 +4628,8 @@ ipcMain.handle('switch-account', async (e, accountId, targetType = null) => {
       currentData.last_cape_url = '';
       currentData.last_avatar_url = '';
       saveUserData(currentData);
+      currentPolledUid = null;
+      invalidateSocialAuthCache();
 
       // Update lastUsed
       const idx = accounts.findIndex(a => a.id === acc.id);
@@ -4569,6 +4637,14 @@ ipcMain.handle('switch-account', async (e, accountId, targetType = null) => {
         accounts[idx].avatarUrl = '';
         accounts[idx].lastUsed = new Date().toISOString();
         saveSavedAccounts(accounts);
+      }
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('auth-state-changed', {
+          account_type: 'offline',
+          username: currentData.username,
+          uuid: currentData.uuid
+        });
       }
 
       return { success: true, newData: currentData };
@@ -4633,6 +4709,12 @@ ipcMain.handle('switch-account', async (e, accountId, targetType = null) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('force-social-badge-update');
           mainWindow.webContents.send('inbox-updated');
+          mainWindow.webContents.send('auth-state-changed', {
+            account_type: 'helloworld',
+            username: currentData.username,
+            uuid: currentData.uuid,
+            uid: currentData.firebase_uid
+          });
         }
 
         return { success: true, newData: currentData };
@@ -4728,18 +4810,24 @@ ipcMain.handle('switch-account', async (e, accountId, targetType = null) => {
           saveSavedAccounts(accounts);
         }
 
-        const safeProfile = { name: profileData.name, id: profileData.id, skin: profileData.skins || [] };
-        if (mainWindow) {
-          mainWindow.webContents.send('login-success', safeProfile);
-          mainWindow.webContents.send('force-social-badge-update');
-          mainWindow.webContents.send('inbox-updated');
-        }
-
         currentPolledUid = null;
         invalidateSocialAuthCache();
         startMessagePolling();
         presenceManager.safeRun(presenceManager.setLauncherOnline());
         startPresencePolling();
+
+        const safeProfile = { name: profileData.name, id: profileData.id, skin: profileData.skins || [] };
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('login-success', safeProfile);
+          mainWindow.webContents.send('force-social-badge-update');
+          mainWindow.webContents.send('inbox-updated');
+          mainWindow.webContents.send('auth-state-changed', {
+            account_type: 'microsoft',
+            username: currentData.username,
+            uuid: currentData.uuid,
+            uid: currentData.firebase_ms_uid || currentData.uuid
+          });
+        }
 
         return { success: true, newData: currentData };
       } catch (err) {
@@ -8548,30 +8636,89 @@ ipcMain.handle('send-telemetry-diagnostic', async () => {
   return await telemetryManager.sendReport('manual_diagnostic');
 });
 
-// Telemetry Admin IPC handlers (Strict server-side moderator role validation)
+// Telemetry Admin IPC handlers (Strict server-side D1 UID/UUID moderator validation — NEVER by username!)
 const TELEMETRY_ADMIN_BASE = 'https://hwlauncher-telemetry.abeloskysb.workers.dev';
-const TELEMETRY_ADMIN_KEY = 'hwlauncher_admin_telemetry_key';
+const TELEMETRY_LAUNCHER_SECRET = 'hwl_sec_7f9b8c2d1e0a4f5b9c8d7e6a5b4c3d2e1';
+
+async function getTelemetryAdminAuthHeaders() {
+  const ud = loadUserData();
+  if (!ud || !ud.account_type || ud.account_type === 'offline') {
+    return null;
+  }
+
+  let auth = null;
+  try { auth = await getSocialAuth(); } catch (_) {}
+
+  const headers = {
+    'X-Launcher-Secret': TELEMETRY_LAUNCHER_SECRET,
+  };
+
+  if (ud.account_type === 'helloworld') {
+    const uid = (auth && auth.uid) || ud.firebase_uid || '';
+    if (!uid || uid.startsWith('local_')) return null;
+    if (auth && auth.idToken) {
+      headers['Authorization'] = `Bearer ${auth.idToken}`;
+    }
+    headers['X-User-Uid'] = String(uid).trim();
+    return headers;
+  }
+
+  if (ud.account_type === 'microsoft') {
+    const uid = (auth && auth.uid) || ud.firebase_ms_uid || '';
+    const mcUuid = ud.uuid || '';
+    if ((!uid || uid.startsWith('local_')) && (!mcUuid || mcUuid.startsWith('local_'))) {
+      return null;
+    }
+    if (auth && auth.idToken) {
+      headers['Authorization'] = `Bearer ${auth.idToken}`;
+    }
+    if (uid && !uid.startsWith('local_')) headers['X-User-Uid'] = String(uid).trim();
+    if (mcUuid && !mcUuid.startsWith('local_')) headers['X-User-Uuid'] = String(mcUuid).trim();
+    return headers;
+  }
+
+  return null;
+}
 
 async function checkIsStaffOrMod() {
   try {
-    let auth = null;
-    try { auth = await getSocialAuth(); } catch (_) {}
-    if (auth && auth.idToken) {
-      const roles = await _wkGetUserRoles(auth.idToken);
-      if (roles.isAdmin || roles.isMod) return true;
-    }
     const ud = loadUserData();
-    const isMicrosoft = ud && ud.account_type === 'microsoft';
-    const targetUid = isMicrosoft ? (ud.firebase_ms_uid || ud.uuid) : (ud.firebase_uid || ud.uuid);
-    if (targetUid) {
-      const res = await ApiClient.users.getProfile(targetUid);
-      if (res && res.success && res.user) {
-        const u = res.user;
-        const role = (u.role || '').toLowerCase();
-        const badges = Array.isArray(u.badges) ? u.badges : [];
-        if (u.isAdmin || role === 'admin' || role === 'owner' || badges.includes('creator')) return true;
-        if (u.isMod || role === 'moderator' || role === 'mod' || badges.includes('moderator')) return true;
+    // Offline accounts can NEVER be staff/moderators regardless of username
+    if (!ud || !ud.account_type || ud.account_type === 'offline') {
+      return false;
+    }
+
+    const headers = await getTelemetryAdminAuthHeaders();
+    if (!headers) return false;
+
+    // 1. Primary check: strict server-side D1 verification on Telemetry Worker (/auth/check)
+    try {
+      const res = await axios.get(`${TELEMETRY_ADMIN_BASE}/auth/check`, {
+        headers,
+        timeout: 6000,
+      });
+      if (res && res.data && res.data.success === true) {
+        return Boolean(res.data.hasAccess);
       }
+    } catch (_) {}
+
+    // 2. Fallback: strict UID/UUID-only role endpoint on main Cloudflare API (ZERO username lookup!)
+    const candidateIds = [];
+    if (ud.account_type === 'helloworld' && ud.firebase_uid) {
+      candidateIds.push(ud.firebase_uid);
+    } else if (ud.account_type === 'microsoft') {
+      if (ud.firebase_ms_uid) candidateIds.push(ud.firebase_ms_uid);
+      if (ud.uuid) candidateIds.push(ud.uuid);
+    }
+
+    for (const targetId of candidateIds) {
+      if (!targetId || targetId.startsWith('local_')) continue;
+      try {
+        const res = await ApiClient.users.checkRoleById(targetId);
+        if (res && res.success && (res.isAdmin || res.isMod)) {
+          return true;
+        }
+      } catch (_) {}
     }
   } catch (_) {}
   return false;
@@ -8583,22 +8730,22 @@ ipcMain.handle('telemetry-admin-check-access', async () => {
 });
 
 ipcMain.handle('telemetry-admin-stats', async () => {
-  const hasAccess = await checkIsStaffOrMod();
-  if (!hasAccess) return { success: false, error: 'Forbidden' };
+  const headers = await getTelemetryAdminAuthHeaders();
+  if (!headers) return { success: false, error: 'Forbidden' };
   try {
     const res = await axios.get(`${TELEMETRY_ADMIN_BASE}/reports/stats`, {
-      headers: { 'x-admin-key': TELEMETRY_ADMIN_KEY },
+      headers,
       timeout: 8000,
     });
     return res.data;
   } catch (err) {
-    return { success: false, error: err.message };
+    return { success: false, error: err?.response?.data?.error || err.message };
   }
 });
 
 ipcMain.handle('telemetry-admin-list', async (e, filters = {}) => {
-  const hasAccess = await checkIsStaffOrMod();
-  if (!hasAccess) return { success: false, error: 'Forbidden' };
+  const headers = await getTelemetryAdminAuthHeaders();
+  if (!headers) return { success: false, error: 'Forbidden' };
   try {
     const params = new URLSearchParams();
     if (filters.username) params.set('username', filters.username);
@@ -8610,34 +8757,35 @@ ipcMain.handle('telemetry-admin-list', async (e, filters = {}) => {
     if (filters.offset) params.set('offset', String(filters.offset));
 
     const res = await axios.get(`${TELEMETRY_ADMIN_BASE}/reports?${params.toString()}`, {
-      headers: { 'x-admin-key': TELEMETRY_ADMIN_KEY },
+      headers,
       timeout: 10000,
     });
     return res.data;
   } catch (err) {
-    return { success: false, error: err.message };
+    return { success: false, error: err?.response?.data?.error || err.message };
   }
 });
 
 ipcMain.handle('telemetry-admin-get-report', async (e, id) => {
-  const hasAccess = await checkIsStaffOrMod();
-  if (!hasAccess) return { success: false, error: 'Forbidden' };
+  const headers = await getTelemetryAdminAuthHeaders();
+  if (!headers) return { success: false, error: 'Forbidden' };
   try {
-    const res = await axios.get(`${TELEMETRY_ADMIN_BASE}/reports/${id}`, {
-      headers: { 'x-admin-key': TELEMETRY_ADMIN_KEY },
+    const res = await axios.get(`${TELEMETRY_ADMIN_BASE}/reports/${encodeURIComponent(id)}`, {
+      headers,
       timeout: 8000,
     });
     return res.data;
   } catch (err) {
-    return { success: false, error: err.message };
+    return { success: false, error: err?.response?.data?.error || err.message };
   }
 });
 
 ipcMain.handle('telemetry-admin-fetch-full-logs', async (e, id) => {
-  const hasAccess = await checkIsStaffOrMod();
-  if (!hasAccess) return { success: false, error: 'Forbidden' };
+  const headers = await getTelemetryAdminAuthHeaders();
+  if (!headers) return { success: false, error: 'Forbidden' };
   try {
-    const res = await axios.get(`${TELEMETRY_ADMIN_BASE}/reports/${id}/logs`, {
+    const res = await axios.get(`${TELEMETRY_ADMIN_BASE}/reports/${encodeURIComponent(id)}/logs`, {
+      headers,
       responseType: 'arraybuffer',
       timeout: 15000,
     });
@@ -8651,21 +8799,21 @@ ipcMain.handle('telemetry-admin-fetch-full-logs', async (e, id) => {
     const json = JSON.parse(decompressed.toString('utf8'));
     return { success: true, bundle: json };
   } catch (err) {
-    return { success: false, error: err.message };
+    return { success: false, error: err?.response?.data?.error || err.message };
   }
 });
 
 ipcMain.handle('telemetry-admin-delete-report', async (e, id) => {
-  const hasAccess = await checkIsStaffOrMod();
-  if (!hasAccess) return { success: false, error: 'Forbidden' };
+  const headers = await getTelemetryAdminAuthHeaders();
+  if (!headers) return { success: false, error: 'Forbidden' };
   try {
-    const res = await axios.delete(`${TELEMETRY_ADMIN_BASE}/reports/${id}`, {
-      headers: { 'x-admin-key': TELEMETRY_ADMIN_KEY },
+    const res = await axios.delete(`${TELEMETRY_ADMIN_BASE}/reports/${encodeURIComponent(id)}`, {
+      headers,
       timeout: 8000,
     });
     return res.data;
   } catch (err) {
-    return { success: false, error: err.message };
+    return { success: false, error: err?.response?.data?.error || err.message };
   }
 });
 
@@ -10880,35 +11028,29 @@ async function _wkGetUserRoles(idToken) {
     let isAdmin = false;
     let isMod = false;
 
-    // 1. Candidate UIDs (primary UID + linked account UIDs for current user only)
+    // 1. Candidate UIDs/UUIDs strictly for the active authenticated account (NEVER username!)
     const candidateUids = new Set([uid]);
-    let currentUsername = '';
     try {
       const ud = loadUserData();
-      if (ud.username) currentUsername = ud.username;
-      if (ud.firebase_uid === uid || ud.firebase_ms_uid === uid || ud.uuid === uid) {
-        if (ud.firebase_uid) candidateUids.add(ud.firebase_uid);
+      if (ud && ud.account_type === 'microsoft' && (ud.firebase_ms_uid === uid || ud.uuid === uid)) {
         if (ud.firebase_ms_uid) candidateUids.add(ud.firebase_ms_uid);
+        if (ud.uuid) candidateUids.add(ud.uuid);
+      } else if (ud && ud.account_type === 'helloworld' && ud.firebase_uid === uid) {
+        candidateUids.add(ud.firebase_uid);
       }
     } catch (_) {}
 
-    // 2. Query Cloudflare Backend via ApiClient
-    const targets = [...candidateUids];
-    if (currentUsername && !targets.includes(currentUsername)) {
-      targets.push(currentUsername);
-    }
-    for (const ident of targets) {
+    // 2. Query Cloudflare Backend strictly by UID/UUID (ZERO username lookup!)
+    for (const ident of candidateUids) {
+      if (!ident || String(ident).startsWith('local_')) continue;
       try {
-        const res = await ApiClient.users.getProfile(encodeURIComponent(ident));
-        if (res && res.success && res.user) {
-          const u = res.user;
-          const role = (u.role || '').toLowerCase();
-          const badges = Array.isArray(u.badges) ? u.badges : [];
-          if (u.isAdmin || role === 'admin' || role === 'owner' || badges.includes('creator')) {
+        const res = await ApiClient.users.checkRoleById(ident);
+        if (res && res.success) {
+          if (res.isAdmin) {
             isAdmin = true;
             isMod = true;
             break;
-          } else if (u.isMod || role === 'moderator' || role === 'mod' || badges.includes('moderator')) {
+          } else if (res.isMod) {
             isMod = true;
           }
         }
@@ -11375,6 +11517,12 @@ ipcMain.handle('get-dismissed-announcements', async () => {
 
 ipcMain.handle('workshop-check-admin', async () => {
   try {
+    const ud = loadUserData();
+    // Offline accounts can never be admin/mod regardless of username
+    if (!ud || !ud.account_type || ud.account_type === 'offline') {
+      return { success: true, isAdmin: false, isMod: false };
+    }
+
     let auth = null;
     try { auth = await getSocialAuth(); } catch (_) {}
     if (auth && auth.idToken) {
@@ -11383,23 +11531,25 @@ ipcMain.handle('workshop-check-admin', async () => {
         return { success: true, isAdmin: roles.isAdmin, isMod: roles.isMod };
       }
     }
-    // Also check current logged-in user profile from ApiClient strictly by UID
-    try {
-      const ud = loadUserData();
-      const isMicrosoft = ud && ud.account_type === 'microsoft';
-      const targetUid = isMicrosoft ? (ud.firebase_ms_uid || ud.uuid) : (ud.firebase_uid || ud.uuid);
-      if (targetUid) {
-        const res = await ApiClient.users.getProfile(targetUid);
-        if (res && res.success && res.user) {
-          const u = res.user;
-          const role = (u.role || '').toLowerCase();
-          const badges = Array.isArray(u.badges) ? u.badges : [];
-          const isAdmin = Boolean(u.isAdmin || role === 'admin' || role === 'owner' || badges.includes('creator'));
-          const isMod = Boolean(isAdmin || u.isMod || role === 'moderator' || role === 'mod' || badges.includes('moderator'));
-          return { success: true, isAdmin, isMod };
+
+    // Strict check by active account UID/UUID ONLY (never username!)
+    const candidateIds = [];
+    if (ud.account_type === 'helloworld' && ud.firebase_uid) {
+      candidateIds.push(ud.firebase_uid);
+    } else if (ud.account_type === 'microsoft') {
+      if (ud.firebase_ms_uid) candidateIds.push(ud.firebase_ms_uid);
+      if (ud.uuid) candidateIds.push(ud.uuid);
+    }
+
+    for (const targetId of candidateIds) {
+      if (!targetId || String(targetId).startsWith('local_')) continue;
+      try {
+        const res = await ApiClient.users.checkRoleById(targetId);
+        if (res && res.success && (res.isAdmin || res.isMod)) {
+          return { success: true, isAdmin: Boolean(res.isAdmin), isMod: Boolean(res.isMod || res.isAdmin) };
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
 
     return { success: true, isAdmin: false, isMod: false };
   } catch(e) {

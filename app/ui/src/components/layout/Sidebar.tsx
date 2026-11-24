@@ -7,31 +7,49 @@ export const Sidebar: React.FC = () => {
   const [isModsSubmenuOpen, setIsModsSubmenuOpen] = React.useState(false);
   const [isStaffOrMod, setIsStaffOrMod] = React.useState(false);
 
+  const checkSeqRef = React.useRef(0);
+
   React.useEffect(() => {
     let isMounted = true;
     const checkStaff = async () => {
+      const seq = ++checkSeqRef.current;
       try {
         const win = window as any;
         if (win.hwlAPI?.telemetryAdmin?.checkAccess) {
           const res = await win.hwlAPI.telemetryAdmin.checkAccess();
-          if (isMounted && res && res.hasAccess) {
+          if (!isMounted || seq !== checkSeqRef.current) return;
+          if (res && res.hasAccess) {
             setIsStaffOrMod(true);
             return;
           }
         }
-        if (isMounted) setIsStaffOrMod(false);
+        if (isMounted && seq === checkSeqRef.current) {
+          setIsStaffOrMod(false);
+          // If user was viewing Telemetry and switched to a non-moderator account, navigate away immediately
+          const telemetryEl = document.getElementById('telemetry');
+          if (telemetryEl && telemetryEl.classList.contains('active')) {
+            setActiveSection('play');
+            if (typeof (window as any).showSection === 'function') {
+              (window as any).showSection('play');
+            }
+          }
+        }
       } catch (_) {
-        if (isMounted) setIsStaffOrMod(false);
+        if (isMounted && seq === checkSeqRef.current) {
+          setIsStaffOrMod(false);
+        }
       }
     };
 
     checkStaff();
     window.addEventListener('user-profile-loaded', checkStaff);
     window.addEventListener('auth-state-changed', checkStaff);
+    window.addEventListener('login-success', checkStaff);
     return () => {
       isMounted = false;
       window.removeEventListener('user-profile-loaded', checkStaff);
       window.removeEventListener('auth-state-changed', checkStaff);
+      window.removeEventListener('login-success', checkStaff);
     };
   }, []);
 

@@ -121,6 +121,7 @@ const ApiClient = {
     updateMe: (data) => request('PATCH', 'users/me', { data, requiresAuth: true }),
     syncVersion: (clientVersion) => request('POST', 'users/me/sync-version', { data: { clientVersion }, requiresAuth: true }),
     getProfile: (uidOrUsername) => request('GET', `users/${uidOrUsername}`, { requiresAuth: false }),
+    checkRoleById: (uidOrUuid) => request('GET', `users/role-by-id/${encodeURIComponent(uidOrUuid)}`, { requiresAuth: false }),
     search: (query) => request('GET', 'users/search', { params: { q: query }, requiresAuth: false }),
     verifyMicrosoft: (payload) => request('POST', 'users/microsoft/verify', { data: payload, requiresAuth: true }),
     checkMicrosoftVerified: (username, uuid) => request('GET', 'users/microsoft/status', { params: { username, uuid }, requiresAuth: false }),

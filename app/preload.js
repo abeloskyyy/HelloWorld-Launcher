@@ -516,6 +516,10 @@ ipcRenderer.on('cloud-profiles-updated', (event, data) => {
     window.dispatchEvent(new CustomEvent('cloud-profiles-updated', { detail: data }));
 });
 
+ipcRenderer.on('auth-state-changed', (event, data) => {
+    window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: data }));
+});
+
 ipcRenderer.on('navigate-to-chat', (event, data) => {
     window.dispatchEvent(new CustomEvent('navigate-to-chat', { detail: data }));
 });
@@ -551,7 +555,7 @@ ipcRenderer.on('open-account-switcher', () => {
 // Expose electronAPI for direct event listening
 contextBridge.exposeInMainWorld('electronAPI', {
     on: (channel, callback) => {
-        const validChannels = ['download-progress', 'download-complete', 'download-cancelled', 'info-message', 'login-update', 'reload-profiles', 'cloud-profiles-updated', 'show-in-app-notification', 'stats-updated', 'game-status'];
+        const validChannels = ['download-progress', 'download-complete', 'download-cancelled', 'info-message', 'login-update', 'reload-profiles', 'cloud-profiles-updated', 'auth-state-changed', 'show-in-app-notification', 'stats-updated', 'game-status'];
         if (validChannels.includes(channel)) {
             ipcRenderer.on(channel, (event, data) => callback(data));
         }
