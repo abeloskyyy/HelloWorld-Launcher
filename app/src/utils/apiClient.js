@@ -224,6 +224,29 @@ const ApiClient = {
       data: fileBuffer,
       headers: { 'Content-Type': mimeType },
       requiresAuth: true
+    }),
+    uploadCloudIcon: (fileBuffer, mimeType, profileId) => request('POST', `storage/upload/cloud-icon?profileId=${encodeURIComponent(profileId)}`, {
+      data: fileBuffer,
+      headers: {
+        'Content-Type': mimeType,
+        'X-Profile-Id': String(profileId)
+      },
+      requiresAuth: true,
+      timeout: 20000
+    })
+  },
+
+  // === Módulo Cloud Installations ===
+  cloudInstallations: {
+    list: () => request('GET', 'cloud-installations', { requiresAuth: true, timeout: 15000 }),
+    upsert: (id, payload) => request('PUT', `cloud-installations/${encodeURIComponent(id)}`, {
+      data: payload,
+      requiresAuth: true,
+      timeout: 15000
+    }),
+    remove: (id) => request('DELETE', `cloud-installations/${encodeURIComponent(id)}`, {
+      requiresAuth: true,
+      timeout: 15000
     })
   }
 };

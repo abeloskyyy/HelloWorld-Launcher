@@ -10,6 +10,7 @@ import { WorkshopSection } from './components/sections/WorkshopSection';
 import { ModsSection } from './components/sections/ModsSection';
 import { SkinsSection } from './components/sections/SkinsSection';
 import { SettingsSection } from './components/sections/SettingsSection';
+import { TelemetryView } from './views/TelemetryView';
 import { ProfileModal } from './components/modals/ProfileModal';
 import { LoginModal } from './components/modals/LoginModal';
 import { SystemModals } from './components/modals/SystemModals';
@@ -113,6 +114,7 @@ export const App: React.FC = () => {
           <ModsSection />
           <SkinsSection />
           <SettingsSection />
+          <TelemetryView />
         </div>
       </div>
 

@@ -1218,6 +1218,36 @@ export const MiscModals: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Cloud External Addons Warning Modal */}
+      <div id="cloudExternalAddonsModal" className="modal">
+        <div className="modal-content cloud-external-modal-content">
+          <div className="cloud-external-modal-header">
+            <div className="cloud-external-warning-icon">
+              <i className="fas fa-exclamation-triangle"></i>
+            </div>
+            <div>
+              <h2 data-i18n="cloud.external_modal_title">External addons detected</h2>
+              <p className="cloud-external-modal-desc" data-i18n="cloud.external_modal_desc">
+                The following files were not downloaded through HelloWorld Launcher and will not be uploaded to the cloud:
+              </p>
+            </div>
+          </div>
+
+          <div id="cloudExternalAddonsList" className="cloud-external-list"></div>
+
+          <div className="cloud-external-modal-actions">
+            <button id="cloudExternalBackBtn" type="button" className="btn-secondary">
+              <i className="fas fa-arrow-left"></i>{' '}
+              <span data-i18n="cloud.external_btn_back">Go back</span>
+            </button>
+            <button id="cloudExternalContinueBtn" type="button" className="btn-primary">
+              <i className="fas fa-cloud-upload-alt"></i>{' '}
+              <span data-i18n="cloud.external_btn_continue">Continue anyway</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </>
   );
 };

@@ -2,24 +2,92 @@ import React from 'react';
 
 export const SettingsSection: React.FC = () => {
   const [isDevMode, setIsDevMode] = React.useState(false);
+  const [isTelemetryEnabled, setIsTelemetryEnabled] = React.useState(false);
+  const [isSendingDiagnostic, setIsSendingDiagnostic] = React.useState(false);
+  const [diagnosticStatus, setDiagnosticStatus] = React.useState<{ textKey: string; fallback: string; isError?: boolean } | null>(null);
+
+  const t = (key: string, fallback: string) => {
+    const win = window as any;
+    if (typeof win.t === 'function') {
+      const val = win.t(key);
+      if (val && val !== key) return val;
+    }
+    return fallback;
+  };
 
   React.useEffect(() => {
-    const checkDevMode = () => {
+    const checkSettings = () => {
       const win = window as any;
-      const cb = document.getElementById('devModeCheckbox') as HTMLInputElement | null;
-      setIsDevMode(Boolean(cb?.checked || win.isDevMode));
+      const devCb = document.getElementById('devModeCheckbox') as HTMLInputElement | null;
+      setIsDevMode(Boolean(devCb?.checked || win.isDevMode));
+
+      const telemCb = document.getElementById('telemetryCheckbox') as HTMLInputElement | null;
+      setIsTelemetryEnabled(Boolean(telemCb?.checked));
     };
 
-    checkDevMode();
-    const interval = setInterval(checkDevMode, 1000);
-    const cb = document.getElementById('devModeCheckbox');
-    if (cb) cb.addEventListener('change', checkDevMode);
+    checkSettings();
+    const interval = setInterval(checkSettings, 1000);
+    const devCb = document.getElementById('devModeCheckbox');
+    if (devCb) devCb.addEventListener('change', checkSettings);
+    const telemCb = document.getElementById('telemetryCheckbox');
+    if (telemCb) telemCb.addEventListener('change', checkSettings);
 
     return () => {
       clearInterval(interval);
-      if (cb) cb.removeEventListener('change', checkDevMode);
+      if (devCb) devCb.removeEventListener('change', checkSettings);
+      if (telemCb) telemCb.removeEventListener('change', checkSettings);
     };
   }, []);
+
+  React.useEffect(() => {
+    const win = window as any;
+    if (typeof win.applyTranslations === 'function') {
+      setTimeout(() => win.applyTranslations(), 50);
+    }
+  }, [isTelemetryEnabled, diagnosticStatus]);
+
+  const handleSendDiagnostic = async () => {
+    if (isSendingDiagnostic) return;
+    setIsSendingDiagnostic(true);
+    setDiagnosticStatus({
+      textKey: 'settings.telemetry_sending',
+      fallback: 'Enviando reporte de diagnóstico...',
+    });
+
+    try {
+      const win = window as any;
+      if (win.hwlAPI && typeof win.hwlAPI.sendTelemetryDiagnostic === 'function') {
+        const res = await win.hwlAPI.sendTelemetryDiagnostic();
+        if (res && res.rate_limited) {
+          setDiagnosticStatus({
+            textKey: 'settings.telemetry_rate_limited',
+            fallback: 'Espera unos segundos antes de enviar otro reporte',
+            isError: true,
+          });
+        } else if (res && res.success) {
+          setDiagnosticStatus({
+            textKey: 'settings.telemetry_diagnostic_sent',
+            fallback: '¡Diagnóstico enviado con éxito!',
+          });
+        } else {
+          setDiagnosticStatus({
+            textKey: 'settings.telemetry_diagnostic_failed',
+            fallback: 'Error al enviar el reporte',
+            isError: true,
+          });
+        }
+      }
+    } catch (_) {
+      setDiagnosticStatus({
+        textKey: 'settings.telemetry_diagnostic_failed',
+        fallback: 'Error al enviar el reporte',
+        isError: true,
+      });
+    } finally {
+      setTimeout(() => setIsSendingDiagnostic(false), 3000);
+      setTimeout(() => setDiagnosticStatus(null), 6000);
+    }
+  };
 
   const handleTestUpdate = () => {
     const win = window as any;
@@ -357,6 +425,80 @@ export const SettingsSection: React.FC = () => {
           </div>
         </div>
 
+        <div className="input-group">
+          <div className="toggle-container">
+            <label className="toggle-switch">
+              <input type="checkbox" id="telemetryCheckbox" />
+              <span className="toggle-slider"></span>
+            </label>
+            <span className="toggle-label">
+              <span data-i18n="settings.telemetry_title">Send Diagnostics &amp; Telemetry</span>
+              <i
+                className="fa-regular fa-question-circle help-icon"
+                style={{ color: '#fff' }}
+                data-tooltip="Help improve HelloWorld Launcher by anonymously reporting crash dumps, technical specs, and error logs. Disabled by default."
+                data-i18n-tooltip="settings.telemetry_desc"
+              ></i>
+            </span>
+          </div>
+          {isTelemetryEnabled && (
+            <div
+              id="telemetryActionContainer"
+              style={{
+                marginTop: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                gap: '8px',
+              }}
+            >
+              <button
+                type="button"
+                id="sendDiagnosticBtn"
+                className="btn-secondary"
+                disabled={isSendingDiagnostic}
+                onClick={handleSendDiagnostic}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  borderRadius: '6px',
+                  background: isSendingDiagnostic ? 'rgba(255,255,255,0.06)' : 'rgba(59, 130, 246, 0.15)',
+                  border: '1px solid rgba(59, 130, 246, 0.4)',
+                  color: '#93c5fd',
+                  cursor: isSendingDiagnostic ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <i className={isSendingDiagnostic ? 'fas fa-spinner fa-spin' : 'fas fa-paper-plane'}></i>
+                <span data-i18n="settings.telemetry_send_diagnostic">
+                  {t('settings.telemetry_send_diagnostic', 'Enviar diagnóstico ahora')}
+                </span>
+              </button>
+              {diagnosticStatus && (
+                <div
+                  style={{
+                    fontSize: '12.5px',
+                    fontWeight: 500,
+                    color: diagnosticStatus.isError ? '#f87171' : '#4ade80',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <i className={diagnosticStatus.isError ? 'fas fa-exclamation-circle' : 'fas fa-check-circle'}></i>
+                  <span data-i18n={diagnosticStatus.textKey}>
+                    {t(diagnosticStatus.textKey, diagnosticStatus.fallback)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Developer Mode Testing Tools */}
         {isDevMode && (
           <div
@@ -488,6 +630,24 @@ export const SettingsSection: React.FC = () => {
           className="input-group"
           style={{ paddingTop: '15px', borderTop: '1px solid rgba(255, 255, 255, 0.1)', marginTop: '15px' }}
         >
+          <div className="toggle-container">
+            <label className="toggle-switch">
+              <input type="checkbox" id="minimizeToTrayOnGameOpenCheckbox" />
+              <span className="toggle-slider"></span>
+            </label>
+            <span className="toggle-label">
+              <span data-i18n="settings.minimize_to_tray_on_game_open">Minimize to System Tray on Game Open</span>
+              <i
+                className="fa-regular fa-question-circle help-icon"
+                style={{ color: '#fff' }}
+                data-tooltip="Automatically minimizes the launcher to the system tray once Minecraft opens and is detected as playing."
+                data-i18n-tooltip="settings.minimize_to_tray_on_game_open_tooltip"
+              ></i>
+            </span>
+          </div>
+        </div>
+
+        <div className="input-group">
           <div className="toggle-container">
             <label className="toggle-switch">
               <input type="checkbox" id="reopenOnGameCloseCheckbox" defaultChecked />

@@ -537,6 +537,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
     }
+    window.updateOnboardingAccountState = updateOnboardingAccountState;
 
     const wizLinkedContinueBtn = document.getElementById('wizLinkedContinueBtn');
     if (wizLinkedContinueBtn) {
@@ -547,13 +548,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const wizLinkedSwitchBtn = document.getElementById('wizLinkedSwitchBtn');
     if (wizLinkedSwitchBtn) {
-        wizLinkedSwitchBtn.addEventListener('click', () => {
-            const selectionView = document.getElementById('wizAccountSelectionView');
-            const linkedView = document.getElementById('wizAccountLinkedView');
-            if (selectionView) selectionView.style.display = 'block';
-            if (linkedView) linkedView.style.display = 'none';
-            if (nextBtn && currentStep === 0) {
-                nextBtn.style.display = 'none';
+        wizLinkedSwitchBtn.addEventListener('click', async () => {
+            if (typeof window.openAccountSwitcher === 'function') {
+                await window.openAccountSwitcher();
+            } else {
+                const modal = document.getElementById('accountSwitcherModal');
+                if (modal) modal.classList.add('show');
             }
         });
     }

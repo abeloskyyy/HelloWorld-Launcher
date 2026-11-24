@@ -5,6 +5,35 @@ export const Sidebar: React.FC = () => {
   const [activeSubtype, setActiveSubtype] = React.useState<string | null>(null);
 
   const [isModsSubmenuOpen, setIsModsSubmenuOpen] = React.useState(false);
+  const [isStaffOrMod, setIsStaffOrMod] = React.useState(false);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const checkStaff = async () => {
+      try {
+        const win = window as any;
+        if (win.hwlAPI?.telemetryAdmin?.checkAccess) {
+          const res = await win.hwlAPI.telemetryAdmin.checkAccess();
+          if (isMounted && res && res.hasAccess) {
+            setIsStaffOrMod(true);
+            return;
+          }
+        }
+        if (isMounted) setIsStaffOrMod(false);
+      } catch (_) {
+        if (isMounted) setIsStaffOrMod(false);
+      }
+    };
+
+    checkStaff();
+    window.addEventListener('user-profile-loaded', checkStaff);
+    window.addEventListener('auth-state-changed', checkStaff);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('user-profile-loaded', checkStaff);
+      window.removeEventListener('auth-state-changed', checkStaff);
+    };
+  }, []);
 
   React.useEffect(() => {
     const handleSectionChange = (e: any) => {
@@ -177,90 +206,108 @@ export const Sidebar: React.FC = () => {
         <i className="fas fa-cog"></i> Settings
       </button>
 
+      {isStaffOrMod && (
+        <button
+          className={`sidebar-button ${activeSection === 'telemetry' ? 'active' : ''}`}
+          id="telemetryNavBtn"
+          data-section="telemetry"
+          onClick={() => handleShowSection('telemetry')}
+          data-i18n="sidebar.telemetry"
+          style={{
+            borderColor: activeSection === 'telemetry' ? 'rgba(56, 189, 248, 0.6)' : 'rgba(56, 189, 248, 0.25)',
+            background: activeSection === 'telemetry' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(56, 189, 248, 0.04)',
+          }}
+        >
+          <i className="fas fa-chart-line" style={{ color: '#38bdf8' }}></i> Telemetría
+        </button>
+      )}
+
       {/* Sidebar Bottom Promos (Sponsor, Buy Minecraft, Discord) */}
-      <div className="sidebar-promos">
-        {/* Sponsor Banner (Apex Hosting) */}
-        <div className="sidebar-sponsor is-hidden" id="sidebarSponsorCard" style={{ display: 'none' }}>
-          <a
-            href="https://billing.apexminecrafthosting.com/aff.php?aff=17119"
-            target="_blank"
-            rel="noreferrer"
-            className="sponsor-sidebar-card"
-            id="sidebarSponsorLink"
-            title="Apex Hosting"
-            data-i18n-title="sidebar.sponsor_title"
-          >
-            <div className="sponsor-sidebar-icon" id="sponsorSidebarIcon">
-              <img src="" alt="Sponsor" id="sponsorIconImg" className="sponsor-apex-img" style={{ display: 'none' }} />
-              <i className="fas fa-server sponsor-fallback-icon" id="sponsorFallbackIcon"></i>
-            </div>
-            <div className="sponsor-sidebar-content">
-              <span className="sponsor-sidebar-title" id="sponsorTitle" data-i18n="sidebar.sponsor_title">
-                Apex Hosting
-              </span>
-              <span className="sponsor-sidebar-subtitle" id="sponsorSubtitle" data-i18n="sidebar.sponsor_subtitle">
-                Crea tu servidor
-              </span>
-            </div>
-            <div className="sponsor-sidebar-right">
-              <div className="sponsor-discount-badge" id="sponsorDiscountBadge">-25%</div>
-              <button
-                type="button"
-                className="sponsor-action-btn"
-                id="sponsorCopyBtn"
-                title="Copiar código"
-                data-i18n-title="sidebar.sponsor_copy_hint"
-              >
-                <i className="fas fa-copy"></i>
-              </button>
-            </div>
-          </a>
-        </div>
+      {activeSection !== 'telemetry' && (
+        <div className="sidebar-promos">
+          {/* Sponsor Banner (Apex Hosting) */}
+          <div className="sidebar-sponsor is-hidden" id="sidebarSponsorCard" style={{ display: 'none' }}>
+            <a
+              href="https://billing.apexminecrafthosting.com/aff.php?aff=17119"
+              target="_blank"
+              rel="noreferrer"
+              className="sponsor-sidebar-card"
+              id="sidebarSponsorLink"
+              title="Apex Hosting"
+              data-i18n-title="sidebar.sponsor_title"
+            >
+              <div className="sponsor-sidebar-icon" id="sponsorSidebarIcon">
+                <img src="" alt="Sponsor" id="sponsorIconImg" className="sponsor-apex-img" style={{ display: 'none' }} />
+                <i className="fas fa-server sponsor-fallback-icon" id="sponsorFallbackIcon"></i>
+              </div>
+              <div className="sponsor-sidebar-content">
+                <span className="sponsor-sidebar-title" id="sponsorTitle" data-i18n="sidebar.sponsor_title">
+                  Apex Hosting
+                </span>
+                <span className="sponsor-sidebar-subtitle" id="sponsorSubtitle" data-i18n="sidebar.sponsor_subtitle">
+                  Crea tu servidor
+                </span>
+              </div>
+              <div className="sponsor-sidebar-right">
+                <div className="sponsor-discount-badge" id="sponsorDiscountBadge">-25%</div>
+                <button
+                  type="button"
+                  className="sponsor-action-btn"
+                  id="sponsorCopyBtn"
+                  title="Copiar código"
+                  data-i18n-title="sidebar.sponsor_copy_hint"
+                >
+                  <i className="fas fa-copy"></i>
+                </button>
+              </div>
+            </a>
+          </div>
 
-        {/* Buy Minecraft Premium Banner (Only visible for non-premium accounts) */}
-        <div className="sidebar-buy-mc" id="sidebarBuyMinecraftCard" style={{ display: 'none' }}>
-          <a
-            href="https://www.minecraft.net/es-es/store/minecraft-java-bedrock-edition-pc"
-            target="_blank"
-            rel="noreferrer"
-            className="buy-mc-sidebar-link"
-            id="sidebarBuyMcLink"
-            title="Comprar Minecraft Oficial"
-            data-i18n-title="sidebar.buy_minecraft_hint"
-          >
-            <div className="buy-mc-sidebar-icon">
-              <img src="img/icon.png" alt="Launcher Icon" className="buy-mc-icon-img" />
-            </div>
-            <div className="buy-mc-sidebar-content">
-              <span className="buy-mc-sidebar-title" data-i18n="sidebar.buy_minecraft_title">
-                Comprar Minecraft
-              </span>
-              <span className="buy-mc-sidebar-subtitle" data-i18n="sidebar.buy_minecraft_subtitle">
-                Consigue tu cuenta Premium
-              </span>
-            </div>
-            <i className="fas fa-external-link-alt buy-mc-sidebar-arrow"></i>
-          </a>
-        </div>
+          {/* Buy Minecraft Premium Banner (Only visible for non-premium accounts) */}
+          <div className="sidebar-buy-mc" id="sidebarBuyMinecraftCard" style={{ display: 'none' }}>
+            <a
+              href="https://www.minecraft.net/es-es/store/minecraft-java-bedrock-edition-pc"
+              target="_blank"
+              rel="noreferrer"
+              className="buy-mc-sidebar-link"
+              id="sidebarBuyMcLink"
+              title="Comprar Minecraft Oficial"
+              data-i18n-title="sidebar.buy_minecraft_hint"
+            >
+              <div className="buy-mc-sidebar-icon">
+                <img src="img/icon.png" alt="Launcher Icon" className="buy-mc-icon-img" />
+              </div>
+              <div className="buy-mc-sidebar-content">
+                <span className="buy-mc-sidebar-title" data-i18n="sidebar.buy_minecraft_title">
+                  Comprar Minecraft
+                </span>
+                <span className="buy-mc-sidebar-subtitle" data-i18n="sidebar.buy_minecraft_subtitle">
+                  Consigue tu cuenta Premium
+                </span>
+              </div>
+              <i className="fas fa-external-link-alt buy-mc-sidebar-arrow"></i>
+            </a>
+          </div>
 
-        {/* Discord Link */}
-        <div className="sidebar-discord">
-          <a href="https://dsc.gg/helloworld-launcher" target="_blank" rel="noreferrer" className="discord-sidebar-link">
-            <div className="discord-sidebar-icon">
-              <i className="fab fa-discord"></i>
-            </div>
-            <div className="discord-sidebar-content">
-              <span className="discord-sidebar-title" data-i18n="sidebar.discord_title">
-                Join Community
-              </span>
-              <span className="discord-sidebar-subtitle" data-i18n="sidebar.discord_subtitle">
-                Get support & updates
-              </span>
-            </div>
-            <i className="fas fa-external-link-alt discord-sidebar-arrow"></i>
-          </a>
+          {/* Discord Link */}
+          <div className="sidebar-discord">
+            <a href="https://dsc.gg/helloworld-launcher" target="_blank" rel="noreferrer" className="discord-sidebar-link">
+              <div className="discord-sidebar-icon">
+                <i className="fab fa-discord"></i>
+              </div>
+              <div className="discord-sidebar-content">
+                <span className="discord-sidebar-title" data-i18n="sidebar.discord_title">
+                  Join Community
+                </span>
+                <span className="discord-sidebar-subtitle" data-i18n="sidebar.discord_subtitle">
+                  Get support & updates
+                </span>
+              </div>
+              <i className="fas fa-external-link-alt discord-sidebar-arrow"></i>
+            </a>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

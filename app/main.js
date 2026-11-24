@@ -48,6 +48,10 @@ const fs = require('fs-extra')
 // Catch unhandled exceptions & rejections to stop infinite Electron OS popups if edge cases happen
 process.on('uncaughtException', (error) => {
   console.error('[Global Error] Uncaught Exception:', error);
+  try {
+    const tm = require('./src/utils/telemetry');
+    tm.onLauncherCrash(error);
+  } catch (_) {}
   if (app.isPackaged) {
     dialog.showErrorBox('Error de inicio', `${error.message}\n\n${error.stack || ''}`);
     app.quit();
@@ -55,6 +59,10 @@ process.on('uncaughtException', (error) => {
 });
 process.on('unhandledRejection', (reason, promise) => {
   console.error('[Global Error] Unhandled Rejection at:', promise, 'reason:', reason);
+  try {
+    const tm = require('./src/utils/telemetry');
+    tm.sendReport('unhandled_rejection', { reason: String(reason) });
+  } catch (_) {}
 });
 
 // Clean exit handlers to avoid npm / PowerShell reporting "electron.exe exited with signal SIGINT" on Ctrl+C
@@ -219,9 +227,12 @@ const paths = require('./src/utils/paths')
 markExistingIndexesVerified(paths.getMcDir())
 const profileManager = require('./src/handlers/profiles')
 const modManager = require('./src/handlers/mods')
+const cloudInstallationsManager = require('./src/handlers/cloudInstallations')
 const versionUtils = require('./src/utils/version')
 const { addServerToServersDat, getServerHistory } = require('./src/utils/serversDat')
 const ApiClient = require('./src/utils/apiClient')
+const telemetryManager = require('./src/utils/telemetry')
+telemetryManager.init(app, paths, profileManager)
 
 // Hardware Acceleration & High-Performance GPU (Max VRAM / Dedicated GPU) Configuration
 const configuredGpuPaths = new Set();
@@ -384,6 +395,7 @@ const DEFAULT_USER_DATA = {
   show_profile_name: true,
   show_player_ign: true,
   reopen_on_game_close: true,
+  minimize_to_tray_on_game_open: false,
   addons_per_page: 20,
   launch_count: 0,
   has_reviewed: false,
@@ -988,6 +1000,11 @@ try {
     }
   };
   ApiClient.setAuthHandlers(getAuthTokenSafe, getAuthTokenSafe);
+  cloudInstallationsManager.init({
+    getAuth: getAuthTokenSafe,
+    getUserData: loadUserData,
+    getMainWindow: () => mainWindow
+  });
 } catch (_) {}
 
 // --- Social Helper: Deterministic friendship doc ID ---
@@ -2117,12 +2134,16 @@ async function pollMinecraftProcesses() {
       if (!hasUnreadyInternalProcess && mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('info-message', 'Game Ready');
         mainWindow.webContents.send('game-status', { running: true, count: getRunningMinecraftCount() });
+        if (hasCompletedInitialProcessPoll) {
+          maybeMinimizeToTrayOnGameOpen('external-process-detected');
+        }
       }
     } else if (lastKnownRunningState && !currentlyRunning) {
       lastKnownRunningState = false;
       console.log('[ProcessMonitor] All Minecraft processes closed');
       handleLauncherClose('all_processes_closed');
     }
+    hasCompletedInitialProcessPoll = true;
   } catch (err) {
     console.warn('[ProcessMonitor] Polling error:', err.message);
   }
@@ -2134,6 +2155,8 @@ function startMinecraftProcessMonitor() {
   processMonitorInterval = setInterval(pollMinecraftProcesses, 3500);
 }
 
+let hasCompletedInitialProcessPoll = false;
+let activeGameReadyMinimizeHandled = false;
 let gameStartTime = null;
 let streakSessionTimer = null;
 let streakCountedThisRun = false;
@@ -2209,6 +2232,7 @@ async function handleLauncherClose(e) {
   }
   console.log('[Launcher Close]', e);
   lastKnownRunningState = false;
+  activeGameReadyMinimizeHandled = false;
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('info-message', 'Game Closed');
     mainWindow.webContents.send('game-status', { running: false, count: 0 });
@@ -2283,6 +2307,44 @@ function maximizeAndFocusLauncher() {
   restoreAndFocus();
   // Second pass ensures window state is finalized if the OS was transitioning from Minecraft's display mode/fullscreen
   setTimeout(restoreAndFocus, 150);
+}
+
+function minimizeLauncherToTray() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    if (!tray || tray.isDestroyed()) {
+      createTray();
+    }
+    if (tray && !tray.isDestroyed()) {
+      if (mainWindow.isVisible() || mainWindow.isMinimized()) {
+        mainWindow.hide();
+      }
+      try { if (typeof updateTrayMenu === 'function') updateTrayMenu(); } catch (_) {}
+    } else if (!mainWindow.isMinimized()) {
+      // Fallback if system tray is unavailable on this desktop environment
+      mainWindow.minimize();
+    }
+  } catch (err) {
+    console.error('[Launch] Error minimizing launcher to tray:', err);
+  }
+}
+
+function maybeMinimizeToTrayOnGameOpen(source = 'game-ready') {
+  if (activeGameReadyMinimizeHandled || isLaunchCancelled) return;
+  try {
+    const userData = loadUserData();
+    if (userData.minimize_to_tray_on_game_open === true) {
+      activeGameReadyMinimizeHandled = true;
+      console.log(`[Launch] Auto-minimizing launcher to system tray (${source})`);
+      setTimeout(() => {
+        if (!isLaunchCancelled && isMinecraftRunning()) {
+          minimizeLauncherToTray();
+        }
+      }, 150);
+    }
+  } catch (err) {
+    console.error('[Launch] Error checking minimize_to_tray_on_game_open setting:', err);
+  }
 }
 
 let presencePollingInterval = null;
@@ -4696,9 +4758,9 @@ ipcMain.handle('switch-account', async (e, accountId, targetType = null) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // 2. Profiles
-ipcMain.handle('get-profiles', async () => profileManager.loadProfiles())
+ipcMain.handle('get-profiles', async () => cloudInstallationsManager.filterProfilesForCurrentUser(profileManager.loadProfiles()))
 ipcMain.handle('get-profiles-for-addon', async (e, type) => {
-  const data = profileManager.loadProfiles();
+  const data = cloudInstallationsManager.filterProfilesForCurrentUser(profileManager.loadProfiles());
   const profiles = data.profiles || {};
   const filtered = {};
   const mcDir = paths.getMcDir();
@@ -4775,17 +4837,80 @@ ipcMain.handle('edit-profile', async (e, profile_id, name, version, loader, icon
       data.addons = addons;
     }
   }
+  const existingBeforeEdit = profileManager.loadProfiles()?.profiles?.[id] || null;
+  const iconChanged = Boolean(
+    data.icon !== undefined && data.icon !== null && (
+      (typeof data.icon === 'object' && (data.icon.base64 || data.icon.url)) ||
+      (typeof data.icon === 'string' && (
+        data.icon.startsWith('data:') ||
+        data.icon.startsWith('http://') ||
+        data.icon.startsWith('https://') ||
+        (existingBeforeEdit && data.icon !== existingBeforeEdit.icon)
+      ))
+    )
+  );
   const result = await profileManager.editProfile(id, data);
+  if (result && result.success) {
+    cloudInstallationsManager.scheduleAutoSync(id, { iconChanged });
+  }
   try { updateTrayMenu(); } catch (_) {}
   return result;
 })
 
 ipcMain.handle('delete-profile', async (e, id) => {
+  const cloudDel = await cloudInstallationsManager.deleteFromCloudIfSynced(id);
+  if (!cloudDel.success && !cloudDel.skipped) {
+    return { success: false, error: cloudDel.message || cloudDel.error || 'Failed to delete cloud installation' };
+  }
   const result = await profileManager.deleteProfile(id);
   try { updateTrayMenu(); } catch (_) {}
   return result;
 })
+
+ipcMain.handle('open-profile-folder', async (e, id) => {
+  try {
+    const profiles = profileManager.loadProfiles().profiles || {};
+    const profile = profiles[id];
+    if (!profile) return { success: false, error: 'Profile not found' };
+    const targetDir = (profile.directory && String(profile.directory).trim()) ? profile.directory : paths.getMcDir();
+    fs.ensureDirSync(targetDir);
+    const openErr = await shell.openPath(targetDir);
+    if (openErr) return { success: false, error: openErr };
+    return { success: true, path: targetDir };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+})
+
+ipcMain.handle('duplicate-profile', async (e, id) => {
+  const result = await profileManager.duplicateProfile(id);
+  if (result && result.success) {
+    try { updateTrayMenu(); } catch (_) {}
+  }
+  return result;
+})
 ipcMain.handle('get-profile-icon', async (e, f) => profileManager.getProfileIconAsBase64(f))
+
+// 2b. Cloud Installations IPCs
+ipcMain.handle('cloud-get-status', async () => cloudInstallationsManager.getStatus())
+ipcMain.handle('cloud-scan-external-addons', async (e, { profileId } = {}) => cloudInstallationsManager.scanExternalAddons(profileId))
+ipcMain.handle('cloud-upload-profile', async (e, { profileId, confirmExternal = false } = {}) => {
+  const res = await cloudInstallationsManager.uploadProfileToCloud(profileId, { confirmExternal });
+  try { updateTrayMenu(); } catch (_) {}
+  return res;
+})
+ipcMain.handle('cloud-download-profile', async (e, { profileId } = {}) => {
+  const res = await cloudInstallationsManager.downloadProfileFromCloud(profileId);
+  try { updateTrayMenu(); } catch (_) {}
+  return res;
+})
+ipcMain.handle('cloud-sync-all', async () => {
+  const res = await cloudInstallationsManager.syncAllFromCloud();
+  if (res && res.modified) {
+    try { updateTrayMenu(); } catch (_) {}
+  }
+  return res;
+})
 
 // --- Profile Windows Shortcuts & ICO generation ---
 function pngsToIco(pngBuffers) {
@@ -5189,6 +5314,7 @@ ipcMain.handle('install-addon', async (e, args) => {
             state: 'enabled'
           });
           profileManager.saveProfiles(profilesData);
+          if (type !== 'datapack') cloudInstallationsManager.scheduleAutoSync(profile_id);
         }
 
         return { success: true, alreadyInstalled: true };
@@ -5249,6 +5375,7 @@ ipcMain.handle('install-addon', async (e, args) => {
             state: 'enabled'
           });
           profileManager.saveProfiles(profilesData);
+          if (type !== 'datapack') cloudInstallationsManager.scheduleAutoSync(profile_id);
         }
       }
 
@@ -5439,6 +5566,7 @@ ipcMain.handle('toggle-addon', async (e, { filename, profile_id, type, world_nam
   profile.addons[addonIndex].filename = newFilename;
   profile.addons[addonIndex].state = targetState;
   profileManager.saveProfiles(profilesData);
+  if (type !== 'datapack') cloudInstallationsManager.scheduleAutoSync(profile_id);
 
   return { success: true, new_name: newFilename };
 })
@@ -5496,6 +5624,7 @@ ipcMain.handle('delete-addon', async (e, { filename, profile_id, type, world_nam
       return true;
     });
     profileManager.saveProfiles(profilesData);
+    if (type !== 'datapack') cloudInstallationsManager.scheduleAutoSync(profile_id);
   }
 
   return result;
@@ -5646,6 +5775,115 @@ ipcMain.handle('close-app', async () => {
     } catch (_) {}
     process.exit(0);
   }, 500);
+});
+
+let isRestartingApp = false;
+async function performFullAppRestart() {
+  if (isRestartingApp) return { success: true };
+  isRestartingApp = true;
+  isQuitting = true;
+  console.log('[Restart] Performing full launcher restart...');
+
+  try {
+    await Promise.race([
+      presenceManager.setOffline().catch(() => {}),
+      new Promise(resolve => setTimeout(resolve, 600))
+    ]);
+  } catch (_) {}
+
+  // Abort any active installer download cleanly
+  if (activeInstallerDownload) {
+    try {
+      if (activeInstallerDownload.res && activeInstallerDownload.res.data) {
+        activeInstallerDownload.res.data.destroy();
+      }
+      if (activeInstallerDownload.writer && !activeInstallerDownload.writer.destroyed) {
+        activeInstallerDownload.writer.destroy();
+      }
+      if (activeInstallerDownload.tempPath && fs.existsSync(activeInstallerDownload.tempPath)) {
+        try { fs.unlinkSync(activeInstallerDownload.tempPath); } catch (_) {}
+      }
+    } catch (_) {}
+    activeInstallerDownload = null;
+  }
+
+  // Destroy system tray so no ghost icon remains
+  if (tray && !tray.isDestroyed()) {
+    try { tray.destroy(); } catch (_) {}
+  }
+
+  // Close window immediately without triggering hide-to-tray
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.destroy(); } catch (_) {}
+  }
+
+  // Clear GPU offload env vars that were mutated in this process so the relaunched
+  // instance cleanly applies the newly saved hardware acceleration setting
+  delete process.env.SHIM_MCCOMPAT;
+  delete process.env.__NV_PRIME_RENDER_OFFLOAD;
+  delete process.env.__GLX_VENDOR_LIBRARY_NAME;
+  delete process.env.DRI_PRIME;
+
+  // Strip one-shot CLI action flags so the restarted launcher opens normally
+  const oneShotFlags = new Set(['--quit-launcher', '--open-discord', '--open-social', '--open-launcher', '--relaunch']);
+  const rawArgs = process.argv.slice(1);
+  const cleanArgs = [];
+  for (let i = 0; i < rawArgs.length; i++) {
+    const arg = rawArgs[i];
+    if (typeof arg !== 'string') continue;
+    const trimmed = arg.trim();
+    if (oneShotFlags.has(trimmed)) continue;
+    if (/^--launch-profile=/i.test(trimmed)) continue;
+    if (trimmed.toLowerCase() === '--launch-profile') {
+      i++; // skip value too
+      continue;
+    }
+    cleanArgs.push(arg);
+  }
+
+  // Release single-instance lock BEFORE relaunch so the new process always acquires it
+  try {
+    app.releaseSingleInstanceLock();
+  } catch (_) {}
+
+  try {
+    const relaunchOptions = { args: cleanArgs };
+    // On Linux AppImage, relaunch the actual AppImage binary instead of the temporary mount path
+    if (process.platform === 'linux' && process.env.APPIMAGE) {
+      relaunchOptions.execPath = process.env.APPIMAGE;
+    }
+    app.relaunch(relaunchOptions);
+  } catch (err) {
+    console.error('[Restart] Error scheduling relaunch:', err);
+  }
+
+  // Exit via app.exit(0) so Electron immediately executes the scheduled relaunch hook
+  app.exit(0);
+  return { success: true };
+}
+
+ipcMain.handle('restart-app', async () => performFullAppRestart());
+
+ipcMain.handle('prompt-restart', async (e, opts = {}) => {
+  const title = opts.title || getTranslation('settings.restart_modal_title', 'Restart Required');
+  const message = opts.message || getTranslation('settings.restart_modal_desc', 'Settings have been saved. Some changes require a full launcher restart to take effect.');
+  const restartNowLabel = opts.restartNowLabel || getTranslation('settings.restart_now_btn', 'Restart Now');
+  const laterLabel = opts.laterLabel || getTranslation('settings.restart_later_btn', 'Later');
+
+  const res = await dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title,
+    message,
+    buttons: [restartNowLabel, laterLabel],
+    defaultId: 0,
+    cancelId: 1
+  });
+
+  if (res.response === 0) {
+    await performFullAppRestart();
+    return { restarted: true };
+  }
+  return { restarted: false };
 });
 ipcMain.handle('get-version', () => app.getVersion())
 ipcMain.handle('check-internet', async () => {
@@ -8199,6 +8437,21 @@ ipcMain.handle('error', async (e, message) => {
   dialog.showMessageBox(mainWindow, { type: 'error', title: 'Error', message });
 })
 
+ipcMain.handle('show-warning-dialog', async (e, opts = {}) => {
+  const title = (typeof opts === 'object' && opts.title) ? String(opts.title) : 'Warning';
+  const message = (typeof opts === 'string') ? opts : String(opts.message || '');
+  const detail = (typeof opts === 'object' && opts.detail) ? String(opts.detail) : undefined;
+  await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    title,
+    message,
+    ...(detail ? { detail } : {}),
+    buttons: ['OK'],
+    defaultId: 0
+  });
+  return { success: true };
+})
+
 ipcMain.handle('confirm', async (e, message) => {
   const res = await dialog.showMessageBox(mainWindow, {
     type: 'question',
@@ -8219,7 +8472,7 @@ ipcMain.handle('save-version-settings', async (e, showSnapshots, showOld) => {
   return { success: true };
 })
 
-ipcMain.handle('save-app-settings', async (e, enableTransitions, hwAccel, privacyMode, reopenOnGameClose) => {
+ipcMain.handle('save-app-settings', async (e, enableTransitions, hwAccel, privacyMode, reopenOnGameClose, minimizeToTrayOnGameOpen) => {
   const data = loadUserData();
   // hwAccel needs restart, enableTransitions is instant
   data.enable_transitions = enableTransitions !== false;
@@ -8227,6 +8480,9 @@ ipcMain.handle('save-app-settings', async (e, enableTransitions, hwAccel, privac
   data.privacy_mode = privacyMode === true;
   if (reopenOnGameClose !== undefined) {
     data.reopen_on_game_close = reopenOnGameClose !== false;
+  }
+  if (minimizeToTrayOnGameOpen !== undefined) {
+    data.minimize_to_tray_on_game_open = minimizeToTrayOnGameOpen === true;
   }
   saveUserData(data);
 
@@ -8240,6 +8496,13 @@ ipcMain.handle('save-app-settings', async (e, enableTransitions, hwAccel, privac
 
 ipcMain.handle('maximize-launcher', async () => {
   maximizeAndFocusLauncher();
+  return { success: true };
+})
+
+ipcMain.handle('notify-game-ready', async () => {
+  if (isMinecraftRunning()) {
+    maybeMinimizeToTrayOnGameOpen('renderer-game-ready');
+  }
   return { success: true };
 })
 
@@ -8257,6 +8520,154 @@ ipcMain.handle('save-dev-mode', async (e, enabled) => {
 
   return { success: true };
 })
+
+// Telemetry IPC handlers
+ipcMain.on('telemetry-log', (e, { level, message, stack }) => {
+  telemetryManager.addRendererLog(level, message, stack);
+});
+
+ipcMain.handle('get-telemetry-status', () => {
+  return {
+    enabled: telemetryManager.isTelemetryEnabled(),
+    endpoint: telemetryManager.getTelemetryEndpoint(),
+  };
+});
+
+ipcMain.handle('set-telemetry-status', async (e, enabled) => {
+  const userFilePath = paths.getUserFilePath();
+  let userData = {};
+  if (fs.existsSync(userFilePath)) {
+    try { userData = fs.readJsonSync(userFilePath); } catch (_) {}
+  }
+  userData.telemetry_enabled = !!enabled;
+  await fs.writeJson(userFilePath, userData, { spaces: 2 });
+  return { success: true, enabled: userData.telemetry_enabled };
+});
+
+ipcMain.handle('send-telemetry-diagnostic', async () => {
+  return await telemetryManager.sendReport('manual_diagnostic');
+});
+
+// Telemetry Admin IPC handlers (Strict server-side moderator role validation)
+const TELEMETRY_ADMIN_BASE = 'https://hwlauncher-telemetry.abeloskysb.workers.dev';
+const TELEMETRY_ADMIN_KEY = 'hwlauncher_admin_telemetry_key';
+
+async function checkIsStaffOrMod() {
+  try {
+    let auth = null;
+    try { auth = await getSocialAuth(); } catch (_) {}
+    if (auth && auth.idToken) {
+      const roles = await _wkGetUserRoles(auth.idToken);
+      if (roles.isAdmin || roles.isMod) return true;
+    }
+    const ud = loadUserData();
+    const isMicrosoft = ud && ud.account_type === 'microsoft';
+    const targetUid = isMicrosoft ? (ud.firebase_ms_uid || ud.uuid) : (ud.firebase_uid || ud.uuid);
+    if (targetUid) {
+      const res = await ApiClient.users.getProfile(targetUid);
+      if (res && res.success && res.user) {
+        const u = res.user;
+        const role = (u.role || '').toLowerCase();
+        const badges = Array.isArray(u.badges) ? u.badges : [];
+        if (u.isAdmin || role === 'admin' || role === 'owner' || badges.includes('creator')) return true;
+        if (u.isMod || role === 'moderator' || role === 'mod' || badges.includes('moderator')) return true;
+      }
+    }
+  } catch (_) {}
+  return false;
+}
+
+ipcMain.handle('telemetry-admin-check-access', async () => {
+  const hasAccess = await checkIsStaffOrMod();
+  return { hasAccess };
+});
+
+ipcMain.handle('telemetry-admin-stats', async () => {
+  const hasAccess = await checkIsStaffOrMod();
+  if (!hasAccess) return { success: false, error: 'Forbidden' };
+  try {
+    const res = await axios.get(`${TELEMETRY_ADMIN_BASE}/reports/stats`, {
+      headers: { 'x-admin-key': TELEMETRY_ADMIN_KEY },
+      timeout: 8000,
+    });
+    return res.data;
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('telemetry-admin-list', async (e, filters = {}) => {
+  const hasAccess = await checkIsStaffOrMod();
+  if (!hasAccess) return { success: false, error: 'Forbidden' };
+  try {
+    const params = new URLSearchParams();
+    if (filters.username) params.set('username', filters.username);
+    if (filters.crash_only) params.set('crash_only', '1');
+    if (filters.mod_loader && filters.mod_loader !== 'all') params.set('mod_loader', filters.mod_loader);
+    if (filters.game_version && filters.game_version !== 'all') params.set('game_version', filters.game_version);
+    if (filters.os_platform && filters.os_platform !== 'all') params.set('os_platform', filters.os_platform);
+    if (filters.limit) params.set('limit', String(filters.limit));
+    if (filters.offset) params.set('offset', String(filters.offset));
+
+    const res = await axios.get(`${TELEMETRY_ADMIN_BASE}/reports?${params.toString()}`, {
+      headers: { 'x-admin-key': TELEMETRY_ADMIN_KEY },
+      timeout: 10000,
+    });
+    return res.data;
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('telemetry-admin-get-report', async (e, id) => {
+  const hasAccess = await checkIsStaffOrMod();
+  if (!hasAccess) return { success: false, error: 'Forbidden' };
+  try {
+    const res = await axios.get(`${TELEMETRY_ADMIN_BASE}/reports/${id}`, {
+      headers: { 'x-admin-key': TELEMETRY_ADMIN_KEY },
+      timeout: 8000,
+    });
+    return res.data;
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('telemetry-admin-fetch-full-logs', async (e, id) => {
+  const hasAccess = await checkIsStaffOrMod();
+  if (!hasAccess) return { success: false, error: 'Forbidden' };
+  try {
+    const res = await axios.get(`${TELEMETRY_ADMIN_BASE}/reports/${id}/logs`, {
+      responseType: 'arraybuffer',
+      timeout: 15000,
+    });
+    const zlib = require('zlib');
+    let decompressed;
+    try {
+      decompressed = zlib.gunzipSync(Buffer.from(res.data));
+    } catch (_) {
+      decompressed = Buffer.from(res.data);
+    }
+    const json = JSON.parse(decompressed.toString('utf8'));
+    return { success: true, bundle: json };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('telemetry-admin-delete-report', async (e, id) => {
+  const hasAccess = await checkIsStaffOrMod();
+  if (!hasAccess) return { success: false, error: 'Forbidden' };
+  try {
+    const res = await axios.delete(`${TELEMETRY_ADMIN_BASE}/reports/${id}`, {
+      headers: { 'x-admin-key': TELEMETRY_ADMIN_KEY },
+      timeout: 8000,
+    });
+    return res.data;
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
 
 ipcMain.handle('check-review-reminder', async () => {
   const data = loadUserData();
@@ -8519,6 +8930,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       isStartingGame = false;
       return { status: 'error', error: "Profile not found" };
     }
+    telemetryManager.setActiveProfile(profileId, profile);
 
     const verInfo = versionUtils.parseVersionString(profile.version) || { type: 'vanilla', mcVersion: profile.version, loaderVersion: null };
     const isForge = verInfo.type === 'forge';
@@ -8684,6 +9096,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
         try {
           profileManager.updateProfileVersion(profileId, updatedLoader.new_version);
           profile.version = updatedLoader.new_version;
+          cloudInstallationsManager.scheduleAutoSync(profileId);
         } catch (e) {
           console.warn('[Launch] Could not auto-update profile version in JSON:', e);
         }
@@ -8995,11 +9408,12 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
           exec(`tasklist /v /fo csv /fi "PID eq ${pid}"`, { windowsHide: true, timeout: 2500 }, (err, stdout) => {
             if (!err && stdout) {
               const lines = stdout.split(/\r?\n/).filter(l => l.trim().length > 0);
+              const ignoredSystemTitles = new Set(['n/a', 'olemainthreadwndname', 'default ime', 'msctfime ui', 'gdi+ window']);
               for (let i = 1; i < lines.length; i++) {
                 const cols = parseCsvLine(lines[i]);
                 if (cols.length >= 9) {
                   const title = cols[8].replace(/^"|"$/g, '').trim();
-                  if (title && title !== 'N/A' && isMinecraftGameWindowTitle(title)) {
+                  if (title && !ignoredSystemTitles.has(title.toLowerCase())) {
                     return resolve(true);
                   }
                 }
@@ -9030,8 +9444,65 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
             });
           });
         } else {
-          // Linux: Query wmctrl (X11/Xwayland) or xdotool
-          exec('wmctrl -l -p', { timeout: 2500 }, (err, stdout) => {
+          // Linux: Support X11/XWayland (wmctrl, xdotool), Wayland compositors (Hyprland, Sway),
+          // and universal Wayland GPU render context detection via /proc/<pid>/fd.
+          const hasLinuxGpuWindowContext = (targetPid) => {
+            try {
+              const fdDir = `/proc/${targetPid}/fd`;
+              const entries = fs.readdirSync(fdDir);
+              for (const entry of entries) {
+                try {
+                  const target = fs.readlinkSync(path.join(fdDir, entry));
+                  if (/^\/dev\/(dri\/(renderD|card)\d+|nvidia(\d+|ctl))/.test(target)) {
+                    return true;
+                  }
+                } catch (_) {}
+              }
+            } catch (_) {}
+            return false;
+          };
+
+          const checkWaylandCompositors = () => {
+            if (process.env.HYPRLAND_INSTANCE_SIGNATURE) {
+              return new Promise((res) => {
+                exec('hyprctl clients -j', { timeout: 2000 }, (hErr, hOut) => {
+                  if (!hErr && hOut) {
+                    try {
+                      const clients = JSON.parse(hOut);
+                      if (Array.isArray(clients) && clients.some(c => c.pid === pid || isMinecraftGameWindowTitle(c.title))) {
+                        return res(true);
+                      }
+                    } catch (_) {}
+                  }
+                  res(false);
+                });
+              });
+            }
+            if (process.env.SWAYSOCK) {
+              return new Promise((res) => {
+                exec('swaymsg -t get_tree', { timeout: 2000 }, (sErr, sOut) => {
+                  if (!sErr && sOut) {
+                    try {
+                      const walk = (node) => {
+                        if (!node) return false;
+                        if (node.pid === pid || isMinecraftGameWindowTitle(node.name)) return true;
+                        for (const child of [...(node.nodes || []), ...(node.floating_nodes || [])]) {
+                          if (walk(child)) return true;
+                        }
+                        return false;
+                      };
+                      if (walk(JSON.parse(sOut))) return res(true);
+                    } catch (_) {}
+                  }
+                  res(false);
+                });
+              });
+            }
+            return Promise.resolve(false);
+          };
+
+          // 1. Query wmctrl (X11 / XWayland)
+          exec('wmctrl -l -p', { timeout: 2000 }, async (err, stdout) => {
             if (!err && stdout) {
               const lines = stdout.split(/\r?\n/).filter(l => l.trim().length > 0);
               for (const line of lines) {
@@ -9045,13 +9516,28 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
                 }
               }
             }
-            // Fallback: search window with xdotool
-            exec(`xdotool search --pid ${pid} || xdotool search --name "Minecraft"`, { timeout: 2000 }, (xErr, xStdout) => {
-              if (!xErr && xStdout && xStdout.trim().length > 0) {
+
+            // 2. Fallback: xdotool strictly by exact PID (avoids matching browser tabs)
+            const foundByXdotool = await new Promise((res) => {
+              exec(`xdotool search --onlyvisible --pid ${pid} || xdotool search --pid ${pid}`, { timeout: 1500 }, (xErr, xStdout) => {
+                res(!xErr && Boolean(xStdout && xStdout.trim().length > 0));
+              });
+            });
+            if (foundByXdotool) return resolve(true);
+
+            // 3. Native Wayland compositor query (Hyprland / Sway)
+            if (await checkWaylandCompositors()) return resolve(true);
+
+            // 4. Native Wayland universal fallback (KDE Plasma, GNOME, etc.):
+            // On Wayland, X11 tools cannot see native GLFW/LWJGL windows, so check if the
+            // game process has opened a GPU render device (/dev/dri/* or /dev/nvidia*).
+            if (process.env.WAYLAND_DISPLAY || process.env.XDG_SESSION_TYPE === 'wayland') {
+              if (hasLinuxGpuWindowContext(pid)) {
                 return resolve(true);
               }
-              resolve(false);
-            });
+            }
+
+            resolve(false);
           });
         }
       });
@@ -9089,6 +9575,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
           mainWindow.webContents.send('info-message', 'Game Ready');
           mainWindow.webContents.send('game-status', { running: true, count: getRunningMinecraftCount() });
         }
+        maybeMinimizeToTrayOnGameOpen(reason);
       };
 
       if (isLaunchCancelled) {
@@ -9149,6 +9636,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
       activeGameProcesses.add(child);
       currentGameProcess = child;
       lastKnownRunningState = true;
+      activeGameReadyMinimizeHandled = false;
 
       // Update Presence / RPC state with PID
       presenceManager.safeRun(presenceManager.onGameLaunch({
@@ -9158,7 +9646,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
         pid: child.pid
       }));
 
-      // Window Detection: Poll every 4-5s for the actual Minecraft window
+      // Window Detection: Poll every 1.5s for the actual Minecraft window
       if (child.pid) {
         windowPollTimer = setInterval(async () => {
           if (isGameMarkedReady || isLaunchCancelled || !activeGameProcesses.has(child)) {
@@ -9174,58 +9662,85 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
               triggerGameReady('Minecraft window detected');
             }
           } catch (e) { }
-        }, 4000);
+        }, 1500);
         childMeta.windowPollTimer = windowPollTimer;
       }
 
       let lastStdoutIpcTime = 0;
+      let stdoutLineBuffer = '';
+      let stderrLineBuffer = '';
       const isMinecraftReadyLog = (msg) => {
         if (!msg) return false;
-        // High-confidence completion signatures across Vanilla, Fabric, Forge, NeoForge:
-        // Excludes early logs like texture atlas creation or LWJGL library loading.
-        return /Connecting to\s+|joined the game|joined singleplayer|Player joined|Stopping worker threads|stage COMPLETE|Mod loading complete|Narrator library for/i.test(msg);
+        // High-confidence post-window-open signatures across Vanilla, Fabric, Forge, NeoForge (MC 1.7 - 26.x):
+        // Excludes early pre-window logs like "Setting user:" or "Backend library: LWJGL".
+        return /Sound engine started|OpenAL initialized|Starting up SoundSystem|OpenGL Vendor:|OpenGL Renderer:|Created:\s+\d+x\d+(?:x\d+)?\s+(?:minecraft:)?textures(?:\/atlas\/|-atlas)|Connecting to\s+|joined the game|joined singleplayer|Player joined|Stopping worker threads|stage COMPLETE|Mod loading complete|Narrator library for/i.test(msg);
+      };
+
+      const checkStreamLinesForReady = (chunkText, isStderr) => {
+        const buffer = (isStderr ? stderrLineBuffer : stdoutLineBuffer) + chunkText;
+        const lines = buffer.split(/\r?\n/);
+        const remainder = lines.pop() || '';
+        if (isStderr) stderrLineBuffer = remainder;
+        else stdoutLineBuffer = remainder;
+
+        for (const line of lines) {
+          if (isMinecraftReadyLog(line)) {
+            return line.trim();
+          }
+        }
+        if (remainder && isMinecraftReadyLog(remainder)) {
+          return remainder.trim();
+        }
+        return null;
       };
 
       child.stdout?.on('data', (data) => {
         if (isLaunchCancelled) return;
-        const message = data.toString().trim();
+        const raw = data.toString();
+        const message = raw.trim();
         if (!message) return;
         console.log('[Game stdout]', message);
+        telemetryManager.addGameLog('stdout', message);
         presenceManager.handleGameLog(message);
+        const readyLine = checkStreamLinesForReady(raw, false);
         const now = Date.now();
         if (mainWindow && !mainWindow.isDestroyed()) {
-          const isReady = isMinecraftReadyLog(message);
-          if (isReady || message.includes('Setting user:') || message.includes('Sound engine started') || now - lastStdoutIpcTime > 400) {
+          if (readyLine || message.includes('Setting user:') || message.includes('Sound engine started') || now - lastStdoutIpcTime > 400) {
             lastStdoutIpcTime = now;
             mainWindow.webContents.send('info-message', `[Game stdout] ${message}`);
-            if (isReady) {
-              triggerGameReady(`Log detected: ${message.slice(0, 80)}`);
-            }
           }
+        }
+        if (readyLine) {
+          triggerGameReady(`Log detected: ${readyLine.slice(0, 80)}`);
         }
       });
 
       child.stderr?.on('data', (data) => {
         if (isLaunchCancelled) return;
-        const message = data.toString().trim();
+        const raw = data.toString();
+        const message = raw.trim();
         if (!message) return;
         console.error('[Game stderr]', message);
+        telemetryManager.addGameLog('stderr', message);
         presenceManager.handleGameLog(message);
+        const readyLine = checkStreamLinesForReady(raw, true);
         const now = Date.now();
         if (mainWindow && !mainWindow.isDestroyed()) {
-          const isReady = isMinecraftReadyLog(message);
-          if (isReady || now - lastStdoutIpcTime > 400) {
+          if (readyLine || now - lastStdoutIpcTime > 400) {
             lastStdoutIpcTime = now;
             mainWindow.webContents.send('info-message', `[Game stderr] ${message}`);
-            if (isReady) {
-              triggerGameReady(`Stderr log detected: ${message.slice(0, 80)}`);
-            }
           }
+        }
+        if (readyLine) {
+          triggerGameReady(`Stderr log detected: ${readyLine.slice(0, 80)}`);
         }
       });
 
       child.on('close', (exitCode) => {
         console.log("[Launch] Game process closed", exitCode);
+        if (exitCode !== 0 && exitCode !== null && !isLaunchCancelled) {
+          telemetryManager.onGameCrash(profile, exitCode).catch(() => {});
+        }
         const meta = internalGameProcessesMeta.get(child);
         if (meta) {
           if (meta.windowPollTimer) {
@@ -9260,6 +9775,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
 
       child.on('error', (err) => {
         console.error("[Launch] Process Error:", err);
+        telemetryManager.sendReport('game_spawn_error', { is_crash: true, error: err.message, profileId: profileId, profile }).catch(() => {});
         const meta = internalGameProcessesMeta.get(child);
         if (meta) {
           if (meta.windowPollTimer) {
@@ -9306,6 +9822,7 @@ ipcMain.handle('launch-profile', async (e, { profileId, nickname, force, serverI
     try {
       profile.last_played = new Date().toISOString();
       profileManager.saveProfiles({ profiles });
+      cloudInstallationsManager.scheduleAutoSync(profileId);
       if (typeof updateTrayMenu === 'function') {
         try { updateTrayMenu(); } catch (_) {}
       }
@@ -11167,7 +11684,18 @@ app.on('window-all-closed', async () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', async () => {
+let didCloudQuitFlush = false;
+app.on('before-quit', async (event) => {
+  if (!didCloudQuitFlush && cloudInstallationsManager && typeof cloudInstallationsManager.hasReadyPendingSync === 'function' && cloudInstallationsManager.hasReadyPendingSync()) {
+    event.preventDefault();
+    didCloudQuitFlush = true;
+    isQuitting = true;
+    console.log('[before-quit] Flushing ready cloud installation sync before exit...');
+    await cloudInstallationsManager.flushReadyPendingBeforeQuit(2000);
+    app.quit();
+    return;
+  }
+
   isQuitting = true;
   if (tray && !tray.isDestroyed()) {
     try { tray.destroy(); } catch (_) {}

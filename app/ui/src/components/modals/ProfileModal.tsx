@@ -217,7 +217,7 @@ export const ProfileModal: React.FC = () => {
                 <i className="fas fa-plus"></i>
               </span>
             </label>
-            <input type="file" id="customImageInput" className="icon-input" accept="image/png,image/jpeg,image/jpg,image/gif" />
+            <input type="file" id="customImageInput" className="icon-input" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" />
           </div>
           <div className="modal-options">
             <button id="cancelImageModalBtn" className="btn-secondary" data-i18n="social.cancel_btn">

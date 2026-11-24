@@ -174,3 +174,108 @@ storageApp.post('/upload/icon', requireAuth, async (c) => {
     processedOnServer: sanitized.wasProcessed
   });
 });
+
+// POST /api/v1/storage/upload/cloud-icon - Subir icono custom para instalación en la nube (R2 + D1 rate limit)
+storageApp.post('/upload/cloud-icon', requireAuth, async (c) => {
+  const user = c.get('user');
+  if (!user?.uid || user.uid.startsWith('local_')) {
+    return c.json({ success: false, error: 'auth_required_for_cloud' }, 401);
+  }
+
+  const bucket = c.env.STORAGE_BUCKET;
+  if (!bucket) {
+    return c.json({ success: false, error: 'storage_disabled' }, 501);
+  }
+
+  // 1. Rate limit persistente en D1 (máx 6 subidas de icono / min por usuario)
+  const now = Date.now();
+  const windowStart = now - 60 * 1000;
+  try {
+    const rlRow = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS cnt, MIN(created_at) AS oldest_ts
+       FROM cloud_sync_rate_limits
+       WHERE uid = ? AND action = 'upload_icon' AND created_at > ?`
+    ).bind(user.uid, windowStart).first<{ cnt: number; oldest_ts: number | null }>();
+
+    if (rlRow && rlRow.cnt >= 6) {
+      const oldestTs = rlRow.oldest_ts || now;
+      const retryAfterSec = Math.max(1, Math.ceil((60 * 1000 - (now - oldestTs)) / 1000));
+      c.header('Retry-After', String(retryAfterSec));
+      return c.json({
+        success: false,
+        error: 'rate_limited',
+        retryAfterSec
+      }, 429);
+    }
+  } catch (rlErr) {
+    console.warn('[Storage CloudIcon] Rate limit table check skipped:', rlErr);
+  }
+
+  // 2. Comprobación estricta de seguridad anti-cobro (bloqueo al 80% / 8 GB)
+  const limitCheck = await checkStorageLimit(c.env);
+  if (!limitCheck.allowed) {
+    return c.json({
+      success: false,
+      error: 'storage_safety_limit_reached_anti_billing',
+      message: 'Se ha alcanzado el límite estricto de seguridad para garantizar 0€ de coste.'
+    }, 507);
+  }
+
+  const rawProfileId = (c.req.header('X-Profile-Id') || c.req.query('profileId') || '').trim();
+  const safeProfileId = rawProfileId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+  if (!safeProfileId) {
+    return c.json({ success: false, error: 'missing_profile_id' }, 400);
+  }
+
+  const contentType = c.req.header('Content-Type') || '';
+  let fileBuffer: ArrayBuffer;
+  let mimeType = 'image/png';
+
+  if (contentType.includes('multipart/form-data')) {
+    const formData = await c.req.formData();
+    const rawFile = formData.get('file');
+    if (!rawFile || typeof rawFile === 'string') return c.json({ success: false, error: 'no_file' }, 400);
+    const file = rawFile as File;
+    fileBuffer = await file.arrayBuffer();
+    mimeType = file.type || 'image/png';
+  } else {
+    fileBuffer = await c.req.arrayBuffer();
+    mimeType = contentType || 'image/png';
+  }
+
+  // 3. Procesamiento, Recorte 1:1, Redimensionado a max 512x512 y Compresión Server-Side
+  let sanitized;
+  try {
+    sanitized = await sanitizeAndProcessImage(fileBuffer, mimeType);
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 400);
+  }
+
+  const ext = sanitized.mimeType.includes('webp') ? 'webp' : sanitized.mimeType.includes('jpeg') ? 'jpg' : 'png';
+  const r2Key = `cloud-icons/${user.uid}/${safeProfileId}_${now}.${ext}`;
+
+  await bucket.put(r2Key, sanitized.buffer, {
+    httpMetadata: { contentType: sanitized.mimeType }
+  });
+
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO cloud_sync_rate_limits (uid, installation_id, action, created_at)
+       VALUES (?, ?, 'upload_icon', ?)`
+    ).bind(user.uid, safeProfileId, now).run();
+    await c.env.DB.prepare('DELETE FROM cloud_sync_rate_limits WHERE created_at < ?')
+      .bind(now - 2 * 60 * 1000)
+      .run();
+  } catch (_) {}
+
+  const baseUrl = (c.env.BASE_URL || 'https://api.hwlauncher.abelosky.com').replace(/\/+$/, '');
+  const publicUrl = `${baseUrl}/storage/${r2Key}`;
+
+  return c.json({
+    success: true,
+    iconUrl: publicUrl,
+    r2Key,
+    dimensions: { width: sanitized.width, height: sanitized.height },
+    processedOnServer: sanitized.wasProcessed
+  });
+});

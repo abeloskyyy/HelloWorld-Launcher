@@ -1,3 +1,32 @@
+// Forward unhandled renderer errors and console errors to main process for telemetry
+(function initRendererTelemetry() {
+    if (typeof window === 'undefined') return;
+    const sendLog = (level, message, stack) => {
+        try {
+            if (window.hwlAPI && typeof window.hwlAPI.sendTelemetryLog === 'function') {
+                window.hwlAPI.sendTelemetryLog(level, message, stack);
+            }
+        } catch (_) {}
+    };
+
+    const origConsoleError = console.error.bind(console);
+    console.error = function (...args) {
+        origConsoleError(...args);
+        try {
+            const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+            sendLog('error', msg, new Error().stack);
+        } catch (_) {}
+    };
+
+    window.addEventListener('error', (event) => {
+        sendLog('uncaught', event.message, event.error?.stack);
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+        sendLog('unhandledrejection', String(event.reason), event.reason?.stack);
+    });
+})();
+
 // Toast notification system
 function showToast(message, type = 'error') {
     const container = document.getElementById('toastContainer');
@@ -296,7 +325,11 @@ async function saveSettings() {
 
         const privacyMode = document.getElementById("privacyModeCheckbox")?.checked || false;
 
+        const telemetryEnabled = document.getElementById("telemetryCheckbox")?.checked || false;
+
         const reopenOnGameClose = document.getElementById("reopenOnGameCloseCheckbox")?.checked !== false;
+
+        const minimizeToTrayOnGameOpen = document.getElementById("minimizeToTrayOnGameOpenCheckbox")?.checked === true;
 
 
         // Get current data to check for restart requirements
@@ -336,10 +369,12 @@ async function saveSettings() {
                 mcdir,
                 ui_scale: uiScale,
                 reopen_on_game_close: reopenOnGameClose,
+                minimize_to_tray_on_game_open: minimizeToTrayOnGameOpen,
                 start_on_boot: startOnBoot,
                 discord_rpc_enabled: discordRpc,
                 app_presence_enabled: appPresence,
                 privacy_mode: privacyMode,
+                telemetry_enabled: telemetryEnabled,
                 show_singleplayer_world: showSingleplayerWorld,
                 show_game_version: showGameVersion,
                 show_profile_name: showProfileName,
@@ -369,7 +404,7 @@ async function saveSettings() {
 
         // 4. Save app performance settings
 
-        await window.hwlAPI.save_app_settings(enableTransitions, hwAccel, privacyMode, reopenOnGameClose);
+        await window.hwlAPI.save_app_settings(enableTransitions, hwAccel, privacyMode, reopenOnGameClose, minimizeToTrayOnGameOpen);
 
 
 
@@ -395,12 +430,18 @@ async function saveSettings() {
 
 
 
-        // Alert if restart is needed
-
+        // Prompt user via native OS dialog to restart now or later if required
         if (restartRequired) {
-
-            window.hwlAPI.info(window.t('toasts.settings_saved_restart') || 'Settings saved. One or more changes (Dev Mode or Hardware Acceleration) require a launcher restart to be applied.');
-
+            const tVal = (key, fallback) => {
+                const res = window.t ? window.t(key) : '';
+                return (res && res !== key) ? res : fallback;
+            };
+            window.hwlAPI.prompt_restart({
+                title: tVal('settings.restart_modal_title', 'Restart Required'),
+                message: tVal('settings.restart_modal_desc', 'Settings have been saved. Some changes (Developer Mode or Hardware Acceleration) require a full launcher restart to take effect.'),
+                restartNowLabel: tVal('settings.restart_now_btn', 'Restart Now'),
+                laterLabel: tVal('settings.restart_later_btn', 'Later')
+            });
         }
 
 
@@ -576,6 +617,14 @@ const initLauncher = async () => {
 
         }
 
+        const telemetryCheckbox = document.getElementById("telemetryCheckbox");
+
+        if (telemetryCheckbox) {
+
+            telemetryCheckbox.checked = data.telemetry_enabled || false;
+
+        }
+
         window.isDevMode = data.dev_mode || false;
 
 
@@ -613,6 +662,9 @@ const initLauncher = async () => {
 
         const reopenOnGameCloseCheckbox = document.getElementById("reopenOnGameCloseCheckbox");
         if (reopenOnGameCloseCheckbox) reopenOnGameCloseCheckbox.checked = (data.reopen_on_game_close !== false);
+
+        const minimizeToTrayOnGameOpenCheckbox = document.getElementById("minimizeToTrayOnGameOpenCheckbox");
+        if (minimizeToTrayOnGameOpenCheckbox) minimizeToTrayOnGameOpenCheckbox.checked = (data.minimize_to_tray_on_game_open === true);
 
         const startOnBootCheckbox = document.getElementById("startOnBootCheckbox");
         if (startOnBootCheckbox) startOnBootCheckbox.checked = (data.start_on_boot === true);
@@ -746,6 +798,11 @@ const initLauncher = async () => {
         // Run session refresh non-blocking in background
         refreshUserSession();
         setInterval(refreshUserSession, 60000);
+
+        // Background cloud installations sync on startup
+        if (typeof window.triggerCloudSyncAll === 'function') {
+            window.triggerCloudSyncAll();
+        }
 
         // New direct setup updater handles updates on startup and in-app seamlessly
 
@@ -3737,6 +3794,10 @@ async function updateUserInterface(userData) {
     if (typeof updateBuyMinecraftVisibility === 'function') {
         updateBuyMinecraftVisibility(userData);
     }
+
+    if (typeof window.updateOnboardingAccountState === 'function') {
+        window.updateOnboardingAccountState().catch(() => {});
+    }
 }
 
 
@@ -3880,6 +3941,13 @@ window.addEventListener('login-success', async (event) => {
 
         }
 
+        if (typeof window.triggerCloudSyncAll === 'function') {
+            setTimeout(() => window.triggerCloudSyncAll(), 800);
+        }
+
+    } else {
+        if (typeof loadProfiles === 'function') loadProfiles();
+        if (typeof loadOptions === 'function') loadOptions();
     }
 
 });
@@ -4230,6 +4298,9 @@ async function launchGame() {
             if (window.isLaunching && !window.isSyncing) {
                 console.log("[Launch] 45 seconds without logs passed, considering Minecraft ready.");
                 onMinecraftReady();
+                if (window.hwlAPI && typeof window.hwlAPI.notify_game_ready === 'function') {
+                    window.hwlAPI.notify_game_ready().catch(() => {});
+                }
             }
         }, 45000);
     };
@@ -4478,7 +4549,7 @@ window.addServerToMinecraft = async function(serverIp, serverName = null) {
 // Global listener for info messages from main.js (launcher events)
 window.addEventListener('info-message', (e) => {
     const msg = String(e.detail);
-    const isGameReadyLog = /Connecting to\s+|joined the game|joined singleplayer|Player joined|Stopping worker threads|stage COMPLETE|Mod loading complete|Narrator library for/i.test(msg);
+    const isGameReadyLog = /Sound engine started|OpenAL initialized|Starting up SoundSystem|OpenGL Vendor:|OpenGL Renderer:|Created:\s+\d+x\d+(?:x\d+)?\s+(?:minecraft:)?textures(?:\/atlas\/|-atlas)|Connecting to\s+|joined the game|joined singleplayer|Player joined|Stopping worker threads|stage COMPLETE|Mod loading complete|Narrator library for/i.test(msg);
 
     if (msg === "Game Closed" || msg.includes("Game Crashed") || msg.includes("has exited") || msg.includes("Game process closed")) {
         // Always re-enable button when game closes, regardless of sync state
@@ -5433,7 +5504,7 @@ window.loadOptions = async function loadOptions() {
 
                     <div class="option-content">
 
-                        <div class="option-title">${profile.name}</div>
+                        <div class="option-title"><span>${escapeCloudHtml(profile.name)}</span>${getCloudNameIconHtml(profile)}</div>
 
                         <div class="option-subtitle">${profile.version} • ${window.t('play.last_played')}: ${lastPlayedText}</div>
 
@@ -5482,7 +5553,7 @@ window.loadOptions = async function loadOptions() {
                     }
                     if (document.getElementById('selectedTitle')) {
                         const titleEl = document.getElementById('selectedTitle');
-                        titleEl.textContent = profileToSelect.name;
+                        titleEl.innerHTML = `<span>${escapeCloudHtml(profileToSelect.name)}</span>${getCloudNameIconHtml(profileToSelect)}`;
                         titleEl.removeAttribute('data-i18n');
                     }
                     if (document.getElementById('selectedSubtitle')) {
@@ -5670,7 +5741,7 @@ async function selectOption(id, profile) {
 
     if (document.getElementById('selectedTitle')) {
         const titleEl = document.getElementById('selectedTitle');
-        titleEl.textContent = profile.name;
+        titleEl.innerHTML = `<span>${escapeCloudHtml(profile.name)}</span>${getCloudNameIconHtml(profile)}`;
         titleEl.removeAttribute('data-i18n');
     }
 
@@ -5848,15 +5919,150 @@ function isReservedProfileName(name) {
 
 
 
+const CLOUD_OUTLINE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>`;
+
+function escapeCloudHtml(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function getCloudNameIconHtml(profile) {
+    if (profile && profile.cloud === true) {
+        return `<i class="fas fa-cloud cloud-inline-badge" aria-hidden="true"></i>`;
+    }
+    return '';
+}
+
+function translateOrFallback(key, fallback, vars) {
+    if (typeof window.t === 'function') {
+        const res = window.t(key, vars);
+        if (res && res !== key) return res;
+    }
+    return fallback;
+}
+
+function openCloudExternalAddonsModal(externalAddons) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('cloudExternalAddonsModal');
+        const listEl = document.getElementById('cloudExternalAddonsList');
+        const backBtn = document.getElementById('cloudExternalBackBtn');
+        const continueBtn = document.getElementById('cloudExternalContinueBtn');
+
+        if (!modal || !listEl || !backBtn || !continueBtn) {
+            resolve(false);
+            return;
+        }
+
+        // Ensure modal static texts are translated in current active language
+        const titleEl = modal.querySelector('[data-i18n="cloud.external_modal_title"]');
+        const descEl = modal.querySelector('[data-i18n="cloud.external_modal_desc"]');
+        const backSpan = backBtn.querySelector('[data-i18n="cloud.external_btn_back"]');
+        const contSpan = continueBtn.querySelector('[data-i18n="cloud.external_btn_continue"]');
+        if (titleEl) titleEl.textContent = translateOrFallback('cloud.external_modal_title', 'External addons detected');
+        if (descEl) descEl.textContent = translateOrFallback('cloud.external_modal_desc', 'The following files were not downloaded through HelloWorld Launcher and will not be uploaded to the cloud:');
+        if (backSpan) backSpan.textContent = translateOrFallback('cloud.external_btn_back', 'Go back');
+        if (contSpan) contSpan.textContent = translateOrFallback('cloud.external_btn_continue', 'Continue anyway');
+
+        const typeLabelMap = {
+            mod: translateOrFallback('sidebar.mods', 'Mods'),
+            resourcepack: translateOrFallback('sidebar.resource_packs', 'Resource Packs'),
+            shader: translateOrFallback('sidebar.shaders', 'Shaders')
+        };
+
+        listEl.innerHTML = (externalAddons || []).map((item) => {
+            const typeKey = (item.type || 'mod').toLowerCase();
+            const label = typeLabelMap[typeKey] || typeKey;
+            const displayName = escapeCloudHtml(item.filename || item.display_name || 'Unknown');
+            return `
+                <div class="cloud-external-item">
+                    <span class="cloud-external-item-name" title="${displayName}">${displayName}</span>
+                    <span class="cloud-external-type-badge type-${escapeCloudHtml(typeKey)}">${escapeCloudHtml(label)}</span>
+                </div>
+            `;
+        }).join('');
+
+        let settled = false;
+        const cleanup = (result) => {
+            if (settled) return;
+            settled = true;
+            modal.classList.remove('show');
+            backBtn.removeEventListener('click', onBack);
+            continueBtn.removeEventListener('click', onContinue);
+            modal.removeEventListener('click', onBackdrop);
+            document.removeEventListener('keydown', onKeyDown);
+            resolve(result);
+        };
+
+        const onBack = () => cleanup(false);
+        const onContinue = () => cleanup(true);
+        const onBackdrop = (ev) => {
+            if (ev.target === modal) cleanup(false);
+        };
+        const onKeyDown = (ev) => {
+            if (ev.key === 'Escape') cleanup(false);
+        };
+
+        backBtn.addEventListener('click', onBack);
+        continueBtn.addEventListener('click', onContinue);
+        modal.addEventListener('click', onBackdrop);
+        document.addEventListener('keydown', onKeyDown);
+        modal.classList.add('show');
+    });
+}
+
+window.triggerCloudSyncAll = async function triggerCloudSyncAll() {
+    try {
+        if (!window.hwlAPI || typeof window.hwlAPI.cloud_sync_all !== 'function') return;
+        const res = await window.hwlAPI.cloud_sync_all();
+        if (res && res.modified) {
+            if (typeof loadProfiles === 'function') await loadProfiles();
+            if (typeof loadOptions === 'function') await loadOptions();
+            if (typeof loadModdableProfiles === 'function') await loadModdableProfiles(true);
+        }
+    } catch (err) {
+        console.warn('[CloudSync] Background sync error:', err);
+    }
+};
+
+window.addEventListener('cloud-profiles-updated', async (ev) => {
+    try {
+        const action = ev && ev.detail ? ev.detail.action : null;
+        // Single-card upload/download updates the card in-place without rebuilding the list
+        if (action === 'uploaded' || action === 'downloaded') {
+            if (typeof loadOptions === 'function') await loadOptions();
+            return;
+        }
+        if (typeof loadProfiles === 'function') await loadProfiles();
+        if (typeof loadOptions === 'function') await loadOptions();
+        if (typeof loadModdableProfiles === 'function') await loadModdableProfiles(true);
+    } catch (_) {}
+});
+
+window.addEventListener('online', () => {
+    if (typeof window.triggerCloudSyncAll === 'function') {
+        setTimeout(() => window.triggerCloudSyncAll(), 1500);
+    }
+});
+
 async function loadProfiles() {
 
     const seq = ++loadProfilesSeq;
 
-    const profilesData = await window.hwlAPI.get_profiles();
+    const [profilesData, cloudStatus] = await Promise.all([
+        window.hwlAPI.get_profiles(),
+        (window.hwlAPI && typeof window.hwlAPI.cloud_get_status === 'function')
+            ? window.hwlAPI.cloud_get_status().catch(() => ({ eligible: false, limit: 35, count: 0 }))
+            : Promise.resolve({ eligible: false, limit: 35, count: 0 })
+    ]);
 
     if (seq !== loadProfilesSeq) return; // Abort if a newer call started
 
     const profiles = profilesData.profiles;
+    const isCloudEligible = Boolean(cloudStatus && cloudStatus.eligible);
 
 
 
@@ -5864,7 +6070,15 @@ async function loadProfiles() {
 
     if (!list) return;
 
-    list.innerHTML = "";
+    // Preserve scroll position across atomic list updates
+    const scrollContainers = [
+        document.querySelector('.main-content'),
+        document.getElementById('profiles'),
+        document.querySelector('.content'),
+        document.scrollingElement
+    ].filter(Boolean);
+    const savedScrolls = scrollContainers.map(el => ({ el, top: el.scrollTop }));
+    const savedWindowY = window.scrollY;
 
 
 
@@ -5903,15 +6117,27 @@ async function loadProfiles() {
         return;
     }
 
+    // Resolve all icons in parallel OFF-DOM before swapping so the list never flashes or resets scroll
+    const resolvedIcons = await Promise.all(
+        profilesArray.map(async (profile) => {
+            try {
+                const raw = await window.hwlAPI.get_profile_icon(profile.icon);
+                return window.resolveImageSource(raw);
+            } catch (_) {
+                return '';
+            }
+        })
+    );
 
+    if (seq !== loadProfilesSeq) return; // Abort if a newer call started
 
-    for (const profile of profilesArray) {
+    const fragment = document.createDocumentFragment();
 
+    for (let idx = 0; idx < profilesArray.length; idx++) {
+
+        const profile = profilesArray[idx];
         const id = profile.id;
-
-        const iconUrlRaw = await window.hwlAPI.get_profile_icon(profile.icon);
-
-        const iconUrl = window.resolveImageSource(iconUrlRaw);
+        const iconUrl = resolvedIcons[idx];
 
         const lastPlayedText = profile.last_played ? timeAgo(profile.last_played) : (window.t('time.never') || 'Never');
 
@@ -5921,9 +6147,21 @@ async function loadProfiles() {
 
 
 
+        const isCloudActive = profile.cloud === true;
+        const cloudBtnClasses = [
+            'btn-secondary',
+            'btn-small',
+            'btn-action-square',
+            'cloud-btn',
+            isCloudActive ? 'is-cloud-active' : '',
+            !isCloudEligible ? 'cloud-btn-disabled' : ''
+        ].filter(Boolean).join(' ');
+        const cloudIconHtml = isCloudActive ? '<i class="fas fa-cloud"></i>' : CLOUD_OUTLINE_SVG;
+
         const item = document.createElement("div");
 
         item.className = "profile-card";
+        item.dataset.profileId = id;
 
         item.innerHTML = `
 
@@ -5931,14 +6169,19 @@ async function loadProfiles() {
 
             <div class="profile-info">
 
-                <h3>${profile.name}</h3>
+                <h3><span>${escapeCloudHtml(profile.name)}</span>${getCloudNameIconHtml(profile)}</h3>
 
                 <p>${profile.version} &bull; ${window.t('play.last_played')}: ${lastPlayedText}</p>
 
             </div>
 
             <div class="profile-actions">
+                ${isReserved ? '' : `
+                <button class="${cloudBtnClasses}" ${!isCloudEligible ? 'aria-disabled="true"' : ''}>${cloudIconHtml}</button>
+                <button class="btn-secondary btn-small btn-action-square duplicate-btn" title="${translateOrFallback('installations.duplicate_btn', 'Duplicate installation')}"><i class="fas fa-copy"></i></button>
+                `}
                 <button class="btn-secondary btn-small btn-action-square shortcut-btn" title="${window.t('installations.shortcut_btn') || 'Crear acceso directo en Escritorio e Inicio'}"><i class="fas fa-desktop"></i></button>
+                <button class="btn-secondary btn-small btn-action-square open-folder-btn" title="${translateOrFallback('installations.open_folder_btn', 'Open installation folder')}"><i class="fas fa-folder-open"></i></button>
                 ${isReserved ? '' : `
                 <button class="btn-secondary btn-small btn-action-square edit-btn" title="${window.t('installations.edit_btn') || 'Editar'}"><i class="fas fa-edit"></i></button>
                 <button class="btn-danger btn-small btn-action-square delete-btn" title="${window.t('installations.delete_btn') || 'Eliminar'}"><i class="fas fa-trash"></i></button>
@@ -5946,9 +6189,181 @@ async function loadProfiles() {
             </div>
         `;
 
+        const cloudBtn = item.querySelector('.cloud-btn');
+        const duplicateBtn = item.querySelector('.duplicate-btn');
         const shortcutBtn = item.querySelector('.shortcut-btn');
+        const openFolderBtn = item.querySelector('.open-folder-btn');
         const editBtn = item.querySelector('.edit-btn');
         const deleteBtn = item.querySelector('.delete-btn');
+        const titleHeading = item.querySelector('.profile-info h3');
+
+        if (cloudBtn) {
+            const getCloudTooltip = () => !isCloudEligible
+                ? translateOrFallback('cloud.tooltip_login_required', 'Sign in with a HelloWorld or verified Microsoft account to sync to the cloud')
+                : (profile.cloud === true
+                    ? translateOrFallback('cloud.tooltip_remove', 'Synced in cloud (click to remove from cloud)')
+                    : translateOrFallback('cloud.tooltip_upload', 'Upload installation to cloud'));
+
+            const syncCardCloudVisual = () => {
+                const active = profile.cloud === true;
+                cloudBtn.classList.toggle('is-cloud-active', active);
+                cloudBtn.innerHTML = active ? '<i class="fas fa-cloud"></i>' : CLOUD_OUTLINE_SVG;
+                cloudBtn.style.opacity = '';
+                cloudBtn.dataset.busy = '0';
+                const tip = getCloudTooltip();
+                cloudBtn.setAttribute('data-tooltip', tip);
+                if (titleHeading) {
+                    const existingBadge = titleHeading.querySelector('.cloud-inline-badge');
+                    if (active && !existingBadge) {
+                        titleHeading.insertAdjacentHTML('beforeend', getCloudNameIconHtml(profile));
+                    } else if (!active && existingBadge) {
+                        existingBadge.remove();
+                    }
+                }
+            };
+
+            cloudBtn.setAttribute('data-tooltip', getCloudTooltip());
+            cloudBtn.addEventListener('mouseenter', () => {
+                if (typeof showTooltip === 'function') {
+                    const rect = cloudBtn.getBoundingClientRect();
+                    showTooltip(cloudBtn, getCloudTooltip(), rect.left + rect.width / 2, rect.top);
+                }
+            });
+            cloudBtn.addEventListener('mouseleave', () => {
+                if (typeof hideTooltip === 'function') hideTooltip();
+            });
+
+            cloudBtn.onclick = async (e) => {
+                e.stopPropagation();
+                if (typeof hideTooltip === 'function') hideTooltip();
+
+                if (!isCloudEligible) {
+                    showToast(getCloudTooltip(), 'info');
+                    return;
+                }
+                if (cloudBtn.dataset.busy === '1') return;
+
+                const setBusy = (busy) => {
+                    cloudBtn.dataset.busy = busy ? '1' : '0';
+                    cloudBtn.style.opacity = busy ? '0.65' : '';
+                    cloudBtn.innerHTML = busy
+                        ? '<i class="fas fa-spinner fa-spin"></i>'
+                        : (profile.cloud === true ? '<i class="fas fa-cloud"></i>' : CLOUD_OUTLINE_SVG);
+                };
+
+                try {
+                    if (profile.cloud === true) {
+                        const confirmMsg = translateOrFallback(
+                            'cloud.download_confirm',
+                            `Are you sure you want to remove "${profile.name}" from the cloud? It will remain saved locally and will be deleted from the cloud.`,
+                            { name: profile.name }
+                        );
+                        const confirmed = await window.hwlAPI.confirm(confirmMsg);
+                        if (!confirmed) return;
+
+                        setBusy(true);
+                        const res = await window.hwlAPI.cloud_download_profile(id);
+                        if (res && res.success) {
+                            profile.cloud = false;
+                            syncCardCloudVisual();
+                            showToast(translateOrFallback('cloud.download_success', 'Installation removed from cloud and kept locally'), 'success');
+                            if (typeof loadOptions === 'function') loadOptions();
+                        } else if (res && res.error === 'rate_limited') {
+                            showToast(translateOrFallback('cloud.rate_limited_notice', 'Sync rate-limited; please try again in a few seconds'), 'warning');
+                            setBusy(false);
+                        } else {
+                            showToast((res && res.message) || translateOrFallback('cloud.download_failed', 'Failed to remove installation from cloud'), 'error');
+                            setBusy(false);
+                        }
+                    } else {
+                        setBusy(true);
+                        let res = await window.hwlAPI.cloud_upload_profile(id, false);
+
+                        if (res && res.requiresExternalConfirm) {
+                            setBusy(false);
+                            const proceed = await openCloudExternalAddonsModal(res.externalAddons || []);
+                            if (!proceed) return;
+                            setBusy(true);
+                            res = await window.hwlAPI.cloud_upload_profile(id, true);
+                        }
+
+                        if (res && res.success) {
+                            profile.cloud = true;
+                            syncCardCloudVisual();
+                            showToast(translateOrFallback('cloud.upload_success', 'Installation uploaded to the cloud'), 'success');
+                            if (typeof loadOptions === 'function') loadOptions();
+                        } else if (res && res.error === 'cloud_limit_reached') {
+                            setBusy(false);
+                            const limitVal = res.limit || 35;
+                            await window.hwlAPI.show_warning_dialog({
+                                title: translateOrFallback('cloud.limit_title', 'Cloud installation limit reached'),
+                                message: translateOrFallback(
+                                    'cloud.limit_message',
+                                    `You have reached the maximum of ${limitVal} cloud installations. Remove or delete a cloud installation before uploading a new one.`,
+                                    { limit: limitVal }
+                                )
+                            });
+                        } else if (res && res.error === 'rate_limited') {
+                            showToast(translateOrFallback('cloud.rate_limited_notice', 'Sync rate-limited; please try again in a few seconds'), 'warning');
+                            setBusy(false);
+                        } else {
+                            showToast((res && res.message) || translateOrFallback('cloud.upload_failed', 'Failed to upload installation to the cloud'), 'error');
+                            setBusy(false);
+                        }
+                    }
+                } catch (err) {
+                    console.error('[CloudBtn] Error toggling cloud state:', err);
+                    showToast(err.message || translateOrFallback('cloud.upload_failed', 'Cloud sync failed'), 'error');
+                    setBusy(false);
+                }
+            };
+        }
+
+        if (duplicateBtn) {
+            duplicateBtn.onclick = async (e) => {
+                e.stopPropagation();
+                if (duplicateBtn.dataset.busy === '1') return;
+                try {
+                    duplicateBtn.dataset.busy = '1';
+                    duplicateBtn.style.opacity = '0.65';
+                    duplicateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                    const res = await window.hwlAPI.duplicate_profile(id);
+                    if (res && res.success) {
+                        showToast(
+                            translateOrFallback('installations.duplicate_success', `Installation duplicated as "${res.name}"`, { name: res.name }),
+                            'success'
+                        );
+                        await loadProfiles();
+                        await loadOptions();
+                        await loadModdableProfiles();
+                    } else {
+                        showToast((res && res.error) || translateOrFallback('installations.duplicate_failed', 'Failed to duplicate installation'), 'error');
+                    }
+                } catch (err) {
+                    console.error('Error duplicating profile:', err);
+                    showToast(err.message || translateOrFallback('installations.duplicate_failed', 'Failed to duplicate installation'), 'error');
+                } finally {
+                    duplicateBtn.dataset.busy = '0';
+                    duplicateBtn.style.opacity = '';
+                    duplicateBtn.innerHTML = '<i class="fas fa-copy"></i>';
+                }
+            };
+        }
+
+        if (openFolderBtn) {
+            openFolderBtn.onclick = async (e) => {
+                e.stopPropagation();
+                try {
+                    const res = await window.hwlAPI.open_profile_folder(id);
+                    if (!res || !res.success) {
+                        showToast((res && res.error) || translateOrFallback('installations.open_folder_failed', 'Failed to open installation folder'), 'error');
+                    }
+                } catch (err) {
+                    console.error('Error opening profile folder:', err);
+                    showToast(err.message || translateOrFallback('installations.open_folder_failed', 'Failed to open installation folder'), 'error');
+                }
+            };
+        }
 
         if (shortcutBtn) {
             shortcutBtn.onclick = async (e) => {
@@ -5982,7 +6397,11 @@ async function loadProfiles() {
         if (deleteBtn) {
             deleteBtn.onclick = async (e) => {
                 e.stopPropagation();
-                const confirmed = await window.hwlAPI.confirm(window.t('installations.delete_confirm', { name: profile.name }));
+                const confirmText = profile.cloud === true
+                    ? ((window.t && window.t('cloud.delete_cloud_confirm', { name: profile.name }))
+                        || `"${profile.name}" is synced in the cloud. Deleting it will remove it from the cloud on all your devices (your local worlds folder will be kept). Continue?`)
+                    : window.t('installations.delete_confirm', { name: profile.name });
+                const confirmed = await window.hwlAPI.confirm(confirmText);
                 if (confirmed) {
                     const result = await window.hwlAPI.delete_profile(id);
                     if (result.success) {
@@ -6010,9 +6429,20 @@ async function loadProfiles() {
             }
         };
 
-        list.appendChild(item);
+        fragment.appendChild(item);
 
     }
+
+    // Atomic DOM swap + scroll position restore (zero flicker, zero scroll reset)
+    list.replaceChildren(fragment);
+    const restoreScroll = () => {
+        for (const entry of savedScrolls) {
+            if (entry.el && entry.top > 0) entry.el.scrollTop = entry.top;
+        }
+        if (savedWindowY > 0) window.scrollTo(0, savedWindowY);
+    };
+    restoreScroll();
+    requestAnimationFrame(restoreScroll);
 
 }
 
@@ -6037,12 +6467,19 @@ function showSection(sectionId) {
     const section = document.getElementById(sectionId);
     if (section) section.classList.add('active');
 
+    if (sectionId === 'telemetry') {
+        document.body.classList.add('in-telemetry');
+    } else {
+        document.body.classList.remove('in-telemetry');
+    }
+
     const sectionNavMap = {
         'play': 'playNavBtn',
         'profiles': 'profilesNavBtn',
         'workshop': 'workshopNavBtn',
         'skins': 'skinsSidebarBtn',
-        'settings': 'settingsNavBtn'
+        'settings': 'settingsNavBtn',
+        'telemetry': 'telemetryNavBtn'
     };
     const targetNavBtn = sectionNavMap[sectionId] ? document.getElementById(sectionNavMap[sectionId]) : null;
     if (targetNavBtn) {
@@ -7212,108 +7649,76 @@ function selectImageFromGrid(imageName, imageUrl) {
 
 if (customImageInput) {
 
-    customImageInput.addEventListener('change', function (e) {
+    customImageInput.addEventListener('change', async function (e) {
 
         if (window._wkIconMode) return;
 
-        const file = e.target.files[0];
+        const file = e.target.files && e.target.files[0];
 
+        if (!file || !file.type.startsWith('image/')) return;
 
-
-        if (file && file.type.startsWith('image/')) {
-
-            const reader = new FileReader();
-
-
-
-            reader.onload = function (e) {
-
-                const img = new Image();
-
-                img.onload = function() {
-
-                    let width = img.width;
-
-                    let height = img.height;
-
-                    const maxSize = 128;
-
-
-
-                    if (width > maxSize || height > maxSize) {
-
-                        if (width > height) {
-
-                            height = Math.round((height * maxSize) / width);
-
-                            width = maxSize;
-
-                        } else {
-
-                            width = Math.round((width * maxSize) / height);
-
-                            height = maxSize;
-
-                        }
-
-                    }
-
-
-
-                    const canvas = document.createElement('canvas');
-
-                    canvas.width = width;
-
-                    canvas.height = height;
-
-                    const ctx = canvas.getContext('2d');
-
-                    ctx.drawImage(img, 0, 0, width, height);
-
-
-
-                    const resizedBase64 = canvas.toDataURL(file.type);
-
-
-
-                    selectedImageData = {
-
-                        base64: resizedBase64,
-
-                        filename: file.name,
-
-                        type: file.type
-
-                    };
-
-
-
-                    if (iconPreview) {
-
-                        iconPreview.src = resizedBase64;
-
-                        iconPreview.style.display = 'block';
-
-                    }
-
-                    if (placeholderIcon) placeholderIcon.style.display = 'none';
-
-
-
-                    // Cerrar el modal de imagenes
-
-                    if (imageModal) imageModal.classList.remove('show');
-
-                };
-
-                img.src = e.target.result;
-
+        const applyCustomIconDataUrl = (dataUrl, mimeType) => {
+            selectedImageData = {
+                base64: dataUrl,
+                filename: file.name,
+                type: mimeType || file.type
             };
 
+            if (iconPreview) {
+                iconPreview.src = dataUrl;
+                iconPreview.style.display = 'block';
+            }
 
+            if (placeholderIcon) placeholderIcon.style.display = 'none';
 
-            reader.readAsDataURL(file);
+            if (imageModal) imageModal.classList.remove('show');
+        };
 
+        try {
+            if (typeof window.hwlOpenCropper === 'function') {
+                const result = await window.hwlOpenCropper(file);
+                if (result && result.dataUrl) {
+                    applyCustomIconDataUrl(result.dataUrl, result.format === 'webp' ? 'image/webp' : 'image/png');
+                }
+            } else {
+                await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = function (ev) {
+                        const img = new Image();
+                        img.onload = function () {
+                            let width = img.width;
+                            let height = img.height;
+                            const maxSize = 256;
+                            if (width > maxSize || height > maxSize) {
+                                if (width > height) {
+                                    height = Math.round((height * maxSize) / width);
+                                    width = maxSize;
+                                } else {
+                                    width = Math.round((width * maxSize) / height);
+                                    height = maxSize;
+                                }
+                            }
+                            const canvas = document.createElement('canvas');
+                            canvas.width = width;
+                            canvas.height = height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, width, height);
+                            applyCustomIconDataUrl(canvas.toDataURL(file.type), file.type);
+                            resolve();
+                        };
+                        img.onerror = () => resolve();
+                        img.src = ev.target.result;
+                    };
+                    reader.onerror = () => resolve();
+                    reader.readAsDataURL(file);
+                });
+            }
+        } catch (err) {
+            if (err && err.message !== 'cropper_cancelled') {
+                console.warn('[ProfileIcon Cropper]', err.message);
+            }
+        } finally {
+            try { customImageInput.value = ''; } catch (_) {}
         }
 
     });
@@ -8762,6 +9167,9 @@ window.performAccountSwitch = async function (accountId, openInboxAfter = false,
             if (typeof window.initSocial === 'function') {
                 await window.initSocial(true).catch(() => {});
             }
+            if (typeof window.triggerCloudSyncAll === 'function') {
+                window.triggerCloudSyncAll();
+            }
 
             // Reset admin bypass banner and reevaluate maintenance for the new account
             const bypassBanner = document.getElementById('maintenanceAdminBypassBanner');
@@ -9061,6 +9469,9 @@ function initAccountSwitcherEvents() {
         closeBtn.addEventListener('click', () => {
             const modal = document.getElementById('accountSwitcherModal');
             if (modal) modal.classList.remove('show');
+            if (typeof window.updateOnboardingAccountState === 'function') {
+                window.updateOnboardingAccountState().catch(() => {});
+            }
         });
     }
 
@@ -9070,6 +9481,9 @@ function initAccountSwitcherEvents() {
         modalEl.addEventListener('click', (e) => {
             if (e.target === modalEl) {
                 modalEl.classList.remove('show');
+                if (typeof window.updateOnboardingAccountState === 'function') {
+                    window.updateOnboardingAccountState().catch(() => {});
+                }
             }
         });
     }
@@ -9621,6 +10035,12 @@ window.showSection = function (sectionId, contentType = null) {
 
     if (target) target.classList.add('active');
 
+    if (sectionId === 'telemetry') {
+        document.body.classList.add('in-telemetry');
+    } else {
+        document.body.classList.remove('in-telemetry');
+    }
+
 
 
     // Clear installed addons refresh interval when leaving mods section
@@ -9650,7 +10070,8 @@ window.showSection = function (sectionId, contentType = null) {
             'profiles': 'profilesNavBtn',
             'workshop': 'workshopNavBtn',
             'skins': 'skinsSidebarBtn',
-            'settings': 'settingsNavBtn'
+            'settings': 'settingsNavBtn',
+            'telemetry': 'telemetryNavBtn'
         };
         const targetNavBtn = sectionNavMap[sectionId] ? document.getElementById(sectionNavMap[sectionId]) : null;
         if (targetNavBtn) {

@@ -1,0 +1,23 @@
+name = "hwlauncher-telemetry"
+main = "src/index.js"
+compatibility_date = "2024-04-01"
+
+# Cloudflare D1 Database Binding
+[[d1_databases]]
+binding = "DB"
+database_name = "hwlauncher-telemetry"
+database_id = "7a91ef4f-00dd-4026-a4ea-809f22840e29"
+
+# Cloudflare R2 Storage Bucket Binding (for full compressed logs)
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "hwlauncher-logs"
+
+[vars]
+ADMIN_API_KEY = "hwlauncher_admin_telemetry_key"
+NTFY_SERVER = "https://ntfy.sh"
+NTFY_TOPIC = "helloworld_launcher_ai_notify_29373"
+
+# Cron trigger for 30-day auto-purge (daily at 03:00 UTC)
+[triggers]
+crons = ["0 3 * * *"]

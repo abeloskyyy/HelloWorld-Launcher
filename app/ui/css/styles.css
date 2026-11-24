@@ -2434,6 +2434,416 @@ select:disabled {
     pointer-events: none;
 }
 
+.profile-actions .btn-action-square svg {
+    width: 17px;
+    height: 17px;
+    display: block;
+    pointer-events: none;
+}
+
+/* Cloud Installations: White filled cloud indicator next to installation name (Installations & Play only) */
+.cloud-inline-badge {
+    color: #ffffff !important;
+    font-size: 0.84em;
+    margin-left: 7px;
+    vertical-align: middle;
+    flex-shrink: 0;
+    opacity: 0.96;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
+}
+
+.profile-info h3,
+#selectedTitle,
+#selectOptions .option-title {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+/* Cloud Installations: Toggle button states */
+.profile-actions .cloud-btn.is-cloud-active {
+    background: linear-gradient(135deg, rgba(79, 172, 254, 0.28) 0%, rgba(56, 139, 253, 0.34) 100%);
+    border-color: rgba(79, 172, 254, 0.65);
+    color: #ffffff;
+    box-shadow: 0 0 12px rgba(79, 172, 254, 0.25);
+}
+
+.profile-actions .cloud-btn.is-cloud-active:hover {
+    background: linear-gradient(135deg, rgba(79, 172, 254, 0.4) 0%, rgba(56, 139, 253, 0.46) 100%);
+    border-color: rgba(125, 200, 255, 0.85);
+}
+
+.profile-actions .cloud-btn.cloud-btn-disabled {
+    opacity: 0.4;
+    cursor: not-allowed !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    color: rgba(255, 255, 255, 0.65) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.profile-actions .cloud-btn.cloud-btn-disabled:hover {
+    opacity: 0.45;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* Cloud External Addons Warning Modal */
+#cloudExternalAddonsModal {
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.cloud-external-modal-content {
+    max-width: 520px;
+    width: 92%;
+    margin: auto;
+    padding: 24px;
+    border-radius: 16px;
+    background: rgba(20, 22, 32, 0.98);
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65);
+}
+
+.cloud-external-modal-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.cloud-external-warning-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(251, 191, 36, 0.16);
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    color: #fbbf24;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.cloud-external-modal-header h2 {
+    margin: 0 0 6px 0;
+    font-size: 18px;
+    color: #ffffff;
+}
+
+.cloud-external-modal-desc {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.45;
+    color: #cbd5e1;
+}
+
+.cloud-external-list {
+    max-height: 220px;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 8px;
+    margin-bottom: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.cloud-external-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 13px;
+    color: #e2e8f0;
+}
+
+.cloud-external-item-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.cloud-external-type-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.cloud-external-type-badge.type-mod {
+    background: rgba(79, 172, 254, 0.18);
+    color: #7dd3fc;
+    border: 1px solid rgba(79, 172, 254, 0.35);
+}
+
+.cloud-external-type-badge.type-resourcepack {
+    background: rgba(16, 185, 129, 0.18);
+    color: #6ee7b7;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.cloud-external-type-badge.type-shader {
+    background: rgba(168, 85, 247, 0.18);
+    color: #d8b4fe;
+    border: 1px solid rgba(168, 85, 247, 0.35);
+}
+
+.cloud-external-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.cloud-external-modal-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 13.5px;
+    cursor: pointer;
+}
+
+/* ============================================================
+   Interactive 1:1 Image Cropper Modal (#hwlImageCropperModal)
+   ============================================================ */
+#hwlImageCropperModal {
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(6, 8, 14, 0.72);
+    backdrop-filter: blur(12px);
+}
+
+.cropper-modal-card {
+    max-width: 440px;
+    width: 94%;
+    margin: auto;
+    padding: 22px 24px 24px;
+    border-radius: 18px;
+    background: rgba(18, 22, 34, 0.98);
+    border: 1px solid rgba(79, 172, 254, 0.32);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.cropper-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cropper-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 17px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.cropper-title i {
+    color: #4facfe;
+}
+
+.cropper-header .modal-close-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    color: #cbd5e1;
+    font-size: 20px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.cropper-header .modal-close-btn:hover {
+    background: rgba(239, 68, 68, 0.22);
+    border-color: rgba(239, 68, 68, 0.5);
+    color: #ffffff;
+}
+
+.cropper-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+
+.cropper-canvas-container {
+    position: relative;
+    width: 340px;
+    height: 340px;
+    max-width: 100%;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 2px solid rgba(79, 172, 254, 0.45);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    background: #141720;
+    user-select: none;
+}
+
+#hwlCropperCanvas {
+    display: block;
+    width: 340px;
+    height: 340px;
+    cursor: grab;
+}
+
+#hwlCropperCanvas:active {
+    cursor: grabbing;
+}
+
+.cropper-grid-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(to right, rgba(255, 255, 255, 0.16) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.16) 1px, transparent 1px);
+    background-size: 33.333% 33.333%;
+    background-position: -1px -1px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.cropper-controls-wrapper {
+    width: 100%;
+    max-width: 340px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cropper-zoom-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 8px 12px;
+}
+
+.cropper-zoom-bar .cropper-icon {
+    color: #94a3b8;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.cropper-slider {
+    flex: 1;
+    appearance: none;
+    -webkit-appearance: none;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    outline: none;
+    cursor: pointer;
+}
+
+.cropper-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 8px rgba(79, 172, 254, 0.55);
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+
+.cropper-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.12);
+}
+
+.cropper-icon-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    color: #e2e8f0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.cropper-icon-btn:hover {
+    background: rgba(79, 172, 254, 0.22);
+    border-color: rgba(79, 172, 254, 0.55);
+    color: #ffffff;
+}
+
+.cropper-metadata-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cropper-hint {
+    font-size: 12.5px;
+    color: #94a3b8;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+}
+
+.cropper-hint i {
+    color: #4facfe;
+    font-size: 12px;
+}
+
+.cropper-modal-card .modal-options {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 4px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cropper-modal-card .modal-options button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 13.5px;
+    cursor: pointer;
+}
+
 .btn-small {
     padding: 8px 15px;
     font-size: 12px;
@@ -10875,6 +11285,14 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
    Account Switcher Modal
    ══════════════════════════════════════════════════════ */
 
+#accountSwitcherModal {
+    z-index: 31000;
+}
+
+#loginModal {
+    z-index: 31100;
+}
+
 .account-switcher-modal {
     width: 420px;
     max-width: 95vw;
@@ -15596,4 +16014,99 @@ body:not(.disable-transitions) .social-modal-overlay.show .social-modal-content 
 
 #streakBadgeContainer {
     transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Telemetry & Modern Square Icon Action Buttons */
+.btn-icon-sq {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    min-height: 34px !important;
+    max-width: 34px !important;
+    max-height: 34px !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: #cbd5e1;
+    font-size: 13px !important;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-icon-sq:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+.btn-icon-sq:active {
+    transform: scale(0.93);
+}
+.btn-icon-sq:disabled {
+    opacity: 0.35 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+.btn-icon-sq.btn-blue {
+    background: rgba(56, 189, 248, 0.12) !important;
+    border-color: rgba(56, 189, 248, 0.3) !important;
+    color: #38bdf8 !important;
+}
+.btn-icon-sq.btn-blue:hover {
+    background: rgba(56, 189, 248, 0.25) !important;
+    border-color: rgba(56, 189, 248, 0.55) !important;
+    color: #7dd3fc !important;
+    box-shadow: 0 4px 14px rgba(56, 189, 248, 0.3) !important;
+}
+.btn-icon-sq.btn-success {
+    background: rgba(34, 197, 94, 0.12) !important;
+    border-color: rgba(34, 197, 94, 0.3) !important;
+    color: #4ade80 !important;
+}
+.btn-icon-sq.btn-success:hover {
+    background: rgba(34, 197, 94, 0.25) !important;
+    border-color: rgba(34, 197, 94, 0.55) !important;
+    color: #86efac !important;
+    box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3) !important;
+}
+.btn-icon-sq.btn-danger {
+    background: rgba(239, 68, 68, 0.12) !important;
+    border-color: rgba(239, 68, 68, 0.3) !important;
+    color: #f87171 !important;
+}
+.btn-icon-sq.btn-danger:hover {
+    background: rgba(239, 68, 68, 0.25) !important;
+    border-color: rgba(239, 68, 68, 0.55) !important;
+    color: #fca5a5 !important;
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3) !important;
+}
+
+/* Telemetry Screen Layout Isolation */
+body.in-telemetry #userAreaControls,
+body.in-telemetry #loginButton,
+body.in-telemetry .sidebar-promos,
+body.in-telemetry .update-dock-badge {
+    display: none !important;
+}
+
+body.in-telemetry .main-content {
+    padding: 14px 20px !important;
+    overflow: hidden !important;
+}
+
+#telemetry.section {
+    display: none !important;
+    width: 100%;
+}
+
+#telemetry.section.active {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
 }

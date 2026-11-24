@@ -105,7 +105,7 @@ These scripts automatically download and install the latest version for your sys
 
 ## Key Features
 
-* **Privacy First:** No telemetry or trackers.
+* **Privacy First:** No telemetry by default. Optional diagnostics are strictly opt-in and under your control.
 * **Fast Startup:** Optimized to open in seconds.
 * **Integrated Mod Management:** No external tools needed.
 * **Smart Profiles:** Each world with its own configuration.
@@ -116,10 +116,11 @@ These scripts automatically download and install the latest version for your sys
 
 ## Security and Privacy
 
-* Does not collect user data.
-* Does not send information to external servers.
-* Open source for full auditing.
-* No hidden installers or added software.
+* **Privacy by default:** Does not track user activities or collect telemetry unless explicitly enabled.
+* **Optional Diagnostics (Opt-In):** You can optionally turn on diagnostic reporting in Settings to help troubleshoot Minecraft crashes, incompatible manual mods, and launcher errors.
+* **Open source:** Auditable and transparent codebase.
+* **No hidden installers or added software.**
+* See our full [Privacy Policy](PRIVACY.md) for details.
 
 ---
 
@@ -133,6 +134,9 @@ To run it anyway:
 2. Click **"Run anyway"**.
 
 > If Windows Defender blocks the file, go to **Windows Security → Virus & threat protection → Protection history**, find the blocked item, and click **"Allow"**.
+
+**Does HelloWorld Launcher collect telemetry or data?**
+By default, **no**. Telemetry is strictly **opt-in and disabled by default**. You can voluntarily enable it in **Settings → "Send Diagnostics & Telemetry"** to help us diagnose Minecraft crashes, resolve launcher errors, and detect conflicting custom mods. When enabled, it captures crash logs, technical specs (CPU, GPU, RAM, OS), terminal/console outputs, and scans for untracked mods. You can disable it at any time with a single click.
 
 **Is it legal?**
 The launcher is legal. Using Minecraft utilizes a copy of the game in accordance with Mojang/Microsoft terms.

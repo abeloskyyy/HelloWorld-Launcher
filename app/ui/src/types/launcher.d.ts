@@ -4,12 +4,15 @@ export interface UserData {
   uuid?: string;
   mcdir?: string;
   dev_mode?: boolean;
+  telemetry_enabled?: boolean;
+  telemetry_endpoint?: string;
   show_snapshots?: boolean;
   show_old?: boolean;
   enable_transitions?: boolean;
   hw_accel?: boolean;
   privacy_mode?: boolean;
   reopen_on_game_close?: boolean;
+  minimize_to_tray_on_game_open?: boolean;
   start_on_boot?: boolean;
   discord_rpc_enabled?: boolean;
   app_presence_enabled?: boolean;
@@ -55,6 +58,10 @@ export interface Profile {
   created?: string;
   last_played?: string;
   addons?: Record<string, any>;
+  cloud?: boolean;
+  cloud_uid?: string;
+  cloud_updated_at?: number;
+  cloud_dirty?: boolean;
 }
 
 export interface HwlAPI {
@@ -66,6 +73,8 @@ export interface HwlAPI {
   logout: () => Promise<UserData>;
   checkInternet: () => Promise<boolean>;
   closeApp: () => Promise<void>;
+  restartApp?: () => Promise<any>;
+  promptRestart?: (opts?: { title?: string; message?: string; restartNowLabel?: string; laterLabel?: string }) => Promise<{ restarted: boolean }>;
 
   // Account Switcher
   getSavedAccounts: () => Promise<SavedAccount[]>;
@@ -78,11 +87,20 @@ export interface HwlAPI {
   addProfile: (data: any) => Promise<any>;
   editProfile: (data: any) => Promise<any>;
   deleteProfile: (id: string) => Promise<any>;
+  openProfileFolder?: (id: string) => Promise<{ success: boolean; path?: string; error?: string }>;
+  duplicateProfile?: (id: string) => Promise<{ success: boolean; profile_id?: string; name?: string; error?: string }>;
   getProfileIcon: (filename: string) => Promise<string>;
   getWorlds: (profile_id: string) => Promise<any[]>;
   read_world_seed?: (profile_id: string, world_name: string) => Promise<any>;
   getDocumentsPath: () => Promise<string>;
   createProfileShortcut: (data: any) => Promise<any>;
+  cloudGetStatus?: () => Promise<{ eligible: boolean; reason?: string | null; uid?: string | null; count: number; limit: number }>;
+  cloudScanExternalAddons?: (profileId: string) => Promise<{ success: boolean; externalAddons: Array<{ filename: string; display_name: string; type: string }>; syncableCount: number }>;
+  cloudUploadProfile?: (profileId: string, confirmExternal?: boolean) => Promise<any>;
+  cloudDownloadProfile?: (profileId: string) => Promise<any>;
+  cloudSyncAll?: () => Promise<any>;
+  onCloudProfilesUpdated?: (callback: (data: any) => void) => void;
+  showWarningDialog?: (opts: string | { title?: string; message: string; detail?: string }) => Promise<{ success: boolean }>;
   getPendingLaunchProfile: () => Promise<string | null>;
   onAutoLaunchProfile: (callback: (profileId: string) => void) => void;
   isMinecraftRunning: () => Promise<boolean>;
@@ -102,8 +120,9 @@ export interface HwlAPI {
 
   // Settings
   saveVersionSettings: (showSnapshots: boolean, showOld: boolean) => Promise<any>;
-  saveAppSettings: (enableTransitions: boolean, hwAccel: boolean, privacyMode: boolean, reopenOnGameClose?: boolean) => Promise<any>;
+  saveAppSettings: (enableTransitions: boolean, hwAccel: boolean, privacyMode: boolean, reopenOnGameClose?: boolean, minimizeToTrayOnGameOpen?: boolean) => Promise<any>;
   maximizeLauncher?: () => Promise<any>;
+  notifyGameReady?: () => Promise<any>;
   saveDevMode: (enabled: boolean) => Promise<any>;
   selectFolder: (current_path?: string) => Promise<string | null>;
   selectFile: (current_path?: string, filters?: any[]) => Promise<string | null>;

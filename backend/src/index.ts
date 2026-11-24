@@ -12,6 +12,7 @@ import { inboxApp } from './routes/inbox';
 import { workshopApp } from './routes/workshop';
 import { reviewsApp } from './routes/reviews';
 import { storageApp } from './routes/storage';
+import { cloudInstallationsApp } from './routes/cloudInstallations';
 
 const app = new Hono<{ Bindings: Env; Variables: CustomVariables }>();
 
@@ -20,8 +21,8 @@ app.use('*', logger());
 app.use('*', cors({
   origin: '*',
   allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposeHeaders: ['Content-Length'],
+  allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Launcher-Secret', 'X-User-Username', 'X-User-Uid', 'X-Profile-Id'],
+  exposeHeaders: ['Content-Length', 'Retry-After'],
   maxAge: 86400
 }));
 
@@ -70,6 +71,7 @@ v1.route('/inbox', inboxApp);
 v1.route('/workshop', workshopApp);
 v1.route('/reviews', reviewsApp);
 v1.route('/storage', storageApp);
+v1.route('/cloud-installations', cloudInstallationsApp);
 
 app.route('/api/v1', v1);
 app.route('/v1', v1); // Soporte alias directo /v1

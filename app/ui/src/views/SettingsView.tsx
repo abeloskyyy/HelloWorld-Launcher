@@ -11,6 +11,7 @@ export const SettingsView: React.FC = () => {
   const [transitions, setTransitions] = useState(user?.enable_transitions ?? true);
   const [privacy, setPrivacy] = useState(user?.privacy_mode ?? false);
   const [reopenOnGameClose, setReopenOnGameClose] = useState(user?.reopen_on_game_close ?? true);
+  const [minimizeToTrayOnGameOpen, setMinimizeToTrayOnGameOpen] = useState(user?.minimize_to_tray_on_game_open ?? false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const handleSelectFolder = async () => {
@@ -31,9 +32,10 @@ export const SettingsView: React.FC = () => {
         hw_accel: hwAccel,
         enable_transitions: transitions,
         privacy_mode: privacy,
-        reopen_on_game_close: reopenOnGameClose
+        reopen_on_game_close: reopenOnGameClose,
+        minimize_to_tray_on_game_open: minimizeToTrayOnGameOpen
       });
-      await api.saveAppSettings(transitions, hwAccel, privacy, reopenOnGameClose);
+      await api.saveAppSettings(transitions, hwAccel, privacy, reopenOnGameClose, minimizeToTrayOnGameOpen);
       await refreshUser();
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 2500);
@@ -150,6 +152,19 @@ export const SettingsView: React.FC = () => {
               type="checkbox"
               checked={transitions}
               onChange={e => setTransitions(e.target.checked)}
+              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+            />
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: '14px' }}>Minimizar a la bandeja al abrir el juego</div>
+              <div style={{ color: '#8892b0', fontSize: '12px' }}>Minimiza automáticamente el launcher a la bandeja del sistema cuando Minecraft se abre y pasa a estado Jugando.</div>
+            </div>
+            <input
+              type="checkbox"
+              checked={minimizeToTrayOnGameOpen}
+              onChange={e => setMinimizeToTrayOnGameOpen(e.target.checked)}
               style={{ width: '18px', height: '18px', cursor: 'pointer' }}
             />
           </label>

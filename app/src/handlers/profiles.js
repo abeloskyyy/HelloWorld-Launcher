@@ -258,6 +258,106 @@ class ProfileManager {
         return { success: false };
     }
 
+    async duplicateProfile(id) {
+        try {
+            const profilesData = this.loadProfiles();
+            const profiles = profilesData.profiles || {};
+            const source = profiles[id];
+            if (!source) {
+                return { success: false, error: 'Profile not found' };
+            }
+            if (source.isBuiltIn || this.isReservedName(source.name)) {
+                return { success: false, error: 'This profile cannot be duplicated.' };
+            }
+
+            const existingNames = new Set(
+                Object.values(profiles)
+                    .filter(Boolean)
+                    .map(p => String(p.name || '').trim().toLowerCase())
+            );
+
+            let newName = String(source.name || 'Minecraft').trim() || 'Minecraft';
+            while (existingNames.has(newName.toLowerCase()) || this.isReservedName(newName)) {
+                newName = `${newName}_Duplicated`;
+            }
+
+            const newId = uuid.v4();
+
+            // Copy custom local icon so editing/deleting original never affects the duplicate
+            let newIcon = source.icon || 'default.png';
+            if (newIcon && typeof newIcon === 'string') {
+                const imgDir = paths.getProfilesImgDir();
+                const srcIconPath = path.join(imgDir, path.basename(newIcon));
+                if (fs.existsSync(srcIconPath)) {
+                    const destIconName = `${newId}.png`;
+                    const destIconPath = path.join(imgDir, destIconName);
+                    try {
+                        fs.ensureDirSync(imgDir);
+                        await fs.copy(srcIconPath, destIconPath);
+                        newIcon = destIconName;
+                    } catch (iconErr) {
+                        console.warn('[ProfileManager] Failed to copy custom icon during duplication:', iconErr.message);
+                    }
+                }
+            }
+
+            // Create a dedicated directory for the duplicated profile
+            let docsPath = '';
+            try {
+                docsPath = app ? app.getPath('documents') : path.join(require('os').homedir(), 'Documents');
+            } catch (_) {
+                docsPath = path.join(require('os').homedir(), 'Documents');
+            }
+            const newDir = path.join(docsPath, 'MinecraftDirectories', newId);
+            try { fs.ensureDirSync(newDir); } catch (_) {}
+
+            // Copy addon directories (mods, resourcepacks, shaderpacks) if present, skipping worlds (saves/)
+            const sourceDir = source.directory || paths.getMcDir();
+            if (sourceDir && fs.existsSync(sourceDir) && path.resolve(sourceDir) !== path.resolve(newDir)) {
+                for (const sub of ['mods', 'resourcepacks', 'shaderpacks']) {
+                    const srcSub = path.join(sourceDir, sub);
+                    if (fs.existsSync(srcSub)) {
+                        try {
+                            await fs.copy(srcSub, path.join(newDir, sub));
+                        } catch (copyErr) {
+                            console.warn(`[ProfileManager] Failed to copy ${sub} during duplication:`, copyErr.message);
+                        }
+                    }
+                }
+            }
+
+            const clonedAddons = Array.isArray(source.addons)
+                ? source.addons
+                    .filter(a => a && a.type !== 'datapack')
+                    .map(a => ({ ...a }))
+                : [];
+
+            const duplicated = {
+                name: newName,
+                version: source.version || '',
+                ...(source.loader_version ? { loader_version: source.loader_version } : {}),
+                icon: newIcon,
+                directory: newDir,
+                jvm_args: source.jvm_args || '',
+                ...(source.ram_min !== undefined ? { ram_min: source.ram_min } : {}),
+                ...(source.ram_max !== undefined ? { ram_max: source.ram_max } : {}),
+                ...(source.width !== undefined ? { width: source.width } : {}),
+                ...(source.height !== undefined ? { height: source.height } : {}),
+                java_path: source.java_path || '',
+                ...(source.enable_custom_skins !== undefined ? { enable_custom_skins: source.enable_custom_skins } : {}),
+                ...(clonedAddons.length > 0 ? { addons: clonedAddons } : {})
+            };
+
+            profiles[newId] = duplicated;
+            this.saveProfiles(profilesData);
+
+            return { success: true, profile_id: newId, name: newName };
+        } catch (e) {
+            console.error('[ProfileManager] Error duplicating profile:', e);
+            return { success: false, error: e.message };
+        }
+    }
+
     // --- Icons ---
     saveIcon(id, base64Data) {
         try {

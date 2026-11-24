@@ -46,11 +46,11 @@ export const ImageCropperModal: React.FC = () => {
         </div>
 
         <div className="modal-options">
+          <button type="button" id="hwlCropperCancelBtn" className="btn-secondary" data-i18n="cropper.cancel_btn">
+            Cancelar
+          </button>
           <button type="button" id="hwlCropperConfirmBtn" className="btn-primary" data-i18n="cropper.apply_btn">
             <i className="fas fa-check"></i> Aplicar y Guardar
-          </button>
-          <button type="button" id="hwlCropperCancelBtn" className="btn-secondary" data-i18n="social.cancel_btn">
-            Cancelar
           </button>
         </div>
       </div>

@@ -21,6 +21,8 @@ const hwlAPI = {
     logout: () => ipcRenderer.invoke('logout'),
     checkInternet: () => ipcRenderer.invoke('check-internet'),
     closeApp: () => ipcRenderer.invoke('close-app'),
+    restartApp: () => ipcRenderer.invoke('restart-app'),
+    promptRestart: (opts) => ipcRenderer.invoke('prompt-restart', opts),
 
     // Launch & Versions
     startGame: (profileId, nickname, force, serverIp, saveServer) => ipcRenderer.invoke('launch-profile', { profileId, nickname, force, serverIp, saveServer }),
@@ -38,10 +40,25 @@ const hwlAPI = {
 
     // Settings
     saveVersionSettings: (showSnapshots, showOld) => ipcRenderer.invoke('save-version-settings', showSnapshots, showOld),
-    saveAppSettings: (enableTransitions, hwAccel, privacyMode, reopenOnGameClose) => ipcRenderer.invoke('save-app-settings', enableTransitions, hwAccel, privacyMode, reopenOnGameClose),
+    saveAppSettings: (enableTransitions, hwAccel, privacyMode, reopenOnGameClose, minimizeToTrayOnGameOpen) => ipcRenderer.invoke('save-app-settings', enableTransitions, hwAccel, privacyMode, reopenOnGameClose, minimizeToTrayOnGameOpen),
     maximizeLauncher: () => ipcRenderer.invoke('maximize-launcher'),
+    notifyGameReady: () => ipcRenderer.invoke('notify-game-ready'),
     saveDevMode: (enabled) => ipcRenderer.invoke('save-dev-mode', enabled),
     selectFolder: (current_path) => ipcRenderer.invoke('select-folder', current_path),
+    // Telemetry & Diagnostics
+    sendTelemetryLog: (level, message, stack) => ipcRenderer.send('telemetry-log', { level, message, stack }),
+    getTelemetryStatus: () => ipcRenderer.invoke('get-telemetry-status'),
+    setTelemetryStatus: (enabled) => ipcRenderer.invoke('set-telemetry-status', enabled),
+    sendTelemetryDiagnostic: () => ipcRenderer.invoke('send-telemetry-diagnostic'),
+    telemetryAdmin: {
+      checkAccess: () => ipcRenderer.invoke('telemetry-admin-check-access'),
+      getStats: () => ipcRenderer.invoke('telemetry-admin-stats'),
+      listReports: (filters) => ipcRenderer.invoke('telemetry-admin-list', filters),
+      getReport: (id) => ipcRenderer.invoke('telemetry-admin-get-report', id),
+      fetchFullLogs: (id) => ipcRenderer.invoke('telemetry-admin-fetch-full-logs', id),
+      deleteReport: (id) => ipcRenderer.invoke('telemetry-admin-delete-report', id),
+    },
+
     selectFile: (current_path, filters) => ipcRenderer.invoke('select-file', current_path, filters),
     saveAddonsPerPage: (count) => ipcRenderer.invoke('save-addons-per-page', count),
 
@@ -57,11 +74,20 @@ const hwlAPI = {
     addProfile: (data) => ipcRenderer.invoke('add-profile', data),
     editProfile: (data) => ipcRenderer.invoke('edit-profile', data),
     deleteProfile: (id) => ipcRenderer.invoke('delete-profile', id),
+    openProfileFolder: (id) => ipcRenderer.invoke('open-profile-folder', id),
+    duplicateProfile: (id) => ipcRenderer.invoke('duplicate-profile', id),
     getProfileIcon: (filename) => ipcRenderer.invoke('get-profile-icon', filename),
     getWorlds: (profile_id) => ipcRenderer.invoke('get-worlds', profile_id),
     read_world_seed: (profile_id, world_name) => ipcRenderer.invoke('read-world-seed', profile_id, world_name),
     getDocumentsPath: () => ipcRenderer.invoke('get-documents-path'),
     createProfileShortcut: (data) => ipcRenderer.invoke('create-profile-shortcut', data),
+    cloudGetStatus: () => ipcRenderer.invoke('cloud-get-status'),
+    cloudScanExternalAddons: (profileId) => ipcRenderer.invoke('cloud-scan-external-addons', { profileId }),
+    cloudUploadProfile: (profileId, confirmExternal = false) => ipcRenderer.invoke('cloud-upload-profile', { profileId, confirmExternal }),
+    cloudDownloadProfile: (profileId) => ipcRenderer.invoke('cloud-download-profile', { profileId }),
+    cloudSyncAll: () => ipcRenderer.invoke('cloud-sync-all'),
+    onCloudProfilesUpdated: (callback) => ipcRenderer.on('cloud-profiles-updated', (event, data) => callback(data)),
+    showWarningDialog: (opts) => ipcRenderer.invoke('show-warning-dialog', opts),
     getPendingLaunchProfile: () => ipcRenderer.invoke('get-pending-launch-profile'),
     onAutoLaunchProfile: (callback) => ipcRenderer.on('auto-launch-profile', (event, profileId) => callback(profileId)),
     isMinecraftRunning: () => ipcRenderer.invoke('is-minecraft-running'),
@@ -167,6 +193,20 @@ const hwlAPI = {
     getZoomFactor: () => {
         try { return webFrame.getZoomFactor(); } catch (e) { return 1.0; }
     },
+    // Telemetry & Diagnostics
+    sendTelemetryLog: (level, message, stack) => ipcRenderer.send('telemetry-log', { level, message, stack }),
+    getTelemetryStatus: () => ipcRenderer.invoke('get-telemetry-status'),
+    setTelemetryStatus: (enabled) => ipcRenderer.invoke('set-telemetry-status', enabled),
+    sendTelemetryDiagnostic: () => ipcRenderer.invoke('send-telemetry-diagnostic'),
+    telemetryAdmin: {
+      checkAccess: () => ipcRenderer.invoke('telemetry-admin-check-access'),
+      getStats: () => ipcRenderer.invoke('telemetry-admin-stats'),
+      listReports: (filters) => ipcRenderer.invoke('telemetry-admin-list', filters),
+      getReport: (id) => ipcRenderer.invoke('telemetry-admin-get-report', id),
+      fetchFullLogs: (id) => ipcRenderer.invoke('telemetry-admin-fetch-full-logs', id),
+      deleteReport: (id) => ipcRenderer.invoke('telemetry-admin-delete-report', id),
+    },
+
     selectFile: (current_path, filters) => ipcRenderer.invoke('select-file', current_path, filters),
     select_file: (current_path, filters) => ipcRenderer.invoke('select-file', current_path, filters),
     openUrl: (url) => ipcRenderer.invoke('open-url', url),
@@ -186,6 +226,8 @@ const pywebviewAPI = {
     refresh_session: () => ipcRenderer.invoke('refresh-session'),
     check_internet: () => ipcRenderer.invoke('check-internet'),
     close_app: () => ipcRenderer.invoke('close-app'),
+    restart_app: () => ipcRenderer.invoke('restart-app'),
+    prompt_restart: (opts) => ipcRenderer.invoke('prompt-restart', opts),
     show_desktop_notification: (opts) => ipcRenderer.invoke('show-desktop-notification', opts),
     notification_click_navigate: (recipientInfo) => ipcRenderer.invoke('notification-click-navigate', recipientInfo),
     // Account Switcher
@@ -205,8 +247,16 @@ const pywebviewAPI = {
     edit_profile: (profile_id, name, version, loader, icon, ram_min, ram_max, jvm_args, width, height, java_path, enable_custom_skins, addons) =>
         ipcRenderer.invoke('edit-profile', profile_id, name, version, loader, icon, ram_min, ram_max, jvm_args, width, height, java_path, enable_custom_skins, addons),
     delete_profile: (profile_id) => ipcRenderer.invoke('delete-profile', profile_id),
+    open_profile_folder: (profile_id) => ipcRenderer.invoke('open-profile-folder', profile_id),
+    duplicate_profile: (profile_id) => ipcRenderer.invoke('duplicate-profile', profile_id),
     get_worlds: (profile_id) => ipcRenderer.invoke('get-worlds', profile_id),
     create_profile_shortcut: (profile_id, name, icon) => ipcRenderer.invoke('create-profile-shortcut', { profileId: profile_id, profileName: name, icon }),
+    cloud_get_status: () => ipcRenderer.invoke('cloud-get-status'),
+    cloud_scan_external_addons: (profile_id) => ipcRenderer.invoke('cloud-scan-external-addons', { profileId: profile_id }),
+    cloud_upload_profile: (profile_id, confirm_external = false) => ipcRenderer.invoke('cloud-upload-profile', { profileId: profile_id, confirmExternal: confirm_external }),
+    cloud_download_profile: (profile_id) => ipcRenderer.invoke('cloud-download-profile', { profileId: profile_id }),
+    cloud_sync_all: () => ipcRenderer.invoke('cloud-sync-all'),
+    show_warning_dialog: (opts) => ipcRenderer.invoke('show-warning-dialog', opts),
     get_pending_launch_profile: () => ipcRenderer.invoke('get-pending-launch-profile'),
     on_auto_launch_profile: (callback) => ipcRenderer.on('auto-launch-profile', (event, profileId) => callback(profileId)),
 
@@ -229,8 +279,9 @@ const pywebviewAPI = {
 
     // Settings
     save_version_settings: (showSnapshots, showOld) => ipcRenderer.invoke('save-version-settings', showSnapshots, showOld),
-    save_app_settings: (enableTransitions, hwAccel, privacyMode, reopenOnGameClose) => ipcRenderer.invoke('save-app-settings', enableTransitions, hwAccel, privacyMode, reopenOnGameClose),
+    save_app_settings: (enableTransitions, hwAccel, privacyMode, reopenOnGameClose, minimizeToTrayOnGameOpen) => ipcRenderer.invoke('save-app-settings', enableTransitions, hwAccel, privacyMode, reopenOnGameClose, minimizeToTrayOnGameOpen),
     maximize_launcher: () => ipcRenderer.invoke('maximize-launcher'),
+    notify_game_ready: () => ipcRenderer.invoke('notify-game-ready'),
     save_dev_mode: (enabled) => ipcRenderer.invoke('save-dev-mode', enabled),
     select_folder: (current_path) => ipcRenderer.invoke('select-folder', current_path),
     select_file: (current_path, filters) => ipcRenderer.invoke('select-file', current_path, filters),
@@ -461,6 +512,10 @@ ipcRenderer.on('reload-profiles', (event, data) => {
     window.dispatchEvent(new CustomEvent('reload-profiles', { detail: data }));
 });
 
+ipcRenderer.on('cloud-profiles-updated', (event, data) => {
+    window.dispatchEvent(new CustomEvent('cloud-profiles-updated', { detail: data }));
+});
+
 ipcRenderer.on('navigate-to-chat', (event, data) => {
     window.dispatchEvent(new CustomEvent('navigate-to-chat', { detail: data }));
 });
@@ -496,7 +551,7 @@ ipcRenderer.on('open-account-switcher', () => {
 // Expose electronAPI for direct event listening
 contextBridge.exposeInMainWorld('electronAPI', {
     on: (channel, callback) => {
-        const validChannels = ['download-progress', 'download-complete', 'download-cancelled', 'info-message', 'login-update', 'reload-profiles', 'show-in-app-notification', 'stats-updated', 'game-status'];
+        const validChannels = ['download-progress', 'download-complete', 'download-cancelled', 'info-message', 'login-update', 'reload-profiles', 'cloud-profiles-updated', 'show-in-app-notification', 'stats-updated', 'game-status'];
         if (validChannels.includes(channel)) {
             ipcRenderer.on(channel, (event, data) => callback(data));
         }

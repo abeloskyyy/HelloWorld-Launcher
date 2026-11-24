@@ -1,0 +1,15 @@
+{
+  "name": "hwlauncher-telemetry",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker for HelloWorld Launcher crash reporting and telemetry",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "d1:init": "wrangler d1 execute hwlauncher-telemetry --file=./schema.sql"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "wrangler": "^3.107.0"
+  }
+}
